@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+bin/
+*.test
+*.out
+.DS_Store
+.idea/
+.vscode/
+node_modules/
+web/dist/
+logs/*

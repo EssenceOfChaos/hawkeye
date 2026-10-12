@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS monitors;
+DROP TABLE IF EXISTS subscriptions;
