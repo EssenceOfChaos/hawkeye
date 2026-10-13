@@ -37,6 +37,7 @@ type Metrics struct {
 	RetentionDuration    prometheus.Gauge
 
 	BillingEvents  *prometheus.CounterVec // result=received|duplicate|invalid_signature|processed|ignored|retry|failed
+	BillingRisk    *prometheus.CounterVec // type=charge.dispute.created|charge.refunded|radar.early_fraud_warning.created
 	BillingPending prometheus.Gauge
 	BillingOldest  prometheus.Gauge
 	BillingFailed  prometheus.Gauge
@@ -45,9 +46,15 @@ type Metrics struct {
 	LastPollUnix prometheus.Gauge
 }
 
+// New builds the application metrics on their own registry (worker process).
 func New() *Metrics {
 	r := prometheus.NewRegistry()
 	r.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	return newOn(r)
+}
+
+// newOn registers the application metrics (checks, queue, notifications, billing, retention) on r.
+func newOn(r *prometheus.Registry) *Metrics {
 	f := func(c prometheus.Collector) { r.MustRegister(c) }
 
 	m := &Metrics{
@@ -75,6 +82,7 @@ func New() *Metrics {
 		RetentionLastSuccess: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_retention_last_success_timestamp_seconds", Help: "Unix time of the last successful retention pass."}),
 		RetentionDuration:    prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_retention_last_duration_seconds", Help: "Duration of the last successful retention pass."}),
 		BillingEvents:        prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_billing_webhook_events_total", Help: "Billing webhook events by result."}, []string{"result"}),
+		BillingRisk:          prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_billing_risk_events_total", Help: "Disputes, refunds and fraud warnings received; each needs human review."}, []string{"type"}),
 		BillingPending:       prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_billing_events_pending", Help: "Stored billing events awaiting processing."}),
 		BillingOldest:        prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_billing_oldest_pending_seconds", Help: "Age of the oldest unprocessed billing event."}),
 		BillingFailed:        prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_billing_events_failed", Help: "Billing events that gave up and need manual attention."}),
@@ -83,7 +91,7 @@ func New() *Metrics {
 		LastPollUnix: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_worker_last_poll_timestamp_seconds", Help: "Unix time of the last queue poll."}),
 	}
 	for _, c := range []prometheus.Collector{m.ChecksTotal, m.CheckDuration, m.Scheduled, m.Skipped, m.Missed, m.Backpressure,
-		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.BillingEvents, m.BillingPending, m.BillingOldest, m.BillingFailed} {
+		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed} {
 		f(c)
 	}
 	return m

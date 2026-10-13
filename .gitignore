@@ -10,3 +10,11 @@ bin/
 node_modules/
 web/dist/
 logs/*
+
+# Third-party agent skills (reinstall with: npx skills add https://docs.stripe.com)
+.agents/
+.claude/skills/
+skills-lock.json
+
+# Throwaway test certificates for the local production-like stack
+deploy/smoke/certs/

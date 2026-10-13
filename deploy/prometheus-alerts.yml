@@ -1,0 +1,108 @@
+# Prometheus alerting rules for HawkEye. Scrape the API on :9091 and the worker on :9090 (private ports, never published), then load this file.
+# Pair these with an EXTERNAL uptime check on https://<your-domain>/readyz from a different provider/region: this service must not be the only
+# thing that can notice its own outage. Thresholds assume the default settings; tune them to your plans' check intervals.
+groups:
+  - name: hawkeye-api
+    rules:
+      - alert: HawkEyeApiHighErrorRate
+        expr: sum(rate(hawkeye_http_requests_total{code=~"5.."}[5m])) / clamp_min(sum(rate(hawkeye_http_requests_total[5m])), 1) > 0.05
+        for: 5m
+        labels: {severity: page}
+        annotations: {summary: "More than 5% of API requests fail with 5xx", runbook: "docs/operations.md#api-errors"}
+      - alert: HawkEyeApiSlow
+        expr: histogram_quantile(0.95, sum by (le) (rate(hawkeye_http_request_duration_seconds_bucket[5m]))) > 2
+        for: 10m
+        labels: {severity: ticket}
+        annotations: {summary: "API p95 latency above 2 s", runbook: "docs/operations.md#api-errors"}
+      - alert: HawkEyeApiPanics
+        expr: increase(hawkeye_http_panics_total[15m]) > 0
+        labels: {severity: ticket}
+        annotations: {summary: "A request handler panicked (also reported to the error tracker)"}
+      - alert: HawkEyeRateLimiterFailing
+        expr: increase(hawkeye_rate_limiter_errors_total[10m]) > 0
+        labels: {severity: ticket}
+        annotations: {summary: "The shared rate limiter's database is failing: limits are being skipped (fail-open)"}
+      - alert: HawkEyeDbPoolSaturated
+        expr: hawkeye_db_pool_acquired_connections >= hawkeye_db_pool_max_connections
+        for: 5m
+        labels: {severity: ticket}
+        annotations: {summary: "Every database connection is in use: raise DB_MAX_CONNS or investigate slow queries"}
+      - alert: HawkEyeDbPoolWaiting
+        expr: rate(hawkeye_db_pool_empty_acquires_total[5m]) > 1
+        for: 10m
+        labels: {severity: ticket}
+        annotations: {summary: "Requests regularly wait for a database connection (pool pressure)"}
+
+  - name: hawkeye-monitoring-engine
+    rules:
+      - alert: HawkEyeWorkerNotPolling
+        expr: time() - hawkeye_worker_last_poll_timestamp_seconds > 120
+        for: 2m
+        labels: {severity: page}
+        annotations: {summary: "No worker has polled the queue for 2 minutes: monitoring is NOT running", runbook: "docs/operations.md#checks-are-not-running"}
+      - alert: HawkEyeSchedulerLag
+        expr: hawkeye_scheduler_lag_seconds > 180
+        for: 5m
+        labels: {severity: page}
+        annotations: {summary: "Monitors are overdue by more than 3 minutes (scheduler stopped or workers saturated)", runbook: "docs/operations.md#checks-are-not-running"}
+      - alert: HawkEyeQueueBacklog
+        expr: hawkeye_queue_oldest_job_age_seconds > 300
+        for: 5m
+        labels: {severity: page}
+        annotations: {summary: "The oldest queued check has waited over 5 minutes: add workers or raise WORKER_CONCURRENCY"}
+      - alert: HawkEyeQueueBackpressure
+        expr: increase(hawkeye_scheduler_backpressure_total[10m]) > 0
+        labels: {severity: ticket}
+        annotations: {summary: "The queue reached QUEUE_MAX_DEPTH and the scheduler stopped enqueuing"}
+      - alert: HawkEyeMissedChecks
+        expr: increase(hawkeye_scheduler_missed_checks_total[15m]) > 0
+        labels: {severity: ticket}
+        annotations: {summary: "Checks ran a full interval late (the engine was down or behind)"}
+      - alert: HawkEyeJobsDropped
+        expr: increase(hawkeye_jobs_dropped_total[15m]) > 0
+        labels: {severity: ticket}
+        annotations: {summary: "Check jobs exhausted their attempts and were dropped (workers crashing mid-check?)"}
+      - alert: HawkEyeWorkerErrors
+        expr: sum(rate(hawkeye_worker_errors_total[10m])) > 0.1
+        for: 10m
+        labels: {severity: ticket}
+        annotations: {summary: "Sustained internal worker errors (database trouble?)"}
+      - alert: HawkEyeMostChecksFailing
+        expr: sum(rate(hawkeye_checks_total{result="failure"}[10m])) / clamp_min(sum(rate(hawkeye_checks_total[10m])), 0.001) > 0.5
+        for: 10m
+        labels: {severity: page}
+        annotations: {summary: "Over half of all checks fail: suspect OUR network/DNS/egress, not thousands of customer sites"}
+      - alert: HawkEyeRetentionStale
+        expr: time() - hawkeye_retention_last_success_timestamp_seconds > 10800
+        for: 10m
+        labels: {severity: ticket}
+        annotations: {summary: "Data retention has not completed for 3 hours: the database will keep growing", runbook: "docs/operations.md#database-growing"}
+
+  - name: hawkeye-notifications-and-billing
+    rules:
+      - alert: HawkEyeAlertEmailBacklog
+        expr: hawkeye_notification_oldest_pending_seconds > 300
+        for: 5m
+        labels: {severity: page}
+        annotations: {summary: "Outage alerts are waiting more than 5 minutes to be sent (email provider or dispatcher down)", runbook: "docs/operations.md#alerts-are-not-arriving"}
+      - alert: HawkEyeAlertEmailFailing
+        expr: sum(increase(hawkeye_notification_deliveries_total{result=~"retry|failed"}[15m])) > 3
+        labels: {severity: page}
+        annotations: {summary: "Alert emails are failing or being retried repeatedly", runbook: "docs/operations.md#alerts-are-not-arriving"}
+      - alert: HawkEyeBillingEventFailed
+        expr: hawkeye_billing_events_failed > 0
+        labels: {severity: page}
+        annotations: {summary: "A billing webhook event gave up: a customer's plan may be wrong", runbook: "docs/billing.md#operations"}
+      - alert: HawkEyeBillingBacklog
+        expr: hawkeye_billing_oldest_pending_seconds > 600
+        for: 5m
+        labels: {severity: ticket}
+        annotations: {summary: "Stored billing events are not being applied"}
+      - alert: HawkEyeBillingSignatureFailures
+        expr: increase(hawkeye_billing_webhook_events_total{result="invalid_signature"}[15m]) > 5
+        labels: {severity: ticket}
+        annotations: {summary: "Webhook signature failures: wrong STRIPE_WEBHOOK_SECRET after a roll, or someone probing the endpoint"}
+      - alert: HawkEyeBillingRiskEvent
+        expr: increase(hawkeye_billing_risk_events_total[1h]) > 0
+        labels: {severity: page}
+        annotations: {summary: "A dispute, refund or fraud warning needs human review in Stripe", runbook: "docs/billing.md"}

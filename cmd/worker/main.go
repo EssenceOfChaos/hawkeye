@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -18,6 +19,8 @@ import (
 	"hawkeye/internal/config"
 	"hawkeye/internal/database"
 	"hawkeye/internal/email"
+	"hawkeye/internal/errtrack"
+	"hawkeye/internal/healthcheck"
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/logging"
 	"hawkeye/internal/metrics"
@@ -29,6 +32,13 @@ import (
 )
 
 func main() {
+	if healthcheck.Requested() {
+		port, _ := strconv.Atoi(os.Getenv("WORKER_METRICS_PORT"))
+		if port == 0 {
+			port = 9090
+		}
+		healthcheck.Run(port, "/healthz")
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "fatal:", err)
 		os.Exit(1)
@@ -53,12 +63,18 @@ func run() error {
 	}
 	defer pool.Close()
 
+	reporter, flushErrors, err := errtrack.New(errtrack.Config{DSN: cfg.SentryDSN, Environment: cfg.AppEnv, Release: cfg.AppVersion})
+	if err != nil {
+		return err
+	}
+	defer flushErrors()
 	m := metrics.New()
+	metrics.RegisterPool(m.Registry, pool)
 	w := worker.New(pool,
 		checks.NewChecker(safehttp.Config{}), // strict production SSRF policy
 		checks.NewStore(pool, checks.Thresholds{Failure: cfg.FailureThreshold, Recovery: cfg.RecoveryThreshold}, incidents.Engine{}),
 		worker.Config{Concurrency: cfg.WorkerConcurrency, Lease: cfg.JobLease, MaxAttempts: cfg.JobMaxAttempts, PollInterval: cfg.PollInterval},
-		m, log)
+		m, log).WithReporter(reporter)
 
 	var wg sync.WaitGroup
 	spawn := func(fn func()) {
@@ -67,11 +83,11 @@ func run() error {
 	}
 	spawn(func() { w.Run(ctx) })
 	if cfg.RunScheduler {
-		sched := scheduler.New(pool, scheduler.Config{Interval: cfg.SchedulerInterval, Batch: cfg.SchedulerBatch, MaxQueueDepth: cfg.QueueMaxDepth}, m, log)
+		sched := scheduler.New(pool, scheduler.Config{Interval: cfg.SchedulerInterval, Batch: cfg.SchedulerBatch, MaxQueueDepth: cfg.QueueMaxDepth}, m, log).WithReporter(reporter)
 		spawn(func() { sched.Run(ctx) })
 	}
 	if cfg.RunRetention {
-		job := retention.New(pool, retention.Config{Interval: cfg.RetentionInterval, Batch: cfg.RetentionBatch, Pause: 50 * time.Millisecond}, m, log)
+		job := retention.New(pool, retention.Config{Interval: cfg.RetentionInterval, Batch: cfg.RetentionBatch, Pause: 50 * time.Millisecond}, m, log).WithReporter(reporter)
 		spawn(func() { job.Run(ctx) })
 	}
 	// Billing webhook events accepted by the API but not yet applied (the API processes most inline).
@@ -79,7 +95,7 @@ func run() error {
 	if bc := cfg.Billing(); bc.Enabled() {
 		billingProvider = billing.NewStripeProvider(bc.SecretKey) // events are applied by re-reading the subscription from Stripe
 	}
-	billingSvc := billing.NewService(pool, billingProvider, cfg.Billing(), m, log)
+	billingSvc := billing.NewService(pool, billingProvider, cfg.Billing(), m, log).WithReporter(reporter)
 	spawn(func() {
 		for ctx.Err() == nil {
 			worked, err := billingSvc.ProcessOne(context.WithoutCancel(ctx))
@@ -95,9 +111,14 @@ func run() error {
 			}
 		}
 	})
-	// Alert emails. Only the console provider exists so far; swap the sender here when a real one is added.
-	dispatcher := notifications.NewDispatcher(pool, email.Console{Log: log},
-		notifications.DispatcherConfig{MaxAttempts: cfg.NotifyMaxAttempts, AppBaseURL: cfg.AppBaseURL, From: cfg.EmailFromAddress}, m, log)
+	// Alert emails.
+	mailer, err := email.New(cfg.EmailProvider, email.SMTPConfig{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername,
+		Password: cfg.SMTPPassword, TLS: cfg.SMTPTLS, CAFile: cfg.SMTPCAFile, From: cfg.EmailFromAddress}, log)
+	if err != nil {
+		return err
+	}
+	dispatcher := notifications.NewDispatcher(pool, mailer,
+		notifications.DispatcherConfig{MaxAttempts: cfg.NotifyMaxAttempts, AppBaseURL: cfg.AppBaseURL, From: cfg.EmailFromAddress}, m, log).WithReporter(reporter)
 	spawn(func() { dispatcher.Run(ctx) })
 	spawn(func() {
 		t := time.NewTicker(15 * time.Second)

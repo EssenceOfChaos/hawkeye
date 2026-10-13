@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+
+	"hawkeye/internal/errtrack"
 )
 
 // ErrorBody is the common API error envelope.
@@ -31,7 +33,7 @@ func (e *APIError) Error() string { return e.Code + ": " + e.Message }
 
 // errorHandler serialises every error into the common envelope. Internal errors are
 // logged but never exposed to the client.
-func errorHandler(log *slog.Logger) echo.HTTPErrorHandler {
+func errorHandler(log *slog.Logger, rep errtrack.Reporter) echo.HTTPErrorHandler {
 	return func(err error, c echo.Context) {
 		if c.Response().Committed {
 			return
@@ -47,8 +49,12 @@ func errorHandler(log *slog.Logger) echo.HTTPErrorHandler {
 			status = httpErr.Code
 			body = ErrorDetail{Code: codeForStatus(status), Message: http.StatusText(status)}
 		default:
-			log.ErrorContext(c.Request().Context(), "unhandled error", "error", err,
-				"request_id", c.Response().Header().Get(echo.HeaderXRequestID))
+			rid := c.Response().Header().Get(echo.HeaderXRequestID)
+			var pe panicError
+			if !errors.As(err, &pe) { // recovered panics were already logged and reported by recoverPanics
+				log.ErrorContext(c.Request().Context(), "unhandled error", "error", err, "request_id", rid)
+				rep.Capture(c.Request().Context(), err, map[string]string{"request_id": rid, "route": c.Path(), "method": c.Request().Method})
+			}
 		}
 
 		if c.Request().Method == http.MethodHead {

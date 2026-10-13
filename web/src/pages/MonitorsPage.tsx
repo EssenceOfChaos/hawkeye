@@ -101,8 +101,8 @@ export function MonitorsPage() {
       {monitors?.length === 0 && (
         <section className="card empty">
           <h2>Add your first website</h2>
-          <p>We'll check it regularly and email you if it goes down.</p>
-          <Link className="button" to="/monitors/new">Add a monitor</Link>
+          <p>Your watch starts here. HawkEye will check it regularly and email you when an outage is confirmed.</p>
+          <Link className="button" to="/monitors/new">Add your first website</Link>
         </section>
       )}
       {monitors && monitors.length > 0 && (
@@ -117,7 +117,7 @@ export function MonitorsPage() {
                 <tr key={m.id}>
                   <td>
                     <Link to={`/monitors/${m.id}`}>{m.name}</Link>
-                    <div className="hint">{m.url}</div>
+                    <div className="hint mono">{m.url}</div>
                   </td>
                   <td><StatusBadge monitor={m} /></td>
                   <td>every {Math.round(m.effective_check_interval_seconds / 60)} min</td>

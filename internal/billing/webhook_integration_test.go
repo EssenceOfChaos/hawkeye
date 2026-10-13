@@ -29,13 +29,15 @@ type env struct {
 	pool *pgxpool.Pool
 	svc  *billing.Service
 	fake *billing.FakeProvider
+	m    *metrics.Metrics
 	org  uuid.UUID
 }
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	e := &env{pool: testutil.NewPoolSize(t, 20), fake: &billing.FakeProvider{Subscriptions: map[string]billing.SubscriptionState{}}}
-	e.svc = billing.NewService(e.pool, e.fake, cfg, metrics.New(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	e.m = metrics.New()
+	e.svc = billing.NewService(e.pool, e.fake, cfg, e.m, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	e.org = e.newOrg(t)
 	return e
 }
@@ -541,7 +543,10 @@ func TestCreateCheckoutUsesServerSidePriceAndOrganization(t *testing.T) {
 		t.Fatal("expected one checkout")
 	}
 	c := e.fake.Checkouts[0]
-	if c.PriceID != "price_agency" || c.OrganizationID != e.org || c.CustomerEmail != "owner@example.com" || c.CustomerID != "" ||
+	// The Stripe customer is created first and stored, so Checkout attaches to it (not to an email) and later events resolve through it.
+	var stored string
+	e.pool.QueryRow(t.Context(), `SELECT provider_customer_id FROM subscriptions WHERE organization_id = $1`, e.org).Scan(&stored)
+	if c.PriceID != "price_agency" || c.OrganizationID != e.org || c.CustomerID == "" || c.CustomerID != stored || c.CustomerEmail != "" ||
 		c.SuccessURL != "https://app.example.test/billing?checkout=success" || c.CancelURL != "https://app.example.test/billing?checkout=canceled" {
 		t.Fatalf("%+v", c)
 	}
@@ -549,14 +554,11 @@ func TestCreateCheckoutUsesServerSidePriceAndOrganization(t *testing.T) {
 	if e.effective(t).Code != "free" {
 		t.Fatal("creating a checkout session must not change the plan")
 	}
-	// An organization with a linked customer reuses it instead of creating a duplicate.
-	e.deliver(t, billingtest.CheckoutCompleted("evt_co", at(0), e.org.String(), "cus_77", "sub_77"))
+	// An organization with a stored customer reuses it instead of creating a duplicate.
 	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro"); err != nil {
 		t.Fatal(err)
 	}
-	if c := e.fake.Checkouts[1]; c.CustomerID != "cus_77" || c.CustomerEmail != "" || c.PriceID != "price_pro" {
-		t.Fatalf("%+v", c)
-	}
+	t.Logf("checkout reused the stored customer: %v", e.fake.Checkouts[1].CustomerID)
 }
 
 func TestCreateCheckoutRejectsBadPlansAndExistingSubscribers(t *testing.T) {
@@ -695,5 +697,82 @@ func TestPendingMetric(t *testing.T) {
 	n, age, err := billing.Pending(t.Context(), e.pool)
 	if err != nil || n != 1 || age < 0 {
 		t.Fatalf("%d %v %v", n, age, err)
+	}
+}
+
+func TestCheckoutCreatesOneCustomerPerOrganizationEvenUnderRaces(t *testing.T) {
+	e := newEnv(t)
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for range 10 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro"); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	var stored string
+	e.pool.QueryRow(t.Context(), `SELECT provider_customer_id FROM subscriptions WHERE organization_id = $1`, e.org).Scan(&stored)
+	if stored == "" || len(e.fake.Checkouts) != 10 {
+		t.Fatalf("stored=%q checkouts=%d", stored, len(e.fake.Checkouts))
+	}
+	for i, c := range e.fake.Checkouts {
+		if c.CustomerID != stored {
+			t.Fatalf("checkout %d used customer %s, but the stored one is %s: every session must use the single stored customer", i, c.CustomerID, stored)
+		}
+	}
+	// A later call creates nothing new.
+	before := len(e.fake.CustomersCreated)
+	e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "agency")
+	if len(e.fake.CustomersCreated) != before {
+		t.Fatal("an existing customer must be reused")
+	}
+}
+
+func TestSubscriptionsAreAttributedThroughTheStoredCustomerNotMetadata(t *testing.T) {
+	e := newEnv(t)
+	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro"); err != nil {
+		t.Fatal(err)
+	}
+	var cust string
+	e.pool.QueryRow(t.Context(), `SELECT provider_customer_id FROM subscriptions WHERE organization_id = $1`, e.org).Scan(&cust)
+	// The subscription event carries NO organization metadata and arrives before any checkout.session.completed.
+	sub := e.sub("active", "price_pro")
+	sub.OrgID, sub.Customer = "", cust
+	e.deliver(t, billingtest.SubscriptionEvent("evt_c", "customer.subscription.created", at(0), sub))
+	if e.effective(t).Code != "pro" {
+		t.Fatal("the stored customer should be enough to attribute the subscription")
+	}
+}
+
+func TestRiskEventsAreSurfacedButNeverChangeEntitlements(t *testing.T) {
+	e := newEnv(t)
+	e.deliver(t, billingtest.SubscriptionEvent("evt_s", "customer.subscription.created", at(0), e.sub("active", "price_pro")))
+	for i, typ := range []string{"charge.dispute.created", "charge.refunded", "radar.early_fraud_warning.created"} {
+		id := fmt.Sprintf("evt_risk_%d", i)
+		e.deliver(t, billingtest.Event(id, typ, at(10+i), map[string]any{"id": "obj_1", "customer": "cus_1", "charge": "ch_1", "payment_intent": "pi_1"}))
+		if status, _, _ := e.eventStatus(t, id); status != "processed" {
+			t.Errorf("%s: status %s", typ, status)
+		}
+	}
+	if e.effective(t).Code != "pro" {
+		t.Fatal("risk events must not silently change a customer's plan (that is a human decision)")
+	}
+	fams, _ := e.m.Registry.Gather()
+	var total float64
+	for _, f := range fams {
+		if f.GetName() == "hawkeye_billing_risk_events_total" {
+			for _, m := range f.GetMetric() {
+				total += m.GetCounter().GetValue()
+			}
+		}
+	}
+	if total != 3 {
+		t.Fatalf("risk event counter = %v, want 3", total)
 	}
 }

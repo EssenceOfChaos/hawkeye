@@ -1,0 +1,18 @@
+# Adds a STARTTLS mail sink and the private CA so the production-like stack can be exercised locally. Test use only.
+#   make smoke-up    (generates certificates, builds and starts everything)
+services:
+  mailpit:
+    image: axllent/mailpit:v1.31.5
+    environment:
+      MP_SMTP_TLS_CERT: /certs/server.pem
+      MP_SMTP_TLS_KEY: /certs/server.key
+      MP_SMTP_REQUIRE_STARTTLS: "true"
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "false"
+    volumes: ["./smoke/certs:/certs:ro"]
+    ports: ["8026:8025"]
+    networks: [backend, checks]
+  api:
+    volumes: ["./smoke/certs/ca.pem:/etc/hawkeye/smtp-ca.pem:ro"]
+  worker:
+    volumes: ["./smoke/certs/ca.pem:/etc/hawkeye/smtp-ca.pem:ro"]

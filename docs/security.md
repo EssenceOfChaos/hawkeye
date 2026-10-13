@@ -29,10 +29,10 @@ Limits are enforced in the service layer inside the same transaction as the writ
 - **Webhook endpoint:** HMAC-SHA256 signature over the raw body, 5-minute replay window (Stripe's library), constant-time comparison (library), nothing stored before verification, 1 MB body limit,
   idempotent by event ID. Defence in depth (documented, infrastructure): allowlist Stripe's IPs. It is intentionally outside CSRF/session protection because it is signature-authenticated.
 - **Authorization:** only owners with a verified email can start checkout, open the portal, cancel or re-sync; every call is scoped to the caller's verified organization (tested across tenants).
-- **Secrets:** `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` come from the environment only, are validated at startup (shape, all-or-nothing, live keys refused outside production) and never logged. Provider error text is not returned to users.
+- **Secrets:** (prefer a restricted `rk_` key; see `docs/billing.md` → Keys) `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` come from the environment only, are validated at startup (shape, all-or-nothing, live keys refused outside production) and never logged. Provider error text is not returned to users.
 - **No card data** is handled or stored; Checkout and the portal are Stripe-hosted. Stored webhook payloads (customer IDs/emails) are retained 90 days (180 for failed).
 - **Residual risks:** a compromised webhook secret lets an attacker trigger *re-reads* but not choose the applied state (Stripe's API decides it), which limits the blast radius; the conflicting-second-subscription case requires manual resolution;
-  fraud/dispute/refund events (`charge.dispute.created`, `charge.refunded`) are not handled yet and need a policy before live launch.
+  dispute/refund/fraud-warning events are surfaced (log + alert metric) but deliberately not acted on automatically: define the policy before live launch (`docs/billing.md`).
 
 ## Data retention and privacy (Phase 6)
 
@@ -81,8 +81,25 @@ that cannot reach internal services. Block egress from the worker hosts/containe
 (that is inherent to monitoring a third-party site, not an SSRF); the checker trusts the system resolver and its
 TLS roots; a malicious site can make us send a GET/HEAD with our fixed `User-Agent` to any *public* address, which is the product's purpose.
 
+## Production hardening (Phase 8)
+
+- **Rate limits:** a shared fixed-window limiter in PostgreSQL (`rate_limits`, keys are hashed, rows purged after 24 h) so limits hold across API replicas. Per-IP on auth routes, a per-account login ceiling (30/h: bounds
+  password guessing across many IPs; the trade-off is that an attacker who knows an email can lock that account's *logins* for up to an hour, accepted because sessions already signed in keep working and reset still works),
+  per-address hourly budgets on emails we send (verification, reset, alert confirmation; stops mail-bombing a victim), and an in-memory global per-IP ceiling. If the limiter's database fails it **fails open** and counts `hawkeye_rate_limiter_errors_total` (availability over strictness; alerted).
+- **Headers:** CSP `default-src 'self'; script-src 'self'` (no inline scripts), HSTS (production), `Referrer-Policy: no-referrer`, `X-Content-Type-Options`, frame denial, on both Caddy and the API.
+- **Tokens never in logs/referrers:** Caddy redacts `?token=` and drops `Referer/Cookie/Authorization/X-Csrf-Token/Set-Cookie` from its access log; the SPA strips tokens from the address bar after reading them; verified against a running stack.
+- **Error tracking:** optional Sentry; events pass through a scrubber removing emails, bearer/API tokens, secrets and sensitive headers; request bodies and cookies are never attached.
+- **Account lifecycle:** change password requires the current one, signs out other sessions and emails a notice; export returns the user's own data only; deletion needs password and typed email, cancels the Stripe subscription (customer deleted) *before* removing data, and refuses while the user owns an organization with other members.
+- **Email transport:** SMTP never downgrades from TLS, verifies certificates, strips CR/LF from headers, distinguishes permanent from retryable errors.
+- **Startup guards:** production refuses weak secrets, http URLs, console email, plaintext SMTP/DB. Unknown `/api/v1` paths return 404 (not 401, so route existence is not probed through auth).
+- **Network:** workers sit on a dedicated network; `deploy/egress-filter.sh` drops private/metadata/host traffic at the firewall as a second layer behind `safehttp` (untested on Linux; verify with `scripts/verify-egress.sh`).
+- **Supply chain:** `govulncheck` and `npm audit` run in CI; images pinned by version, distroless runtime.
+
+See `docs/security-review.md` for the review and residual risks.
+
 ## Known gaps
 
-- Email is console-only (links are logged in development). Production refuses nothing but logs a warning; a real provider is required before launch.
-- `SESSION_SECRET` is validated but not yet used (sessions are random DB-backed tokens); it is reserved for signed values added later.
-- No audit log, no account deletion endpoint yet.
+- Console email provider (development) logs verification/reset links; it is refused in production.
+- `SESSION_SECRET` is validated but not used for signing (sessions are random DB-backed tokens); reserved.
+- No audit log of security events beyond application logs.
+- Refunds/disputes are surfaced as alerts only; handled manually.

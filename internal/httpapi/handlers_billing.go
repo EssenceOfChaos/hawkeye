@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -99,4 +100,18 @@ func (h *handlers) billingError(c echo.Context, err error) error {
 	}
 	h.log.ErrorContext(c.Request().Context(), "billing provider call failed", "error", err)
 	return &APIError{Status: http.StatusBadGateway, Code: "BILLING_PROVIDER_ERROR", Message: "The payment provider could not be reached. Please try again."}
+}
+
+// accountError maps account errors; a failed payment-provider call is reported generically (details are logged).
+func (h *handlers) accountError(c echo.Context, err error) error {
+	mapped := mapError(err)
+	if _, isAPI := mapped.(*APIError); isAPI {
+		return mapped
+	}
+	if _, isValidation := mapped.(*APIError); !isValidation && errors.Unwrap(err) != nil && strings.Contains(err.Error(), "delete payment customer") {
+		h.log.ErrorContext(c.Request().Context(), "account deletion blocked: payment provider call failed", "error", err)
+		return &APIError{Status: http.StatusBadGateway, Code: "BILLING_PROVIDER_ERROR",
+			Message: "We could not cancel your subscription with the payment provider, so nothing was deleted. Please try again."}
+	}
+	return mapped
 }

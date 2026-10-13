@@ -57,16 +57,6 @@ func TestProductionRejectsWeakSecrets(t *testing.T) {
 	}
 }
 
-func TestProductionValid(t *testing.T) {
-	_, err := load(env(map[string]string{
-		"APP_ENV": "production", "DATABASE_URL": "postgres://x", "APP_BASE_URL": "https://example.com",
-		"SESSION_SECRET": strings.Repeat("a", 40),
-	}))
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestProductionRequiresHTTPS(t *testing.T) {
 	_, err := load(env(map[string]string{
 		"APP_ENV": "production", "DATABASE_URL": "postgres://x", "APP_BASE_URL": "http://example.com",
@@ -119,5 +109,83 @@ func TestStripeConfigIsOptionalButAllOrNothing(t *testing.T) {
 	live["STRIPE_SECRET_KEY"] = "sk_live_abc"
 	if _, err := load(env(live)); err == nil || !strings.Contains(err.Error(), "live keys") {
 		t.Fatalf("live keys must be refused outside production: %v", err)
+	}
+}
+
+// prodBase is a valid production configuration; tests break one thing at a time.
+func prodBase() map[string]string {
+	return map[string]string{
+		"APP_ENV": "production", "APP_BASE_URL": "https://app.example.org", "API_BASE_URL": "https://app.example.org",
+		"DATABASE_URL": "postgres://u:p@db.example.org/monitoring?sslmode=require", "SESSION_SECRET": strings.Repeat("a", 40),
+		"EMAIL_PROVIDER": "smtp", "SMTP_HOST": "smtp.example.org", "SMTP_USERNAME": "u", "SMTP_PASSWORD": "p", "EMAIL_FROM_ADDRESS": "alerts@hawkeye.example.org",
+	}
+}
+
+func TestProductionBaselineIsValid(t *testing.T) {
+	if _, err := load(env(prodBase())); err != nil {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestProductionRefusesUnsafeSettings(t *testing.T) {
+	cases := map[string]struct {
+		set  map[string]string
+		want string
+	}{
+		"console email":            {map[string]string{"EMAIL_PROVIDER": "console"}, "EMAIL_PROVIDER"},
+		"unencrypted smtp":         {map[string]string{"SMTP_TLS": "none"}, "SMTP_TLS"},
+		"placeholder sender":       {map[string]string{"EMAIL_FROM_ADDRESS": "alerts@example.com"}, "EMAIL_FROM_ADDRESS"},
+		"database without tls":     {map[string]string{"DATABASE_URL": "postgres://u:p@db/x?sslmode=disable"}, "sslmode"},
+		"database sslmode missing": {map[string]string{"DATABASE_URL": "postgres://u:p@db/x"}, "sslmode"},
+		"database sslmode prefer":  {map[string]string{"DATABASE_URL": "postgres://u:p@db/x?sslmode=prefer"}, "sslmode"},
+		"http api url":             {map[string]string{"API_BASE_URL": "http://api.example.org"}, "API_BASE_URL"},
+		"smtp without host":        {map[string]string{"SMTP_HOST": ""}, "SMTP_HOST"},
+	}
+	for name, c := range cases {
+		m := prodBase()
+		for k, v := range c.set {
+			m[k] = v
+		}
+		if _, err := load(env(m)); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: want an error mentioning %q, got %v", name, c.want, err)
+		}
+	}
+}
+
+func TestProductionAllowsInsecureDatabaseOnlyWhenExplicit(t *testing.T) {
+	m := prodBase()
+	m["DATABASE_URL"] = "postgres://u:p@db/x?sslmode=disable"
+	m["ALLOW_INSECURE_DATABASE"] = "true"
+	if _, err := load(env(m)); err != nil {
+		t.Fatalf("explicit opt-out should be accepted: %v", err)
+	}
+}
+
+func TestSMTPSettingsAreValidatedInDevelopmentToo(t *testing.T) {
+	_, err := load(env(map[string]string{"DATABASE_URL": "postgres://x", "EMAIL_PROVIDER": "smtp"}))
+	if err == nil || !strings.Contains(err.Error(), "SMTP_HOST") {
+		t.Fatalf("%v", err)
+	}
+	if _, err := load(env(map[string]string{"DATABASE_URL": "postgres://x", "EMAIL_PROVIDER": "carrier-pigeon"})); err == nil {
+		t.Fatal("unknown provider accepted")
+	}
+	c, err := load(env(map[string]string{"DATABASE_URL": "postgres://x", "EMAIL_PROVIDER": "smtp", "SMTP_HOST": "localhost", "SMTP_TLS": "none", "EMAIL_FROM_ADDRESS": "dev@localhost"}))
+	if err != nil || c.SMTPPort != 587 {
+		t.Fatalf("%v", err)
+	}
+}
+
+// Every setting that main() passes on must really be read from the environment (a declared-but-never-parsed field fails silently).
+func TestSMTPSettingsAreAllReadFromTheEnvironment(t *testing.T) {
+	c, err := load(env(map[string]string{
+		"DATABASE_URL": "postgres://x", "EMAIL_PROVIDER": "smtp", "SMTP_HOST": "mail.internal", "SMTP_PORT": "2525", "SMTP_USERNAME": "user",
+		"SMTP_PASSWORD": "pass", "SMTP_TLS": "implicit", "SMTP_CA_FILE": "/etc/ca.pem", "EMAIL_FROM_ADDRESS": "alerts@hawkeye.test",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.SMTPHost != "mail.internal" || c.SMTPPort != 2525 || c.SMTPUsername != "user" || c.SMTPPassword != "pass" || c.SMTPTLS != "implicit" ||
+		c.SMTPCAFile != "/etc/ca.pem" || c.EmailFromAddress != "alerts@hawkeye.test" {
+		t.Fatalf("%+v", c)
 	}
 }

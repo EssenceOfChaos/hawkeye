@@ -5,7 +5,7 @@
 A modular monolith: one Go module, one PostgreSQL database, and separately runnable processes that share
 `internal/` packages. No microservices, no Kubernetes.
 
-## Current state (Phases 1–7)
+## Current state (Phases 1–8)
 
 ```
 cmd/api        REST API process (Echo)
@@ -93,7 +93,7 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
 ## Decisions and assumptions
 
 - **Module name `hawkeye`**, matching the repository directory.
-- **Versions:** Go 1.25, Echo v4.16, pgx v5, golang-migrate v4, React 19, Vite 8. Echo v4 is used because it is the current stable major available.
+- **Versions:** Go 1.26.9, Echo v4.16, pgx v5, golang-migrate v4, React 19, Vite 8. Echo v4 is used because it is the current stable major available.
 - **Data access:** pgx with explicit SQL in the service packages. `sqlc` was considered for Phase 2 and dropped: the queries are few and the extra code generator added more machinery than it saved. Revisit if query volume grows.
 - **Migrations tool:** golang-migrate as a library, wrapped by `cmd/migrate`, so containers need no extra tooling.
 - **Process layout:** the scheduler runs inside `cmd/worker` (separate package, `DISABLE_SCHEDULER=true` turns it off per instance); there is no `cmd/scheduler` binary.
@@ -115,11 +115,15 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
 - **Downgrades:** nothing is deleted. The stored check interval is kept; the scheduler uses `max(stored, plan minimum)`.
 - **Soft delete:** deleted monitors stop counting toward limits; their rows remain until retention (Phase 6) removes them.
 - **Organization selection:** monitor endpoints use `X-Organization-ID` (verified) or the oldest membership. Personal organizations are the only kind today.
-- **Go version:** `golang.org/x/time` is pinned to v0.15.0 because v0.16 requires Go 1.26 and the Docker image uses Go 1.25.
+- **Go version:** Go 1.26.9 everywhere (go.mod, Docker, CI); earlier 1.25 pins were removed when govulncheck flagged stdlib issues.
 - **Migrations:** 000001 installs `set_updated_at()`; 000002 adds users, organizations, members, plans (seeded), sessions and the two token tables; 000007 adds `billing_webhook_events` and `subscriptions.last_synced_at`; 000006 adds indexes for retention; 000005 adds `incidents`, `notification_settings` (+ confirmation tokens) and `notification_deliveries`; 000004 adds `check_results`, `check_jobs` and `monitors.next_check_at`; 000003 adds subscriptions (every organization starts `active` on Free, created at registration) and monitors.
 - **Tests:** integration tests create a throwaway database per test (`testutil.NewDatabase`), so packages run in parallel safely.
 
 ## Planned phases
 
 2 Auth & tenancy · 3 Monitors & plans · 4 Scheduler/workers & SSRF-safe checks · 5 Incidents & notifications ·
-6 Dashboard & retention · 7 Stripe billing · 8 Production readiness.
+6 Dashboard & retention · 7 Stripe billing · 8 Production readiness (all complete).
+
+## Phase 8 additions
+
+Production Dockerfiles and Compose (`deploy/`, `docs/deployment.md`); SMTP sender; shared PostgreSQL rate limiter; API metrics on a private port (`:9091`) and alert rules; optional Sentry error tracking; account export/deletion/change-password; legal placeholder pages; backup/restore scripts (`docs/backup-restore.md`); egress firewall; smoke test (`scripts/smoke.sh`); security review (`docs/security-review.md`).

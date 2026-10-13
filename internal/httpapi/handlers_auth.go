@@ -4,10 +4,12 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 
+	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/monitors"
@@ -26,7 +28,10 @@ type handlers struct {
 	db            *pgxpool.Pool
 	notifications *notifications.Service
 	billing       *billing.Service
+	account       *account.Service
 	log           *slog.Logger
+	limits        limiterDeps
+	emailPerHour  int
 	secureCookies bool
 }
 
@@ -55,6 +60,11 @@ func mapError(err error) error {
 	case errors.As(err, &ve):
 		return &APIError{Status: http.StatusBadRequest, Code: "VALIDATION_ERROR",
 			Message: "One or more fields are invalid.", Details: map[string]any{"fields": ve.Fields}}
+	case errors.Is(err, auth.ErrWrongPassword):
+		return &APIError{Status: http.StatusForbidden, Code: "WRONG_PASSWORD", Message: "That password is not correct."}
+	case errors.Is(err, account.ErrSharedOrganization):
+		return &APIError{Status: http.StatusConflict, Code: "OWNS_SHARED_ORGANIZATION",
+			Message: "You own an organization that has other members. Remove them first, so their data is not deleted with your account."}
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		return &APIError{Status: http.StatusUnauthorized, Code: "INVALID_CREDENTIALS", Message: "Invalid email or password."}
 	case errors.Is(err, auth.ErrEmailTaken):
@@ -105,6 +115,9 @@ func (h *handlers) login(c echo.Context) error {
 	if err := bind(c, &in); err != nil {
 		return err
 	}
+	if h.limits.l != nil && !h.limits.allow(c, "login-account", in.Email, loginAttemptsPerHour, time.Hour) {
+		return errRateLimited
+	}
 	u, session, err := h.auth.Login(c.Request().Context(), in.Email, in.Password)
 	if err != nil {
 		return mapError(err)
@@ -130,8 +143,11 @@ func (h *handlers) forgotPassword(c echo.Context) error {
 	if err := bind(c, &in); err != nil {
 		return err
 	}
-	if err := h.auth.ForgotPassword(c.Request().Context(), in.Email); err != nil {
-		return err
+	// Each address may trigger only a few reset emails per hour (no mail-bombing a victim). The response is identical either way.
+	if h.emailBudget(c, "forgot", in.Email) {
+		if err := h.auth.ForgotPassword(c.Request().Context(), in.Email); err != nil {
+			return err
+		}
 	}
 	// Same response whether or not the account exists.
 	return c.JSON(http.StatusAccepted, map[string]string{"status": "If the account exists, a reset email has been sent."})
@@ -165,6 +181,10 @@ func (h *handlers) verifyEmail(c echo.Context) error {
 }
 
 func (h *handlers) resendVerification(c echo.Context) error {
+	if !h.emailBudget(c, "verify", currentUser(c).Email) {
+		c.Response().Header().Set("Retry-After", "3600")
+		return errRateLimited
+	}
 	if err := h.auth.ResendVerification(c.Request().Context(), currentUser(c)); err != nil {
 		return err
 	}

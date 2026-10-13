@@ -79,8 +79,8 @@ export function IncidentsPage() {
       {items === null && !error && <p role="status">Loading incidents…</p>}
       {items?.length === 0 && (
         <section className="card empty">
-          <h2>{filter ? 'No incidents match' : 'No incidents — everything has been healthy'}</h2>
-          <p>When a monitor goes down you’ll see it here, and we’ll email your alert recipients.</p>
+          <h2>{filter ? 'No incidents match' : 'No incidents to report'}</h2>
+          <p>When a confirmed outage occurs you’ll see its timeline here, and HawkEye will email your alert recipients.</p>
         </section>
       )}
       {items && items.length > 0 && (

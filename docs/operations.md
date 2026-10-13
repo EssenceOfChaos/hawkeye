@@ -37,11 +37,59 @@ only thing that can notice its own outage.
 
 | `hawkeye_billing_webhook_events_total{result}` | `received`, `duplicate`, `invalid_signature`, `processed`, `ignored`, `retry`, `failed`. A burst of `invalid_signature` = wrong `STRIPE_WEBHOOK_SECRET` (after rolling it?) or probing |
 | `hawkeye_billing_events_pending`, `hawkeye_billing_oldest_pending_seconds` | stored events not yet applied; the oldest should stay under a few minutes |
+| `hawkeye_billing_risk_events_total{type}` | **alert on any increase**: a dispute, refund or fraud warning needs human review (runbook in `docs/billing.md`) |
 | `hawkeye_billing_events_failed` | **alert on > 0**: an event gave up (8 attempts) and a customer's plan may be wrong |
+
+## API metrics (`:9091/metrics`, API process, private)
+
+The API serves its metrics on a **separate port that is never published or proxied** (Caddy forwards only `/api/*`, `/healthz`, `/readyz`). Scrape it from inside the Docker network.
+
+| Metric | Meaning |
+|---|---|
+| `hawkeye_http_requests_total{method,route,code}` | requests by route *template* (e.g. `/api/v1/monitors/:monitorID`), so cardinality stays bounded |
+| `hawkeye_http_request_duration_seconds{route}` | latency histogram |
+| `hawkeye_http_requests_in_flight`, `hawkeye_http_panics_total` | load; recovered handler panics (each also goes to the error tracker) |
+| `hawkeye_rate_limited_total{scope}` | requests refused by a rate limit (`global`, `route:login`, `login-account`, ...). A spike on `route:login` is credential stuffing |
+| `hawkeye_rate_limiter_errors_total` | the shared limiter's database failed and limits were skipped (fail-open) |
+| `hawkeye_email_actions_suppressed_total{action}` | emails not sent because an address hit its hourly cap (mail-bombing attempts) |
+| `hawkeye_db_pool_*` | connection pool usage (`acquired`, `idle`, `total`, `max`, `empty_acquires_total`, `acquire_wait_seconds_total`); also exposed by the worker |
+| `hawkeye_billing_webhook_events_total{result}`, `hawkeye_billing_risk_events_total{type}` | billing intake (the API receives webhooks) |
+
+## Alerting and external monitoring
+
+`deploy/prometheus-alerts.yml` contains 21 alert rules covering API errors and latency, panics, the shared limiter, database pool pressure, workers not polling, scheduler lag,
+queue backlog/backpressure, missed checks, dropped jobs, mass check failures (a sign of **our** network problem), stale retention, alert-email backlog/failures, and billing
+failures/risk events. They are validated with `promtool check rules`, and a unit test fails if a rule names a metric the code does not export.
+Load the file into your Prometheus (or Grafana/Alertmanager) and route `severity: page` alerts to a pager.
+
+Also run an **external** uptime check on `https://<domain>/readyz` from a different provider/region (several free tiers exist), alerting a channel that does not depend on this
+system. A monitoring product must never be the only thing able to notice its own outage. Optional: set `SENTRY_DSN` for error tracking (events are scrubbed of emails, tokens and keys before leaving the process).
+
+## Runbooks
+
+Each section is linked from an alert in `deploy/prometheus-alerts.yml`.
+
+### API errors
+
+1. `docker compose logs --tail 200 api` (JSON; every request has a `request_id`, which is also in the `X-Request-Id` response header and in error-tracker events).
+2. 5xx on one route only → look at that route's handler/logs. 5xx everywhere → check `/readyz` (database) and `hawkeye_db_pool_*` (pool exhausted? raise `DB_MAX_CONNS`, check for slow queries with `SELECT * FROM pg_stat_activity WHERE state <> 'idle' ORDER BY query_start`).
+3. Latency up with CPU low → database. Latency up with CPU high on the API container → scale `api` replicas (they are stateless; sessions and rate limits are in PostgreSQL).
+4. A burst of 429s: see `hawkeye_rate_limited_total` by scope; legitimate NAT'd offices can hit the per-IP limits (raise `AUTH_RATE_LIMIT_PER_MIN` / `GLOBAL_RATE_LIMIT_PER_MIN`).
+
+### Email delivery failing
+
+Symptoms: `HawkEyeAlertEmailBacklog`/`HawkEyeAlertEmailFailing`. Delivery errors are in `notification_deliveries.last_error` (sanitised) and the worker log.
+`smtp auth` errors → wrong `SMTP_USERNAME/PASSWORD` (rotated key?); `starttls`/certificate errors → wrong `SMTP_TLS` mode/port or a private CA (`SMTP_CA_FILE`); `451/452` → provider throttling (retried automatically with backoff);
+`550/553` → bad recipient (marked failed, no retry). Deliveries retry for hours, so fixing the credential lets queued alerts go out; to push them now:
+`UPDATE notification_deliveries SET next_attempt_at = now() WHERE status = 'pending';`. Account emails (verification, reset) are sent by the API process; their failures are logged as `send ... email failed`.
 
 ## Troubleshooting
 
-**A customer paid but is still on Free / was cancelled but still has access.** (1) Look at their organization's row and recent events:
+More specific runbooks:
+
+### Billing is out of sync with Stripe
+
+(1) Look at their organization's row and recent events:
 `SELECT s.status, p.code, s.provider_subscription_id, s.last_synced_at FROM subscriptions s JOIN plans p ON p.id = s.plan_id WHERE s.organization_id = '…';` and
 `SELECT provider_event_id, event_type, status, attempt_count, last_error, received_at FROM billing_webhook_events ORDER BY received_at DESC LIMIT 20;`
 (2) No events at all → the webhook is not reaching us: check the endpoint URL/secret in Stripe (Workbench → Webhooks → Event deliveries), TLS, and `invalid_signature` counts.
@@ -49,22 +97,32 @@ only thing that can notice its own outage.
 (4) Events `failed` → fix the cause, then `UPDATE billing_webhook_events SET status='received', attempt_count=0, next_attempt_at=now() WHERE status='failed' AND id='…';`
 (5) Fastest repair for one organization: the owner (or you, via the API as them) calls `POST /api/v1/billing/sync`, which re-reads the subscription from Stripe.
 
-**Database growing / old data not disappearing.** Check `hawkeye_retention_last_success_timestamp_seconds`, the worker log lines "retention pass complete / failed", and that
+### Database growing
+
+Check `hawkeye_retention_last_success_timestamp_seconds`, the worker log lines "retention pass complete / failed", and that
 `DISABLE_RETENTION` is not set on every worker. Table sizes: `SELECT pg_size_pretty(pg_total_relation_size('check_results'));`. A first pass after a long gap deletes in
 batches of `RETENTION_BATCH` (default 5000) with 50 ms pauses, so it can take a while but does not block checks or the API. Run a pass by restarting a worker, or lower `RETENTION_INTERVAL` temporarily.
 
-**A customer says their history is missing.** Their plan's window applies (`plans.history_retention_days`): 7 / 90 / 365 days. After a downgrade older data is deleted on the next pass and cannot be restored (restore from a backup if absolutely necessary).
+### History is missing
 
-**Uptime shows "not enough data".** Fewer than 5 completed checks exist in the window (new monitor, paused monitor, or a window beyond the retained history).
+Their plan's window applies (`plans.history_retention_days`): 7 / 90 / 365 days. After a downgrade older data is deleted on the next pass and cannot be restored (restore from a backup if absolutely necessary).
 
-**Alerts are not arriving.** (1) Is the monitor's incident open? `SELECT * FROM incidents WHERE monitor_id = '…' ORDER BY started_at DESC LIMIT 3;`
+### Uptime shows not enough data
+
+Fewer than 5 completed checks exist in the window (new monitor, paused monitor, or a window beyond the retained history).
+
+### Alerts are not arriving
+
+(1) Is the monitor's incident open? `SELECT * FROM incidents WHERE monitor_id = '…' ORDER BY started_at DESC LIMIT 3;`
 (2) Were deliveries created? `SELECT d.event_type, d.status, d.attempt_count, d.last_error, s.destination FROM notification_deliveries d JOIN notification_settings s ON s.id = d.notification_setting_id WHERE d.incident_id = '…';`
 No rows means no enabled, verified recipient existed when the incident opened (check `notification_settings.verified_at`/`enabled`).
 `pending` with a future `next_attempt_at` is a retry waiting for backoff; `failed` has the sanitised reason in `last_error`.
 (3) Is a worker running (the dispatcher lives in `cmd/worker`)? In development the email provider is `console`, so mail appears in the worker log, not a mailbox.
 To retry a failed delivery now: `UPDATE notification_deliveries SET status='pending', attempt_count=0, next_attempt_at=now() WHERE id='…';`
 
-**Checks are not running.** (1) Is a worker up? `hawkeye_worker_last_poll_timestamp_seconds`, `/healthz`. (2) Is a scheduler running
+### Checks are not running
+
+(1) Is a worker up? `hawkeye_worker_last_poll_timestamp_seconds`, `/healthz`. (2) Is a scheduler running
 (`DISABLE_SCHEDULER` unset on at least one instance)? (3) Look at lag and queue metrics:
 ```sql
 SELECT count(*) FILTER (WHERE status='queued') queued, count(*) FILTER (WHERE status='running') running,
@@ -72,17 +130,27 @@ SELECT count(*) FILTER (WHERE status='queued') queued, count(*) FILTER (WHERE st
 SELECT count(*) AS overdue, min(next_check_at) FROM monitors
  WHERE enabled AND deleted_at IS NULL AND next_check_at <= now();
 ```
-**Jobs stuck "running".** Expected briefly. If `expired_leases > 0` and nothing reclaims them, no worker is polling. Expired leases are
+### Jobs stuck running
+
+Expected briefly. If `expired_leases > 0` and nothing reclaims them, no worker is polling. Expired leases are
 reclaimed automatically; no manual action is needed. To force a retry: `UPDATE check_jobs SET locked_until = now() - interval '1 second' WHERE status='running';`
 
-**Queue full (backpressure).** Raise `WORKER_CONCURRENCY` (and DB pool), add worker instances, or raise `QUEUE_MAX_DEPTH`. Each check holds one
+### Queue full (backpressure)
+
+Raise `WORKER_CONCURRENCY` (and DB pool), add worker instances, or raise `QUEUE_MAX_DEPTH`. Each check holds one
 goroutine and one database connection only while claiming/recording, not while waiting on the website.
 
-**Many `blocked` failures for a monitor.** The target resolves to a private/reserved address or redirects to one; this is the SSRF guard working. Tell the customer.
+### Many blocked failures for one monitor
 
-**Many `dns`/`timeout` failures across unrelated sites.** Suspect worker-side DNS or egress networking, not the customers' sites.
+The target resolves to a private/reserved address or redirects to one; this is the SSRF guard working. Tell the customer.
 
-**Wipe a poisoned queue** (safe: the scheduler re-enqueues due monitors): `DELETE FROM check_jobs;`
+### Many dns or timeout failures across unrelated sites
+
+Suspect worker-side DNS or egress networking, not the customers' sites.
+
+### Wipe a poisoned queue
+
+(safe: the scheduler re-enqueues due monitors): `DELETE FROM check_jobs;`
 
 ## Tuning
 

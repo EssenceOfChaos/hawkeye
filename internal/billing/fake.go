@@ -2,17 +2,44 @@ package billing
 
 import (
 	"context"
+	"fmt"
 	"sync"
+
+	"github.com/google/uuid"
 )
 
 // FakeProvider is an in-memory Provider for tests and local development without Stripe credentials.
 type FakeProvider struct {
-	mu              sync.Mutex
-	Checkouts       []CheckoutParams
-	PortalCustomers []string
-	CanceledSubs    []string
-	Subscriptions   map[string]SubscriptionState // returned by GetSubscription / updated by CancelAtPeriodEnd
-	Err             error                        // returned by every call when set
+	mu               sync.Mutex
+	CustomersCreated []string
+	CustomersDeleted []string
+	Checkouts        []CheckoutParams
+	PortalCustomers  []string
+	CanceledSubs     []string
+	Subscriptions    map[string]SubscriptionState // returned by GetSubscription / updated by CancelAtPeriodEnd
+	Err              error                        // returned by every call when set
+}
+
+// CreateCustomer returns a distinct ID per call (real Stripe would return the same one for a repeated idempotency key), so tests can
+// detect any code path that creates more customers than it keeps.
+func (f *FakeProvider) CreateCustomer(_ context.Context, email string, orgID uuid.UUID) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return "", f.Err
+	}
+	f.CustomersCreated = append(f.CustomersCreated, email)
+	return fmt.Sprintf("cus_fake_%s_%d", orgID.String()[:8], len(f.CustomersCreated)), nil
+}
+
+func (f *FakeProvider) DeleteCustomer(_ context.Context, customerID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return f.Err
+	}
+	f.CustomersDeleted = append(f.CustomersDeleted, customerID)
+	return nil
 }
 
 func (f *FakeProvider) CreateCheckoutSession(_ context.Context, p CheckoutParams) (string, error) {

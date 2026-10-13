@@ -326,7 +326,7 @@ func TestOutageAndRecoveryEndToEnd(t *testing.T) {
 	e.round(t, w) // second failure confirms the outage
 	drain()
 	msgs := mail.Messages()
-	if len(msgs) != 1 || msgs[0].To != "owner@example.com" || !strings.Contains(msgs[0].Subject, "DOWN") || !strings.Contains(msgs[0].Text, "Received HTTP 500") {
+	if len(msgs) != 1 || msgs[0].To != "owner@example.com" || !strings.Contains(msgs[0].Subject, "may be down") || !strings.Contains(msgs[0].Text, "Received HTTP 500") {
 		t.Fatalf("outage mail: %+v", msgs)
 	}
 	e.round(t, w)
@@ -340,7 +340,7 @@ func TestOutageAndRecoveryEndToEnd(t *testing.T) {
 	e.round(t, w) // second success confirms recovery
 	drain()
 	msgs = mail.Messages()
-	if len(msgs) != 2 || !strings.Contains(msgs[1].Subject, "RECOVERED") {
+	if len(msgs) != 2 || !strings.Contains(msgs[1].Subject, "is responding again") {
 		t.Fatalf("recovery mail: %+v", msgs)
 	}
 	var open, resolved int

@@ -3,10 +3,8 @@
 Multi-tenant website monitoring SaaS: add websites, detect downtime, get alerts, review uptime.
 Go + Echo REST API, PostgreSQL, React + TypeScript frontend.
 
-**Status:** Phases 1–7 complete (Stripe billing is built and tested against a fake provider and signed fixtures; it needs your Stripe test keys to run for real, see `docs/billing.md`) (dashboard, uptime, response-time charts, check history, per-plan retention are in). Earlier: foundation, authentication & tenancy, monitor management with plan limits, the monitoring engine
-(durable scheduler/queue, SSRF-safe checks), and incidents with confirmed-outage/recovery email alerts. Email is still the `console` provider
-(messages are logged, not delivered). Dashboard/charts/uptime arrive in Phase 6, billing in Phase 7.
-See `docs/architecture.md` for the design.
+**Status:** all 8 phases complete: auth and tenancy, monitors with plan limits, the monitoring engine (durable scheduler/queue, SSRF-safe checks), incidents and email alerts, dashboard/uptime/charts/retention, Stripe billing (verified against the Stripe sandbox; real webhook delivery still needs `stripe listen`, see `docs/billing.md`), and production readiness (hardened images, HTTPS, backups, monitoring, security review). **Before real customers:** replace the placeholder Privacy/Terms (`docs/legal-placeholders.md`) and read the residual risks in `docs/security-review.md`.
+See `docs/architecture.md` for the design and `docs/deployment.md` to deploy.
 
 ## Prerequisites
 
@@ -44,7 +42,7 @@ make check                 # gofmt, go vet, go test -race, web lint/test/build
 
 Without `TEST_DATABASE_URL`, the PostgreSQL integration tests are **skipped** (the test log says so). CI always sets it.
 Each integration test creates and drops its own temporary database on that server, so the role needs CREATEDB.
-API reference: `docs/api.md`. Security notes: `docs/security.md`. Running the engine: `docs/operations.md`. Brand assets: `docs/branding.md`. Billing/Stripe: `docs/billing.md`.
+API reference: `docs/api.md`. Security notes: `docs/security.md`. Running the engine: `docs/operations.md`. Brand assets: `docs/branding.md`. Billing/Stripe: `docs/billing.md`. Deployment: `docs/deployment.md`. Backups: `docs/backup-restore.md`. Security review: `docs/security-review.md`.
 
 ## Commands
 
@@ -56,6 +54,8 @@ API reference: `docs/api.md`. Security notes: `docs/security.md`. Running the en
 | `make test`, `make test-race` | Go tests |
 | `make lint` | gofmt, vet, web lint |
 | `make build` | Build binaries into `bin/` and the web bundle |
+| `make smoke-up` / `smoke` / `smoke-down` | Build and run the production images locally (HTTPS, mail catcher), run 30 checks, tear down |
+| `make vuln` | `govulncheck` |
 
 ## Configuration
 
@@ -70,6 +70,7 @@ golang-migrate. Never edit an applied migration; add a new one.
 
 ## Troubleshooting
 
+- macOS: `go test -race` or cgo fails to link with a newer SDK → `export SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk` (or whichever older SDK is installed under that folder).
 - `invalid configuration: DATABASE_URL: required` — copy `.env.example` to `.env` (Make loads it) or export the variable.
 - `/readyz` returns 503 — PostgreSQL is unreachable; check the API log for the underlying error (it is deliberately not in the response).
 - Migration says `dirty` — a migration failed midway; fix the database state manually, then `migrate force <version>` (golang-migrate CLI).

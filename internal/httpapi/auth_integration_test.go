@@ -15,16 +15,20 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/labstack/echo/v4"
 
+	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/email"
+	"hawkeye/internal/errtrack"
 	"hawkeye/internal/httpapi"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
+	"hawkeye/internal/ratelimit"
 	"hawkeye/internal/testutil"
 )
 
@@ -33,19 +37,27 @@ type env struct {
 	pool *pgxpool.Pool
 	mail *email.Memory
 	fake *billing.FakeProvider // set when billing is enabled
+	app  *echo.Echo
 }
 
 type envOpts struct {
 	billingCfg billing.Config
 	provider   billing.Provider
+
+	// Phase 8 hardening, off by default so older tests keep their simple setup.
+	shared    bool // use the database-backed shared rate limiter
+	hsts      bool
+	metrics   *metrics.APIMetrics
+	reporter  errtrack.Reporter
+	emailPerH int
+	global    int
 }
 
 func newEnv(t *testing.T, rateLimit int) *env { return newEnvOpts(t, rateLimit, envOpts{}) }
 
-func newEnvOpts(t *testing.T, rateLimit int, o envOpts) *env {
+// buildApp assembles the API against pool. It is called more than once on one pool to simulate several API processes.
+func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit int, o envOpts) *echo.Echo {
 	t.Helper()
-	pool := testutil.NewPool(t)
-	mail := &email.Memory{}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	svc, err := auth.NewService(pool, mail, log, auth.Config{
 		AppBaseURL: "http://app.test", Hasher: auth.Hasher{Memory: 8, Time: 1, Threads: 1},
@@ -54,16 +66,29 @@ func newEnvOpts(t *testing.T, rateLimit int, o envOpts) *env {
 		t.Fatal(err)
 	}
 	planSvc := plans.NewService("http://app.test")
-	app := httpapi.New(httpapi.Options{
+	opts := httpapi.Options{
 		Logger: log, DB: pool, RequestTimeout: 10 * time.Second, BodyLimit: "1M",
 		Auth: svc, Orgs: organizations.NewService(pool), AuthRateLimitPerMin: rateLimit,
 		Plans: planSvc, Monitors: monitors.NewService(pool, planSvc), Pool: pool, PgPool: pool,
 		Notifications: notifications.NewService(pool, mail, log, "http://app.test", "alerts@test"),
 		Billing:       billing.NewService(pool, o.provider, o.billingCfg, metrics.New(), log),
-	})
+		Account:       account.NewService(pool, svc, o.provider, mail, log),
+		HSTS:          o.hsts, Metrics: o.metrics, Errors: o.reporter, EmailActionLimitPerHour: o.emailPerH, GlobalRateLimitPerMin: o.global,
+	}
+	if o.shared {
+		opts.Limiter = ratelimit.New(pool)
+	}
+	return httpapi.New(opts)
+}
+
+func newEnvOpts(t *testing.T, rateLimit int, o envOpts) *env {
+	t.Helper()
+	pool := testutil.NewPool(t)
+	mail := &email.Memory{}
+	app := buildApp(t, pool, mail, rateLimit, o)
 	srv := httptest.NewServer(app)
 	t.Cleanup(srv.Close)
-	e := &env{srv: srv, pool: pool, mail: mail}
+	e := &env{srv: srv, pool: pool, mail: mail, app: app}
 	if f, ok := o.provider.(*billing.FakeProvider); ok {
 		e.fake = f
 	}

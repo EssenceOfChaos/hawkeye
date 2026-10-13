@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/errtrack"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/reports"
@@ -53,8 +54,8 @@ func (c Config) withDefaults() Config {
 
 // Stats counts what one pass removed.
 type Stats struct {
-	CheckResults, Incidents, Monitors, Sessions, Tokens, BillingEvents int
-	Skipped                                                            bool // another instance holds the lock
+	CheckResults, Incidents, Monitors, Sessions, Tokens, BillingEvents, RateLimits int
+	Skipped                                                                        bool // another instance holds the lock
 }
 
 type Job struct {
@@ -63,10 +64,17 @@ type Job struct {
 	m    *metrics.Metrics
 	log  *slog.Logger
 	now  func() time.Time
+	rep  errtrack.Reporter
 }
 
 func New(pool *pgxpool.Pool, cfg Config, m *metrics.Metrics, log *slog.Logger) *Job {
-	return &Job{pool: pool, cfg: cfg.withDefaults(), m: m, log: log, now: time.Now}
+	return &Job{pool: pool, cfg: cfg.withDefaults(), m: m, log: log, now: time.Now, rep: errtrack.Noop{}}
+}
+
+// WithReporter sends failed retention steps to an error tracker.
+func (j *Job) WithReporter(r errtrack.Reporter) *Job {
+	j.rep = r
+	return j
 }
 
 // Run executes a pass immediately and then every Interval until ctx is cancelled.
@@ -120,6 +128,7 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 		if err != nil && ctx.Err() == nil {
 			j.m.RetentionErrors.Inc()
 			j.log.Error("retention step failed", "error", err)
+			j.rep.Capture(ctx, err, map[string]string{"component": "retention"})
 			if firstErr == nil {
 				firstErr = err
 			}
@@ -177,6 +186,10 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 		note(err)
 	}
 
+	// Shared rate-limit counters only matter for the current window; keep a day for investigation.
+	st.RateLimits, err2 = j.batchesNoOrg(ctx, `DELETE FROM rate_limits WHERE (key, window_start) IN (
+			SELECT key, window_start FROM rate_limits WHERE window_start < $1 LIMIT $2)`, j.now().Add(-24*time.Hour))
+	note(err2)
 	// Stored webhook payloads include customer details: keep handled ones 90 days (enough to investigate), failed ones 180.
 	var berr error
 	st.BillingEvents, berr = j.batchesNoOrg(ctx, `DELETE FROM billing_webhook_events WHERE id IN (
@@ -193,6 +206,7 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 	j.m.RetentionDeleted.WithLabelValues("sessions").Add(float64(st.Sessions))
 	j.m.RetentionDeleted.WithLabelValues("tokens").Add(float64(st.Tokens))
 	j.m.RetentionDeleted.WithLabelValues("billing_events").Add(float64(st.BillingEvents))
+	j.m.RetentionDeleted.WithLabelValues("rate_limits").Add(float64(st.RateLimits))
 	return st, firstErr
 }
 

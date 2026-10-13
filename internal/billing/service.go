@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/errtrack"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/validation"
@@ -33,10 +34,17 @@ type Service struct {
 	cfg      Config
 	m        *metrics.Metrics
 	log      *slog.Logger
+	rep      errtrack.Reporter
 }
 
 func NewService(pool *pgxpool.Pool, provider Provider, cfg Config, m *metrics.Metrics, log *slog.Logger) *Service {
-	return &Service{pool: pool, provider: provider, cfg: cfg.withDefaults(), m: m, log: log}
+	return &Service{pool: pool, provider: provider, cfg: cfg.withDefaults(), m: m, log: log, rep: errtrack.Noop{}}
+}
+
+// WithReporter sends billing events that failed permanently (and so need a human) to an error tracker.
+func (s *Service) WithReporter(r errtrack.Reporter) *Service {
+	s.rep = r
+	return s
 }
 
 // Enabled reports whether Checkout and the portal can be offered.
@@ -126,19 +134,49 @@ func (s *Service) CreateCheckout(ctx context.Context, orgID uuid.UUID, userEmail
 	if cur.Code != plans.FreeCode {
 		return "", ErrAlreadySubscribed // plan changes go through the customer portal
 	}
+	customerID, err := s.ensureCustomer(ctx, orgID, userEmail)
+	if err != nil {
+		return "", err
+	}
+	return s.provider.CreateCheckoutSession(ctx, CheckoutParams{
+		OrganizationID: orgID, PriceID: price, CustomerID: customerID,
+		SuccessURL: s.cfg.AppBaseURL + "/billing?checkout=success",
+		CancelURL:  s.cfg.AppBaseURL + "/billing?checkout=canceled",
+	})
+}
+
+// ensureCustomer returns the organization's provider customer, creating and storing it first if needed. Creating it BEFORE
+// Checkout means every later subscription event can be attributed through the customer ID (a first-class provider object that we
+// map in our own database) instead of depending on metadata or on the order in which events arrive.
+func (s *Service) ensureCustomer(ctx context.Context, orgID uuid.UUID, email string) (string, error) {
 	r, err := loadRow(ctx, s.pool, orgID, false)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return "", err
 	}
-	cp := CheckoutParams{
-		OrganizationID: orgID, PriceID: price, CustomerEmail: userEmail,
-		SuccessURL: s.cfg.AppBaseURL + "/billing?checkout=success",
-		CancelURL:  s.cfg.AppBaseURL + "/billing?checkout=canceled",
-	}
 	if r.customerID != nil {
-		cp.CustomerID, cp.CustomerEmail = *r.customerID, ""
+		return *r.customerID, nil
 	}
-	return s.provider.CreateCheckoutSession(ctx, cp)
+	created, err := s.provider.CreateCustomer(ctx, email, orgID)
+	if err != nil {
+		return "", err
+	}
+	// Store it only if nobody else did first (two simultaneous requests): the first stored customer wins, the other is simply unused.
+	var stored string
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `INSERT INTO subscriptions (organization_id, plan_id, status)
+			SELECT $1, id, 'active' FROM plans WHERE code = 'free' ON CONFLICT (organization_id) DO NOTHING`, orgID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE subscriptions SET provider = 'stripe', provider_customer_id = $2
+			WHERE organization_id = $1 AND provider_customer_id IS NULL`, orgID, created); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, `SELECT provider_customer_id FROM subscriptions WHERE organization_id = $1`, orgID).Scan(&stored)
+	})
+	if err != nil {
+		return "", err
+	}
+	return stored, nil
 }
 
 // CreatePortal opens the provider's customer portal (payment method, plan changes, cancellation).

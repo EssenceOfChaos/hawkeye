@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"hawkeye/internal/billing"
 	"log/slog"
+	"net/mail"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -46,6 +48,20 @@ type Config struct {
 
 	EmailProvider    string
 	EmailFromAddress string
+	SMTPHost         string
+	SMTPPort         int
+	SMTPUsername     string
+	SMTPPassword     string
+	SMTPTLS          string
+	SMTPCAFile       string
+
+	APIMetricsPort          int
+	GlobalRateLimitPerMin   int
+	EmailActionLimitPerHour int
+	AllowInsecureDatabase   bool
+
+	SentryDSN  string
+	AppVersion string
 
 	// Monitoring engine (worker process).
 	WorkerConcurrency int
@@ -68,6 +84,15 @@ type Config struct {
 	StripeWebhookSecret string
 	StripePricePro      string
 	StripePriceAgency   string
+}
+
+// dbSSLMode extracts sslmode from a PostgreSQL URL ("" if absent or unparseable).
+func dbSSLMode(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return u.Query().Get("sslmode")
 }
 
 func (c Config) IsProduction() bool { return c.AppEnv == EnvProduction }
@@ -164,7 +189,21 @@ func load(get func(string) string) (Config, error) {
 		StripePricePro:      str("STRIPE_PRICE_PRO_ID", ""),
 		StripePriceAgency:   str("STRIPE_PRICE_AGENCY_ID", ""),
 
-		EmailProvider:    str("EMAIL_PROVIDER", "console"),
+		EmailProvider: str("EMAIL_PROVIDER", "console"),
+		SMTPHost:      str("SMTP_HOST", ""),
+		SMTPPort:      integer("SMTP_PORT", 587),
+		SMTPUsername:  str("SMTP_USERNAME", ""),
+		SMTPPassword:  str("SMTP_PASSWORD", ""),
+		SMTPTLS:       str("SMTP_TLS", "starttls"),
+		SMTPCAFile:    str("SMTP_CA_FILE", ""),
+
+		APIMetricsPort:          integer("API_METRICS_PORT", 9091),
+		GlobalRateLimitPerMin:   integer("GLOBAL_RATE_LIMIT_PER_MIN", 600),
+		EmailActionLimitPerHour: integer("EMAIL_ACTION_LIMIT_PER_HOUR", 3),
+		AllowInsecureDatabase:   boolean("ALLOW_INSECURE_DATABASE"),
+
+		SentryDSN:        str("SENTRY_DSN", ""),
+		AppVersion:       str("APP_VERSION", "dev"),
 		EmailFromAddress: str("EMAIL_FROM_ADDRESS", "alerts@example.com"),
 	}
 
@@ -186,8 +225,34 @@ func load(get func(string) string) (Config, error) {
 	if c.AuthRateLimitPerMin < 1 {
 		errs = append(errs, errors.New("AUTH_RATE_LIMIT_PER_MIN: must be at least 1"))
 	}
-	if c.EmailProvider != "console" {
-		errs = append(errs, errors.New("EMAIL_PROVIDER: only \"console\" is implemented so far"))
+	switch c.EmailProvider {
+	case "console":
+	case "smtp":
+		if c.SMTPHost == "" {
+			errs = append(errs, errors.New("SMTP_HOST: required when EMAIL_PROVIDER=smtp"))
+		}
+		if c.SMTPPort < 1 || c.SMTPPort > 65535 {
+			errs = append(errs, errors.New("SMTP_PORT: must be between 1 and 65535"))
+		}
+		switch c.SMTPTLS {
+		case "starttls", "implicit", "none":
+		default:
+			errs = append(errs, errors.New("SMTP_TLS: must be starttls, implicit or none"))
+		}
+		if _, err := mail.ParseAddress(c.EmailFromAddress); err != nil {
+			errs = append(errs, errors.New("EMAIL_FROM_ADDRESS: must be a valid email address"))
+		}
+	default:
+		errs = append(errs, errors.New("EMAIL_PROVIDER: must be console or smtp"))
+	}
+	if c.APIMetricsPort < 1 || c.APIMetricsPort > 65535 || c.APIMetricsPort == c.Port {
+		errs = append(errs, errors.New("API_METRICS_PORT: must be a valid port different from APP_PORT"))
+	}
+	if c.GlobalRateLimitPerMin < 1 {
+		errs = append(errs, errors.New("GLOBAL_RATE_LIMIT_PER_MIN: must be at least 1"))
+	}
+	if c.EmailActionLimitPerHour < 1 {
+		errs = append(errs, errors.New("EMAIL_ACTION_LIMIT_PER_HOUR: must be at least 1"))
 	}
 	for key, v := range map[string]int{
 		"WORKER_CONCURRENCY": c.WorkerConcurrency, "SCHEDULER_BATCH": c.SchedulerBatch, "QUEUE_MAX_DEPTH": c.QueueMaxDepth,
@@ -218,6 +283,24 @@ func load(get func(string) string) (Config, error) {
 		}
 		if !strings.HasPrefix(c.AppBaseURL, "https://") {
 			errs = append(errs, errors.New("APP_BASE_URL: must use https in production"))
+		}
+		if !strings.HasPrefix(c.APIBaseURL, "https://") {
+			errs = append(errs, errors.New("API_BASE_URL: must use https in production"))
+		}
+		// Alerts and password resets must actually be delivered, and never over an unencrypted channel.
+		if c.EmailProvider != "smtp" {
+			errs = append(errs, errors.New("EMAIL_PROVIDER: must be smtp in production (console only logs messages)"))
+		}
+		if c.EmailProvider == "smtp" && c.SMTPTLS == "none" {
+			errs = append(errs, errors.New("SMTP_TLS: none is not allowed in production"))
+		}
+		if strings.HasSuffix(strings.ToLower(c.EmailFromAddress), "@example.com") {
+			errs = append(errs, errors.New("EMAIL_FROM_ADDRESS: set a real sender address you control (the default is a placeholder)"))
+		}
+		if !c.AllowInsecureDatabase {
+			if mode := dbSSLMode(c.DatabaseURL); mode == "" || mode == "disable" || mode == "allow" || mode == "prefer" {
+				errs = append(errs, fmt.Errorf("DATABASE_URL: sslmode must be require, verify-ca or verify-full in production (got %q); set ALLOW_INSECURE_DATABASE=true only for a database on a private network you control", mode))
+			}
 		}
 	}
 

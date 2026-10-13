@@ -1,4 +1,4 @@
-# API (Phases 2–7)
+# API (Phases 2–8)
 
 Base path `/api/v1`. JSON only. Operational probes `/healthz` and `/readyz` are outside the prefix.
 
@@ -16,8 +16,10 @@ Base path `/api/v1`. JSON only. Operational probes `/healthz` and `/readyz` are 
 | 403 | `PLAN_LIMIT_REACHED` | a plan limit blocks the operation (see below) |
 | 404 | `NOT_FOUND` | unknown resource **or one in another tenant** |
 | 409 | `EMAIL_TAKEN` | registration with an existing email |
-| 429 | `RATE_LIMITED` | per-IP limit on auth endpoints |
+| 429 | `RATE_LIMITED` | a rate limit was hit (per-IP, per-account login ceiling, or a global per-IP ceiling); sends `Retry-After` seconds |
 | 5xx | `INTERNAL_ERROR` | details are logged server-side only |
+
+Unknown paths under `/api/v1/` return 404 `NOT_FOUND` for everyone, signed in or not.
 
 ## Authentication model
 
@@ -39,6 +41,9 @@ The cookie is set on the first `/api/v1` response, so the SPA should call `GET /
 | `POST /auth/reset-password` | – | `{token, password}` → 204; revokes all sessions; also verifies the email |
 | `POST /auth/verify-email` | – | `{token}` → 204; links valid 48h, single use |
 | `POST /auth/resend-verification` | session | 202; invalidates older links |
+| `POST /auth/change-password` | session | `{current_password, new_password}` → 204; signs out other sessions, emails a notice |
+| `GET /account/export` | session | the caller's own data as a JSON download |
+| `POST /account/delete` | session | `{password, confirm_email}` (typed email must match) → 204; cancels the Stripe subscription, deletes sole-member organizations; 409 `OWNS_SHARED_ORGANIZATION`; wrong password 403 `WRONG_PASSWORD` while the user owns an organization with other members |
 | `GET /auth/me` | session | `{user, organizations[]}` |
 | `GET /organizations` | session | organizations the caller belongs to, with their `role` |
 | `GET /organizations/:id` | session | 404 if not a member |

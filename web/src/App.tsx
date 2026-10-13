@@ -3,11 +3,13 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router'
 import { AuthProvider, useAuth } from './auth'
 import { Layout } from './components/Layout'
 import { ConfirmAlertAddressPage, ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage, VerifyEmailPage } from './pages/AuthPages'
+import { AccountPage } from './pages/AccountPage'
 import { BillingPage } from './pages/BillingPage'
 import { IncidentsPage } from './pages/IncidentsPage'
 import { LandingPage } from './pages/LandingPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { MonitorFormPage } from './pages/MonitorFormPage'
+import { PrivacyPage, TermsPage } from './pages/LegalPages'
 import { MonitorsPage } from './pages/MonitorsPage'
 
 // The chart pages pull in the charting library; load them only when visited so the landing and auth pages stay light.
@@ -45,12 +47,15 @@ export function AppRoutes() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       </Route>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
       <Route path="/reset-password" element={<main><ResetPasswordPage /></main>} />
       <Route path="/confirm-alert-address" element={<main><ConfirmAlertAddressPage /></main>} />
       <Route element={<RequireAuth />}>
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/dashboard" element={<Lazy><DashboardPage /></Lazy>} />
         <Route path="/billing" element={<BillingPage />} />
+        <Route path="/account" element={<AccountPage />} />
         <Route path="/incidents" element={<IncidentsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/monitors" element={<MonitorsPage />} />

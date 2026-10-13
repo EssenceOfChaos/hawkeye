@@ -28,7 +28,7 @@ export function Layout() {
           <NavLink to="/billing">Billing</NavLink>
         </nav>
         <span className="spacer" />
-        <span className="who">{user?.email}</span>
+        <Link className="who" to="/account" aria-label="Account settings">{user?.email}</Link>
         <button onClick={() => void logout()}>Log out</button>
       </header>
       {user && !user.email_verified_at && (
@@ -46,6 +46,9 @@ export function Layout() {
       <main>
         <Outlet />
       </main>
+      <footer className="app-footer">
+        <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
+      </footer>
     </>
   )
 }

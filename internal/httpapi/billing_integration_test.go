@@ -185,7 +185,7 @@ func TestCheckoutSessionUsesServerSidePrices(t *testing.T) {
 		t.Fatalf("%d %v", r.Status, r.Body)
 	}
 	ck := e.fake.Checkouts[0]
-	if ck.PriceID != "price_pro" || ck.OrganizationID.String() != org || ck.CustomerEmail != "owner@example.com" {
+	if ck.PriceID != "price_pro" || ck.OrganizationID.String() != org || ck.CustomerID == "" || ck.CustomerEmail != "" {
 		t.Fatalf("%+v", ck)
 	}
 	if v := subView(t, c); v["paid_access"] != false {

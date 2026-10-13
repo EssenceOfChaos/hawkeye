@@ -1,0 +1,30 @@
+# Optional override: runs PostgreSQL in a container on the same host. Use only if you cannot use a managed database, and then take
+# regular off-host backups (scripts/backup.sh). The database has no TLS inside the private network, so set ALLOW_INSECURE_DATABASE=true
+# and use sslmode=disable in DATABASE_URL (host "db").
+#
+#   docker compose --env-file .env.production -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local-db.yml up -d --build
+services:
+  db:
+    image: postgres:17.11-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hawkeye}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: ${POSTGRES_DB:-monitoring}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-hawkeye} -d $${POSTGRES_DB:-monitoring}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # Not published on the host. `checks` lets the worker reach it; the worker's egress rules must allow this one address.
+    networks:
+      backend: {}
+      checks:
+        ipv4_address: 172.30.10.5   # fixed so the egress filter can allow exactly this address: ALLOW_TCP=172.30.10.5:5432
+  migrate:
+    depends_on:
+      db: { condition: service_healthy }
+
+volumes:
+  pgdata: {}

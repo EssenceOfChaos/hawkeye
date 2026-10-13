@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../auth'
@@ -30,14 +30,15 @@ describe('LandingPage', () => {
     renderLanding((url) =>
       url.includes('/plans') ? json(200, { plans }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }),
     )
-    expect(screen.getByRole('img', { name: 'HawkEye' })).toBeInTheDocument()
+    expect(screen.getAllByRole('img', { name: 'HawkEye' }).length).toBeGreaterThan(0)
     expect(await screen.findByText('50 website monitors')).toBeInTheDocument()
     expect(screen.getByText('$19')).toBeInTheDocument()
     // Paid checkout is not built yet, so the page must not pretend it is.
     expect(screen.getByRole('button', { name: /open soon/i })).toBeDisabled()
-    expect(screen.getAllByRole('link', { name: /start free|Monitor 5 sites free/i }).length).toBeGreaterThan(0)
-    // Reports are not built yet.
-    expect(screen.getByText('Coming soon')).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /start monitoring free/i }).length).toBeGreaterThan(0)
+    // Features that are not built (SSL expiry, exports, branded reports, SMS) must not be advertised.
+    expect(screen.queryByText(/ssl|branded|priority support/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Always in sight/ })).toBeInTheDocument()
   })
 
   it('offers real upgrade links once billing is enabled', async () => {
@@ -63,5 +64,30 @@ describe('LandingPage', () => {
     const icons = container.querySelectorAll('.feature img')
     expect(icons.length).toBeGreaterThanOrEqual(6)
     icons.forEach((img) => expect(img).toHaveAttribute('alt', ''))
+  })
+
+  it('social links are disabled placeholders, not links to accounts that do not exist', () => {
+    renderLanding(() => json(200, { plans: [] }))
+    for (const name of ['X', 'LinkedIn', 'GitHub', 'YouTube']) {
+      expect(screen.getByRole('button', { name: `${name} (coming soon)` })).toBeDisabled()
+    }
+  })
+
+  it('footer offers sign up and log in only to visitors who are not signed in', async () => {
+    renderLanding((url) =>
+      url.includes('/plans') ? json(200, { plans: [] }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }),
+    )
+    const footer = screen.getByRole('contentinfo')
+    expect(await within(footer).findByRole('link', { name: 'Sign up' })).toBeInTheDocument()
+    expect(within(footer).getByRole('link', { name: 'Log in' })).toBeInTheDocument()
+  })
+
+  it('footer hides sign up and log in for a signed-in user', async () => {
+    const me = { user: { id: 'u', email: 'a@b.co', email_verified_at: '2026-01-01T00:00:00Z' }, organizations: [] }
+    renderLanding((url) => (url.includes('/plans') ? json(200, { plans: [] }) : json(200, me)))
+    const footer = screen.getByRole('contentinfo')
+    expect(await within(footer).findByRole('link', { name: 'Dashboard' })).toBeInTheDocument()
+    expect(within(footer).queryByRole('link', { name: 'Sign up' })).not.toBeInTheDocument()
+    expect(within(footer).queryByRole('link', { name: 'Log in' })).not.toBeInTheDocument()
   })
 })

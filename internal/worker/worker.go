@@ -14,6 +14,7 @@ import (
 
 	"hawkeye/internal/billing"
 	"hawkeye/internal/checks"
+	"hawkeye/internal/errtrack"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/queue"
@@ -50,10 +51,17 @@ type Worker struct {
 	cfg     Config
 	m       *metrics.Metrics
 	log     *slog.Logger
+	rep     errtrack.Reporter
 }
 
 func New(pool *pgxpool.Pool, checker *checks.Checker, store *checks.Store, cfg Config, m *metrics.Metrics, log *slog.Logger) *Worker {
-	return &Worker{pool: pool, checker: checker, store: store, cfg: cfg.withDefaults(), m: m, log: log}
+	return &Worker{pool: pool, checker: checker, store: store, cfg: cfg.withDefaults(), m: m, log: log, rep: errtrack.Noop{}}
+}
+
+// WithReporter sends unexpected worker errors to an error tracker.
+func (w *Worker) WithReporter(r errtrack.Reporter) *Worker {
+	w.rep = r
+	return w
 }
 
 // Run starts Concurrency polling loops and returns after ctx is cancelled and in-flight checks have
@@ -68,6 +76,7 @@ func (w *Worker) Run(ctx context.Context) {
 				worked, err := w.ProcessOne(context.WithoutCancel(ctx))
 				if err != nil {
 					w.log.Error("worker iteration failed", "error", err)
+					w.rep.Capture(ctx, err, map[string]string{"component": "worker"})
 					worked = false
 				}
 				if !worked {

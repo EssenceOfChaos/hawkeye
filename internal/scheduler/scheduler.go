@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/errtrack"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/plans"
 )
@@ -50,10 +51,17 @@ type Scheduler struct {
 	m    *metrics.Metrics
 	log  *slog.Logger
 	rnd  func() float64 // [0,1); replaceable in tests
+	rep  errtrack.Reporter
 }
 
 func New(pool *pgxpool.Pool, cfg Config, m *metrics.Metrics, log *slog.Logger) *Scheduler {
-	return &Scheduler{pool: pool, cfg: cfg.withDefaults(), m: m, log: log, rnd: rand.Float64}
+	return &Scheduler{pool: pool, cfg: cfg.withDefaults(), m: m, log: log, rnd: rand.Float64, rep: errtrack.Noop{}}
+}
+
+// WithReporter sends unexpected scheduler errors to an error tracker.
+func (s *Scheduler) WithReporter(r errtrack.Reporter) *Scheduler {
+	s.rep = r
+	return s
 }
 
 // Stats summarises one tick.
@@ -70,6 +78,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 		if _, err := s.Tick(ctx); err != nil && ctx.Err() == nil {
 			s.m.WorkerErrors.WithLabelValues("schedule").Inc()
 			s.log.Error("scheduler tick failed", "error", err)
+			s.rep.Capture(ctx, err, map[string]string{"component": "scheduler"})
 		}
 		select {
 		case <-ctx.Done():

@@ -4,14 +4,32 @@ Subscriptions are handled with Stripe Checkout (hosted), the Stripe customer por
 
 ## What is verified, and what is not
 
-Built and tested without Stripe credentials:
-- webhook signature verification using Stripe's official library (signed in tests with the library's own signer), duplicate/out-of-order/replay handling;
-- subscription-state → entitlement mapping, downgrade behaviour, role/email gating, server-side pricing;
-- that our Stripe provider sends the right requests: the official SDK is pointed at a local stand-in server and the exact form fields are asserted
-  (`internal/billing/stripe_provider_test.go`).
+Verified **against the real Stripe sandbox** (`internal/billing/live_smoke_test.go`, run with `STRIPE_LIVE_SMOKE=1`, test-mode keys only, self-cleaning):
+- Checkout sessions are accepted by Stripe and return a real `checkout.stripe.com` URL; customer creation with an idempotency key; customer portal sessions;
+- a real subscription is read back correctly (status, price, billing period, metadata) and cancel-at-period-end works;
+- **real Stripe events** (account API version `2026-09-30.endive`) are replayed byte-for-byte through our webhook pipeline with the real provider re-reading state:
+  a real `customer.subscription.created` moves an organization Free → Pro, and a real `customer.subscription.deleted` moves it back, with nothing deleted.
 
-**Not verified until you have test keys:** that Stripe's real API accepts those requests and returns the shapes we parse, your Dashboard configuration,
-and the real webhook delivery. Do the checklist below once with a test-mode key before relying on any of it.
+Verified with fakes/fixtures (no network): signature verification (signed with Stripe's own SDK helper, and independently with `openssl` against the running API),
+duplicates/replay/ordering, status mapping, downgrade behaviour, role/email gating, server-side pricing.
+
+**Not yet verified:** Stripe's *own* delivery of a webhook to our endpoint with *its* signature (needs `stripe listen` or a registered endpoint; step 4 below), and Checkout page completion by a browser.
+The replay tests sign real payloads with a local test secret instead.
+
+## Decisions for you (business, not technical)
+
+- **Managed Payments.** New Stripe accounts have *Managed Payments* on by default: Stripe becomes the **merchant of record** and handles sales tax/VAT/GST in 80+ countries, fraud and
+  disputes. That is attractive for a small team selling worldwide, but it is a different legal/fee arrangement and Stripe documents restrictions (no Connect, no subscriptions created outside Checkout/Payment Links,
+  no one-off invoices outside the billing period, no third-party tax integrations). Review the terms and fees in the Dashboard (Settings → Managed Payments) before going live and decide to keep it
+  or turn it off (then you are the merchant of record and need Stripe Tax and registrations: https://docs.stripe.com/billing/taxes/collect-taxes). This code works either way; with it on, every Product needs a tax code.
+- **Tax codes.** Both sandbox products use `txcd_10103001` (SaaS, business use), which fits an agency/freelancer audience. Use the personal-use code (`txcd_10103000`) if you sell mainly to consumers.
+- **Stripe Invoicing.** Subscription invoices (and receipts, hosted invoice pages) are created by Stripe Billing automatically; configure branding and emails in the Dashboard.
+  Ad-hoc invoices for individual agencies are not part of this application.
+
+## Sandbox state (created for development)
+
+Products "HawkEye Pro" ($19/month) and "HawkEye Agency" ($59/month) with lookup keys `hawkeye_pro_monthly` / `hawkeye_agency_monthly`, tax code `txcd_10103001`. Their price IDs are in your local `.env`.
+Stripe's guidance is to use a dedicated sandbox per environment rather than the account's shared test mode; consider creating one for CI.
 
 ## Setup (test mode first)
 
@@ -27,7 +45,8 @@ and the real webhook delivery. Do the checklist below once with a test-mode key 
    `STRIPE_WEBHOOK_SECRET` and restart the API and worker. (The CLI's secret differs from a Dashboard endpoint's.)
 5. **Webhooks, deployed.** Workbench → Webhooks → create an event destination for *your account*, payload format **Snapshot** (this code reads snapshot
    events, not thin events), URL `https://<your-domain>/api/v1/webhooks/stripe`, and subscribe to only:
-   `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `checkout.session.completed`.
+   `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `checkout.session.completed`, and the risk events
+   `charge.dispute.created`, `charge.refunded`, `radar.early_fraud_warning.created` (surfaced for human review, see below).
    Copy the endpoint's signing secret into `STRIPE_WEBHOOK_SECRET`. Stripe recommends also allowlisting [Stripe's IP addresses](https://docs.stripe.com/ips) at your
    firewall in addition to signature verification. Roll the secret periodically (Workbench lets the old one stay valid up to 24 h).
 6. **Both processes need the settings.** The API creates sessions and receives webhooks; the worker retries unprocessed events and also needs the price IDs
@@ -53,7 +72,7 @@ Use a different card per independent scenario (Stripe notes card-level state can
 ## Flow
 
 ```
-Browser ──POST /billing/checkout-session {plan}──▶ API  (owner + verified email; price from config; nothing granted)
+Browser ──POST /billing/checkout-session {plan}──▶ API  (owner + verified email; price from config; creates + stores the Stripe customer first; nothing granted)
 Browser ◀── redirect URL ── API ;  Browser ──▶ Stripe Checkout ──▶ back to /billing?checkout=success   (still nothing granted)
 Stripe ──POST /api/v1/webhooks/stripe──▶ API: verify signature on the RAW body → store event (UNIQUE event id) → 200 right away
         API/worker: for a subscription event, RE-READ the subscription from Stripe → apply to our subscriptions row (one transaction)
@@ -84,10 +103,19 @@ A *deleted* event is the one exception: if the subscription can no longer be ret
 Free limit, the dashboard explains how many to delete or that the owner can upgrade, and the retention job later trims history to the Free window (documented in `architecture.md`).
 Cancelling from the app (or the portal) sets *cancel at period end*: the owner keeps paid access until the period ends, then Stripe deletes the subscription and access ends.
 
+## Risk events: disputes, refunds, fraud warnings
+
+`charge.dispute.created`, `charge.refunded` and `radar.early_fraud_warning.created` are stored, logged at WARN with the Stripe object IDs, and counted in
+`hawkeye_billing_risk_events_total{type}` (alert on any increase). They **never change entitlements automatically**: whether a refund or dispute should end access is a business decision.
+Manual runbook: open the object in the Stripe Dashboard, identify the subscription (via the charge → invoice → subscription, or the customer ID in the log), decide, then act in Stripe
+(cancel the subscription, which flows back as a verified event) or leave it. Not automated yet: resolving the affected subscription from these events (Stripe's object graph differs by API version).
+
 ## Safety rules enforced in code
 
 - **Prices come from configuration only**; the checkout endpoint reads just the plan name (`pro`/`agency`). Tested: client-supplied `price`/`amount` fields are ignored.
 - **Only owners** can start checkout, open the portal, cancel or re-sync, and the account email must be **verified** (members can view the plan).
+- **Customer first.** The Stripe customer is created (idempotency key per organization) and its ID stored *before* Checkout, so later events are attributed through the customer ID,
+  with checkout/subscription metadata only as a fallback.
 - **One subscription per organization.** A second paid subscription is reported as a conflict (event retried then `failed`) rather than overwriting the first; a stray non-paying
   duplicate being cancelled is ignored. Choosing a plan while subscribed returns `ALREADY_SUBSCRIBED` (use the portal). One Stripe customer maps to exactly one organization (unique index).
 - **Unknown prices never grant access.** A subscription whose price isn't `STRIPE_PRICE_PRO_ID`/`STRIPE_PRICE_AGENCY_ID` is rejected (and a cancellation of one is still honoured).
@@ -97,7 +125,25 @@ Cancelling from the app (or the portal) sets *cancel at period end*: the owner k
 
 ## Operations
 
+- Deleting an account first deletes the Stripe customer (which cancels its subscriptions; verified against the sandbox), then the data. If Stripe is unreachable the deletion fails and can be retried.
 - `POST /api/v1/billing/sync` (owner) re-reads the organization's subscription from Stripe and applies it: the repair tool when webhooks were missed (e.g. an outage longer than Stripe's 3-day retry window).
 - Stripe's Workbench → Webhooks → *Event deliveries* shows delivery status and can resend events (15 days via Dashboard, 30 days via CLI `stripe events resend`).
 - Metrics, alerts and SQL for stuck events: `docs/operations.md` (Billing).
 - Stored webhook payloads (which include customer details) are deleted after 90 days (failed ones after 180).
+
+## Keys
+
+- The sandbox secret key lives only in your local `.env` (gitignored, mode 600). It was shared in a chat session while setting this up: **roll it** in the Dashboard (Developers → API keys) when convenient and prefer a
+  **restricted key** (`rk_test_…`) with only the permissions this app uses (Customers, Checkout Sessions, Customer portal sessions, Subscriptions: write; Prices/Products: read). Test it by running the live smoke tests
+  and adding any permission a `403` reports. Use separate keys per environment and never put a live key in a file that is committed.
+- A publishable key (`pk_…`) is not used: we use Stripe-hosted Checkout, so no Stripe.js and no card data touch our pages (a Content-Security-Policy header is still a Phase 8 item).
+- Stripe SDK: `stripe-go/v87` (current as of this writing).
+
+## Running the live smoke tests
+
+```sh
+set -a; . ./.env; set +a
+export TEST_DATABASE_URL='postgres://postgres@localhost:5432/monitoring_test?sslmode=disable'
+STRIPE_LIVE_SMOKE=1 go test -count=1 -run LiveStripe -v ./internal/billing
+```
+They refuse to run with a non-test key, create one customer and one subscription per run and delete them at the end.

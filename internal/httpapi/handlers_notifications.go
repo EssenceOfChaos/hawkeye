@@ -58,6 +58,11 @@ func (h *handlers) createSetting(c echo.Context) error {
 	if in.Channel != "" && in.Channel != "email" {
 		return mapError(validation.New("channel", "only \"email\" is supported"))
 	}
+	// Adding a recipient emails a third party: cap how often any one address can be targeted.
+	if !h.emailBudget(c, "alert-confirm", in.Destination) {
+		c.Response().Header().Set("Retry-After", "3600")
+		return errRateLimited
+	}
 	s, err := h.notifications.Create(c.Request().Context(), currentOrg(c), actor(c), in.Destination)
 	if err != nil {
 		return mapError(err)
@@ -101,6 +106,10 @@ func (h *handlers) resendSettingConfirmation(c echo.Context) error {
 	id, err := settingID(c)
 	if err != nil {
 		return err
+	}
+	if !h.emailBudget(c, "alert-confirm-resend", id.String()) {
+		c.Response().Header().Set("Retry-After", "3600")
+		return errRateLimited
 	}
 	if err := h.notifications.ResendConfirmation(c.Request().Context(), currentOrg(c), id, actor(c)); err != nil {
 		return mapError(err)

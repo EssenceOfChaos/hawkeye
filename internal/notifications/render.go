@@ -60,20 +60,22 @@ func Render(a Alert) email.Message {
 	m := email.Message{From: a.From, To: a.To}
 	switch a.Event {
 	case EventRecovery:
-		m.Subject = "[HawkEye] RECOVERED: " + name
+		m.Subject = "HawkEye recovery: " + name + " is responding again"
 		dur := ""
 		if a.ResolvedAt != nil {
-			dur = fmt.Sprintf("\nOutage lasted: %s (ended %s)", Duration(a.ResolvedAt.Sub(a.StartedAt)), a.ResolvedAt.UTC().Format("2006-01-02 15:04 UTC"))
+			dur = fmt.Sprintf("\nRecovery confirmed: %s\nIncident duration: %s", a.ResolvedAt.UTC().Format("2006-01-02 15:04 UTC"), Duration(a.ResolvedAt.Sub(a.StartedAt)))
 		}
-		m.Text = fmt.Sprintf("%s is back up.\n\nURL: %s\nOutage started: %s%s", name, url, started, dur) + footer
+		m.Text = fmt.Sprintf("Good news. HawkEye has recorded enough successful checks to resolve the incident affecting %s.\n\nWebsite: %s\nIncident began: %s%s\n\n"+
+			"Review the incident timeline to see the recorded failures and recovery checks.", name, url, started, dur) + footer
 	default:
-		m.Subject = "[HawkEye] DOWN: " + name
+		m.Subject = "HawkEye alert: " + name + " may be down"
 		cause := ""
 		if a.Cause != "" {
-			cause = "\nCause: " + clean(a.Cause)
+			cause = "\nLatest result: " + clean(a.Cause)
 		}
-		m.Text = fmt.Sprintf("%s is down.\n\nURL: %s\nStarted: %s%s\n\nWe confirmed this with consecutive failed checks, "+
-			"so it is unlikely to be a one-off blip. We will email you when it recovers.", name, url, started, cause) + footer
+		m.Text = fmt.Sprintf("HawkEye has detected repeated failures while checking %s.\n\nWebsite: %s\nDetected at: %s%s\nIncident status: Open\n\n"+
+			"We recommend reviewing the website and its hosting environment. HawkEye will continue monitoring according to your configured check interval, "+
+			"and will email you once when the website recovers.", name, url, started, cause) + footer
 	}
 	return m
 }

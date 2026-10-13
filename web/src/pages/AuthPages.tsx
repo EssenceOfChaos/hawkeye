@@ -1,9 +1,24 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { api, ApiError } from '../api'
 import { useAuth } from '../auth'
 import { BrandMark } from '../components/Brand'
 import { Field } from '../components/Field'
+
+/**
+ * Reads the one-time `?token=` from the URL and immediately removes it from the address bar (history entry replaced), so it does not linger in
+ * browser history, screen shares, bookmarks or later Referer headers. The value is kept in component state for the API call.
+ */
+function useTokenFromUrl(): string {
+  const [params] = useSearchParams()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [token] = useState(() => params.get('token') ?? '')
+  useEffect(() => {
+    if (new URLSearchParams(location.search).has('token')) navigate(location.pathname, { replace: true })
+  }, [location.pathname, location.search, navigate])
+  return token
+}
 
 function useSubmit() {
   const [error, setError] = useState<ApiError | null>(null)
@@ -74,14 +89,15 @@ export function RegisterPage() {
   return (
     <section className="card narrow">
       <BrandMark />
-      <h1>Create your free account</h1>
-      <p>Monitor up to 5 websites for free. No credit card needed.</p>
+      <h1>Start with a clearer view</h1>
+      <p>Create your free HawkEye account and bring your website monitoring into one place. Monitor up to 5 websites free; no credit card needed.</p>
+      <p className="hint">By creating an account you agree to the <Link to="/terms">Terms</Link> and the <Link to="/privacy">Privacy policy</Link>.</p>
       <form onSubmit={onSubmit}>
         <Field label="Email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} error={error?.fields.email} />
         <Field label="Password" type="password" autoComplete="new-password" required minLength={10} maxLength={128}
           hint="At least 10 characters." value={password} onChange={(e) => setPassword(e.target.value)} error={error?.fields.password} />
         <FormError error={error} />
-        <button type="submit" disabled={busy}>Sign up</button>
+        <button type="submit" disabled={busy}>Create free account</button>
       </form>
       <p>Already registered? <Link to="/login">Log in</Link></p>
     </section>
@@ -119,8 +135,7 @@ export function ForgotPasswordPage() {
 }
 
 export function ResetPasswordPage() {
-  const [params] = useSearchParams()
-  const token = params.get('token') ?? ''
+  const token = useTokenFromUrl()
   const { error, busy, run } = useSubmit()
   const [password, setPassword] = useState('')
   const [done, setDone] = useState(false)
@@ -151,8 +166,7 @@ export function ResetPasswordPage() {
 }
 
 export function VerifyEmailPage() {
-  const [params] = useSearchParams()
-  const token = params.get('token') ?? ''
+  const token = useTokenFromUrl()
   const { refresh } = useAuth()
   const [state, setState] = useState<'working' | 'ok' | 'failed'>('working')
 
@@ -182,8 +196,7 @@ export function VerifyEmailPage() {
 
 /** Opened from the link in an alert-address confirmation email; the visitor may not have an account. */
 export function ConfirmAlertAddressPage() {
-  const [params] = useSearchParams()
-  const token = params.get('token') ?? ''
+  const token = useTokenFromUrl()
   const [state, setState] = useState<'working' | 'ok' | 'failed'>('working')
 
   useEffect(() => {

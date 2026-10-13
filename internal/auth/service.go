@@ -15,9 +15,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"hawkeye/internal/email"
+	"hawkeye/internal/validation"
 )
 
 var (
+	ErrWrongPassword      = errors.New("current password is incorrect")
 	ErrInvalidCredentials = errors.New("invalid email or password")
 	ErrEmailTaken         = errors.New("email already registered")
 	ErrInvalidToken       = errors.New("invalid or expired token")
@@ -350,4 +352,55 @@ func consumeToken(ctx context.Context, tx pgx.Tx, table, raw string) (uuid.UUID,
 		return uuid.Nil, ErrInvalidToken
 	}
 	return id, err
+}
+
+// VerifyPassword checks a user's current password (used to re-authenticate sensitive actions such as account deletion).
+func (s *Service) VerifyPassword(ctx context.Context, userID uuid.UUID, password string) error {
+	var hash string
+	err := s.pool.QueryRow(ctx, `SELECT password_hash FROM users WHERE id = $1 AND disabled_at IS NULL`, userID).Scan(&hash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrUnauthenticated
+	}
+	if err != nil {
+		return err
+	}
+	ok, verr := Verify(password, hash)
+	if verr != nil || !ok {
+		return ErrWrongPassword
+	}
+	return nil
+}
+
+// ChangePassword sets a new password after re-checking the current one, signs out every OTHER session (the caller stays signed in)
+// and emails the account owner so an unexpected change is noticed.
+func (s *Service) ChangePassword(ctx context.Context, user User, currentSessionToken, current, newPassword string) error {
+	if err := ValidatePassword(newPassword); err != nil {
+		return validation.New("new_password", "must be between 10 and 128 characters") // name the field the client sent
+	}
+	if err := s.VerifyPassword(ctx, user.ID, current); err != nil {
+		return err
+	}
+	if newPassword == current {
+		return validation.New("new_password", "must be different from your current password")
+	}
+	hash, err := s.cfg.Hasher.Hash(newPassword)
+	if err != nil {
+		return err
+	}
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `UPDATE users SET password_hash = $2 WHERE id = $1`, user.ID, hash); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2`, user.ID, HashToken(currentSessionToken))
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("change password: %w", err)
+	}
+	if err := s.mail.Send(ctx, email.Message{To: user.Email, Subject: "Your HawkEye password was changed",
+		Text: "The password for your HawkEye account was just changed, and all other devices were signed out.\n\n" +
+			"If this was not you, reset your password immediately: " + s.cfg.AppBaseURL + "/forgot-password"}); err != nil {
+		s.log.ErrorContext(ctx, "send password-changed email failed", "user_id", user.ID, "error", err)
+	}
+	return nil
 }

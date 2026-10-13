@@ -12,12 +12,16 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/time/rate"
 
+	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
+	"hawkeye/internal/errtrack"
+	"hawkeye/internal/metrics"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
+	"hawkeye/internal/ratelimit"
 )
 
 // Pinger reports whether a dependency (PostgreSQL) is usable.
@@ -38,12 +42,21 @@ type Options struct {
 	Monitors      *monitors.Service
 	Notifications *notifications.Service
 	Billing       *billing.Service
+	Account       *account.Service
 	PgPool        *pgxpool.Pool
 	Pool          plans.DB
 
 	SecureCookies       bool
 	AuthRateLimitPerMin int
 	TrustForwardedFor   bool
+
+	// Production hardening. All optional: nil/zero values keep development and tests simple.
+	HSTS                    bool                // send Strict-Transport-Security (serve HTTPS only)
+	Metrics                 *metrics.APIMetrics // request metrics (exposed on a separate private port by the caller)
+	Limiter                 *ratelimit.Limiter  // shared (database-backed) rate limits; nil falls back to per-process limits
+	GlobalRateLimitPerMin   int                 // per-IP requests per minute for the whole API (per process); 0 disables
+	EmailActionLimitPerHour int                 // emails per hour per target address for forgot-password/confirmations
+	Errors                  errtrack.Reporter   // error tracking; nil = disabled
 }
 
 const readinessTimeout = 2 * time.Second
@@ -53,7 +66,10 @@ func New(o Options) *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
-	e.HTTPErrorHandler = errorHandler(o.Logger)
+	if o.Errors == nil {
+		o.Errors = errtrack.Noop{}
+	}
+	e.HTTPErrorHandler = errorHandler(o.Logger, o.Errors)
 	// Client IPs drive rate limiting, so X-Forwarded-For is ignored unless a trusted proxy is declared.
 	if o.TrustForwardedFor {
 		e.IPExtractor = echo.ExtractIPFromXFFHeader()
@@ -62,10 +78,13 @@ func New(o Options) *echo.Echo {
 	}
 
 	e.Use(middleware.RequestID())
+	if o.Metrics != nil {
+		e.Use(apiMetrics(o.Metrics))
+	}
 	e.Use(requestLogger(o.Logger))
-	e.Use(middleware.Recover())
+	e.Use(recoverPanics(o.Logger, o.Metrics, o.Errors))
 	e.Use(middleware.BodyLimit(o.BodyLimit))
-	e.Use(securityHeaders)
+	e.Use(securityHeaders(o.HSTS))
 	e.Use(middleware.ContextTimeoutWithConfig(middleware.ContextTimeoutConfig{Timeout: o.RequestTimeout}))
 
 	e.GET("/healthz", healthz)
@@ -76,7 +95,7 @@ func New(o Options) *echo.Echo {
 		// over the raw body, which is checked before anything is stored. Registered before the CSRF-protected group.
 		e.POST("/api/v1/webhooks/stripe", (&handlers{billing: o.Billing, log: o.Logger}).stripeWebhook)
 	}
-	if o.Auth != nil && o.Orgs != nil && o.Plans != nil && o.Monitors != nil && o.Notifications != nil && o.PgPool != nil && o.Billing != nil {
+	if o.Auth != nil && o.Orgs != nil && o.Plans != nil && o.Monitors != nil && o.Notifications != nil && o.PgPool != nil && o.Billing != nil && o.Account != nil {
 		registerAPI(e, o)
 	}
 	return e
@@ -106,15 +125,6 @@ func readyz(db Pinger, log *slog.Logger) echo.HandlerFunc {
 	}
 }
 
-func securityHeaders(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		h := c.Response().Header()
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("Cache-Control", "no-store")
-		return next(c)
-	}
-}
-
 func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 	return middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogMethod: true, LogURIPath: true, LogStatus: true, LogLatency: true, LogRequestID: true, LogError: true,
@@ -139,7 +149,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, billing: o.Billing, log: o.Logger, secureCookies: o.SecureCookies}
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, billing: o.Billing, account: o.Account, log: o.Logger, secureCookies: o.SecureCookies}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		TokenLookup:    "header:X-CSRF-Token",
@@ -158,32 +168,67 @@ func registerAPI(e *echo.Echo, o Options) {
 	if perMin < 1 {
 		perMin = 10
 	}
-	limit := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
-		Store: middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{
-			Rate: rate.Limit(float64(perMin) / 60), Burst: perMin, ExpiresIn: time.Hour,
-		}),
-		IdentifierExtractor: func(c echo.Context) (string, error) { return c.RealIP(), nil },
-		DenyHandler: func(echo.Context, string, error) error {
-			return &APIError{Status: http.StatusTooManyRequests, Code: "RATE_LIMITED", Message: "Too many requests. Try again later."}
-		},
-	})
+	emailPerHour := o.EmailActionLimitPerHour
+	if emailPerHour < 1 {
+		emailPerHour = 3
+	}
+	h.emailPerHour = emailPerHour
+	// limit builds the per-IP limiter for one endpoint. With a shared limiter the budget holds across all API processes;
+	// without one (tests, single process) an in-memory limiter is used.
+	var limit func(scope string) echo.MiddlewareFunc
+	if o.Limiter != nil {
+		deps := limiterDeps{l: o.Limiter, m: o.Metrics, log: o.Logger}
+		h.limits = deps
+		limit = func(scope string) echo.MiddlewareFunc { return deps.byIP("route:"+scope, perMin, time.Minute) }
+	} else {
+		mem := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+			Store: middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{
+				Rate: rate.Limit(float64(perMin) / 60), Burst: perMin, ExpiresIn: time.Hour,
+			}),
+			IdentifierExtractor: func(c echo.Context) (string, error) { return c.RealIP(), nil },
+			DenyHandler:         func(echo.Context, string, error) error { return errRateLimited },
+		})
+		limit = func(string) echo.MiddlewareFunc { return mem }
+	}
+	// A generous per-process, per-IP ceiling for the whole API absorbs floods before they reach handlers.
+	if o.GlobalRateLimitPerMin > 0 {
+		v1.Use(middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+			Store: middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{
+				Rate: rate.Limit(float64(o.GlobalRateLimitPerMin) / 60), Burst: max(20, o.GlobalRateLimitPerMin/6), ExpiresIn: time.Hour,
+			}),
+			IdentifierExtractor: func(c echo.Context) (string, error) { return c.RealIP(), nil },
+			DenyHandler: func(c echo.Context, _ string, _ error) error {
+				c.Response().Header().Set("Retry-After", "30")
+				if o.Metrics != nil {
+					o.Metrics.RateLimited.WithLabelValues("global").Inc()
+				}
+				return errRateLimited
+			},
+		}))
+	}
 
 	a := v1.Group("/auth")
-	a.POST("/register", h.register, limit)
-	a.POST("/login", h.login, limit)
-	a.POST("/forgot-password", h.forgotPassword, limit)
-	a.POST("/reset-password", h.resetPassword, limit)
-	a.POST("/verify-email", h.verifyEmail, limit)
+	a.POST("/register", h.register, limit("register"))
+	a.POST("/login", h.login, limit("login"))
+	a.POST("/forgot-password", h.forgotPassword, limit("forgot"))
+	a.POST("/reset-password", h.resetPassword, limit("reset"))
+	a.POST("/verify-email", h.verifyEmail, limit("verify"))
 	a.POST("/logout", h.logout)
+	a.POST("/change-password", h.changePassword, h.requireAuth, limit("change-password"))
 	a.GET("/me", h.me, h.requireAuth)
-	a.POST("/resend-verification", h.resendVerification, h.requireAuth, limit)
+	a.POST("/resend-verification", h.resendVerification, h.requireAuth, limit("resend"))
 
 	v1.GET("/plans", h.listPlans)
 	// Called from the confirmation email by a recipient who may not have an account.
-	v1.POST("/notification-settings/confirm", h.confirmSetting, limit)
+	v1.POST("/notification-settings/confirm", h.confirmSetting, limit("confirm-alert"))
 
 	// Tenant-scoped resources act on the organization named by X-Organization-ID (membership is
 	// verified) or, by default, the caller's oldest organization.
+	// Account-level (not organization-level) privacy endpoints.
+	acct := v1.Group("/account", h.requireAuth)
+	acct.GET("/export", h.exportData, limit("account-export"))
+	acct.POST("/delete", h.deleteAccount, limit("account-delete"))
+
 	scoped := v1.Group("", h.requireAuth, h.resolveOrg)
 	scoped.GET("/usage", h.usage)
 	scoped.GET("/monitors", h.listMonitors)
@@ -212,14 +257,20 @@ func registerAPI(e *echo.Echo, o Options) {
 	// Alert recipients: any member can view; only owners change them; adding a recipient needs a verified
 	// email and is rate-limited because it causes mail to be sent to a third party.
 	scoped.GET("/notification-settings", h.listSettings)
-	scoped.POST("/notification-settings", h.createSetting, requireOwner, requireVerifiedEmail, limit)
+	scoped.POST("/notification-settings", h.createSetting, requireOwner, requireVerifiedEmail, limit("create-alert"))
 	scoped.PATCH("/notification-settings/:settingID", h.updateSetting, requireOwner)
 	scoped.DELETE("/notification-settings/:settingID", h.deleteSetting, requireOwner)
-	scoped.POST("/notification-settings/:settingID/resend-confirmation", h.resendSettingConfirmation, requireOwner, requireVerifiedEmail, limit)
+	scoped.POST("/notification-settings/:settingID/resend-confirmation", h.resendSettingConfirmation, requireOwner, requireVerifiedEmail, limit("resend-alert"))
 
 	org := v1.Group("/organizations", h.requireAuth)
 	org.GET("", h.listOrgs)
 	org.GET("/:organizationID", h.getOrg)
 	org.PATCH("/:organizationID", h.updateOrg)
 	org.GET("/:organizationID/members", h.listMembers)
+
+	// Group middleware (authentication, CSRF) also guards each group's catch-all, which made unknown paths answer 401/403 to
+	// anonymous callers. Unknown API paths are simply 404 for everyone.
+	e.RouteNotFound("/api/v1/*", func(echo.Context) error {
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Not found."}
+	})
 }

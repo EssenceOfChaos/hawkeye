@@ -114,7 +114,7 @@ func TestOutageEmailIsSentOnce(t *testing.T) {
 	if r.Status != "sent" || r.Attempts != 1 || r.SentAt == nil || r.LastErr != nil {
 		t.Fatalf("%+v", r)
 	}
-	if len(s.sent) != 1 || s.sent[0].To != "owner@example.com" || s.sent[0].From != "alerts@example.com" || s.sent[0].Subject != "[HawkEye] DOWN: Site" {
+	if len(s.sent) != 1 || s.sent[0].To != "owner@example.com" || s.sent[0].From != "alerts@example.com" || s.sent[0].Subject != "HawkEye alert: Site may be down" {
 		t.Fatalf("%+v", s.sent)
 	}
 	if worked, _ := d.ProcessOne(t.Context()); worked || s.callCount() != 1 {

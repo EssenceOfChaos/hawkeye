@@ -11,10 +11,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/sora": "^5.3.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "animejs": "^4.5.0",
+    "daisyui": "^5.7.50",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router": "^7.18.4",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",

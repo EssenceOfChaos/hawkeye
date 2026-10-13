@@ -34,8 +34,8 @@ export function DashboardPage() {
       {s && s.monitors.total === 0 && (
         <section className="card empty">
           <h2>Add your first website</h2>
-          <p>Add a site and we’ll start checking it right away, then email you if it goes down.</p>
-          <Link className="button primary" to="/monitors/new">Add a monitor</Link>
+          <p>Your watch starts here. Add your first website and let HawkEye begin tracking availability and response times.</p>
+          <Link className="button primary" to="/monitors/new">Add your first website</Link>
         </section>
       )}
 
@@ -79,7 +79,7 @@ export function DashboardPage() {
               <span className="spacer" />
               <Link to="/incidents">All incidents</Link>
             </div>
-            {incidents.data?.incidents.length === 0 && <p>No incidents. Everything has been healthy.</p>}
+            {incidents.data?.incidents.length === 0 && <p>No incidents to report. HawkEye will continue checking your configured websites.</p>}
             {incidents.data && incidents.data.incidents.length > 0 && (
               <ul className="plain-list">
                 {incidents.data.incidents.map((i) => (

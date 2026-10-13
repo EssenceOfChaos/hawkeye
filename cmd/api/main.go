@@ -9,14 +9,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
+	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/config"
 	"hawkeye/internal/database"
 	"hawkeye/internal/email"
+	"hawkeye/internal/errtrack"
+	"hawkeye/internal/healthcheck"
 	"hawkeye/internal/httpapi"
 	"hawkeye/internal/logging"
 	"hawkeye/internal/metrics"
@@ -24,9 +28,17 @@ import (
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
+	"hawkeye/internal/ratelimit"
 )
 
 func main() {
+	if healthcheck.Requested() { // used by the container HEALTHCHECK: this image has no shell or curl
+		port, _ := strconv.Atoi(os.Getenv("APP_PORT"))
+		if port == 0 {
+			port = 8080
+		}
+		healthcheck.Run(port, "/readyz")
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "fatal:", err)
 		os.Exit(1)
@@ -50,9 +62,24 @@ func run() error {
 	}
 	defer pool.Close()
 
-	mailer := email.Console{Log: log}
-	if cfg.IsProduction() {
-		log.Warn("EMAIL_PROVIDER=console: emails are logged, not delivered; no real provider is implemented yet")
+	reporter, flushErrors, err := errtrack.New(errtrack.Config{DSN: cfg.SentryDSN, Environment: cfg.AppEnv, Release: cfg.AppVersion})
+	if err != nil {
+		return err
+	}
+	defer flushErrors()
+	if cfg.SentryDSN == "" {
+		log.Info("error tracking disabled (set SENTRY_DSN to enable it)")
+	}
+	apiMetrics := metrics.NewAPI()
+	metrics.RegisterPool(apiMetrics.Registry, pool)
+
+	mailer, err := email.New(cfg.EmailProvider, email.SMTPConfig{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername,
+		Password: cfg.SMTPPassword, TLS: cfg.SMTPTLS, CAFile: cfg.SMTPCAFile, From: cfg.EmailFromAddress}, log)
+	if err != nil {
+		return err
+	}
+	if cfg.EmailProvider == "console" {
+		log.Warn("EMAIL_PROVIDER=console: emails are logged, not delivered (development only)")
 	}
 	authSvc, err := auth.NewService(pool, mailer, log, auth.Config{SessionTTL: cfg.SessionTTL, AppBaseURL: cfg.AppBaseURL})
 	if err != nil {
@@ -67,14 +94,17 @@ func run() error {
 	} else {
 		log.Info("billing disabled: set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and the price IDs to enable it")
 	}
-	billingSvc := billing.NewService(pool, provider, cfg.Billing(), metrics.New(), log)
+	billingSvc := billing.NewService(pool, provider, cfg.Billing(), apiMetrics.App, log)
 
 	e := httpapi.New(httpapi.Options{
 		Logger: log, DB: pool, RequestTimeout: cfg.RequestTimeout, BodyLimit: cfg.BodyLimit,
 		Auth: authSvc, Orgs: organizations.NewService(pool), Plans: planSvc, Monitors: monitors.NewService(pool, planSvc), Pool: pool, PgPool: pool,
 		Billing:       billingSvc,
+		Account:       account.NewService(pool, authSvc, provider, mailer, log),
 		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress),
 		SecureCookies: cfg.IsProduction(), AuthRateLimitPerMin: cfg.AuthRateLimitPerMin, TrustForwardedFor: cfg.TrustForwardedFor,
+		HSTS: cfg.IsProduction(), Metrics: apiMetrics, Limiter: ratelimit.New(pool), Errors: reporter,
+		GlobalRateLimitPerMin: cfg.GlobalRateLimitPerMin, EmailActionLimitPerHour: cfg.EmailActionLimitPerHour,
 	})
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
@@ -85,9 +115,19 @@ func run() error {
 		IdleTimeout:       60 * time.Second,
 	}
 
+	// Metrics are served on a separate port that must not be published or proxied: they describe internals.
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", apiMetrics.Handler())
+	metricsSrv := &http.Server{Addr: fmt.Sprintf(":%d", cfg.APIMetricsPort), Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	go func() {
+		if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("metrics server failed", "error", err)
+		}
+	}()
+
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("api listening", "addr", srv.Addr, "env", cfg.AppEnv)
+		log.Info("api listening", "addr", srv.Addr, "metrics_addr", metricsSrv.Addr, "env", cfg.AppEnv, "version", cfg.AppVersion)
 		errCh <- srv.ListenAndServe()
 	}()
 
@@ -100,6 +140,7 @@ func run() error {
 		log.Info("shutting down")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 		defer cancel()
+		_ = metricsSrv.Shutdown(shutdownCtx)
 		return srv.Shutdown(shutdownCtx)
 	}
 	return nil

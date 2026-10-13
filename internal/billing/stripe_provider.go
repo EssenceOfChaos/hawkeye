@@ -3,10 +3,12 @@ package billing
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
-	"github.com/stripe/stripe-go/v86"
+	"github.com/google/uuid"
+	"github.com/stripe/stripe-go/v87"
 )
 
 // StripeProvider talks to the Stripe API with the official Go SDK. Use test-mode keys outside production.
@@ -18,6 +20,35 @@ const apiTimeout = 20 * time.Second
 
 func NewStripeProvider(secretKey string, opts ...stripe.ClientOption) *StripeProvider {
 	return &StripeProvider{client: stripe.NewClient(secretKey, opts...)}
+}
+
+func (p *StripeProvider) CreateCustomer(ctx context.Context, email string, orgID uuid.UUID) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, apiTimeout)
+	defer cancel()
+	params := &stripe.CustomerCreateParams{
+		Email:    stripe.String(email),
+		Metadata: map[string]string{"organization_id": orgID.String()}, // informational/fallback; our database maps customer ID -> organization
+	}
+	// One customer per organization even if two requests race: Stripe returns the first response for a repeated key (keys last 24 h).
+	params.SetIdempotencyKey("hawkeye-customer-" + orgID.String())
+	c, err := p.client.V1Customers.Create(ctx, params)
+	if err != nil {
+		return "", fmt.Errorf("create customer: %w", err)
+	}
+	return c.ID, nil
+}
+
+func (p *StripeProvider) DeleteCustomer(ctx context.Context, customerID string) error {
+	ctx, cancel := context.WithTimeout(ctx, apiTimeout)
+	defer cancel()
+	if _, err := p.client.V1Customers.Delete(ctx, customerID, nil); err != nil {
+		var se *stripe.Error
+		if errors.As(err, &se) && se.Code == stripe.ErrorCodeResourceMissing {
+			return nil // already gone
+		}
+		return fmt.Errorf("delete customer: %w", err)
+	}
+	return nil
 }
 
 func (p *StripeProvider) CreateCheckoutSession(ctx context.Context, c CheckoutParams) (string, error) {

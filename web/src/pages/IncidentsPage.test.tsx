@@ -31,7 +31,7 @@ describe('IncidentsPage', () => {
 
   it('has a friendly empty state', async () => {
     renderPage([])
-    expect(await screen.findByText(/everything has been healthy/)).toBeInTheDocument()
+    expect(await screen.findByText(/No incidents to report/)).toBeInTheDocument()
   })
 })
 

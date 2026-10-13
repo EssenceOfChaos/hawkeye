@@ -65,7 +65,8 @@ export function MonitorFormPage() {
   const generic = error && !Object.keys(f).length
   return (
     <section className="card narrow">
-      <h1>{editing ? 'Edit monitor' : 'Add monitor'}</h1>
+      <h1>{editing ? 'Edit monitor' : 'Add a website to monitor'}</h1>
+      {!editing && <p>Give your monitor a recognizable name and enter the website URL you want HawkEye to check.</p>}
       {!loaded && !error && <p role="status">Loading…</p>}
       {generic && (
         <div role="alert" className="error">

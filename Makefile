@@ -6,7 +6,11 @@ endif
 
 COMPOSE := docker compose -f deploy/docker-compose.yml
 
-.PHONY: help up down db-up migrate migrate-down run-api run-worker web-install web-dev fmt vet test test-race lint build check
+# `env -i`: the include/export of .env above would otherwise leak your development DATABASE_URL etc. into the test stack's settings.
+SMOKE := env -i PATH="$$PATH" HOME="$$HOME" HAWKEYE_ENV_FILE=smoke/env.smoke docker compose --env-file deploy/smoke/env.smoke -p hawkeye-smoke \
+	-f deploy/docker-compose.prod.yml -f deploy/docker-compose.local-db.yml -f deploy/smoke/docker-compose.smoke.yml
+
+.PHONY: smoke-up smoke smoke-down vuln help up down db-up migrate migrate-down run-api run-worker web-install web-dev fmt vet test test-race lint build check
 
 help:
 	@grep -E '^[a-z-]+:' Makefile | cut -d: -f1 | sort
@@ -50,3 +54,16 @@ build:
 
 check: lint test-race   ## Everything CI runs for the backend, plus lint
 	cd web && npm test && npm run build
+
+# ---- production-like local stack (real TLS via Caddy's internal CA, real SMTP STARTTLS via Mailpit, PostgreSQL in a container)
+smoke-up:      ## Build and start the production images locally on https://localhost:8443
+	deploy/smoke/gen-certs.sh
+	$(SMOKE) up -d --build --wait
+smoke:         ## Run the post-deploy smoke test, including a full account lifecycle, against the local stack
+	scripts/smoke.sh https://localhost:8443 --insecure --full smoke@hawkeye.test --mail-api http://localhost:8026
+smoke-down:
+	$(SMOKE) down -v
+
+vuln:          ## Scan Go and npm dependencies for known vulnerabilities
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	cd web && npm audit

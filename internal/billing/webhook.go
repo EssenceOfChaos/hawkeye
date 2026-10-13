@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/stripe/stripe-go/v86/webhook"
+	"github.com/stripe/stripe-go/v87/webhook"
 )
 
 var ErrInvalidSignature = errors.New("invalid webhook signature")
@@ -116,6 +116,7 @@ func (s *Service) run(ctx context.Context, ev *storedEvent) error {
 	if ev.attempts >= s.cfg.MaxEventAttempts {
 		s.m.BillingEvents.WithLabelValues("failed").Inc()
 		s.log.Error("billing webhook event failed permanently", "event_id", ev.id, "type", ev.typ, "attempts", ev.attempts, "error", msg)
+		s.rep.Capture(ctx, err, map[string]string{"component": "billing", "event_id": ev.id.String(), "type": ev.typ})
 		_, _ = s.pool.Exec(context.WithoutCancel(ctx), `UPDATE billing_webhook_events SET status = 'failed', last_error = $2 WHERE id = $1`, ev.id, msg)
 		return err
 	}
@@ -163,9 +164,28 @@ func (s *Service) handle(ctx context.Context, tx pgx.Tx, ev *storedEvent) (strin
 		return s.apply(ctx, tx, orgID, current)
 	case "checkout.session.completed":
 		return s.linkCustomer(ctx, tx, env.Data.Object)
+	case "charge.dispute.created", "charge.refunded", "radar.early_fraud_warning.created":
+		s.noteRiskEvent(ctx, ev, env.Data.Object)
+		return outcomeApplied, nil
 	default:
 		return outcomeIgnored, nil // invoices, payment intents, etc. carry no entitlement decision
 	}
+}
+
+// noteRiskEvent makes money-at-risk events visible. It deliberately takes NO automatic action on entitlements (a refund or dispute may
+// or may not mean the customer should lose access; that is a business decision), but it never lets them pass silently: a warning log
+// with the Stripe object IDs and a counter that should page someone. See docs/billing.md for the manual runbook.
+func (s *Service) noteRiskEvent(ctx context.Context, ev *storedEvent, object json.RawMessage) {
+	var o struct {
+		ID            string     `json:"id"`
+		Customer      flexString `json:"customer"`
+		Charge        flexString `json:"charge"`
+		PaymentIntent flexString `json:"payment_intent"`
+	}
+	_ = json.Unmarshal(object, &o)
+	s.m.BillingRisk.WithLabelValues(ev.typ).Inc()
+	s.log.WarnContext(ctx, "billing risk event received: review in the Stripe Dashboard", "type", ev.typ, "event_id", ev.id,
+		"object_id", o.ID, "customer", string(o.Customer), "charge", string(o.Charge), "payment_intent", string(o.PaymentIntent))
 }
 
 var errNoOrganization = errors.New("cannot attribute the event to an organization")

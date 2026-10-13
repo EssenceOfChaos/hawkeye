@@ -5,18 +5,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/stripe/stripe-go/v86"
+	"github.com/stripe/stripe-go/v87"
 
 	"hawkeye/internal/billing"
 )
 
 type recorded struct {
-	Method, Path, Auth string
-	Form               url.Values
+	Method, Path, Auth, IdemKey string
+	Form                        url.Values
 }
 
 // fakeStripe is a local stand-in for api.stripe.com: it records what the official SDK sends and replies in Stripe's JSON shapes.
@@ -31,7 +32,7 @@ func (f *fakeStripe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	form, _ := url.ParseQuery(string(body))
 	f.mu.Lock()
-	f.reqs = append(f.reqs, recorded{r.Method, r.URL.Path, r.Header.Get("Authorization"), form})
+	f.reqs = append(f.reqs, recorded{r.Method, r.URL.Path, r.Header.Get("Authorization"), r.Header.Get("Idempotency-Key"), form})
 	f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	if f.fail {
@@ -40,6 +41,13 @@ func (f *fakeStripe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case r.Method == http.MethodDelete && r.URL.Path == "/v1/customers/cus_gone":
+		w.WriteHeader(404)
+		io.WriteString(w, `{"error":{"type":"invalid_request_error","code":"resource_missing","message":"No such customer: 'cus_gone'"}}`)
+	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/v1/customers/"):
+		io.WriteString(w, `{"id":"`+strings.TrimPrefix(r.URL.Path, "/v1/customers/")+`","object":"customer","deleted":true}`)
+	case r.URL.Path == "/v1/customers":
+		io.WriteString(w, `{"id":"cus_created_1","object":"customer","email":"owner@example.com"}`)
 	case r.URL.Path == "/v1/checkout/sessions":
 		io.WriteString(w, `{"id":"cs_test_1","object":"checkout.session","url":"https://checkout.stripe.test/c/pay/cs_test_1"}`)
 	case r.URL.Path == "/v1/billing_portal/sessions":
@@ -160,5 +168,39 @@ func TestStripeProviderErrorsAreReturned(t *testing.T) {
 	}
 	if _, err := p.CancelAtPeriodEnd(t.Context(), "sub_1"); err == nil {
 		t.Fatal("expected an error")
+	}
+}
+
+func TestStripeProviderCreatesCustomerIdempotentlyPerOrganization(t *testing.T) {
+	p, fs := newProvider(t)
+	org := uuid.MustParse("2632f045-1667-4020-abe7-da7d4a2d718f")
+	id, err := p.CreateCustomer(t.Context(), "owner@example.com", org)
+	if err != nil || id != "cus_created_1" {
+		t.Fatalf("%q %v", id, err)
+	}
+	r := fs.last()
+	if r.Method != "POST" || r.Path != "/v1/customers" || r.Form.Get("email") != "owner@example.com" || r.Form.Get("metadata[organization_id]") != org.String() {
+		t.Fatalf("%+v", r)
+	}
+	if r.IdemKey != "hawkeye-customer-"+org.String() {
+		t.Fatalf("the idempotency key must be stable per organization so a double click cannot create two customers: %q", r.IdemKey)
+	}
+}
+
+func TestStripeProviderDeleteCustomer(t *testing.T) {
+	p, fs := newProvider(t)
+	if err := p.DeleteCustomer(t.Context(), "cus_123"); err != nil {
+		t.Fatal(err)
+	}
+	if r := fs.last(); r.Method != "DELETE" || r.Path != "/v1/customers/cus_123" {
+		t.Fatalf("%+v", r)
+	}
+	// An already-deleted customer counts as success so that a retried account deletion can finish.
+	if err := p.DeleteCustomer(t.Context(), "cus_gone"); err != nil {
+		t.Fatalf("a missing customer must not block deletion: %v", err)
+	}
+	fs.fail = true
+	if err := p.DeleteCustomer(t.Context(), "cus_123"); err == nil {
+		t.Fatal("other provider errors must be returned so deletion is aborted")
 	}
 }

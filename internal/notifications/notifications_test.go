@@ -10,12 +10,12 @@ func TestRenderOutage(t *testing.T) {
 	m := Render(Alert{Event: EventOutage, MonitorName: "Client Site", MonitorURL: "https://client.example.com/",
 		Cause: "Received HTTP 503", StartedAt: time.Date(2026, 10, 12, 14, 30, 0, 0, time.UTC),
 		AppBaseURL: "https://app.example.com", To: "me@example.com", From: "alerts@example.com"})
-	for _, want := range []string{"Client Site is down", "https://client.example.com/", "2026-10-12 14:30 UTC", "Received HTTP 503", "https://app.example.com/incidents", "/notifications"} {
+	for _, want := range []string{"repeated failures while checking Client Site", "https://client.example.com/", "2026-10-12 14:30 UTC", "Received HTTP 503", "https://app.example.com/incidents", "/notifications"} {
 		if !strings.Contains(m.Text, want) {
 			t.Errorf("body missing %q:\n%s", want, m.Text)
 		}
 	}
-	if m.Subject != "[HawkEye] DOWN: Client Site" || m.To != "me@example.com" || m.From != "alerts@example.com" {
+	if m.Subject != "HawkEye alert: Client Site may be down" || m.To != "me@example.com" || m.From != "alerts@example.com" {
 		t.Fatalf("%+v", m)
 	}
 }
@@ -24,7 +24,7 @@ func TestRenderRecoveryIncludesDuration(t *testing.T) {
 	start := time.Date(2026, 10, 12, 14, 30, 0, 0, time.UTC)
 	end := start.Add(2*time.Hour + 5*time.Minute)
 	m := Render(Alert{Event: EventRecovery, MonitorName: "Site", MonitorURL: "https://x.example.com", StartedAt: start, ResolvedAt: &end, AppBaseURL: "https://a"})
-	if m.Subject != "[HawkEye] RECOVERED: Site" || !strings.Contains(m.Text, "2h 5m") {
+	if m.Subject != "HawkEye recovery: Site is responding again" || !strings.Contains(m.Text, "2h 5m") {
 		t.Fatalf("%+v", m)
 	}
 }

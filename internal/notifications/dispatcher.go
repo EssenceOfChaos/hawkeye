@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"hawkeye/internal/email"
+	"hawkeye/internal/errtrack"
 	"hawkeye/internal/metrics"
 )
 
@@ -63,10 +64,17 @@ type Dispatcher struct {
 	cfg  DispatcherConfig
 	m    *metrics.Metrics
 	log  *slog.Logger
+	rep  errtrack.Reporter
 }
 
 func NewDispatcher(pool *pgxpool.Pool, mail email.Sender, cfg DispatcherConfig, m *metrics.Metrics, log *slog.Logger) *Dispatcher {
-	return &Dispatcher{pool: pool, mail: mail, cfg: cfg.withDefaults(), m: m, log: log}
+	return &Dispatcher{pool: pool, mail: mail, cfg: cfg.withDefaults(), m: m, log: log, rep: errtrack.Noop{}}
+}
+
+// WithReporter sends alert deliveries that failed permanently to an error tracker.
+func (d *Dispatcher) WithReporter(r errtrack.Reporter) *Dispatcher {
+	d.rep = r
+	return d
 }
 
 // Run polls until ctx is cancelled.
@@ -130,6 +138,7 @@ func (d *Dispatcher) ProcessOne(ctx context.Context) (bool, error) {
 		d.finish(ctx, c, StatusSent, "")
 	case errors.Is(sendErr, email.ErrPermanent) || c.attempts >= d.cfg.MaxAttempts:
 		d.log.Warn("alert delivery failed permanently", "delivery_id", c.id, "attempts", c.attempts)
+		d.rep.Capture(ctx, sendErr, map[string]string{"component": "notifications", "delivery_id": c.id.String(), "event": c.alert.Event})
 		d.finish(ctx, c, StatusFailed, sendErr.Error())
 	default:
 		d.log.Warn("alert delivery failed; will retry", "delivery_id", c.id, "attempt", c.attempts)
