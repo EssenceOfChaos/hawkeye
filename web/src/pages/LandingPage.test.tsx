@@ -40,6 +40,14 @@ describe('LandingPage', () => {
     expect(screen.getByText('Coming soon')).toBeInTheDocument()
   })
 
+  it('offers real upgrade links once billing is enabled', async () => {
+    renderLanding((url) =>
+      url.includes('/plans') ? json(200, { plans, billing_enabled: true }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }),
+    )
+    expect(await screen.findByRole('link', { name: /upgrade to Pro/ })).toHaveAttribute('href', '/register')
+    expect(screen.queryByRole('button', { name: /open soon/i })).not.toBeInTheDocument()
+  })
+
   it('still offers signup when pricing cannot be loaded', async () => {
     renderLanding(() => Promise.reject(new Error('offline')))
     expect(await screen.findByText(/Pricing is temporarily unavailable/)).toBeInTheDocument()

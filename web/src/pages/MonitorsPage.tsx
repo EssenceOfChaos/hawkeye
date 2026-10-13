@@ -116,7 +116,7 @@ export function MonitorsPage() {
               {monitors.map((m) => (
                 <tr key={m.id}>
                   <td>
-                    <Link to={`/monitors/${m.id}/edit`}>{m.name}</Link>
+                    <Link to={`/monitors/${m.id}`}>{m.name}</Link>
                     <div className="hint">{m.url}</div>
                   </td>
                   <td><StatusBadge monitor={m} /></td>

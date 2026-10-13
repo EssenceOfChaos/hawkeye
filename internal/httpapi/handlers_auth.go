@@ -2,12 +2,14 @@ package httpapi
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 
 	"hawkeye/internal/auth"
+	"hawkeye/internal/billing"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/organizations"
@@ -23,6 +25,8 @@ type handlers struct {
 	pool          plans.DB
 	db            *pgxpool.Pool
 	notifications *notifications.Service
+	billing       *billing.Service
+	log           *slog.Logger
 	secureCookies bool
 }
 
@@ -57,6 +61,14 @@ func mapError(err error) error {
 		return &APIError{Status: http.StatusConflict, Code: "EMAIL_TAKEN", Message: "An account with this email already exists."}
 	case errors.Is(err, auth.ErrInvalidToken):
 		return &APIError{Status: http.StatusBadRequest, Code: "INVALID_TOKEN", Message: "This link is invalid or has expired."}
+	case errors.Is(err, billing.ErrNotConfigured):
+		return &APIError{Status: http.StatusServiceUnavailable, Code: "BILLING_NOT_CONFIGURED", Message: "Billing is not available on this server yet."}
+	case errors.Is(err, billing.ErrAlreadySubscribed):
+		return &APIError{Status: http.StatusConflict, Code: "ALREADY_SUBSCRIBED", Message: "This organization already has a paid plan. Use Manage billing to change it."}
+	case errors.Is(err, billing.ErrNoCustomer):
+		return &APIError{Status: http.StatusConflict, Code: "NO_BILLING_ACCOUNT", Message: "There is no billing account yet. Choose a plan first."}
+	case errors.Is(err, billing.ErrNoSubscription):
+		return &APIError{Status: http.StatusConflict, Code: "NO_ACTIVE_SUBSCRIPTION", Message: "There is no active subscription."}
 	case errors.Is(err, notifications.ErrNotFound):
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Notification setting not found."}
 	case errors.Is(err, notifications.ErrDuplicate):

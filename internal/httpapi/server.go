@@ -13,6 +13,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"hawkeye/internal/auth"
+	"hawkeye/internal/billing"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/organizations"
@@ -36,6 +37,7 @@ type Options struct {
 	Plans         *plans.Service
 	Monitors      *monitors.Service
 	Notifications *notifications.Service
+	Billing       *billing.Service
 	PgPool        *pgxpool.Pool
 	Pool          plans.DB
 
@@ -69,7 +71,12 @@ func New(o Options) *echo.Echo {
 	e.GET("/healthz", healthz)
 	e.GET("/readyz", readyz(o.DB, o.Logger))
 
-	if o.Auth != nil && o.Orgs != nil && o.Plans != nil && o.Monitors != nil && o.Notifications != nil && o.PgPool != nil {
+	if o.Billing != nil {
+		// The provider calls this endpoint, not a browser: no session, no CSRF token. It is authenticated by the signature
+		// over the raw body, which is checked before anything is stored. Registered before the CSRF-protected group.
+		e.POST("/api/v1/webhooks/stripe", (&handlers{billing: o.Billing, log: o.Logger}).stripeWebhook)
+	}
+	if o.Auth != nil && o.Orgs != nil && o.Plans != nil && o.Monitors != nil && o.Notifications != nil && o.PgPool != nil && o.Billing != nil {
 		registerAPI(e, o)
 	}
 	return e
@@ -132,7 +139,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, secureCookies: o.SecureCookies}
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, billing: o.Billing, log: o.Logger, secureCookies: o.SecureCookies}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		TokenLookup:    "header:X-CSRF-Token",
@@ -188,6 +195,19 @@ func registerAPI(e *echo.Echo, o Options) {
 	scoped.POST("/monitors/:monitorID/resume", h.resumeMonitor)
 	scoped.GET("/monitors/:monitorID/incidents", h.listMonitorIncidents)
 	scoped.GET("/incidents", h.listIncidents)
+
+	// Billing: any member can see the plan; changes need the owner and a verified email.
+	scoped.GET("/billing/subscription", h.billingSubscription)
+	scoped.POST("/billing/checkout-session", h.billingCheckout, requireOwner, requireVerifiedEmail)
+	scoped.POST("/billing/portal-session", h.billingPortal, requireOwner, requireVerifiedEmail)
+	scoped.POST("/billing/cancel-subscription", h.billingCancel, requireOwner, requireVerifiedEmail)
+	scoped.POST("/billing/sync", h.billingSync, requireOwner)
+	scoped.GET("/monitors/:monitorID/results", h.monitorResults)
+	scoped.GET("/monitors/:monitorID/uptime", h.monitorUptime)
+	scoped.GET("/monitors/:monitorID/response-times", h.monitorResponseTimes)
+	scoped.GET("/dashboard/summary", h.dashboardSummary)
+	scoped.GET("/dashboard/recent-incidents", h.dashboardRecentIncidents)
+	scoped.GET("/dashboard/response-times", h.dashboardResponseTimes)
 
 	// Alert recipients: any member can view; only owners change them; adding a recipient needs a verified
 	// email and is rate-limited because it causes mail to be sent to a third party.

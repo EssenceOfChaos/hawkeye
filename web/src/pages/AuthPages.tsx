@@ -38,7 +38,7 @@ export function LoginPage() {
     e.preventDefault()
     void run(async () => {
       await login(email, password)
-      navigate('/monitors')
+      navigate('/dashboard')
     })
   }
   return (
@@ -68,7 +68,7 @@ export function RegisterPage() {
     e.preventDefault()
     void run(async () => {
       await register(email, password)
-      navigate('/monitors')
+      navigate('/dashboard')
     })
   }
   return (

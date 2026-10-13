@@ -31,7 +31,31 @@ only thing that can notice its own outage.
 | `hawkeye_notification_deliveries_total{event,result}` | `sent`, `retry`, `failed`, `skipped`. Alert on a sustained `failed` or `retry` rate: email provider trouble |
 | `hawkeye_notification_pending`, `hawkeye_notification_oldest_pending_seconds` | alerts waiting; the oldest due one should stay under a minute or two |
 
+| `hawkeye_retention_last_success_timestamp_seconds` | alert if older than ~3 × `RETENTION_INTERVAL`: retention is not completing and the database will grow |
+| `hawkeye_retention_deleted_rows_total{kind}`, `hawkeye_retention_runs_total{result}`, `hawkeye_retention_errors_total` | what is being removed; `skipped` means another worker held the lock (normal with several workers) |
+| `hawkeye_retention_last_duration_seconds` | a pass that takes much longer than usual may mean a backlog (e.g. a large downgrade) |
+
+| `hawkeye_billing_webhook_events_total{result}` | `received`, `duplicate`, `invalid_signature`, `processed`, `ignored`, `retry`, `failed`. A burst of `invalid_signature` = wrong `STRIPE_WEBHOOK_SECRET` (after rolling it?) or probing |
+| `hawkeye_billing_events_pending`, `hawkeye_billing_oldest_pending_seconds` | stored events not yet applied; the oldest should stay under a few minutes |
+| `hawkeye_billing_events_failed` | **alert on > 0**: an event gave up (8 attempts) and a customer's plan may be wrong |
+
 ## Troubleshooting
+
+**A customer paid but is still on Free / was cancelled but still has access.** (1) Look at their organization's row and recent events:
+`SELECT s.status, p.code, s.provider_subscription_id, s.last_synced_at FROM subscriptions s JOIN plans p ON p.id = s.plan_id WHERE s.organization_id = '…';` and
+`SELECT provider_event_id, event_type, status, attempt_count, last_error, received_at FROM billing_webhook_events ORDER BY received_at DESC LIMIT 20;`
+(2) No events at all → the webhook is not reaching us: check the endpoint URL/secret in Stripe (Workbench → Webhooks → Event deliveries), TLS, and `invalid_signature` counts.
+(3) Events `received` with `last_error` → processing is failing (Stripe API unreachable, unknown price → check `STRIPE_PRICE_*` on **both** api and worker, conflicting subscription).
+(4) Events `failed` → fix the cause, then `UPDATE billing_webhook_events SET status='received', attempt_count=0, next_attempt_at=now() WHERE status='failed' AND id='…';`
+(5) Fastest repair for one organization: the owner (or you, via the API as them) calls `POST /api/v1/billing/sync`, which re-reads the subscription from Stripe.
+
+**Database growing / old data not disappearing.** Check `hawkeye_retention_last_success_timestamp_seconds`, the worker log lines "retention pass complete / failed", and that
+`DISABLE_RETENTION` is not set on every worker. Table sizes: `SELECT pg_size_pretty(pg_total_relation_size('check_results'));`. A first pass after a long gap deletes in
+batches of `RETENTION_BATCH` (default 5000) with 50 ms pauses, so it can take a while but does not block checks or the API. Run a pass by restarting a worker, or lower `RETENTION_INTERVAL` temporarily.
+
+**A customer says their history is missing.** Their plan's window applies (`plans.history_retention_days`): 7 / 90 / 365 days. After a downgrade older data is deleted on the next pass and cannot be restored (restore from a backup if absolutely necessary).
+
+**Uptime shows "not enough data".** Fewer than 5 completed checks exist in the window (new monitor, paused monitor, or a window beyond the retained history).
 
 **Alerts are not arriving.** (1) Is the monitor's incident open? `SELECT * FROM incidents WHERE monitor_id = '…' ORDER BY started_at DESC LIMIT 3;`
 (2) Were deliveries created? `SELECT d.event_type, d.status, d.attempt_count, d.last_error, s.destination FROM notification_deliveries d JOIN notification_settings s ON s.id = d.notification_setting_id WHERE d.incident_id = '…';`

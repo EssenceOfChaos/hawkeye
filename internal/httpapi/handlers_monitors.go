@@ -76,7 +76,7 @@ func (h *handlers) listPlans(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"plans": list})
+	return c.JSON(http.StatusOK, map[string]any{"plans": list, "billing_enabled": h.billing != nil && h.billing.Enabled()})
 }
 
 func (h *handlers) usage(c echo.Context) error {

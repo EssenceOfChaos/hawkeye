@@ -40,6 +40,11 @@ services:
       DATABASE_URL: postgres://postgres:postgres@db:5432/monitoring?sslmode=disable
       SESSION_SECRET: replace_with_a_secure_random_secret
       LOG_LEVEL: debug
+      # Optional Stripe test-mode settings, passed through from your shell/.env (billing stays off when empty).
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_PRO_ID: ${STRIPE_PRICE_PRO_ID:-}
+      STRIPE_PRICE_AGENCY_ID: ${STRIPE_PRICE_AGENCY_ID:-}
     ports:
       - "8080:8080"
     depends_on:
@@ -55,6 +60,10 @@ services:
       DATABASE_URL: postgres://postgres:postgres@db:5432/monitoring?sslmode=disable
       SESSION_SECRET: replace_with_a_secure_random_secret
       LOG_LEVEL: debug
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_PRO_ID: ${STRIPE_PRICE_PRO_ID:-}
+      STRIPE_PRICE_AGENCY_ID: ${STRIPE_PRICE_AGENCY_ID:-}
     ports:
       - "9090:9090"
     depends_on:

@@ -13,11 +13,13 @@ import (
 	"time"
 
 	"hawkeye/internal/auth"
+	"hawkeye/internal/billing"
 	"hawkeye/internal/config"
 	"hawkeye/internal/database"
 	"hawkeye/internal/email"
 	"hawkeye/internal/httpapi"
 	"hawkeye/internal/logging"
+	"hawkeye/internal/metrics"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/organizations"
@@ -59,9 +61,18 @@ func run() error {
 
 	planSvc := plans.NewService(cfg.AppBaseURL)
 
+	var provider billing.Provider
+	if bc := cfg.Billing(); bc.Enabled() {
+		provider = billing.NewStripeProvider(bc.SecretKey)
+	} else {
+		log.Info("billing disabled: set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and the price IDs to enable it")
+	}
+	billingSvc := billing.NewService(pool, provider, cfg.Billing(), metrics.New(), log)
+
 	e := httpapi.New(httpapi.Options{
 		Logger: log, DB: pool, RequestTimeout: cfg.RequestTimeout, BodyLimit: cfg.BodyLimit,
 		Auth: authSvc, Orgs: organizations.NewService(pool), Plans: planSvc, Monitors: monitors.NewService(pool, planSvc), Pool: pool, PgPool: pool,
+		Billing:       billingSvc,
 		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress),
 		SecureCookies: cfg.IsProduction(), AuthRateLimitPerMin: cfg.AuthRateLimitPerMin, TrustForwardedFor: cfg.TrustForwardedFor,
 	})

@@ -1,0 +1,75 @@
+package billing
+
+import (
+	"context"
+	"sync"
+)
+
+// FakeProvider is an in-memory Provider for tests and local development without Stripe credentials.
+type FakeProvider struct {
+	mu              sync.Mutex
+	Checkouts       []CheckoutParams
+	PortalCustomers []string
+	CanceledSubs    []string
+	Subscriptions   map[string]SubscriptionState // returned by GetSubscription / updated by CancelAtPeriodEnd
+	Err             error                        // returned by every call when set
+}
+
+func (f *FakeProvider) CreateCheckoutSession(_ context.Context, p CheckoutParams) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return "", f.Err
+	}
+	f.Checkouts = append(f.Checkouts, p)
+	return "https://checkout.example.test/session/" + p.PriceID, nil
+}
+
+func (f *FakeProvider) CreatePortalSession(_ context.Context, customerID, returnURL string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return "", f.Err
+	}
+	f.PortalCustomers = append(f.PortalCustomers, customerID)
+	return "https://portal.example.test/" + customerID + "?return=" + returnURL, nil
+}
+
+func (f *FakeProvider) GetSubscription(_ context.Context, id string) (SubscriptionState, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return SubscriptionState{}, f.Err
+	}
+	st, ok := f.Subscriptions[id]
+	if !ok {
+		return SubscriptionState{}, ErrNoSubscription
+	}
+	return st, nil
+}
+
+func (f *FakeProvider) CancelAtPeriodEnd(_ context.Context, id string) (SubscriptionState, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return SubscriptionState{}, f.Err
+	}
+	st, ok := f.Subscriptions[id]
+	if !ok {
+		return SubscriptionState{}, ErrNoSubscription
+	}
+	st.CancelAtPeriodEnd = true
+	f.Subscriptions[id] = st
+	f.CanceledSubs = append(f.CanceledSubs, id)
+	return st, nil
+}
+
+// SetSubscription sets the provider-side truth returned by GetSubscription.
+func (f *FakeProvider) SetSubscription(st SubscriptionState) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Subscriptions == nil {
+		f.Subscriptions = map[string]SubscriptionState{}
+	}
+	f.Subscriptions[st.ID] = st
+}

@@ -3,7 +3,7 @@
 Multi-tenant website monitoring SaaS: add websites, detect downtime, get alerts, review uptime.
 Go + Echo REST API, PostgreSQL, React + TypeScript frontend.
 
-**Status:** Phases 1–5 complete: foundation, authentication & tenancy, monitor management with plan limits, the monitoring engine
+**Status:** Phases 1–7 complete (Stripe billing is built and tested against a fake provider and signed fixtures; it needs your Stripe test keys to run for real, see `docs/billing.md`) (dashboard, uptime, response-time charts, check history, per-plan retention are in). Earlier: foundation, authentication & tenancy, monitor management with plan limits, the monitoring engine
 (durable scheduler/queue, SSRF-safe checks), and incidents with confirmed-outage/recovery email alerts. Email is still the `console` provider
 (messages are logged, not delivered). Dashboard/charts/uptime arrive in Phase 6, billing in Phase 7.
 See `docs/architecture.md` for the design.
@@ -44,7 +44,7 @@ make check                 # gofmt, go vet, go test -race, web lint/test/build
 
 Without `TEST_DATABASE_URL`, the PostgreSQL integration tests are **skipped** (the test log says so). CI always sets it.
 Each integration test creates and drops its own temporary database on that server, so the role needs CREATEDB.
-API reference: `docs/api.md`. Security notes: `docs/security.md`. Running the engine: `docs/operations.md`. Brand assets: `docs/branding.md`.
+API reference: `docs/api.md`. Security notes: `docs/security.md`. Running the engine: `docs/operations.md`. Brand assets: `docs/branding.md`. Billing/Stripe: `docs/billing.md`.
 
 ## Commands
 

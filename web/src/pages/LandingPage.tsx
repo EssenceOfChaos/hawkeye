@@ -42,7 +42,7 @@ function price(cents: number) {
   return cents === 0 ? '$0' : `$${(cents / 100).toFixed(0)}`
 }
 
-function PlanCard({ plan, featured }: { plan: Plan; featured: boolean }) {
+function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: Plan; featured: boolean; billingEnabled: boolean; signedIn: boolean }) {
   const mins = Math.round(plan.minimum_check_interval_seconds / 60)
   return (
     <li className={`plan${featured ? ' featured' : ''}`}>
@@ -59,6 +59,8 @@ function PlanCard({ plan, featured }: { plan: Plan; featured: boolean }) {
       </ul>
       {plan.monthly_price_cents === 0 ? (
         <Link className="button primary" to="/register">Start free</Link>
+      ) : billingEnabled ? (
+        <Link className="button primary" to={signedIn ? '/billing' : '/register'}>{signedIn ? `Choose ${plan.name}` : `Start free, upgrade to ${plan.name}`}</Link>
       ) : (
         <button disabled>Paid plans open soon</button>
       )}
@@ -69,11 +71,16 @@ function PlanCard({ plan, featured }: { plan: Plan; featured: boolean }) {
 export function LandingPage() {
   const { status } = useAuth()
   const [plans, setPlans] = useState<Plan[] | null>(null)
+  const [billingEnabled, setBillingEnabled] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    api<{ plans: Plan[] }>('GET', '/plans')
-      .then((r) => !cancelled && setPlans(r.plans))
+    api<{ plans: Plan[]; billing_enabled?: boolean }>('GET', '/plans')
+      .then((r) => {
+        if (cancelled) return
+        setPlans(r.plans)
+        setBillingEnabled(Boolean(r.billing_enabled))
+      })
       .catch(() => !cancelled && setPlans([]))
     return () => {
       cancelled = true
@@ -88,7 +95,7 @@ export function LandingPage() {
         <img className="landing-logo" src={brand.logo} alt="HawkEye" width={150} height={54} />
         <span className="spacer" />
         {signedIn ? (
-          <Link className="button primary" to="/monitors">Open dashboard</Link>
+          <Link className="button primary" to="/dashboard">Open dashboard</Link>
         ) : (
           <>
             <Link to="/login">Log in</Link>
@@ -105,7 +112,7 @@ export function LandingPage() {
             recovers, and keeps a record of every incident.
           </p>
           <div className="row">
-            <Link className="button primary large" to={signedIn ? '/monitors' : '/register'}>
+            <Link className="button primary large" to={signedIn ? '/dashboard' : '/register'}>
               {signedIn ? 'Open dashboard' : 'Monitor 5 sites free'}
             </Link>
             <span className="hint">No credit card needed.</span>
@@ -156,7 +163,7 @@ export function LandingPage() {
         {plans && plans.length > 0 && (
           <ul className="plans">
             {plans.map((p) => (
-              <PlanCard key={p.code} plan={p} featured={p.code === 'pro'} />
+              <PlanCard key={p.code} plan={p} featured={p.code === 'pro'} billingEnabled={billingEnabled} signedIn={signedIn} />
             ))}
           </ul>
         )}

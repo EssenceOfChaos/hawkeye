@@ -92,3 +92,32 @@ func TestEngineDefaultsAndValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestStripeConfigIsOptionalButAllOrNothing(t *testing.T) {
+	base := map[string]string{"DATABASE_URL": "postgres://x"}
+	with := func(extra map[string]string) map[string]string {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
+	}
+	if c, err := load(env(base)); err != nil || c.Billing().Enabled() {
+		t.Fatalf("no Stripe settings must mean billing disabled, not an error: %v", err)
+	}
+	full := map[string]string{"STRIPE_SECRET_KEY": "sk_test_abc", "STRIPE_WEBHOOK_SECRET": "whsec_abc", "STRIPE_PRICE_PRO_ID": "price_1", "STRIPE_PRICE_AGENCY_ID": "price_2"}
+	if c, err := load(env(with(full))); err != nil || !c.Billing().Enabled() {
+		t.Fatalf("%v", err)
+	}
+	if _, err := load(env(with(map[string]string{"STRIPE_SECRET_KEY": "sk_test_abc"}))); err == nil || !strings.Contains(err.Error(), "STRIPE_WEBHOOK_SECRET") {
+		t.Fatalf("a partial Stripe configuration must fail loudly: %v", err)
+	}
+	live := with(full)
+	live["STRIPE_SECRET_KEY"] = "sk_live_abc"
+	if _, err := load(env(live)); err == nil || !strings.Contains(err.Error(), "live keys") {
+		t.Fatalf("live keys must be refused outside production: %v", err)
+	}
+}

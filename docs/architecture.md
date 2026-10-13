@@ -5,7 +5,7 @@
 A modular monolith: one Go module, one PostgreSQL database, and separately runnable processes that share
 `internal/` packages. No microservices, no Kubernetes.
 
-## Current state (Phases 1–5)
+## Current state (Phases 1–7)
 
 ```
 cmd/api        REST API process (Echo)
@@ -23,6 +23,9 @@ internal/worker        bounded-concurrency polling loops, metrics sampler
 internal/metrics       Prometheus metrics
 internal/incidents     incident engine (opened/resolved inside the result transaction) and incident queries
 internal/notifications recipients + confirmation, enqueue (idempotent), email rendering, retrying dispatcher
+internal/reports       range resolution (plan-clamped), check-based uptime, bucketed series, check history, dashboard summary
+internal/retention     batched per-plan data retention + credential housekeeping (runs inside cmd/worker)
+internal/billing       Stripe: provider interface (+ SDK implementation and fake), checkout/portal/cancel/resync, signed webhook intake, event processing
 internal/email         Sender interface + console and in-memory senders
 internal/validation    field-level validation error
 internal/testutil      per-test isolated, migrated PostgreSQL databases
@@ -67,6 +70,22 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
   index: one open per monitor) and enqueues one `notification_deliveries` row per enabled, verified recipient; any move into `up` closes an
   open incident and enqueues recovery deliveries. Status, incident and deliveries therefore commit atomically
   (`TestIncidentAndNotificationsCommitAtomicallyWithTheResult`). The dispatcher (in `cmd/worker`) sends them; see `docs/api.md` for retry rules.
+- **Reporting (Phase 6):** reports read `check_results` directly (index `(monitor_id, checked_at)`); series are aggregated in SQL into at most 150
+  buckets so dashboards never load raw history. At current scale (a 1-minute plan with 200 monitors writes ≈ 288k rows/day) this is fast enough; if
+  org-wide 90–365-day charts become slow, add a pre-aggregated hourly rollup table fed by the retention job.
+- **Retention policy** (`internal/retention`, hourly, `DISABLE_RETENTION` to turn off per instance; one pass at a time via a PostgreSQL advisory lock):
+  check results and *resolved* incidents older than the plan's history window are deleted in batches of `RETENTION_BATCH` with a short pause between
+  statements; live monitors and open incidents are never deleted (a downgrade only shrinks the history window); monitors the user deleted are purged
+  after 30 days; expired sessions and spent/expired one-time tokens are removed. Deletion is irreversible — upgrading later does not bring history back.
+  The window is resolved through `plans.EffectivePlan`, the same function that governs every other entitlement.
+- **Charts:** Recharts, lazy-loaded with the dashboard/monitor pages (main bundle ≈ 294 kB). Design rules applied: single-series line (2px) with a
+  10 % area wash, hairline solid horizontal grid, no legend for one series, hover/keyboard readout, a table view of every value, held-frame dimming on
+  refetch, honest gaps, and status shown by icon + text rather than colour alone.
+- **Billing (Phase 7):** `internal/billing`. Webhooks are verified on the raw body, stored in `billing_webhook_events` (UNIQUE provider+event id), acknowledged, and processed
+  inline once and then by the worker with retry/backoff. A subscription event only identifies *which* subscription changed; the applied state is **re-read from Stripe**
+  (Stripe does not guarantee order and says not to use `created` for ordering). `apply` locks the organization's subscription row, maps the status (`docs/billing.md`),
+  resolves the plan from the configured price IDs and never lets a second subscription overwrite the first. Entitlements still come from `plans.EffectivePlan`: no code path
+  grants a plan except a successfully applied provider state.
 - **Brand assets:** `web/src/assets/brand/` holds the cleaned artwork from the supplied pack; `scripts/prepare_brand_assets.py` reproduces it
   (see `docs/branding.md`).
 - **Not yet:** multi-region verification (the single threshold rule is the extension point), retention of old results (Phase 6).
@@ -97,7 +116,7 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
 - **Soft delete:** deleted monitors stop counting toward limits; their rows remain until retention (Phase 6) removes them.
 - **Organization selection:** monitor endpoints use `X-Organization-ID` (verified) or the oldest membership. Personal organizations are the only kind today.
 - **Go version:** `golang.org/x/time` is pinned to v0.15.0 because v0.16 requires Go 1.26 and the Docker image uses Go 1.25.
-- **Migrations:** 000001 installs `set_updated_at()`; 000002 adds users, organizations, members, plans (seeded), sessions and the two token tables; 000005 adds `incidents`, `notification_settings` (+ confirmation tokens) and `notification_deliveries`; 000004 adds `check_results`, `check_jobs` and `monitors.next_check_at`; 000003 adds subscriptions (every organization starts `active` on Free, created at registration) and monitors.
+- **Migrations:** 000001 installs `set_updated_at()`; 000002 adds users, organizations, members, plans (seeded), sessions and the two token tables; 000007 adds `billing_webhook_events` and `subscriptions.last_synced_at`; 000006 adds indexes for retention; 000005 adds `incidents`, `notification_settings` (+ confirmation tokens) and `notification_deliveries`; 000004 adds `check_results`, `check_jobs` and `monitors.next_check_at`; 000003 adds subscriptions (every organization starts `active` on Free, created at registration) and monitors.
 - **Tests:** integration tests create a throwaway database per test (`testutil.NewDatabase`), so packages run in parallel safely.
 
 ## Planned phases

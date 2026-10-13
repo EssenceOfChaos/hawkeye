@@ -17,8 +17,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"hawkeye/internal/auth"
+	"hawkeye/internal/billing"
 	"hawkeye/internal/email"
 	"hawkeye/internal/httpapi"
+	"hawkeye/internal/metrics"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/organizations"
@@ -30,9 +32,17 @@ type env struct {
 	srv  *httptest.Server
 	pool *pgxpool.Pool
 	mail *email.Memory
+	fake *billing.FakeProvider // set when billing is enabled
 }
 
-func newEnv(t *testing.T, rateLimit int) *env {
+type envOpts struct {
+	billingCfg billing.Config
+	provider   billing.Provider
+}
+
+func newEnv(t *testing.T, rateLimit int) *env { return newEnvOpts(t, rateLimit, envOpts{}) }
+
+func newEnvOpts(t *testing.T, rateLimit int, o envOpts) *env {
 	t.Helper()
 	pool := testutil.NewPool(t)
 	mail := &email.Memory{}
@@ -49,10 +59,15 @@ func newEnv(t *testing.T, rateLimit int) *env {
 		Auth: svc, Orgs: organizations.NewService(pool), AuthRateLimitPerMin: rateLimit,
 		Plans: planSvc, Monitors: monitors.NewService(pool, planSvc), Pool: pool, PgPool: pool,
 		Notifications: notifications.NewService(pool, mail, log, "http://app.test", "alerts@test"),
+		Billing:       billing.NewService(pool, o.provider, o.billingCfg, metrics.New(), log),
 	})
 	srv := httptest.NewServer(app)
 	t.Cleanup(srv.Close)
-	return &env{srv: srv, pool: pool, mail: mail}
+	e := &env{srv: srv, pool: pool, mail: mail}
+	if f, ok := o.provider.(*billing.FakeProvider); ok {
+		e.fake = f
+	}
+	return e
 }
 
 // client is a browser-like client: it keeps cookies and echoes the CSRF cookie as a header.
@@ -494,4 +509,12 @@ func (c *client) doWithHeaderBody(method, path, orgHeader, body string) int {
 	}
 	res.Body.Close()
 	return res.StatusCode
+}
+
+func mustJSONBytes(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }

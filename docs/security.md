@@ -22,6 +22,25 @@ Monitors are always queried by `(id, organization_id)`, with the organization re
 
 Limits are enforced in the service layer inside the same transaction as the write, under an organization row lock; the UI only mirrors them.
 
+## Billing (Phase 7)
+
+- **Entitlements change only from the payment provider's state**, read from Stripe after a *signed* webhook (or an explicit owner-triggered sync). A Checkout redirect, a created session
+  or a client-supplied value never grants a plan; prices and the organization are chosen server-side (`TestCheckoutSessionUsesServerSidePrices`, `TestUpgradeAndDowngradeFlow`).
+- **Webhook endpoint:** HMAC-SHA256 signature over the raw body, 5-minute replay window (Stripe's library), constant-time comparison (library), nothing stored before verification, 1 MB body limit,
+  idempotent by event ID. Defence in depth (documented, infrastructure): allowlist Stripe's IPs. It is intentionally outside CSRF/session protection because it is signature-authenticated.
+- **Authorization:** only owners with a verified email can start checkout, open the portal, cancel or re-sync; every call is scoped to the caller's verified organization (tested across tenants).
+- **Secrets:** `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` come from the environment only, are validated at startup (shape, all-or-nothing, live keys refused outside production) and never logged. Provider error text is not returned to users.
+- **No card data** is handled or stored; Checkout and the portal are Stripe-hosted. Stored webhook payloads (customer IDs/emails) are retained 90 days (180 for failed).
+- **Residual risks:** a compromised webhook secret lets an attacker trigger *re-reads* but not choose the applied state (Stripe's API decides it), which limits the blast radius; the conflicting-second-subscription case requires manual resolution;
+  fraud/dispute/refund events (`charge.dispute.created`, `charge.refunded`) are not handled yet and need a policy before live launch.
+
+## Data retention and privacy (Phase 6)
+
+- Stored per check: status, timings and a fixed sanitised error summary — never page content. Retention windows per plan: Free 7 days, Pro 90, Agency 365,
+  applied by an hourly batched job (see `docs/architecture.md`). Monitors you delete are purged after 30 days; expired sessions and one-time tokens are removed.
+- Report endpoints are bounded (≤ 366-day windows, ≤ 150 chart points, ≤ 200 history rows per page) and tenant-scoped (`TestReportEndpointsAreTenantScoped`).
+- **Not yet implemented:** self-service account deletion/export (needed for GDPR-style requests) and a published privacy policy; both are Phase 8 items.
+
 ## Alerts and email abuse (Phase 5)
 
 - An alert address other than the owner's own must be confirmed by an emailed single-use link (48 h, hashed in the database) before it receives

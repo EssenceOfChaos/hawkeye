@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"hawkeye/internal/billing"
 	"log/slog"
 	"os"
 	"strconv"
@@ -59,9 +60,23 @@ type Config struct {
 	RecoveryThreshold int
 	WorkerMetricsPort int
 	NotifyMaxAttempts int
+	RunRetention      bool
+	RetentionInterval time.Duration
+	RetentionBatch    int
+
+	StripeSecretKey     string
+	StripeWebhookSecret string
+	StripePricePro      string
+	StripePriceAgency   string
 }
 
 func (c Config) IsProduction() bool { return c.AppEnv == EnvProduction }
+
+// Billing returns the payment-provider settings. Billing is simply disabled when none are set.
+func (c Config) Billing() billing.Config {
+	return billing.Config{SecretKey: c.StripeSecretKey, WebhookSecret: c.StripeWebhookSecret,
+		PricePro: c.StripePricePro, PriceAgency: c.StripePriceAgency, AppBaseURL: c.AppBaseURL}
+}
 
 // Load reads configuration from the process environment and validates it.
 func Load() (Config, error) { return load(os.Getenv) }
@@ -140,6 +155,14 @@ func load(get func(string) string) (Config, error) {
 		RecoveryThreshold: integer("RECOVERY_THRESHOLD", 2),
 		WorkerMetricsPort: integer("WORKER_METRICS_PORT", 9090),
 		NotifyMaxAttempts: integer("NOTIFY_MAX_ATTEMPTS", 6),
+		RunRetention:      !boolean("DISABLE_RETENTION"),
+		RetentionInterval: duration("RETENTION_INTERVAL", time.Hour),
+		RetentionBatch:    integer("RETENTION_BATCH", 5000),
+
+		StripeSecretKey:     str("STRIPE_SECRET_KEY", ""),
+		StripeWebhookSecret: str("STRIPE_WEBHOOK_SECRET", ""),
+		StripePricePro:      str("STRIPE_PRICE_PRO_ID", ""),
+		StripePriceAgency:   str("STRIPE_PRICE_AGENCY_ID", ""),
 
 		EmailProvider:    str("EMAIL_PROVIDER", "console"),
 		EmailFromAddress: str("EMAIL_FROM_ADDRESS", "alerts@example.com"),
@@ -168,7 +191,7 @@ func load(get func(string) string) (Config, error) {
 	}
 	for key, v := range map[string]int{
 		"WORKER_CONCURRENCY": c.WorkerConcurrency, "SCHEDULER_BATCH": c.SchedulerBatch, "QUEUE_MAX_DEPTH": c.QueueMaxDepth,
-		"JOB_MAX_ATTEMPTS": c.JobMaxAttempts, "FAILURE_THRESHOLD": c.FailureThreshold, "RECOVERY_THRESHOLD": c.RecoveryThreshold, "NOTIFY_MAX_ATTEMPTS": c.NotifyMaxAttempts,
+		"JOB_MAX_ATTEMPTS": c.JobMaxAttempts, "FAILURE_THRESHOLD": c.FailureThreshold, "RECOVERY_THRESHOLD": c.RecoveryThreshold, "NOTIFY_MAX_ATTEMPTS": c.NotifyMaxAttempts, "RETENTION_BATCH": c.RetentionBatch,
 	} {
 		if v < 1 {
 			errs = append(errs, fmt.Errorf("%s: must be at least 1", key))
@@ -196,6 +219,10 @@ func load(get func(string) string) (Config, error) {
 		if !strings.HasPrefix(c.AppBaseURL, "https://") {
 			errs = append(errs, errors.New("APP_BASE_URL: must use https in production"))
 		}
+	}
+
+	if err := c.Billing().Validate(c.IsProduction()); err != nil {
+		errs = append(errs, err)
 	}
 
 	return c, errors.Join(errs...)

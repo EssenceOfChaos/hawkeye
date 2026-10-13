@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/billing"
 	"hawkeye/internal/checks"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/notifications"
@@ -177,6 +178,13 @@ func Sample(ctx context.Context, pool *pgxpool.Pool, m *metrics.Metrics) error {
 	if err != nil {
 		m.WorkerErrors.WithLabelValues("sample").Inc()
 		return err
+	}
+	if bn, boldest, err := billing.Pending(ctx, pool); err == nil {
+		m.BillingPending.Set(float64(bn))
+		m.BillingOldest.Set(boldest.Seconds())
+	}
+	if bf, err := billing.Failed(ctx, pool); err == nil {
+		m.BillingFailed.Set(float64(bf))
 	}
 	m.NotificationsPending.Set(float64(n))
 	m.NotificationsOldest.Set(oldest.Seconds())

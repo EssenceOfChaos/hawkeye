@@ -30,6 +30,17 @@ type Metrics struct {
 	NotificationsPending prometheus.Gauge
 	NotificationsOldest  prometheus.Gauge
 
+	RetentionDeleted     *prometheus.CounterVec // kind=check_results|incidents|monitors|sessions|tokens
+	RetentionRuns        *prometheus.CounterVec // result=ok|error|skipped
+	RetentionErrors      prometheus.Counter
+	RetentionLastSuccess prometheus.Gauge
+	RetentionDuration    prometheus.Gauge
+
+	BillingEvents  *prometheus.CounterVec // result=received|duplicate|invalid_signature|processed|ignored|retry|failed
+	BillingPending prometheus.Gauge
+	BillingOldest  prometheus.Gauge
+	BillingFailed  prometheus.Gauge
+
 	WorkerErrors *prometheus.CounterVec // stage=claim|load|record|complete|sample|schedule
 	LastPollUnix prometheus.Gauge
 }
@@ -58,12 +69,21 @@ func New() *Metrics {
 			Help: "Alert delivery attempts by event and result."}, []string{"event", "result"}),
 		NotificationsPending: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_notification_pending", Help: "Alert deliveries waiting to be sent."}),
 		NotificationsOldest:  prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_notification_oldest_pending_seconds", Help: "Age of the oldest due alert delivery."}),
+		RetentionDeleted:     prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_retention_deleted_rows_total", Help: "Rows removed by retention, by kind."}, []string{"kind"}),
+		RetentionRuns:        prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_retention_runs_total", Help: "Retention passes by result."}, []string{"result"}),
+		RetentionErrors:      prometheus.NewCounter(prometheus.CounterOpts{Name: "hawkeye_retention_errors_total", Help: "Failed retention steps."}),
+		RetentionLastSuccess: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_retention_last_success_timestamp_seconds", Help: "Unix time of the last successful retention pass."}),
+		RetentionDuration:    prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_retention_last_duration_seconds", Help: "Duration of the last successful retention pass."}),
+		BillingEvents:        prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_billing_webhook_events_total", Help: "Billing webhook events by result."}, []string{"result"}),
+		BillingPending:       prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_billing_events_pending", Help: "Stored billing events awaiting processing."}),
+		BillingOldest:        prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_billing_oldest_pending_seconds", Help: "Age of the oldest unprocessed billing event."}),
+		BillingFailed:        prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_billing_events_failed", Help: "Billing events that gave up and need manual attention."}),
 		WorkerErrors: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_worker_errors_total",
 			Help: "Internal errors by stage."}, []string{"stage"}),
 		LastPollUnix: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_worker_last_poll_timestamp_seconds", Help: "Unix time of the last queue poll."}),
 	}
 	for _, c := range []prometheus.Collector{m.ChecksTotal, m.CheckDuration, m.Scheduled, m.Skipped, m.Missed, m.Backpressure,
-		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest} {
+		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.BillingEvents, m.BillingPending, m.BillingOldest, m.BillingFailed} {
 		f(c)
 	}
 	return m

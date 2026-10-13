@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"hawkeye/internal/billing"
 	"hawkeye/internal/checks"
 	"hawkeye/internal/config"
 	"hawkeye/internal/database"
@@ -21,6 +22,7 @@ import (
 	"hawkeye/internal/logging"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/notifications"
+	"hawkeye/internal/retention"
 	"hawkeye/internal/safehttp"
 	"hawkeye/internal/scheduler"
 	"hawkeye/internal/worker"
@@ -68,6 +70,31 @@ func run() error {
 		sched := scheduler.New(pool, scheduler.Config{Interval: cfg.SchedulerInterval, Batch: cfg.SchedulerBatch, MaxQueueDepth: cfg.QueueMaxDepth}, m, log)
 		spawn(func() { sched.Run(ctx) })
 	}
+	if cfg.RunRetention {
+		job := retention.New(pool, retention.Config{Interval: cfg.RetentionInterval, Batch: cfg.RetentionBatch, Pause: 50 * time.Millisecond}, m, log)
+		spawn(func() { job.Run(ctx) })
+	}
+	// Billing webhook events accepted by the API but not yet applied (the API processes most inline).
+	var billingProvider billing.Provider
+	if bc := cfg.Billing(); bc.Enabled() {
+		billingProvider = billing.NewStripeProvider(bc.SecretKey) // events are applied by re-reading the subscription from Stripe
+	}
+	billingSvc := billing.NewService(pool, billingProvider, cfg.Billing(), m, log)
+	spawn(func() {
+		for ctx.Err() == nil {
+			worked, err := billingSvc.ProcessOne(context.WithoutCancel(ctx))
+			if err != nil {
+				log.Warn("billing event processing failed", "error", err)
+			}
+			if worked {
+				continue
+			}
+			select {
+			case <-ctx.Done():
+			case <-time.After(2 * time.Second):
+			}
+		}
+	})
 	// Alert emails. Only the console provider exists so far; swap the sender here when a real one is added.
 	dispatcher := notifications.NewDispatcher(pool, email.Console{Log: log},
 		notifications.DispatcherConfig{MaxAttempts: cfg.NotifyMaxAttempts, AppBaseURL: cfg.AppBaseURL, From: cfg.EmailFromAddress}, m, log)

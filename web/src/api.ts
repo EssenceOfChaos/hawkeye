@@ -65,6 +65,64 @@ export interface Incident {
   duration_seconds: number
 }
 
+export interface BillingSubscription {
+  billing_enabled: boolean
+  plan: Plan
+  status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'incomplete'
+  paid_access: boolean
+  cancel_at_period_end: boolean
+  current_period_end: string | null
+  can_manage: boolean
+  has_subscription: boolean
+}
+
+export interface RangeInfo {
+  from: string
+  to: string
+  preset: string
+  clamped_to_retention: boolean
+  retention_days: number
+}
+
+export interface Uptime {
+  from: string
+  to: string
+  clamped_to_retention: boolean
+  total_checks: number
+  successful_checks: number
+  failed_checks: number
+  uptime_percent: number | null
+  insufficient_data: boolean
+  min_checks: number
+  avg_response_ms: number | null
+  method: 'check_based'
+}
+
+export interface SeriesPoint {
+  t: string
+  avg_ms: number | null
+  max_ms: number | null
+  checks: number
+  failed: number
+}
+
+export interface CheckResult {
+  id: number
+  checked_at: string
+  success: boolean
+  http_status_code: number | null
+  response_time_ms: number | null
+  error_category: string | null
+  error_summary: string | null
+}
+
+export interface DashboardSummary {
+  monitors: { total: number; up: number; down: number; pending: number; paused: number }
+  open_incidents: number
+  uptime: Uptime
+  generated_at: string
+}
+
 export interface MonitorInput {
   name: string
   url: string

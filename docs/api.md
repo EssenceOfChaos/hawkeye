@@ -1,4 +1,4 @@
-# API (Phases 2–5)
+# API (Phases 2–7)
 
 Base path `/api/v1`. JSON only. Operational probes `/healthz` and `/readyz` are outside the prefix.
 
@@ -83,6 +83,49 @@ database index). Deleting a monitor closes its open incident silently.
 
 Incident: `{id, monitor_id, monitor_name, started_at, resolved_at, status, cause_category, summary, duration_seconds}`
 (`duration_seconds` is the elapsed time so far while open).
+
+## Reports, history and the dashboard
+
+All report endpoints are tenant-scoped (a monitor from another organization is a 404) and **bounded**: no endpoint returns unbounded history.
+
+**Time range.** Either `range=24h|7d|30d|90d|365d` (default `24h`) or an explicit `from` and `to` (RFC 3339, together, not combined with `range`).
+`to` is capped at now, a window may not exceed 366 days, and history older than the plan's retention does not exist, so `from` is clamped to
+the retention cutoff. Every response echoes the effective window: `range: {from, to, preset, clamped_to_retention, retention_days}`; when
+`clamped_to_retention` is true the UI tells the user their plan keeps less history than they asked for.
+
+| Method & path | Notes |
+|---|---|
+| `GET /monitors/:id/uptime` | `{range, uptime}` (see below) |
+| `GET /monitors/:id/response-times` | `{range, bucket_seconds, points: [{t, avg_ms, max_ms, checks, failed}]}`. At most 150 points: the bucket width (1 min up to 3 days) is chosen from the window. Buckets with no checks are **omitted**, so charts show gaps rather than zeros. `avg_ms`/`max_ms` cover successful checks only and are null for a bucket that only had failures |
+| `GET /monitors/:id/results` | check history, newest first: `{range, results: [{id, checked_at, success, http_status_code, response_time_ms, error_category, error_summary}], total, limit, offset}`; `limit` 1–200 (default 50) |
+| `GET /dashboard/summary` | `{range, summary: {monitors: {total, up, down, pending, paused}, open_incidents, uptime, generated_at}}`. Counts and open incidents are *current*; `uptime` follows the range. Paused wins over status in the counts; deleted monitors are excluded |
+| `GET /dashboard/recent-incidents` | `limit` 1–20 (default 5) |
+| `GET /dashboard/response-times` | same shape as the per-monitor series, averaged across all live monitors |
+
+**Uptime** — `{from, to, clamped_to_retention, total_checks, successful_checks, failed_checks, uptime_percent, insufficient_data, min_checks, avg_response_ms, method: "check_based"}`
+
+> uptime % = successful checks ÷ completed checks × 100, over the window
+
+- It is *check-based*, not continuous: only completed checks are counted. Periods when a monitor was paused, or when a check was late, never ran or was
+  cancelled by a shutdown, produce no result and are therefore outside the denominator.
+- The percentage is **truncated** to three decimals, never rounded up, so it reads 100 only when every completed check succeeded.
+- With fewer than 5 completed checks (`min_checks`), `uptime_percent` is `null` and `insufficient_data` is true.
+- Organization-wide figures use only live (non-deleted) monitors. A failed check of any kind counts as a failure, including `blocked` and `timeout`.
+
+## Plans and billing
+
+`GET /plans` (public) → `{plans, billing_enabled}`. Billing details and the Stripe setup are in `docs/billing.md`.
+
+| Method & path | Who | Notes |
+|---|---|---|
+| `GET /billing/subscription` | any member | `{subscription: {billing_enabled, plan, status, paid_access, cancel_at_period_end, current_period_end, can_manage, has_subscription}, usage}`. `plan` is the plan whose limits apply now; `status` is `active`, `trialing`, `past_due`, `canceled` or `incomplete` |
+| `POST /billing/checkout-session` | owner, verified email | `{plan: "pro"\|"agency"}` → `{url}` (Stripe-hosted Checkout). Only the plan name is read; price and organization come from the server. Grants nothing. 409 `ALREADY_SUBSCRIBED`, 400 validation, 503 `BILLING_NOT_CONFIGURED` |
+| `POST /billing/portal-session` | owner, verified email | → `{url}` (customer portal). 409 `NO_BILLING_ACCOUNT` before a first checkout |
+| `POST /billing/cancel-subscription` | owner, verified email | schedules cancellation at period end; access continues until then. 409 `NO_ACTIVE_SUBSCRIPTION` |
+| `POST /billing/sync` | owner | re-reads the subscription from the provider (repair after missed webhooks) |
+| `POST /webhooks/stripe` | Stripe | raw JSON body + `Stripe-Signature`. 200 `{received, duplicate}`; 400 `INVALID_SIGNATURE`; 503 when webhooks are not configured. No session/CSRF |
+
+Provider failures return 502 `BILLING_PROVIDER_ERROR` with a generic message.
 
 ## Alert recipients (notification settings)
 

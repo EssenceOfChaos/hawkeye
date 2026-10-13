@@ -21,9 +21,11 @@ export function Layout() {
           <BrandMark />
         </Link>
         <nav aria-label="Main">
+          <NavLink to="/dashboard">Dashboard</NavLink>
           <NavLink to="/monitors">Monitors</NavLink>
           <NavLink to="/incidents">Incidents</NavLink>
           <NavLink to="/notifications">Alerts</NavLink>
+          <NavLink to="/billing">Billing</NavLink>
         </nav>
         <span className="spacer" />
         <span className="who">{user?.email}</span>
