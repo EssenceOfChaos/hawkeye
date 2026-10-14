@@ -81,6 +81,10 @@ func TestExportContainsOnlyTheCallersDataAndNoSecrets(t *testing.T) {
 	newMonitorID(t, bob, "Bob's Secret Site")
 	seedIncident(t, e, m, time.Hour, false)
 	seedResults(t, e, m, 12, time.Minute, time.Minute, 0, 100)
+	if r := alice.call("PATCH", "/api/v1/monitors/"+m, map[string]any{
+		"auth": map[string]string{"type": "header", "header_name": "X-Api-Key", "secret": "monitor-api-key"}}); r.Status != 200 {
+		t.Fatalf("set monitor auth: %d %v", r.Status, r.Body)
+	}
 	alice.call("POST", "/api/v1/notification-settings", map[string]string{"destination": "client@example.net"})
 	e.signedWebhook(t, billingtest.SubscriptionEvent("evt_x", "customer.subscription.created", time.Now(),
 		billingtest.Sub{ID: "sub_secretid", Customer: "cus_secretid", Status: "active", Price: "price_pro", OrgID: aliceOrg, PeriodEnd: time.Now().Add(720 * time.Hour).Unix()}))
@@ -104,7 +108,7 @@ func TestExportContainsOnlyTheCallersDataAndNoSecrets(t *testing.T) {
 			t.Errorf("export missing %q", want)
 		}
 	}
-	for _, leaked := range []string{"bob@example.com", "Bob's Secret Site", "cus_secretid", "sub_secretid", "$argon2id"} {
+	for _, leaked := range []string{"bob@example.com", "Bob's Secret Site", "cus_secretid", "sub_secretid", "$argon2id", "monitor-api-key"} {
 		if strings.Contains(body, leaked) {
 			t.Errorf("export leaked %q", leaked)
 		}

@@ -51,10 +51,92 @@ describe('MonitorFormPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/Pro includes 50 monitors/)
   })
 
+  it('sends headers, body, auth and assertions for an API check', async () => {
+    setup(() => json(201, { monitor: {} }))
+    const fetchMock = vi.mocked(globalThis.fetch)
+    await fill('API')
+    await userEvent.selectOptions(screen.getByLabelText('Request method'), 'POST')
+    await userEvent.click(screen.getByRole('button', { name: 'Add header' }))
+    await userEvent.type(screen.getByLabelText('Header 1 name'), 'X-Env')
+    await userEvent.type(screen.getByLabelText('Header 1 value'), 'prod')
+    await userEvent.type(screen.getByLabelText('Request body (optional)'), 'ping')
+    await userEvent.selectOptions(screen.getByLabelText('Authentication'), 'bearer')
+    await userEvent.type(screen.getByLabelText('Token'), 'tok')
+    await userEvent.click(screen.getByRole('button', { name: 'Add assertion' }))
+    await userEvent.selectOptions(screen.getByLabelText('Assertion 1 type'), 'json_path')
+    await userEvent.type(screen.getByLabelText('Assertion 1 JSON path'), 'data.status')
+    await userEvent.type(screen.getByLabelText('Assertion 1 value'), 'ok')
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Monitor list' })).toBeInTheDocument())
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!
+    const sent = JSON.parse(post[1]!.body as string)
+    expect(sent).toMatchObject({
+      method: 'POST',
+      headers: [{ name: 'X-Env', value: 'prod' }],
+      body: 'ping',
+      auth: { type: 'bearer', secret: 'tok' },
+      assertions: [{ type: 'json_path', path: 'data.status', operator: 'equals', value: 'ok' }],
+    })
+  })
+
+  it('does not send a body for GET and hides assertions for HEAD', async () => {
+    setup(() => json(201, { monitor: {} }))
+    await fill('Site')
+    expect(screen.queryByLabelText('Request body (optional)')).not.toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Request method'), 'HEAD')
+    expect(screen.queryByRole('button', { name: 'Add assertion' })).not.toBeInTheDocument()
+    expect(screen.getByText(/HEAD responses have no body/)).toBeInTheDocument()
+  })
+
+  it('shows errors for a header row', async () => {
+    setup(() => json(400, { error: { code: 'VALIDATION_ERROR', message: 'bad', details: { fields: { 'headers[0].name': 'use authentication instead, so the credentials stay hidden' } } } }))
+    await fill('Home')
+    await userEvent.click(screen.getByRole('button', { name: 'Add header' }))
+    await userEvent.type(screen.getByLabelText('Header 1 name'), 'Authorization')
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    expect(await screen.findByText(/use authentication instead/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Header 1 name')).toHaveAttribute('aria-invalid', 'true')
+  })
+
   it('returns to the list after success', async () => {
     setup(() => json(201, { monitor: {} }))
     await fill('Home')
     await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Monitor list' })).toBeInTheDocument())
+  })
+})
+
+describe('MonitorFormPage editing', () => {
+  it('keeps the stored secret unless a new one is entered', async () => {
+    document.cookie = 'csrf_token=t; path=/'
+    const monitor = {
+      id: 'm1', name: 'API', url: 'https://api.example.com', method: 'GET', expected_status_code: null,
+      check_interval_seconds: 300, effective_check_interval_seconds: 300, timeout_seconds: 10, enabled: true,
+      current_status: 'up', last_checked_at: null, headers: [], body: null,
+      auth: { type: 'basic', username: 'svc', secret_set: true }, assertions: [{ type: 'body_contains', value: 'ok' }],
+    }
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.endsWith('/usage')) return json(200, { usage: { plan: { minimum_check_interval_seconds: 300 } } })
+      if (init?.method === 'PATCH') return json(200, { monitor })
+      return json(200, { monitor })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <MemoryRouter initialEntries={['/monitors/m1/edit']}>
+        <Routes>
+          <Route path="/monitors/:monitorID/edit" element={<MonitorFormPage />} />
+          <Route path="/monitors" element={<h1>Monitor list</h1>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByLabelText('Username')).toHaveValue('svc')
+    expect(screen.getByText(/Leave empty to keep it/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Assertion 1 value')).toHaveValue('ok')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Monitor list' })).toBeInTheDocument())
+    const patch = fetchMock.mock.calls.find(([, init]) => init?.method === 'PATCH')!
+    const sent = JSON.parse(patch[1]!.body as string)
+    expect(sent.auth).toEqual({ type: 'basic', username: 'svc' })
+    expect(sent.body).toBeNull()
   })
 })

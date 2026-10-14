@@ -23,6 +23,7 @@ const CAUSES: Record<string, string> = {
   redirect: 'Too many redirects',
   blocked: 'Address not permitted',
   http_status: 'Unexpected HTTP status',
+  assertion: 'Response check failed',
   other: 'Request failed',
 }
 

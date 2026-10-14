@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +25,7 @@ const (
 	CatRedirect   = "redirect"
 	CatBlocked    = "blocked"
 	CatHTTPStatus = "http_status"
+	CatAssertion  = "assertion"
 	CatOther      = "other"
 )
 
@@ -39,6 +41,10 @@ type Target struct {
 	Method         string
 	ExpectedStatus *int
 	Timeout        time.Duration
+	Headers        []Header
+	Body           string
+	Auth           Auth
+	Assertions     []Assertion
 }
 
 // Result is the outcome of one completed check. ResponseTimeMs is the time until response headers arrived.
@@ -66,6 +72,7 @@ func NewChecker(cfg safehttp.Config) *Checker { return &Checker{cfg: cfg, now: t
 //
 // Success rule: with an expected status code, the final status (after redirects) must equal it;
 // otherwise any final status below 400 is up. Transport failures (DNS, connect, TLS, timeout) always fail.
+// When the status passes, every assertion must hold on the response body (CatAssertion otherwise).
 func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
 	res := Result{CheckedAt: c.now()}
 	finish := func() (Result, error) {
@@ -75,15 +82,44 @@ func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
 
 	reqCtx, cancel := context.WithTimeout(ctx, t.Timeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, t.Method, t.URL, nil)
+	var body io.Reader
+	if t.Body != "" {
+		body = strings.NewReader(t.Body)
+	}
+	req, err := http.NewRequestWithContext(reqCtx, t.Method, t.URL, body)
 	if err != nil {
 		res.ErrorCategory, res.ErrorSummary = CatOther, "Invalid request"
 		return finish()
 	}
-	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "*/*")
+	if t.Body != "" {
+		req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+		if json.Valid([]byte(t.Body)) {
+			req.Header.Set("Content-Type", "application/json")
+		}
+	}
+	for _, h := range t.Headers {
+		req.Header.Set(h.Name, h.Value)
+	}
+	req.Header.Set("User-Agent", userAgent)
 
-	resp, err := safehttp.New(c.cfg, t.Timeout).Do(req)
+	client := safehttp.New(c.cfg, t.Timeout)
+	if secretHeader := applyAuth(req, t.Auth); secretHeader != "" {
+		// Credentials only go to the monitored host. Go already drops Authorization when a redirect leaves
+		// the domain, but keeps it for subdomains and never knows about a custom API-key header.
+		next := client.CheckRedirect
+		client.CheckRedirect = func(r *http.Request, via []*http.Request) error {
+			if err := next(r, via); err != nil {
+				return err
+			}
+			if !strings.EqualFold(r.URL.Host, via[0].URL.Host) {
+				r.Header.Del(secretHeader)
+			}
+			return nil
+		}
+	}
+
+	resp, err := client.Do(req)
 	elapsed := int(c.now().Sub(res.CheckedAt) / time.Millisecond)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -93,10 +129,28 @@ func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
 		return finish()
 	}
 	defer resp.Body.Close()
-	_, _ = io.CopyN(io.Discard, resp.Body, maxDrainBytes) // never keep or interpret the body
 
 	code := resp.StatusCode
 	res.StatusCode, res.ResponseTimeMs = &code, &elapsed
+	// The body is only read when assertions need it, and then only up to MaxBodyBytes; it is never stored.
+	var respBody []byte
+	truncated := false
+	if len(t.Assertions) > 0 {
+		respBody, err = io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes+1))
+		if err != nil {
+			if ctx.Err() != nil {
+				return Result{}, ctx.Err()
+			}
+			res.ErrorCategory, res.ErrorSummary = Classify(err)
+			return finish()
+		}
+		if len(respBody) > MaxBodyBytes {
+			respBody, truncated = respBody[:MaxBodyBytes], true
+		}
+	} else {
+		_, _ = io.CopyN(io.Discard, resp.Body, maxDrainBytes)
+	}
+
 	if t.ExpectedStatus != nil {
 		res.Success = code == *t.ExpectedStatus
 	} else {
@@ -108,8 +162,36 @@ func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
 		if t.ExpectedStatus != nil {
 			res.ErrorSummary = fmt.Sprintf("Received HTTP %d, expected %d", code, *t.ExpectedStatus)
 		}
+		return finish()
+	}
+	if msg := evaluate(t.Assertions, respBody, truncated); msg != "" {
+		res.Success, res.ErrorCategory, res.ErrorSummary = false, CatAssertion, truncate(msg, maxSummaryLen)
 	}
 	return finish()
+}
+
+// applyAuth adds credentials to req and returns the header that carries them, or "" for none.
+func applyAuth(req *http.Request, a Auth) string {
+	switch a.Type {
+	case AuthBasic:
+		req.SetBasicAuth(a.Username, a.Secret)
+		return "Authorization"
+	case AuthBearer:
+		req.Header.Set("Authorization", "Bearer "+a.Secret)
+		return "Authorization"
+	case AuthHeader:
+		req.Header.Set(a.HeaderName, a.Secret)
+		return a.HeaderName
+	}
+	return ""
+}
+
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n-1]) + "…"
 }
 
 // Classify maps a transport error to a stable category and a fixed, sanitised summary. Raw error

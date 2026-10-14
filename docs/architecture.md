@@ -62,7 +62,9 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
 - **What counts as down (documented, explicit):** transport failures (DNS, connect, TLS, timeout, blocked, too many redirects) always
   fail a check. For HTTP responses, with `expected_status_code` set the final status must equal it; otherwise any final status
   below 400 is success (`500` is an HTTP failure, `404` is a failure unless expected). Redirects are followed and the final status counts.
-  `response_time_ms` is the time until response headers arrive.
+  `response_time_ms` is the time until response headers arrive. When the status passes, every assertion must hold on the response
+  body (the first failure is recorded as `assertion`). The body is read only when there are assertions, at most 1 MiB, and never stored.
+  Credentials (`auth_secret`) are only sent to the monitored host: they are dropped on a redirect to any other host.
 - **Status transitions:** configurable `FAILURE_THRESHOLD` (default 2) consecutive failures confirm an outage; `RECOVERY_THRESHOLD`
   (default 2) consecutive successes confirm recovery; `unknown → up` on the first success. `Store.Record` returns the `Transition`
   (`WentDown` / `Recovered`) that Phase 5 will turn into incidents and notifications inside the same transaction.

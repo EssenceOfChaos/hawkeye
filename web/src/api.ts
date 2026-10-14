@@ -29,12 +29,54 @@ export interface Usage {
 
 export type MonitorStatus = 'unknown' | 'up' | 'down'
 
+export const HTTP_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as const
+export type HttpMethod = (typeof HTTP_METHODS)[number]
+
+/** Methods that may send a request body. */
+export const BODY_METHODS: readonly HttpMethod[] = ['POST', 'PUT', 'PATCH', 'DELETE']
+
+export interface RequestHeader {
+  name: string
+  value: string
+}
+
+export type AuthType = 'none' | 'basic' | 'bearer' | 'header'
+
+/** A monitor's authentication as the API returns it: the secret itself is never sent back. */
+export interface MonitorAuth {
+  type: AuthType
+  username?: string
+  header_name?: string
+  secret_set: boolean
+}
+
+/** Sets authentication. Omit `secret` (or leave it empty) to keep the stored one when the type is unchanged. */
+export interface MonitorAuthInput {
+  type: AuthType
+  username?: string
+  header_name?: string
+  secret?: string
+}
+
+export type JsonOperator = 'equals' | 'not_equals' | 'contains' | 'exists' | 'not_exists'
+
+export interface Assertion {
+  type: 'body_contains' | 'body_not_contains' | 'json_path'
+  path?: string
+  operator?: JsonOperator
+  value?: string
+}
+
 export interface Monitor {
   id: string
   name: string
   url: string
-  method: 'GET' | 'HEAD'
+  method: HttpMethod
   expected_status_code: number | null
+  headers: RequestHeader[]
+  body: string | null
+  auth: MonitorAuth
+  assertions: Assertion[]
   check_interval_seconds: number
   effective_check_interval_seconds: number
   timeout_seconds: number
@@ -126,9 +168,13 @@ export interface DashboardSummary {
 export interface MonitorInput {
   name: string
   url: string
-  method: 'GET' | 'HEAD'
+  method: HttpMethod
   expected_status_code: number | null
   check_interval_seconds?: number
+  headers?: RequestHeader[]
+  body?: string | null
+  auth?: MonitorAuthInput
+  assertions?: Assertion[]
 }
 
 /** An error response from the API, using the common `{error: {code, message, details}}` envelope. */
