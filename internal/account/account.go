@@ -15,6 +15,7 @@ import (
 
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
+	"hawkeye/internal/checks"
 	"hawkeye/internal/email"
 	"hawkeye/internal/validation"
 )
@@ -83,6 +84,18 @@ type ExportMonitor struct {
 	Enabled              bool      `json:"enabled"`
 	CurrentStatus        string    `json:"current_status"`
 	CreatedAt            time.Time `json:"created_at"`
+	// Credentials are never exported; only the authentication type and its non-secret settings are.
+	Headers    []checks.Header    `json:"headers"`
+	Body       *string            `json:"body"`
+	Auth       ExportAuth         `json:"auth"`
+	Assertions []checks.Assertion `json:"assertions"`
+}
+
+// ExportAuth names a monitor's authentication method and its non-secret settings.
+type ExportAuth struct {
+	Type       string `json:"type"`
+	Username   string `json:"username,omitempty"`
+	HeaderName string `json:"header_name,omitempty"`
 }
 
 type ExportIncident struct {
@@ -145,14 +158,16 @@ func (s *Service) Export(ctx context.Context, userID uuid.UUID) (Export, error) 
 
 func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 	o.Monitors, o.Incidents, o.AlertRecipients = []ExportMonitor{}, []ExportIncident{}, []ExportRecipient{}
-	rows, err := s.pool.Query(ctx, `SELECT id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds, enabled, current_status, created_at
+	rows, err := s.pool.Query(ctx, `SELECT id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds, enabled, current_status, created_at,
+		request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), assertions
 		FROM monitors WHERE organization_id = $1 AND deleted_at IS NULL ORDER BY created_at, id`, o.ID)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
 		var m ExportMonitor
-		if err := rows.Scan(&m.ID, &m.Name, &m.URL, &m.Method, &m.ExpectedStatusCode, &m.CheckIntervalSeconds, &m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.URL, &m.Method, &m.ExpectedStatusCode, &m.CheckIntervalSeconds, &m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.CreatedAt,
+			&m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username, &m.Auth.HeaderName, &m.Assertions); err != nil {
 			rows.Close()
 			return err
 		}

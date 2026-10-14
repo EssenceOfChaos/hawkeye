@@ -139,7 +139,7 @@ func TestDowngradeClampsIntervalAndAllowsOtherEdits(t *testing.T) {
 func TestValidation(t *testing.T) {
 	svc, _, org := setup(t, "pro", "active")
 	badStatus, badTimeout, badInterval := 700, 0, 5
-	method := "POST"
+	method := "TRACE"
 	_, err := svc.Create(t.Context(), org, monitors.CreateInput{
 		Name: " ", URL: "http://127.0.0.1", Method: &method, ExpectedStatusCode: &badStatus,
 		TimeoutSeconds: &badTimeout, CheckIntervalSeconds: &badInterval,

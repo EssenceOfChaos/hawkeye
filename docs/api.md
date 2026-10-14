@@ -60,19 +60,37 @@ malformed ID gives 404) or, if absent, the caller's oldest organization. Any mem
 | `GET /plans` | public price list (active plans, cheapest first) |
 | `GET /usage` | `{usage: {plan, monitors_used, monitor_limit, over_limit, next_plan}}` |
 | `GET /monitors` | filters `status` (unknown/up/down), `enabled`, `q` (name/URL substring); pagination `limit` (1–100, default 25) and `offset`; returns `{monitors, total, limit, offset}`, newest first |
-| `POST /monitors` | `{name, url, method?, expected_status_code?, check_interval_seconds?, timeout_seconds?}` → 201 |
-| `GET/PATCH/DELETE /monitors/:id` | PATCH is partial; `expected_status_code: null` clears it. DELETE is a soft delete (204) and frees a plan slot |
+| `POST /monitors` | `{name, url, method?, expected_status_code?, check_interval_seconds?, timeout_seconds?, headers?, body?, auth?, assertions?}` → 201 |
+| `GET/PATCH/DELETE /monitors/:id` | PATCH is partial; `expected_status_code: null` and `body: null` clear them, `headers` and `assertions` replace the whole list. DELETE is a soft delete (204) and frees a plan slot |
 | `POST /monitors/:id/pause`, `/resume` | toggles `enabled`; allowed even when over the plan limit |
 
-**Monitor fields.** Editable: `name` (1–100), `url`, `method` (`GET` default, or `HEAD`), `expected_status_code`
+**Monitor fields.** Editable: `name` (1–100), `url`, `method` (`GET` default, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`), `expected_status_code`
 (100–599 or null; null means any response below 400 is up), `check_interval_seconds` (60–86400, default = plan minimum),
 `timeout_seconds` (1–30, default 10). Read-only and ignored if sent: `current_status`, `consecutive_*`, `last_*`,
 `enabled` (use pause/resume), `organization_id`. `effective_check_interval_seconds` is what the scheduler will use: the stored
 interval raised to the plan minimum, so a downgrade takes effect without rewriting data.
 
+**API check fields.**
+
+- `headers`: up to 20 `{name, value}` pairs (values up to 1024 characters, no line breaks). Names the checker controls are refused:
+  `Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `User-Agent`, `Accept-Encoding` and similar. `Authorization` is refused
+  too, because header values are returned by the API; use `auth`.
+- `body`: up to 64 KB of text, only with `POST`, `PUT`, `PATCH` or `DELETE`. Sent as `application/json` when it is valid JSON,
+  otherwise as `text/plain`, unless a `Content-Type` header is set.
+- `auth`: `{type: "none"}`, `{type: "basic", username, secret}`, `{type: "bearer", secret}` or `{type: "header", header_name, secret}`.
+  The secret is write-only: responses carry `{type, username?, header_name?, secret_set}`. On PATCH, omitting `secret` keeps the stored
+  one as long as `type` is unchanged; `type: "none"` deletes it. Data exports never include it.
+- `assertions`: up to 10, all of which must pass after the status check. `{type: "body_contains" | "body_not_contains", value}`
+  searches the first 1 MiB of the body. `{type: "json_path", path, operator, value?}` parses the body as JSON (failing above 1 MiB);
+  `path` looks like `data.items[0].status` (a leading `$.` is optional); `operator` is `equals`, `not_equals`, `contains` (substring
+  of a string, or an element of an array), `exists` or `not_exists`. Strings compare as text, numbers numerically, and other values
+  by their JSON form (`true`, `null`). Not allowed with `HEAD`. A failed assertion is recorded with `error_category: "assertion"`.
+
+Validation errors for list items name the item, for example `headers[0].name` or `assertions[2].path`.
+
 **URL rules.** `http`/`https` only, no credentials, ports 80/443 only, no `localhost`/`.local`/`.internal`/single-label hosts,
 no literal private/loopback/link-local/metadata IPs. This is early feedback only — the real SSRF defence (DNS resolution and
-dial-time validation) arrives with the checker in Phase 4. Editing the URL or method resets health state to `unknown`.
+dial-time validation) arrives with the checker in Phase 4. Editing the URL, method, headers, body or authentication resets health state to `unknown`.
 
 ## Incidents
 

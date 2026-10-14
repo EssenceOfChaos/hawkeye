@@ -114,9 +114,12 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 	var t checks.Target
 	var enabled bool
 	var timeoutSecs int
-	err = w.pool.QueryRow(ctx, `SELECT url, method, expected_status_code, timeout_seconds, enabled
+	err = w.pool.QueryRow(ctx, `SELECT url, method, expected_status_code, timeout_seconds, enabled,
+		request_headers, COALESCE(request_body, ''), auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''),
+		COALESCE(auth_secret, ''), assertions
 		FROM monitors WHERE id = $1 AND deleted_at IS NULL`, job.MonitorID).
-		Scan(&t.URL, &t.Method, &t.ExpectedStatus, &timeoutSecs, &enabled)
+		Scan(&t.URL, &t.Method, &t.ExpectedStatus, &timeoutSecs, &enabled, &t.Headers, &t.Body, &t.Auth.Type,
+			&t.Auth.Username, &t.Auth.HeaderName, &t.Auth.Secret, &t.Assertions)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows) || err == nil && !enabled:
 		return true, w.complete(ctx, job) // deleted or paused since it was scheduled

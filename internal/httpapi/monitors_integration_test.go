@@ -190,3 +190,36 @@ func TestPlansEndpointAndOverLimitAfterDowngrade(t *testing.T) {
 		t.Fatalf("pause over limit: %d", r.Status)
 	}
 }
+
+func TestAPIMonitorOverHTTP(t *testing.T) {
+	e := newEnv(t, 1000)
+	c, _ := e.register(t, "api@example.com")
+	body := monitorBody("API")
+	body["method"] = "post"
+	body["headers"] = []map[string]string{{"name": "X-Env", "value": "prod"}}
+	body["body"] = `{"ping":true}`
+	body["auth"] = map[string]string{"type": "basic", "username": "svc", "secret": "hunter2"}
+	body["assertions"] = []map[string]string{{"type": "json_path", "path": "data.ok", "operator": "equals", "value": "true"}}
+	r := c.call("POST", "/api/v1/monitors", body)
+	if r.Status != 201 {
+		t.Fatalf("create: %d %v", r.Status, r.Body)
+	}
+	m := r.Body["monitor"].(map[string]any)
+	auth := m["auth"].(map[string]any)
+	if m["method"] != "POST" || m["body"] != `{"ping":true}` || len(m["headers"].([]any)) != 1 || len(m["assertions"].([]any)) != 1 ||
+		auth["type"] != "basic" || auth["username"] != "svc" || auth["secret_set"] != true || auth["secret"] != nil {
+		t.Fatalf("monitor: %v", m)
+	}
+	got := c.call("GET", "/api/v1/monitors/"+m["id"].(string), nil)
+	if _, ok := got.Body["monitor"].(map[string]any)["auth"].(map[string]any)["secret"]; ok {
+		t.Fatalf("secret returned: %v", got.Body)
+	}
+
+	body["headers"] = []map[string]string{{"name": "Authorization", "value": "x"}}
+	body["assertions"] = []map[string]string{{"type": "json_path", "path": "a[", "operator": "equals"}}
+	r = c.call("POST", "/api/v1/monitors", body)
+	fields, _ := r.Body["error"].(map[string]any)["details"].(map[string]any)["fields"].(map[string]any)
+	if r.Status != 400 || fields["headers[0].name"] == nil || fields["assertions[0].path"] == nil {
+		t.Fatalf("validation: %d %v", r.Status, r.Body)
+	}
+}

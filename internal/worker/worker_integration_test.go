@@ -349,3 +349,40 @@ func TestOutageAndRecoveryEndToEnd(t *testing.T) {
 		t.Fatalf("open=%d resolved=%d", open, resolved)
 	}
 }
+
+func TestAPICheckSendsRequestAndRecordsAssertionFailure(t *testing.T) {
+	e := newEnv(t)
+	var healthy atomic.Bool
+	var seen atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		seen.Store(r.Method + " " + r.Header.Get("X-Env") + " " + r.Header.Get("Authorization") + " " + string(b))
+		if healthy.Load() {
+			w.Write([]byte(`{"status":"ok"}`))
+		} else {
+			w.Write([]byte(`{"status":"degraded"}`))
+		}
+	}))
+	defer srv.Close()
+	id := e.monitor(t, srv.URL)
+	if _, err := e.pool.Exec(t.Context(), `UPDATE monitors SET method = 'POST', request_headers = '[{"name":"X-Env","value":"prod"}]',
+		request_body = '{"q":1}', auth_type = 'bearer', auth_secret = 'tok',
+		assertions = '[{"type":"json_path","path":"status","operator":"equals","value":"ok"}]' WHERE id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	w := e.worker(loopbackCfg())
+	e.round(t, w)
+	if got := seen.Load(); got != `POST prod Bearer tok {"q":1}` {
+		t.Fatalf("server saw %q", got)
+	}
+	var cat, summary string
+	if err := e.pool.QueryRow(t.Context(), `SELECT error_category, error_summary FROM check_results WHERE monitor_id = $1`, id).
+		Scan(&cat, &summary); err != nil || cat != checks.CatAssertion || !strings.Contains(summary, "status") {
+		t.Fatalf("%q %q %v", cat, summary, err)
+	}
+	healthy.Store(true)
+	e.round(t, w)
+	if s := e.state(t, id); s.Successes != 1 {
+		t.Fatalf("%+v", s)
+	}
+}

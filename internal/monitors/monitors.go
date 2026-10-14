@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -16,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/checks"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/validation"
 )
@@ -26,7 +29,27 @@ const (
 	DefaultTimeoutSeconds = 10
 	MaxIntervalSeconds    = 86400
 	MinIntervalSeconds    = 60
+
+	MaxHeaders     = 20
+	MaxAssertions  = 10
+	MaxBodyBytes   = 64 << 10
+	maxSecretChars = 2048
 )
+
+// Methods lists the accepted request methods. Only some of them may carry a body.
+var Methods = []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+
+func bodyAllowed(method string) bool {
+	return method == "POST" || method == "PUT" || method == "PATCH" || method == "DELETE"
+}
+
+// reservedHeaders are set by the checker or the HTTP stack, or would change how the response is read.
+// Authorization is reserved so credentials go through auth, which is never returned by the API.
+var reservedHeaders = map[string]bool{
+	"Host": true, "Content-Length": true, "Transfer-Encoding": true, "Connection": true, "Upgrade": true,
+	"Te": true, "Trailer": true, "Keep-Alive": true, "Proxy-Authorization": true, "Proxy-Connection": true,
+	"Accept-Encoding": true, "User-Agent": true, "Authorization": true, "Cookie2": true, "Expect": true,
+}
 
 type Monitor struct {
 	ID                   uuid.UUID `json:"id"`
@@ -38,16 +61,37 @@ type Monitor struct {
 	CheckIntervalSeconds int       `json:"check_interval_seconds"`
 	// EffectiveCheckIntervalSeconds is what the scheduler uses: the stored value raised to the
 	// plan minimum, so a downgrade takes effect without rewriting data.
-	EffectiveCheckIntervalSeconds int        `json:"effective_check_interval_seconds"`
-	TimeoutSeconds                int        `json:"timeout_seconds"`
-	Enabled                       bool       `json:"enabled"`
-	CurrentStatus                 string     `json:"current_status"`
-	LastCheckedAt                 *time.Time `json:"last_checked_at"`
-	LastSuccessAt                 *time.Time `json:"last_success_at"`
-	ConsecutiveFailures           int        `json:"consecutive_failures"`
-	ConsecutiveSuccesses          int        `json:"consecutive_successes"`
-	CreatedAt                     time.Time  `json:"created_at"`
-	UpdatedAt                     time.Time  `json:"updated_at"`
+	EffectiveCheckIntervalSeconds int                `json:"effective_check_interval_seconds"`
+	TimeoutSeconds                int                `json:"timeout_seconds"`
+	Headers                       []checks.Header    `json:"headers"`
+	Body                          *string            `json:"body"`
+	Auth                          AuthInfo           `json:"auth"`
+	Assertions                    []checks.Assertion `json:"assertions"`
+	Enabled                       bool               `json:"enabled"`
+	CurrentStatus                 string             `json:"current_status"`
+	LastCheckedAt                 *time.Time         `json:"last_checked_at"`
+	LastSuccessAt                 *time.Time         `json:"last_success_at"`
+	ConsecutiveFailures           int                `json:"consecutive_failures"`
+	ConsecutiveSuccesses          int                `json:"consecutive_successes"`
+	CreatedAt                     time.Time          `json:"created_at"`
+	UpdatedAt                     time.Time          `json:"updated_at"`
+}
+
+// AuthInfo describes a monitor's authentication without its secret, which the API never returns.
+type AuthInfo struct {
+	Type       string `json:"type"`
+	Username   string `json:"username,omitempty"`
+	HeaderName string `json:"header_name,omitempty"`
+	SecretSet  bool   `json:"secret_set"`
+}
+
+// AuthInput sets a monitor's authentication. Secret is the Basic password, the Bearer token or the header
+// value. When it is omitted or empty and the type is unchanged, the stored secret is kept.
+type AuthInput struct {
+	Type       string  `json:"type"`
+	Username   string  `json:"username"`
+	HeaderName string  `json:"header_name"`
+	Secret     *string `json:"secret"`
 }
 
 // Nullable distinguishes "field absent" from "field set to null" in PATCH bodies.
@@ -72,21 +116,29 @@ func (n *Nullable[T]) UnmarshalJSON(b []byte) error {
 
 // Only client-editable fields exist here; state fields (status, counters, timestamps) cannot be set.
 type CreateInput struct {
-	Name                 string  `json:"name"`
-	URL                  string  `json:"url"`
-	Method               *string `json:"method"`
-	ExpectedStatusCode   *int    `json:"expected_status_code"`
-	CheckIntervalSeconds *int    `json:"check_interval_seconds"`
-	TimeoutSeconds       *int    `json:"timeout_seconds"`
+	Name                 string             `json:"name"`
+	URL                  string             `json:"url"`
+	Method               *string            `json:"method"`
+	ExpectedStatusCode   *int               `json:"expected_status_code"`
+	CheckIntervalSeconds *int               `json:"check_interval_seconds"`
+	TimeoutSeconds       *int               `json:"timeout_seconds"`
+	Headers              []checks.Header    `json:"headers"`
+	Body                 *string            `json:"body"`
+	Auth                 *AuthInput         `json:"auth"`
+	Assertions           []checks.Assertion `json:"assertions"`
 }
 
 type UpdateInput struct {
-	Name                 *string       `json:"name"`
-	URL                  *string       `json:"url"`
-	Method               *string       `json:"method"`
-	ExpectedStatusCode   Nullable[int] `json:"expected_status_code"`
-	CheckIntervalSeconds *int          `json:"check_interval_seconds"`
-	TimeoutSeconds       *int          `json:"timeout_seconds"`
+	Name                 *string             `json:"name"`
+	URL                  *string             `json:"url"`
+	Method               *string             `json:"method"`
+	ExpectedStatusCode   Nullable[int]       `json:"expected_status_code"`
+	CheckIntervalSeconds *int                `json:"check_interval_seconds"`
+	TimeoutSeconds       *int                `json:"timeout_seconds"`
+	Headers              *[]checks.Header    `json:"headers"`
+	Body                 Nullable[string]    `json:"body"`
+	Auth                 *AuthInput          `json:"auth"`
+	Assertions           *[]checks.Assertion `json:"assertions"`
 }
 
 type ListFilter struct {
@@ -105,13 +157,16 @@ type Service struct {
 func NewService(pool *pgxpool.Pool, p *plans.Service) *Service { return &Service{pool: pool, plans: p} }
 
 const cols = `id, organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
-	enabled, current_status, last_checked_at, last_success_at, consecutive_failures, consecutive_successes, created_at, updated_at`
+	enabled, current_status, last_checked_at, last_success_at, consecutive_failures, consecutive_successes, created_at, updated_at,
+	request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), auth_secret IS NOT NULL,
+	assertions`
 
 func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	var m Monitor
 	err := row.Scan(&m.ID, &m.OrganizationID, &m.Name, &m.URL, &m.Method, &m.ExpectedStatusCode, &m.CheckIntervalSeconds,
 		&m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.LastCheckedAt, &m.LastSuccessAt, &m.ConsecutiveFailures,
-		&m.ConsecutiveSuccesses, &m.CreatedAt, &m.UpdatedAt)
+		&m.ConsecutiveSuccesses, &m.CreatedAt, &m.UpdatedAt, &m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username,
+		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions)
 	m.EffectiveCheckIntervalSeconds = max(m.CheckIntervalSeconds, minInterval)
 	return m, err
 }
@@ -121,6 +176,173 @@ type fields struct {
 	name, url, method string
 	expected          *int
 	interval, timeout int
+	headers           []checks.Header
+	body              *string
+	auth              checks.Auth // Secret is "" when no new secret was supplied
+	keepSecret        bool        // the stored secret stays: auth type unchanged and no new secret
+	hasSecret         bool        // a secret is stored for the current auth type
+	assertions        []checks.Assertion
+}
+
+// setAuth applies an auth input on top of the current type, keeping the stored secret when allowed.
+func (f *fields) setAuth(in *AuthInput, curType string, curHasSecret bool) {
+	if in == nil {
+		f.keepSecret = curHasSecret
+		return
+	}
+	f.auth = checks.Auth{Type: strings.ToLower(strings.TrimSpace(in.Type)), Username: in.Username,
+		HeaderName: strings.TrimSpace(in.HeaderName)}
+	if f.auth.Type == "" {
+		f.auth.Type = checks.AuthNone
+	}
+	if in.Secret != nil && *in.Secret != "" {
+		f.auth.Secret = *in.Secret
+	} else {
+		f.keepSecret = f.auth.Type == curType && curHasSecret
+	}
+}
+
+// validToken reports whether s is a valid HTTP header field name (RFC 9110 token).
+func validToken(s string) bool {
+	if s == "" || len(s) > 100 {
+		return false
+	}
+	for _, r := range s {
+		if r > 0x7e || r <= ' ' || strings.ContainsRune(`"(),/:;<=>?@[\]{}`, r) {
+			return false
+		}
+	}
+	return true
+}
+
+// validHeaderValue rejects control characters, which could split or corrupt the request.
+func validHeaderValue(s string) bool {
+	for _, r := range s {
+		if r == 0x7f || (r < ' ' && r != '\t') {
+			return false
+		}
+	}
+	return true
+}
+
+func (f *fields) validateRequest(bad map[string]string) {
+	if f.headers == nil {
+		f.headers = []checks.Header{}
+	}
+	if len(f.headers) > MaxHeaders {
+		bad["headers"] = fmt.Sprintf("at most %d headers", MaxHeaders)
+	}
+	seen := map[string]bool{}
+	for i, h := range f.headers {
+		h.Name = strings.TrimSpace(h.Name)
+		f.headers[i].Name = h.Name
+		canon := http.CanonicalHeaderKey(h.Name)
+		switch {
+		case !validToken(h.Name):
+			bad[fmt.Sprintf("headers[%d].name", i)] = "must be a valid header name"
+		case canon == "Authorization":
+			bad[fmt.Sprintf("headers[%d].name", i)] = "use authentication instead, so the credentials stay hidden"
+		case reservedHeaders[canon]:
+			bad[fmt.Sprintf("headers[%d].name", i)] = "is set by HawkEye and cannot be changed"
+		case seen[canon]:
+			bad[fmt.Sprintf("headers[%d].name", i)] = "is already set"
+		}
+		seen[canon] = true
+		if !validHeaderValue(h.Value) || len(h.Value) > 1024 {
+			bad[fmt.Sprintf("headers[%d].value", i)] = "must be at most 1024 characters without line breaks"
+		}
+	}
+
+	if f.body != nil && *f.body == "" {
+		f.body = nil
+	}
+	if f.body != nil {
+		switch {
+		case !bodyAllowed(f.method):
+			bad["body"] = "can only be sent with POST, PUT, PATCH or DELETE"
+		case len(*f.body) > MaxBodyBytes:
+			bad["body"] = fmt.Sprintf("must be at most %d KB", MaxBodyBytes>>10)
+		case !utf8.ValidString(*f.body):
+			bad["body"] = "must be text"
+		}
+	}
+
+	a := &f.auth
+	switch a.Type {
+	case checks.AuthNone:
+		*a = checks.Auth{Type: checks.AuthNone}
+		f.keepSecret = false
+	case checks.AuthBasic, checks.AuthBearer, checks.AuthHeader:
+		if a.Type != checks.AuthBasic {
+			a.Username = ""
+		}
+		if a.Type != checks.AuthHeader {
+			a.HeaderName = ""
+		}
+		if a.Type == checks.AuthBasic && (a.Username == "" || utf8.RuneCountInString(a.Username) > 200 ||
+			strings.Contains(a.Username, ":") || !validHeaderValue(a.Username)) {
+			bad["auth.username"] = "is required, at most 200 characters, without a colon"
+		}
+		if a.Type == checks.AuthHeader {
+			canon := http.CanonicalHeaderKey(a.HeaderName)
+			switch {
+			case !validToken(a.HeaderName):
+				bad["auth.header_name"] = "must be a valid header name"
+			case reservedHeaders[canon] && canon != "Authorization":
+				bad["auth.header_name"] = "is set by HawkEye and cannot be changed"
+			case seen[canon]:
+				bad["auth.header_name"] = "is also set as a custom header"
+			}
+		}
+		switch {
+		case a.Secret == "" && !f.keepSecret:
+			bad["auth.secret"] = "is required"
+		case a.Secret != "" && (utf8.RuneCountInString(a.Secret) > maxSecretChars || !validHeaderValue(a.Secret)):
+			bad["auth.secret"] = fmt.Sprintf("must be at most %d characters without line breaks", maxSecretChars)
+		}
+	default:
+		bad["auth.type"] = "must be none, basic, bearer or header"
+	}
+
+	if f.assertions == nil {
+		f.assertions = []checks.Assertion{}
+	}
+	if len(f.assertions) > MaxAssertions {
+		bad["assertions"] = fmt.Sprintf("at most %d assertions", MaxAssertions)
+	}
+	if len(f.assertions) > 0 && f.method == "HEAD" {
+		bad["assertions"] = "HEAD responses have no body; use GET to check the content"
+	}
+	for i, as := range f.assertions {
+		key := func(k string) string { return fmt.Sprintf("assertions[%d].%s", i, k) }
+		as.Type = strings.TrimSpace(as.Type)
+		as.Path = strings.TrimSpace(as.Path)
+		as.Operator = strings.TrimSpace(as.Operator)
+		if utf8.RuneCountInString(as.Value) > 1000 {
+			bad[key("value")] = "must be at most 1000 characters"
+		}
+		switch as.Type {
+		case checks.AssertBodyContains, checks.AssertBodyNotContains:
+			as.Path, as.Operator = "", ""
+			if as.Value == "" {
+				bad[key("value")] = "is required"
+			}
+		case checks.AssertJSONPath:
+			if err := checks.ValidatePath(as.Path); err != nil || len(as.Path) > 200 {
+				bad[key("path")] = "must be a path like data.items[0].status"
+			}
+			switch as.Operator {
+			case checks.OpExists, checks.OpNotExists:
+				as.Value = ""
+			case checks.OpEquals, checks.OpNotEquals, checks.OpContains:
+			default:
+				bad[key("operator")] = "must be equals, not_equals, contains, exists or not_exists"
+			}
+		default:
+			bad[key("type")] = "must be body_contains, body_not_contains or json_path"
+		}
+		f.assertions[i] = as
+	}
 }
 
 func (f *fields) validate() error {
@@ -135,8 +357,8 @@ func (f *fields) validate() error {
 		f.url = u
 	}
 	f.method = strings.ToUpper(strings.TrimSpace(f.method))
-	if f.method != "GET" && f.method != "HEAD" {
-		bad["method"] = "must be GET or HEAD"
+	if !slices.Contains(Methods, f.method) {
+		bad["method"] = "must be one of " + strings.Join(Methods, ", ")
 	}
 	if f.expected != nil && (*f.expected < 100 || *f.expected > 599) {
 		bad["expected_status_code"] = "must be between 100 and 599, or null"
@@ -147,6 +369,7 @@ func (f *fields) validate() error {
 	if f.timeout < 1 || f.timeout > 30 {
 		bad["timeout_seconds"] = "must be between 1 and 30"
 	}
+	f.validateRequest(bad)
 	if len(bad) > 0 {
 		return &validation.Error{Fields: bad}
 	}
@@ -185,6 +408,11 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		if in.TimeoutSeconds != nil {
 			f.timeout = *in.TimeoutSeconds
 		}
+		f.headers, f.body, f.assertions = slices.Clone(in.Headers), in.Body, slices.Clone(in.Assertions)
+		f.setAuth(in.Auth, checks.AuthNone, false)
+		if in.Auth == nil {
+			f.auth.Type = checks.AuthNone
+		}
 		if err := f.validate(); err != nil {
 			return err
 		}
@@ -197,9 +425,11 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 			}
 		}
 		out, err = scan(tx.QueryRow(ctx, `INSERT INTO monitors
-			(organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds)
-			VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING `+cols,
-			orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout), minInterval)
+			(organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
+			 request_headers, request_body, auth_type, auth_username, auth_header_name, auth_secret, assertions)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14) RETURNING `+cols,
+			orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout,
+			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.auth.Secret, f.assertions), minInterval)
 		return err
 	})
 	return out, err
@@ -279,7 +509,19 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			return err
 		}
 		f := fields{name: cur.Name, url: cur.URL, method: cur.Method, expected: cur.ExpectedStatusCode,
-			interval: cur.CheckIntervalSeconds, timeout: cur.TimeoutSeconds}
+			interval: cur.CheckIntervalSeconds, timeout: cur.TimeoutSeconds, headers: slices.Clone(cur.Headers),
+			body: cur.Body, assertions: slices.Clone(cur.Assertions),
+			auth: checks.Auth{Type: cur.Auth.Type, Username: cur.Auth.Username, HeaderName: cur.Auth.HeaderName}}
+		f.setAuth(in.Auth, cur.Auth.Type, cur.Auth.SecretSet)
+		if in.Headers != nil {
+			f.headers = slices.Clone(*in.Headers)
+		}
+		if in.Body.Set {
+			f.body = in.Body.Value
+		}
+		if in.Assertions != nil {
+			f.assertions = slices.Clone(*in.Assertions)
+		}
 		if in.Name != nil {
 			f.name = *in.Name
 		}
@@ -307,19 +549,30 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 				return err
 			}
 		}
-		// A changed target invalidates the previous health state.
-		reset := f.url != cur.URL || f.method != cur.Method
+		// A changed request (target, headers, body or credentials) invalidates the previous health state.
+		reset := f.url != cur.URL || f.method != cur.Method || !slices.Equal(f.headers, cur.Headers) ||
+			!equalPtr(f.body, cur.Body) || f.auth.Type != cur.Auth.Type || f.auth.Username != cur.Auth.Username || f.auth.HeaderName != cur.Auth.HeaderName ||
+			f.auth.Secret != ""
 		out, err = scan(tx.QueryRow(ctx, `UPDATE monitors SET name=$3, url=$4, method=$5, expected_status_code=$6,
 			check_interval_seconds=$7, timeout_seconds=$8,
 			next_check_at = CASE WHEN $9 THEN now() ELSE next_check_at END,
 			current_status = CASE WHEN $9 THEN 'unknown' ELSE current_status END,
 			consecutive_failures = CASE WHEN $9 THEN 0 ELSE consecutive_failures END,
-			consecutive_successes = CASE WHEN $9 THEN 0 ELSE consecutive_successes END
+			consecutive_successes = CASE WHEN $9 THEN 0 ELSE consecutive_successes END,
+			request_headers=$10, request_body=$11, auth_type=$12, auth_username=NULLIF($13,''),
+			auth_header_name=NULLIF($14,''),
+			auth_secret = CASE WHEN $12 = 'none' THEN NULL WHEN $15 THEN auth_secret ELSE NULLIF($16,'') END,
+			assertions=$17
 			WHERE id = $1 AND organization_id = $2 RETURNING `+cols,
-			id, orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout, reset), minInterval)
+			id, orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout, reset,
+			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.keepSecret, f.auth.Secret, f.assertions), minInterval)
 		return err
 	})
 	return out, err
+}
+
+func equalPtr[T comparable](a, b *T) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
 }
 
 // SetEnabled pauses or resumes a monitor.

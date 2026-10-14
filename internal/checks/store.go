@@ -54,10 +54,7 @@ func (s *Store) Record(ctx context.Context, monitorID uuid.UUID, r Result) (Outc
 			return err
 		}
 
-		summary := r.ErrorSummary
-		if len(summary) > maxSummaryLen {
-			summary = summary[:maxSummaryLen]
-		}
+		summary := truncate(r.ErrorSummary, maxSummaryLen)
 		if _, err := tx.Exec(ctx, `INSERT INTO check_results
 			(monitor_id, checked_at, finished_at, success, http_status_code, response_time_ms, error_category, error_summary)
 			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''))`,
@@ -73,7 +70,7 @@ func (s *Store) Record(ctx context.Context, monitorID uuid.UUID, r Result) (Outc
 			return err
 		}
 		if out.Transition == WentDown {
-			return s.incidents.Opened(ctx, tx, monitorID, out.After.Failures, r.ErrorCategory, r.ErrorSummary)
+			return s.incidents.Opened(ctx, tx, monitorID, out.After.Failures, r.ErrorCategory, summary)
 		}
 		// Any move into "up" closes an open incident. This covers confirmed recovery and also the case where
 		// editing a monitor reset its state to "unknown" while an incident was open.
