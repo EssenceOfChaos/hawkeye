@@ -17,6 +17,7 @@ import (
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/config"
+	"hawkeye/internal/contact"
 	"hawkeye/internal/database"
 	"hawkeye/internal/email"
 	"hawkeye/internal/errtrack"
@@ -100,7 +101,8 @@ func run() error {
 		Logger: log, DB: pool, RequestTimeout: cfg.RequestTimeout, BodyLimit: cfg.BodyLimit,
 		Auth: authSvc, Orgs: organizations.NewService(pool), Plans: planSvc, Monitors: monitors.NewService(pool, planSvc), Pool: pool, PgPool: pool,
 		Billing:       billingSvc,
-		Account:       account.NewService(pool, authSvc, provider, mailer, log),
+		Account:       account.NewService(pool, authSvc, provider, mailer, log, cfg.AppBaseURL),
+		Contact:       contact.NewService(mailer, log, cfg.SupportAddress, cfg.EmailFromAddress, cfg.AppBaseURL),
 		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress),
 		SecureCookies: cfg.IsProduction(), AuthRateLimitPerMin: cfg.AuthRateLimitPerMin, TrustForwardedFor: cfg.TrustForwardedFor,
 		HSTS: cfg.IsProduction(), Metrics: apiMetrics, Limiter: ratelimit.New(pool), Errors: reporter,

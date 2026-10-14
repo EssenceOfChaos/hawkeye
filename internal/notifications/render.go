@@ -50,32 +50,43 @@ func Duration(d time.Duration) string {
 	return fmt.Sprintf("%dd %dh", int(d.Hours())/24, int(d.Hours())%24)
 }
 
-// Render builds the plain-text alert email.
+// Render builds the alert email (branded HTML plus a plain-text alternative).
 func Render(a Alert) email.Message {
 	name, url := clean(a.MonitorName), clean(a.MonitorURL)
 	started := a.StartedAt.UTC().Format("2006-01-02 15:04 UTC")
-	link := a.AppBaseURL + "/incidents"
-	footer := "\n\nView incidents: " + link + "\nManage alert recipients: " + a.AppBaseURL + "/notifications\n"
-
-	m := email.Message{From: a.From, To: a.To}
+	c := email.Content{
+		ButtonLabel: "View incidents", ButtonURL: a.AppBaseURL + "/incidents", AppBaseURL: a.AppBaseURL,
+		Note: "Manage who receives alerts: " + a.AppBaseURL + "/notifications",
+	}
+	var subject string
 	switch a.Event {
 	case EventRecovery:
-		m.Subject = "HawkEye recovery: " + name + " is responding again"
-		dur := ""
+		subject = "HawkEye recovery: " + name + " is responding again"
+		c.Tone = email.ToneSuccess
+		c.Preheader = name + " is responding again."
+		c.Heading = name + " is responding again"
+		c.Paragraphs = []string{"Good news. HawkEye has recorded enough successful checks to resolve the incident affecting " + name + "."}
+		c.Facts = []email.Fact{{Label: "Website", Value: url}, {Label: "Incident began", Value: started}}
 		if a.ResolvedAt != nil {
-			dur = fmt.Sprintf("\nRecovery confirmed: %s\nIncident duration: %s", a.ResolvedAt.UTC().Format("2006-01-02 15:04 UTC"), Duration(a.ResolvedAt.Sub(a.StartedAt)))
+			c.Facts = append(c.Facts,
+				email.Fact{Label: "Recovery confirmed", Value: a.ResolvedAt.UTC().Format("2006-01-02 15:04 UTC")},
+				email.Fact{Label: "Incident duration", Value: Duration(a.ResolvedAt.Sub(a.StartedAt))})
 		}
-		m.Text = fmt.Sprintf("Good news. HawkEye has recorded enough successful checks to resolve the incident affecting %s.\n\nWebsite: %s\nIncident began: %s%s\n\n"+
-			"Review the incident timeline to see the recorded failures and recovery checks.", name, url, started, dur) + footer
+		c.Paragraphs = append(c.Paragraphs, "Review the incident timeline to see the recorded failures and recovery checks.")
 	default:
-		m.Subject = "HawkEye alert: " + name + " may be down"
-		cause := ""
-		if a.Cause != "" {
-			cause = "\nLatest result: " + clean(a.Cause)
+		subject = "HawkEye alert: " + name + " may be down"
+		c.Tone = email.ToneAlert
+		c.Preheader = "HawkEye detected repeated failures while checking " + name + "."
+		c.Heading = name + " may be down"
+		c.Paragraphs = []string{
+			"HawkEye has detected repeated failures while checking " + name + ".",
+			"We recommend reviewing the website and its hosting environment. HawkEye will continue monitoring according to your configured check interval, and will email you once when the website recovers.",
 		}
-		m.Text = fmt.Sprintf("HawkEye has detected repeated failures while checking %s.\n\nWebsite: %s\nDetected at: %s%s\nIncident status: Open\n\n"+
-			"We recommend reviewing the website and its hosting environment. HawkEye will continue monitoring according to your configured check interval, "+
-			"and will email you once when the website recovers.", name, url, started, cause) + footer
+		c.Facts = []email.Fact{{Label: "Website", Value: url}, {Label: "Detected at", Value: started}}
+		if a.Cause != "" {
+			c.Facts = append(c.Facts, email.Fact{Label: "Latest result", Value: clean(a.Cause)})
+		}
+		c.Facts = append(c.Facts, email.Fact{Label: "Incident status", Value: "Open"})
 	}
-	return m
+	return c.Message(a.From, a.To, subject)
 }

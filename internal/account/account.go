@@ -30,10 +30,11 @@ type Service struct {
 	provider billing.Provider // nil when billing is not configured
 	mail     email.Sender
 	log      *slog.Logger
+	baseURL  string // for links and the logo in emails
 }
 
-func NewService(pool *pgxpool.Pool, a *auth.Service, provider billing.Provider, mail email.Sender, log *slog.Logger) *Service {
-	return &Service{pool: pool, auth: a, provider: provider, mail: mail, log: log}
+func NewService(pool *pgxpool.Pool, a *auth.Service, provider billing.Provider, mail email.Sender, log *slog.Logger, appBaseURL string) *Service {
+	return &Service{pool: pool, auth: a, provider: provider, mail: mail, log: log, baseURL: appBaseURL}
 }
 
 // ---- export
@@ -278,9 +279,13 @@ func (s *Service) Delete(ctx context.Context, user auth.User, password, confirmE
 		return fmt.Errorf("delete account: %w", err)
 	}
 	s.log.InfoContext(ctx, "account deleted", "user_id", user.ID, "organizations_deleted", len(doomed))
-	if err := s.mail.Send(ctx, email.Message{To: user.Email, Subject: "Your HawkEye account was deleted",
-		Text: "Your HawkEye account and its data have been permanently deleted, and any subscription was canceled.\n\n" +
-			"If you did not request this, contact support immediately."}); err != nil {
+	c := email.Content{
+		Preheader: "Your HawkEye account and data have been deleted.", Heading: "Your account was deleted",
+		Paragraphs:  []string{"Your HawkEye account and its data have been permanently deleted, and any subscription was canceled."},
+		ButtonLabel: "Contact us", ButtonURL: s.baseURL + "/contact", Tone: email.ToneAlert,
+		Note: "If you did not request this, contact us immediately.", AppBaseURL: s.baseURL,
+	}
+	if err := s.mail.Send(ctx, c.Message("", user.Email, "Your HawkEye account was deleted")); err != nil {
 		s.log.WarnContext(ctx, "send account-deleted email failed", "error", err)
 	}
 	return nil

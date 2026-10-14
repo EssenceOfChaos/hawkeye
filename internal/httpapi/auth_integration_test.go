@@ -20,6 +20,7 @@ import (
 	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
+	"hawkeye/internal/contact"
 	"hawkeye/internal/email"
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/httpapi"
@@ -72,7 +73,8 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 		Plans: planSvc, Monitors: monitors.NewService(pool, planSvc), Pool: pool, PgPool: pool,
 		Notifications: notifications.NewService(pool, mail, log, "http://app.test", "alerts@test"),
 		Billing:       billing.NewService(pool, o.provider, o.billingCfg, metrics.New(), log),
-		Account:       account.NewService(pool, svc, o.provider, mail, log),
+		Account:       account.NewService(pool, svc, o.provider, mail, log, "https://app.example.com"),
+		Contact:       contact.NewService(mail, log, "support@test.example", "alerts@test.example", "https://app.example.com"),
 		HSTS:          o.hsts, Metrics: o.metrics, Errors: o.reporter, EmailActionLimitPerHour: o.emailPerH, GlobalRateLimitPerMin: o.global,
 	}
 	if o.shared {

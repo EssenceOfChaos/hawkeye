@@ -205,10 +205,13 @@ func (s *Service) Confirm(ctx context.Context, token string) error {
 
 func (s *Service) sendConfirmation(ctx context.Context, to, requestedBy, raw string) {
 	link := fmt.Sprintf("%s/confirm-alert-address?token=%s", s.appBaseURL, raw)
-	err := s.mail.Send(ctx, email.Message{From: s.from, To: to, Subject: "Confirm your HawkEye alert address",
-		Text: fmt.Sprintf("%s asked to send HawkEye website-outage alerts to this address.\n\n"+
-			"To start receiving them, confirm here:\n\n%s\n\n"+
-			"If you did not expect this, ignore this email: no alerts will be sent.", clean(requestedBy), link)})
+	c := email.Content{
+		Preheader: "Confirm this address to receive HawkEye alerts.", Heading: "Confirm your alert address",
+		Paragraphs:  []string{fmt.Sprintf("%s asked to send HawkEye website-outage alerts to this address. To start receiving them, confirm below.", clean(requestedBy))},
+		ButtonLabel: "Confirm alert address", ButtonURL: link,
+		Note: "If you did not expect this, ignore this email: no alerts will be sent.", AppBaseURL: s.appBaseURL,
+	}
+	err := s.mail.Send(ctx, c.Message(s.from, to, "Confirm your HawkEye alert address"))
 	if err != nil {
 		s.log.ErrorContext(ctx, "send alert-address confirmation failed", "error", err)
 	}

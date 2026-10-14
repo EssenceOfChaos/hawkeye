@@ -104,7 +104,13 @@ func (s *SMTP) Send(ctx context.Context, m Message) error {
 	if err != nil {
 		return fmt.Errorf("%w: invalid recipient", ErrPermanent)
 	}
-	body, err := buildMessage(fromAddr, toAddr, m.Subject, m.Text)
+	var replyTo *mail.Address
+	if m.ReplyTo != "" {
+		if replyTo, err = parseOne(m.ReplyTo); err != nil {
+			return fmt.Errorf("%w: invalid reply-to", ErrPermanent)
+		}
+	}
+	body, err := buildMessage(fromAddr, toAddr, replyTo, m.Subject, m.Text, m.HTML)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrPermanent, err)
 	}
@@ -198,9 +204,10 @@ func parseOne(s string) (*mail.Address, error) {
 	return mail.ParseAddress(s)
 }
 
-// buildMessage renders a plain-text RFC 5322 message. Header values are validated (no CR/LF) so a monitor name or recipient can
-// never inject headers, the subject is MIME-encoded when needed, and the body is quoted-printable UTF-8.
-func buildMessage(from, to *mail.Address, subject, text string) ([]byte, error) {
+// buildMessage renders an RFC 5322 message: plain text, or multipart/alternative (text first, HTML preferred) when html is set. Header
+// values are validated (no CR/LF) so a monitor name or recipient can never inject headers, the subject is MIME-encoded when needed,
+// and bodies are quoted-printable UTF-8.
+func buildMessage(from, to, replyTo *mail.Address, subject, text, html string) ([]byte, error) {
 	if strings.ContainsAny(subject, "\r\n") {
 		return nil, errors.New("line break in subject")
 	}
@@ -215,20 +222,45 @@ func buildMessage(from, to *mail.Address, subject, text string) ([]byte, error) 
 	h := func(k, v string) { b.WriteString(k + ": " + v + "\r\n") }
 	h("From", from.String())
 	h("To", to.String())
+	if replyTo != nil {
+		h("Reply-To", replyTo.String())
+	}
 	h("Subject", mime.QEncoding.Encode("utf-8", subject))
 	h("Date", time.Now().UTC().Format(time.RFC1123Z))
 	h("Message-ID", "<"+hex.EncodeToString(id[:])+"@"+domain+">")
 	h("MIME-Version", "1.0")
-	h("Content-Type", `text/plain; charset="utf-8"`)
-	h("Content-Transfer-Encoding", "quoted-printable")
 	h("Auto-Submitted", "auto-generated") // transactional, so auto-responders stay quiet
+
+	part := func(w *bytes.Buffer, body string) error {
+		qp := quotedprintable.NewWriter(w)
+		if _, err := qp.Write([]byte(strings.ReplaceAll(body, "\r\n", "\n"))); err != nil {
+			return err
+		}
+		return qp.Close()
+	}
+	if html == "" {
+		h("Content-Type", `text/plain; charset="utf-8"`)
+		h("Content-Transfer-Encoding", "quoted-printable")
+		b.WriteString("\r\n")
+		if err := part(&b, text); err != nil {
+			return nil, err
+		}
+		return b.Bytes(), nil
+	}
+
+	var bid [12]byte
+	_, _ = rand.Read(bid[:])
+	boundary := "hawkeye-" + hex.EncodeToString(bid[:])
+	h("Content-Type", `multipart/alternative; boundary="`+boundary+`"`)
 	b.WriteString("\r\n")
-	qp := quotedprintable.NewWriter(&b)
-	if _, err := qp.Write([]byte(strings.ReplaceAll(text, "\r\n", "\n"))); err != nil {
-		return nil, err
+	for _, p := range []struct{ ctype, body string }{{"text/plain", text}, {"text/html", html}} {
+		b.WriteString("--" + boundary + "\r\n")
+		b.WriteString("Content-Type: " + p.ctype + "; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n")
+		if err := part(&b, p.body); err != nil {
+			return nil, err
+		}
+		b.WriteString("\r\n")
 	}
-	if err := qp.Close(); err != nil {
-		return nil, err
-	}
+	b.WriteString("--" + boundary + "--\r\n")
 	return b.Bytes(), nil
 }

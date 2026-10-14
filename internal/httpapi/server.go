@@ -15,6 +15,7 @@ import (
 	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
+	"hawkeye/internal/contact"
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/monitors"
@@ -43,6 +44,7 @@ type Options struct {
 	Notifications *notifications.Service
 	Billing       *billing.Service
 	Account       *account.Service
+	Contact       *contact.Service
 	PgPool        *pgxpool.Pool
 	Pool          plans.DB
 
@@ -149,7 +151,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, billing: o.Billing, account: o.Account, log: o.Logger, secureCookies: o.SecureCookies}
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, billing: o.Billing, account: o.Account, contact: o.Contact, log: o.Logger, secureCookies: o.SecureCookies}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		TokenLookup:    "header:X-CSRF-Token",
@@ -219,6 +221,13 @@ func registerAPI(e *echo.Echo, o Options) {
 	a.POST("/resend-verification", h.resendVerification, h.requireAuth, limit("resend"))
 
 	v1.GET("/plans", h.listPlans)
+	// Public contact form: per-IP burst and hourly caps, a spam trap, and per-address limits on the acknowledgement email.
+	contactLimits := []echo.MiddlewareFunc{limit("contact")}
+	if h.limits.l != nil {
+		contactLimits = append(contactLimits, h.limits.byIP("contact:hour", 5, time.Hour))
+	}
+	v1.GET("/contact/categories", h.contactCategories)
+	v1.POST("/contact", h.submitContact, contactLimits...)
 	// Called from the confirmation email by a recipient who may not have an account.
 	v1.POST("/notification-settings/confirm", h.confirmSetting, limit("confirm-alert"))
 

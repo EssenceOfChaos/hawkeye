@@ -254,9 +254,13 @@ func (s *Service) ForgotPassword(ctx context.Context, emailAddr string) error {
 		return fmt.Errorf("create reset token: %w", err)
 	}
 	link := fmt.Sprintf("%s/reset-password?token=%s", s.cfg.AppBaseURL, raw)
-	if err := s.mail.Send(ctx, email.Message{To: addr, Subject: "Reset your HawkEye password",
-		Text: "Use this link to choose a new password (valid for 1 hour):\n\n" + link +
-			"\n\nIf you did not request this, you can ignore this email."}); err != nil {
+	c := email.Content{
+		Preheader: "Choose a new password for your HawkEye account.", Heading: "Reset your password",
+		Paragraphs:  []string{"We received a request to reset the password for your HawkEye account. The link below is valid for 1 hour."},
+		ButtonLabel: "Choose a new password", ButtonURL: link,
+		Note: "If you did not request this, you can ignore this email. Your password will not change.", AppBaseURL: s.cfg.AppBaseURL,
+	}
+	if err := s.mail.Send(ctx, c.Message("", addr, "Reset your HawkEye password")); err != nil {
 		s.log.ErrorContext(ctx, "send password reset email failed", "user_id", id, "error", err)
 	}
 	return nil
@@ -336,8 +340,13 @@ func (s *Service) ResendVerification(ctx context.Context, u User) error {
 
 func (s *Service) sendVerification(ctx context.Context, to, raw string) {
 	link := fmt.Sprintf("%s/verify-email?token=%s", s.cfg.AppBaseURL, raw)
-	if err := s.mail.Send(ctx, email.Message{To: to, Subject: "Verify your HawkEye email address",
-		Text: "Confirm your email address to enable billing and alert delivery:\n\n" + link}); err != nil {
+	c := email.Content{
+		Preheader: "Confirm your email address to finish setting up HawkEye.", Heading: "Confirm your email address",
+		Paragraphs:  []string{"Welcome to HawkEye. Please confirm your email address to enable billing and alert delivery."},
+		ButtonLabel: "Confirm email address", ButtonURL: link,
+		Note: "This link is valid for 48 hours. If you did not create a HawkEye account, you can ignore this email.", AppBaseURL: s.cfg.AppBaseURL,
+	}
+	if err := s.mail.Send(ctx, c.Message("", to, "Verify your HawkEye email address")); err != nil {
 		s.log.ErrorContext(ctx, "send verification email failed", "error", err)
 	}
 }
@@ -397,9 +406,13 @@ func (s *Service) ChangePassword(ctx context.Context, user User, currentSessionT
 	if err != nil {
 		return fmt.Errorf("change password: %w", err)
 	}
-	if err := s.mail.Send(ctx, email.Message{To: user.Email, Subject: "Your HawkEye password was changed",
-		Text: "The password for your HawkEye account was just changed, and all other devices were signed out.\n\n" +
-			"If this was not you, reset your password immediately: " + s.cfg.AppBaseURL + "/forgot-password"}); err != nil {
+	c := email.Content{
+		Preheader: "Your HawkEye password was just changed.", Heading: "Your password was changed",
+		Paragraphs:  []string{"The password for your HawkEye account was just changed, and all other devices were signed out."},
+		ButtonLabel: "Reset your password", ButtonURL: s.cfg.AppBaseURL + "/forgot-password", Tone: email.ToneAlert,
+		Note: "If this was you, no action is needed. If it was not, reset your password immediately.", AppBaseURL: s.cfg.AppBaseURL,
+	}
+	if err := s.mail.Send(ctx, c.Message("", user.Email, "Your HawkEye password was changed")); err != nil {
 		s.log.ErrorContext(ctx, "send password-changed email failed", "user_id", user.ID, "error", err)
 	}
 	return nil

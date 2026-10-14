@@ -47,7 +47,7 @@ export function Layout() {
         <Outlet />
       </main>
       <footer className="app-footer">
-        <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
+        <Link to="/contact">Contact</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
       </footer>
     </>
   )

@@ -345,8 +345,9 @@ export function LandingPage() {
             </>
           )}
         </nav>
-        <nav aria-label="Legal">
-          <h6 className="d-footer-title">Legal</h6>
+        <nav aria-label="Company">
+          <h6 className="d-footer-title">Company</h6>
+          <Link className="d-link d-link-hover" to="/contact">Contact us</Link>
           <Link className="d-link d-link-hover" to="/privacy">Privacy policy</Link>
           <Link className="d-link d-link-hover" to="/terms">Terms of service</Link>
         </nav>

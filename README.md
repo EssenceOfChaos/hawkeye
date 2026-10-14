@@ -1,3 +1,5 @@
+[![CI](https://github.com/EssenceOfChaos/hawkeye/actions/workflows/ci.yml/badge.svg)](https://github.com/EssenceOfChaos/hawkeye/actions/workflows/ci.yml)
+
 # Hawkeye
 
 Multi-tenant website monitoring SaaS: add websites, detect downtime, get alerts, review uptime.
@@ -46,16 +48,16 @@ API reference: `docs/api.md`. Security notes: `docs/security.md`. Running the en
 
 ## Commands
 
-| Command | Purpose |
-|---|---|
-| `make migrate` / `migrate-down` | Apply / revert one migration (`cmd/migrate`) |
-| `make run-api` | Run the API |
-| `make run-worker` | Run the monitoring engine (scheduler + workers + `/metrics`) |
-| `make test`, `make test-race` | Go tests |
-| `make lint` | gofmt, vet, web lint |
-| `make build` | Build binaries into `bin/` and the web bundle |
-| `make smoke-up` / `smoke` / `smoke-down` | Build and run the production images locally (HTTPS, mail catcher), run 30 checks, tear down |
-| `make vuln` | `govulncheck` |
+| Command                                  | Purpose                                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `make migrate` / `migrate-down`          | Apply / revert one migration (`cmd/migrate`)                                                |
+| `make run-api`                           | Run the API                                                                                 |
+| `make run-worker`                        | Run the monitoring engine (scheduler + workers + `/metrics`)                                |
+| `make test`, `make test-race`            | Go tests                                                                                    |
+| `make lint`                              | gofmt, vet, web lint                                                                        |
+| `make build`                             | Build binaries into `bin/` and the web bundle                                               |
+| `make smoke-up` / `smoke` / `smoke-down` | Build and run the production images locally (HTTPS, mail catcher), run 34 checks, tear down |
+| `make vuln`                              | `govulncheck`                                                                               |
 
 ## Configuration
 

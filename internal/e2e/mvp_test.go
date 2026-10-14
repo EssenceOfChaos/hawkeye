@@ -70,7 +70,7 @@ func newStack(t *testing.T) *stack {
 		Logger: log, DB: pool, RequestTimeout: 10 * time.Second, BodyLimit: "1M", AuthRateLimitPerMin: 1000,
 		Auth: authSvc, Orgs: organizations.NewService(pool), Plans: planSvc, Monitors: monitors.NewService(pool, planSvc), Pool: pool, PgPool: pool,
 		Notifications: notifications.NewService(pool, mail, log, "https://app.test", "alerts@hawkeye.test"),
-		Billing:       billing.NewService(pool, fake, bcfg, m, log), Account: account.NewService(pool, authSvc, fake, mail, log),
+		Billing:       billing.NewService(pool, fake, bcfg, m, log), Account: account.NewService(pool, authSvc, fake, mail, log, "https://app.example.com"),
 		Limiter: ratelimit.New(pool), Metrics: metrics.NewAPI(), HSTS: true, EmailActionLimitPerHour: 50,
 	})
 	srv := httptest.NewServer(app)

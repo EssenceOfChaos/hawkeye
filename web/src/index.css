@@ -202,3 +202,17 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 .status-stack > * { grid-area: 1 / 1; }
 .badge .d-tooltip::before { white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .status-stack .animate-ping { animation: none; opacity: .35; } }
+
+/* Contact page */
+.contact main { max-width: 46rem; margin: 0 auto; }
+.contact form { display: grid; gap: .75rem; }
+.contact textarea { width: 100%; box-sizing: border-box; font: inherit; padding: .5rem .6rem; border: 1px solid var(--border); border-radius: .4rem; background: transparent; color: inherit; resize: vertical; }
+.topics { border: 0; padding: 0; margin: 0 0 .5rem; }
+.topics legend { font-weight: 600; margin-bottom: .5rem; padding: 0; }
+.topic-grid { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+.topic { position: relative; display: grid; gap: .15rem; padding: .7rem .9rem; border: 1px solid var(--border); border-radius: .6rem; cursor: pointer; }
+.topic input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.topic-label { font-weight: 600; }
+.topic.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+.topic:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }

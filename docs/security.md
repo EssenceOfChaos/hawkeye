@@ -95,6 +95,8 @@ TLS roots; a malicious site can make us send a GET/HEAD with our fixed `User-Age
 - **Network:** workers sit on a dedicated network; `deploy/egress-filter.sh` drops private/metadata/host traffic at the firewall as a second layer behind `safehttp` (untested on Linux; verify with `scripts/verify-egress.sh`).
 - **Supply chain:** `govulncheck` and `npm audit` run in CI; images pinned by version, distroless runtime.
 
+- **Contact form:** public, so it is limited per IP (burst and 5/hour, shared across API processes), has a hidden spam-trap field, strict length limits, and rejects anything but a bare email address (no header injection through name/subject/email, all text escaped in HTML). The acknowledgement email goes to an address the visitor typed, so it has its own per-address hourly budget and support still receives every accepted message. Account context in the support email comes only from the server's own session lookup, never from the request body.
+
 See `docs/security-review.md` for the review and residual risks.
 
 ## Known gaps

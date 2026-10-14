@@ -60,7 +60,7 @@ smoke-up:      ## Build and start the production images locally on https://local
 	deploy/smoke/gen-certs.sh
 	$(SMOKE) up -d --build --wait
 smoke:         ## Run the post-deploy smoke test, including a full account lifecycle, against the local stack
-	scripts/smoke.sh https://localhost:8443 --insecure --full smoke@hawkeye.test --mail-api http://localhost:8026
+	SMOKE_HTTP_BASE=http://localhost:8088 scripts/smoke.sh https://localhost:8443 --insecure --full smoke@hawkeye.test --mail-api http://localhost:8026
 smoke-down:
 	$(SMOKE) down -v
 

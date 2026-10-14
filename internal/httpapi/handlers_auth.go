@@ -12,6 +12,7 @@ import (
 	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
+	"hawkeye/internal/contact"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/organizations"
@@ -29,6 +30,7 @@ type handlers struct {
 	notifications *notifications.Service
 	billing       *billing.Service
 	account       *account.Service
+	contact       *contact.Service
 	log           *slog.Logger
 	limits        limiterDeps
 	emailPerHour  int

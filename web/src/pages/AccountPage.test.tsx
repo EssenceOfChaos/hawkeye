@@ -158,17 +158,44 @@ describe('AccountPage', () => {
 })
 
 describe('legal pages', () => {
-  it('are clearly marked as placeholders for legal review and cross-linked', () => {
-    render(<MemoryRouter><PrivacyPage /></MemoryRouter>)
-    expect(screen.getByRole('note')).toHaveTextContent(/PLACEHOLDER — DRAFT FOR LEGAL REVIEW/)
-    expect(screen.getByText(/7 days/)).toBeInTheDocument()
+  it('the privacy policy is complete (no unfilled placeholders) and states the real retention periods and contact', () => {
+    const { container } = render(<MemoryRouter><PrivacyPage /></MemoryRouter>)
+    expect(screen.getByRole('heading', { level: 1, name: 'HawkEye Privacy Policy' })).toBeInTheDocument()
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
+    const text = container.textContent ?? ''
+    expect(text).not.toMatch(/\[(INSERT|CONFIRM|IDENTIFY|LIST|ATTORNEY)/i)
+    expect(text).not.toMatch(/PLACEHOLDER/)
+    for (const days of ['7 days', '90 days', '365 days']) expect(text).toContain(days)
+    expect(screen.getAllByRole('link', { name: 'support@hawkeye.observer' })[0]).toHaveAttribute('href', 'mailto:support@hawkeye.observer')
     expect(screen.getAllByRole('link', { name: 'Terms of service' }).length).toBeGreaterThan(0)
   })
 
-  it('terms require authorization to monitor and disclaim guaranteed detection', () => {
-    render(<MemoryRouter><TermsPage /></MemoryRouter>)
-    expect(screen.getByRole('note')).toHaveTextContent(/legal review/i)
-    expect(screen.getByText(/Only add websites and APIs that you own or are authorized to monitor/)).toBeInTheDocument()
-    expect(screen.getByText(/best-effort basis/)).toBeInTheDocument()
+  it('the privacy policy names every service provider and cookie the app really uses', () => {
+    const { container } = render(<MemoryRouter><PrivacyPage /></MemoryRouter>)
+    const text = container.textContent ?? ''
+    for (const word of ['Vultr', 'Stripe', 'Resend', 'Cloudflare', 'hawkeye_session', 'csrf_token', 'at least 18']) expect(text).toContain(word)
+  })
+
+  it('terms are complete, require authorization to monitor and disclaim guaranteed detection', () => {
+    const { container } = render(<MemoryRouter><TermsPage /></MemoryRouter>)
+    const text = container.textContent ?? ''
+    expect(screen.getByRole('heading', { level: 1, name: 'HawkEye Terms and Conditions' })).toBeInTheDocument()
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
+    expect(text).not.toMatch(/\[(INSERT|CONFIRM|IDENTIFY|LIST|ATTORNEY)/i)
+    expect(text).not.toMatch(/PLACEHOLDER|Attorney review/i)
+    expect(text).toMatch(/own or are authorized to test or monitor/)
+    expect(text).toMatch(/best-effort basis/)
+    expect(text).toMatch(/cannot guarantee that every outage/)
+    expect(text).toContain('at least 18')
+    expect(text).toContain('Commonwealth of Pennsylvania')
+  })
+
+  it('terms only promise what the product does today', () => {
+    const { container } = render(<MemoryRouter><TermsPage /></MemoryRouter>)
+    const text = container.textContent ?? ''
+    // Plan limits mirror the seeded plans; unbuilt features must not be promised.
+    for (const want of ['up to 5 monitors', 'up to 50 monitors', 'up to 200 monitors', '$19 per month', '$59 per month', 'Email is currently the only notification channel']) expect(text).toContain(want)
+    expect(text).not.toMatch(/team members|branded reports|SMS alerts|priority support/i)
+    expect(screen.getAllByRole('link', { name: 'support@hawkeye.observer' })[0]).toHaveAttribute('href', 'mailto:support@hawkeye.observer')
   })
 })

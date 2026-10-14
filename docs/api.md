@@ -154,6 +154,13 @@ failures retry with backoff 1 m, 5 m, 15 m, 1 h, 3 h up to `NOTIFY_MAX_ATTEMPTS`
 Permanent errors (`email.ErrPermanent`) fail immediately. Delivery is at-least-once: a crash between sending and recording can cause one duplicate email.
 Settings disabled or removed after queuing are skipped.
 
+## Contact form
+
+| Method & path | Auth | Notes |
+|---|---|---|
+| `GET /contact/categories` | – | the triage topics: `{categories: [{code, label, hint, priority}]}` |
+| `POST /contact` | – (session optional) | `{category, name, email, subject, message, url?}` → 202 `{reference}`. Emails the support inbox with Reply-To = `email`; a signed-in sender's account id and plan are added by the server. 400 `VALIDATION_ERROR` with `details.fields`; 429 when rate-limited; 503 `CONTACT_UNAVAILABLE` if delivery failed. A non-empty `company` field (spam trap) is answered 202 and silently dropped. |
+
 ## Plan limits
 
 `403 PLAN_LIMIT_REACHED` with details:

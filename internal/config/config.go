@@ -48,6 +48,7 @@ type Config struct {
 
 	EmailProvider    string
 	EmailFromAddress string
+	SupportAddress   string // where contact-form messages are delivered
 	SMTPHost         string
 	SMTPPort         int
 	SMTPUsername     string
@@ -205,6 +206,7 @@ func load(get func(string) string) (Config, error) {
 		SentryDSN:        str("SENTRY_DSN", ""),
 		AppVersion:       str("APP_VERSION", "dev"),
 		EmailFromAddress: str("EMAIL_FROM_ADDRESS", "alerts@example.com"),
+		SupportAddress:   str("CONTACT_TO_ADDRESS", "support@example.com"),
 	}
 
 	if err := c.LogLevel.UnmarshalText([]byte(str("LOG_LEVEL", "info"))); err != nil {
@@ -238,6 +240,9 @@ func load(get func(string) string) (Config, error) {
 		case "starttls", "implicit", "none":
 		default:
 			errs = append(errs, errors.New("SMTP_TLS: must be starttls, implicit or none"))
+		}
+		if _, err := mail.ParseAddress(c.SupportAddress); err != nil {
+			errs = append(errs, errors.New("CONTACT_TO_ADDRESS: must be a valid email address"))
 		}
 		if _, err := mail.ParseAddress(c.EmailFromAddress); err != nil {
 			errs = append(errs, errors.New("EMAIL_FROM_ADDRESS: must be a valid email address"))
@@ -296,6 +301,9 @@ func load(get func(string) string) (Config, error) {
 		}
 		if strings.HasSuffix(strings.ToLower(c.EmailFromAddress), "@example.com") {
 			errs = append(errs, errors.New("EMAIL_FROM_ADDRESS: set a real sender address you control (the default is a placeholder)"))
+		}
+		if strings.HasSuffix(strings.ToLower(c.SupportAddress), "@example.com") {
+			errs = append(errs, errors.New("CONTACT_TO_ADDRESS: set the support inbox that should receive contact-form messages (the default is a placeholder)"))
 		}
 		if !c.AllowInsecureDatabase {
 			if mode := dbSSLMode(c.DatabaseURL); mode == "" || mode == "disable" || mode == "allow" || mode == "prefer" {

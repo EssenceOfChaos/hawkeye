@@ -34,7 +34,9 @@ check "readiness /readyz is 200 (database reachable)" '[ "$(status "$BASE/readyz
 check "readiness reports the database check"  '"${CURL[@]}" "$BASE/readyz" | grep -q "\"database\":\"ok\""'
 check "landing page is served"              '"${CURL[@]}" "$BASE/" | grep -qi "hawkeye"'
 check "SPA deep link falls back to the app (/login)" '[ "$(status "$BASE/login")" = 200 ]'
-check "privacy and terms pages exist"       '[ "$(status "$BASE/privacy")" = 200 ] && [ "$(status "$BASE/terms")" = 200 ]'
+check "privacy, terms and contact pages exist" '[ "$(status "$BASE/privacy")" = 200 ] && [ "$(status "$BASE/terms")" = 200 ] && [ "$(status "$BASE/contact")" = 200 ]'
+check "the email logo is served as an image" '[ "$(status "$BASE/email/hawkeye-logo.png")" = 200 ] && "${CURL[@]}" -I "$BASE/email/hawkeye-logo.png" | grep -qi "^content-type: image/png"'
+check "contact topics are public"            '[ "$("${CURL[@]}" "$BASE/api/v1/contact/categories" | jq_ "len(d[\"categories\"])")" -ge 5 ]'
 
 echo "== API basics"
 check "public plan list has three plans"    '[ "$("${CURL[@]}" "$BASE/api/v1/plans" | jq_ "len(d[\"plans\"])")" = 3 ]'
@@ -81,6 +83,12 @@ if [ -n "$FULL_EMAIL" ]; then
     TOKEN="$("${CURL[@]}" "$MAIL_API/api/v1/message/$ID" | python3 -c "import sys,json,re; print(re.search(r'token=([A-Za-z0-9_-]+)', json.load(sys.stdin)['Text']).group(1))")"
     R="$(post /auth/verify-email "{\"token\":\"$TOKEN\"}")"
     check "the emailed link verifies the address (204)" '[ "$(echo "$R" | tail -1)" = 204 ]'
+  fi
+  if [ -n "$MAIL_API" ]; then
+    R="$(post /contact "{\"category\":\"technical\",\"name\":\"Smoke Test\",\"email\":\"$FULL_EMAIL\",\"subject\":\"Smoke test message\",\"message\":\"This is an automated smoke test of the contact form.\"}")"
+    check "the contact form is accepted (202)"      '[ "$(echo "$R" | tail -1)" = 202 ]'
+    sleep 2
+    check "support received the message, tagged, with Reply-To and branded HTML" '"${CURL[@]}" "$MAIL_API/api/v1/messages" | grep -q "\[Something isn.t working\] Smoke test message" && ID=$("${CURL[@]}" "$MAIL_API/api/v1/search?query=subject:%22Smoke+test+message%22" | jq_ "d[\"messages\"][0][\"ID\"]") && M=$("${CURL[@]}" "$MAIL_API/api/v1/message/$ID") && echo "$M" | grep -q "support@hawkeye.test" && echo "$M" | grep -q "hawkeye-logo.png"'
   fi
   R="$(post /monitors '{"name":"Smoke monitor","url":"https://example.com"}')"
   check "a monitor can be created (201)"          '[ "$(echo "$R" | tail -1)" = 201 ]'

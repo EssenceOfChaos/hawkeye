@@ -12,7 +12,9 @@ type Message struct {
 	From    string // optional; providers fall back to their configured sender
 	To      string
 	Subject string
-	Text    string
+	Text    string // always required: the plain-text body (and the alternative when HTML is set)
+	HTML    string // optional branded body; sent as multipart/alternative
+	ReplyTo string // optional address replies should go to (e.g. the person who filled in the contact form)
 }
 
 // ErrPermanent marks a delivery failure that will never succeed on retry (invalid address, rejected

@@ -118,6 +118,19 @@ func prodBase() map[string]string {
 		"APP_ENV": "production", "APP_BASE_URL": "https://app.example.org", "API_BASE_URL": "https://app.example.org",
 		"DATABASE_URL": "postgres://u:p@db.example.org/monitoring?sslmode=require", "SESSION_SECRET": strings.Repeat("a", 40),
 		"EMAIL_PROVIDER": "smtp", "SMTP_HOST": "smtp.example.org", "SMTP_USERNAME": "u", "SMTP_PASSWORD": "p", "EMAIL_FROM_ADDRESS": "alerts@hawkeye.example.org",
+		"CONTACT_TO_ADDRESS": "support@hawkeye.example.org",
+	}
+}
+
+func TestProductionRequiresARealSupportInbox(t *testing.T) {
+	b := prodBase()
+	delete(b, "CONTACT_TO_ADDRESS")
+	if _, err := load(env(b)); err == nil || !strings.Contains(err.Error(), "CONTACT_TO_ADDRESS") {
+		t.Fatalf("the placeholder support inbox must be refused in production: %v", err)
+	}
+	b["CONTACT_TO_ADDRESS"] = "not an address"
+	if _, err := load(env(b)); err == nil || !strings.Contains(err.Error(), "CONTACT_TO_ADDRESS") {
+		t.Fatalf("an invalid support address must be refused: %v", err)
 	}
 }
 
