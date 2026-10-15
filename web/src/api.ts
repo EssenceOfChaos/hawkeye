@@ -17,6 +17,7 @@ export interface Plan {
   max_monitors: number
   minimum_check_interval_seconds: number
   history_retention_days: number
+  maintenance_enabled?: boolean
 }
 
 export interface Usage {
@@ -123,6 +124,29 @@ export interface MaintenanceWindow {
   status: 'active' | 'upcoming' | 'ended'
   next_start: string | null
   created_at: string
+}
+
+export interface StatusPageConfig {
+  slug: string
+  title: string
+  description: string
+  published: boolean
+  monitors: { monitor_id: string; display_name: string }[]
+}
+
+export interface PublicStatus {
+  title: string
+  description: string
+  overall: 'operational' | 'partial_outage' | 'major_outage' | 'maintenance'
+  monitors: {
+    name: string
+    state: 'up' | 'down' | 'maintenance' | 'unknown'
+    uptime_percent: number | null
+    days: { date: string; uptime_percent: number | null; status: 'ok' | 'degraded' | 'down' | 'none' }[]
+  }[]
+  incidents: { monitor: string; started_at: string; resolved_at: string | null }[]
+  history_days: number
+  generated_at: string
 }
 
 export interface NotificationSetting {

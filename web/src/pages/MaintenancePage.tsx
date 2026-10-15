@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, type MaintenanceWindow, type Monitor } from '../api'
+import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
@@ -27,9 +28,9 @@ function localInputValue(offsetMinutes: number): string {
 }
 
 function StatusLabel({ w }: { w: MaintenanceWindow }) {
-  if (w.status === 'active') return <span className="badge maintenance"><span aria-hidden="true">🛠</span> In progress</span>
-  if (w.status === 'ended') return <span className="badge paused"><span aria-hidden="true">✔</span> Finished</span>
-  return <span className="badge unknown"><span aria-hidden="true">⏳</span> Scheduled</span>
+  if (w.status === 'active') return <span className="d-badge d-badge-soft d-badge-info"><span aria-hidden="true">🛠</span> In progress</span>
+  if (w.status === 'ended') return <span className="d-badge d-badge-soft d-badge-ghost"><span aria-hidden="true">✔</span> Finished</span>
+  return <span className="d-badge d-badge-soft d-badge-warning"><span aria-hidden="true">⏳</span> Scheduled</span>
 }
 
 export function MaintenancePage() {
@@ -112,11 +113,11 @@ export function MaintenancePage() {
       </p>
 
       {error && (
-        <p role="alert" className="error">
+        <Alert>
           {typeof error === 'string' ? error : error.message} {upgrade && <Link to="/billing">See plans</Link>}
-        </p>
+        </Alert>
       )}
-      {items === null && !error && <p role="status">Loading…</p>}
+      {items === null && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>}
 
       {items && items.length === 0 && <p className="hint">No maintenance windows yet.</p>}
       {items && items.length > 0 && (
@@ -176,7 +177,7 @@ export function MaintenancePage() {
             </div>
             <fieldset className="field">
               <legend>Applies to</legend>
-              <label><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> All monitors, including ones added later</label>
+              <label><input type="checkbox" className="d-toggle d-toggle-sm" checked={all} onChange={(e) => setAll(e.target.checked)} /> All monitors, including ones added later</label>
               {!all &&
                 monitors.map((m) => (
                   <label key={m.id}>

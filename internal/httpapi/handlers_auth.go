@@ -18,6 +18,7 @@ import (
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
+	"hawkeye/internal/statuspage"
 	"hawkeye/internal/validation"
 )
 
@@ -30,6 +31,7 @@ type handlers struct {
 	db            *pgxpool.Pool
 	notifications *notifications.Service
 	maintenance   *maintenance.Service
+	statusPages   *statuspage.Service
 	billing       *billing.Service
 	account       *account.Service
 	contact       *contact.Service
@@ -83,6 +85,11 @@ func mapError(err error) error {
 		return &APIError{Status: http.StatusConflict, Code: "NO_BILLING_ACCOUNT", Message: "There is no billing account yet. Choose a plan first."}
 	case errors.Is(err, billing.ErrNoSubscription):
 		return &APIError{Status: http.StatusConflict, Code: "NO_ACTIVE_SUBSCRIPTION", Message: "There is no active subscription."}
+	case errors.Is(err, statuspage.ErrNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Status page not found."}
+	case errors.Is(err, statuspage.ErrSlugTaken):
+		return &APIError{Status: http.StatusConflict, Code: "SLUG_TAKEN", Message: "That status page address is already taken. Choose another.",
+			Details: map[string]any{"fields": map[string]string{"slug": "is already taken"}}}
 	case errors.Is(err, maintenance.ErrNotFound):
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Maintenance window not found."}
 	case errors.Is(err, maintenance.ErrTooMany):

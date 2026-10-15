@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, type Monitor, type Usage } from '../api'
+import { Alert } from '../components/Alert'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { CertBadge } from '../components/Certificate'
@@ -23,10 +24,10 @@ export function UsagePanel({ usage }: { usage: Usage }) {
       </p>
       <progress max={limit} value={Math.min(used, limit)} aria-label={`${used} of ${limit} monitors used`} />
       {over_limit && (
-        <p role="alert" className="error">
+        <Alert>
           You have more monitors than your plan includes. Nothing was deleted, but you can't add more until you remove{' '}
           {used - limit} or upgrade.
-        </p>
+        </Alert>
       )}
       {atLimit && !over_limit && <p role="status">You've used all of your monitors.</p>}
       {atLimit && next && (
@@ -95,14 +96,14 @@ export function MonitorsPage() {
         )}
       </div>
       {!canAdd && <p id="limit-reason" className="hint">Plan limit reached — see the usage box below.</p>}
-      {error && <p role="alert" className="error">{error}</p>}
+      {error && <Alert>{error}</Alert>}
       {usage && <UsagePanel usage={usage} />}
 
-      {monitors === null && !error && <p role="status">Loading monitors…</p>}
+      {monitors === null && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading monitors…</p>}
       {monitors?.length === 0 && (
         <section className="card empty">
           <h2>Add your first website</h2>
-          <p>Your watch starts here. HawkEye will check it regularly and email you when an outage is confirmed.</p>
+          <p>Your watch starts here. HawkEye will check it regularly and alert you when an outage is confirmed.</p>
           <Link className="button" to="/monitors/new">Add your first website</Link>
         </section>
       )}

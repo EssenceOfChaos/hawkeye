@@ -194,7 +194,7 @@ describe('legal pages', () => {
     const { container } = render(<MemoryRouter><TermsPage /></MemoryRouter>)
     const text = container.textContent ?? ''
     // Plan limits mirror the seeded plans; unbuilt features must not be promised.
-    for (const want of ['up to 5 monitors', 'up to 50 monitors', 'up to 200 monitors', '$19 per month', '$59 per month', 'Email is currently the only notification channel']) expect(text).toContain(want)
+    for (const want of ['up to 5 monitors', 'up to 50 monitors', 'up to 200 monitors', '$19 per month', '$59 per month', 'SMS is not currently available', 'Maintenance windows are included in the Pro and Agency plans']) expect(text).toContain(want)
     expect(text).not.toMatch(/team members|branded reports|SMS alerts|priority support/i)
     expect(screen.getAllByRole('link', { name: 'support@hawkeye.observer' })[0]).toHaveAttribute('href', 'mailto:support@hawkeye.observer')
   })

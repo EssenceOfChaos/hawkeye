@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { api, ApiError } from '../api'
+import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { BrandMark } from '../components/Brand'
 import { Field } from '../components/Field'
@@ -39,7 +40,7 @@ function useSubmit() {
 
 function FormError({ error }: { error: ApiError | null }) {
   if (!error || Object.keys(error.fields).length) return null
-  return <p role="alert" className="error">{error.message}</p>
+  return <Alert>{error.message}</Alert>
 }
 
 export function LoginPage() {
@@ -189,7 +190,7 @@ export function VerifyEmailPage() {
       <h1>Email verification</h1>
       {state === 'working' && <p role="status">Verifying…</p>}
       {state === 'ok' && <p role="status">Your email address is verified. <Link to="/monitors">Continue</Link></p>}
-      {state === 'failed' && <p role="alert" className="error">This link is invalid or has expired. Log in and request a new one.</p>}
+      {state === 'failed' && <Alert>This link is invalid or has expired. Log in and request a new one.</Alert>}
     </section>
   )
 }
@@ -215,7 +216,7 @@ export function ConfirmAlertAddressPage() {
       <h1>Alert address confirmation</h1>
       {state === 'working' && <p role="status">Confirming…</p>}
       {state === 'ok' && <p role="status">Thanks — this address will now receive HawkEye alerts. You can close this page.</p>}
-      {state === 'failed' && <p role="alert" className="error">This link is invalid or has expired. Ask the person who added you to send a new confirmation.</p>}
+      {state === 'failed' && <Alert>This link is invalid or has expired. Ask the person who added you to send a new confirmation.</Alert>}
     </section>
   )
 }

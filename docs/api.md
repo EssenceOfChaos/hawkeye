@@ -170,6 +170,17 @@ Alerts go only to destinations that are **enabled and verified**.
 | `POST /notification-settings/:id/resend-confirmation` | owner, verified email | 202; older links stop working |
 | `POST /notification-settings/confirm` | public | `{token}` from the confirmation email → 204; single use, valid 48 h |
 
+## Status page
+
+One public page per organization at `/status/<slug>`, available on every plan. Only the monitors the owner adds appear, under the name the owner chooses. **Monitor URLs, error messages and causes are never exposed.** Nothing is public until `published` is true; a draft and a page that does not exist both answer 404.
+
+| Method & path | Who | Notes |
+|---|---|---|
+| `GET /public/status/:slug` | **no login** | `{title, description, overall, monitors: [{name, state, uptime_percent, days: [{date, uptime_percent, status}]}], incidents: [{monitor, started_at, resolved_at}], history_days, generated_at}`. `overall` is `operational`, `partial_outage`, `major_outage` or `maintenance`; `state` is `up`, `down`, `maintenance` or `unknown` (paused / no check yet); day `status` is `ok` (≥ 99.5 %), `degraded` (≥ 95 %), `down` or `none` (fewer than 5 checks). Uptime leaves out checks made during maintenance windows. `history_days` is 90, or the plan's retention if shorter (Free: 7). Incidents are those from the last 14 days. Cached for 30 s (`Cache-Control: public, max-age=30`); 120 requests/min/IP |
+| `GET /status-page` | any member | `{status_page: {slug, title, description, published, monitors: [{monitor_id, display_name}]} \| null}` |
+| `PUT /status-page` | owner | Creates or replaces the page (same body). `slug`: 3–40 lowercase letters, digits, hyphens. `display_name` empty = the monitor's own name. Publishing needs at least one monitor. 409 `SLUG_TAKEN`, 400 `VALIDATION_ERROR` (for example a monitor from another organization) |
+| `DELETE /status-page` | owner | 204; the address becomes available again |
+
 ## Maintenance windows
 
 Planned periods during which a monitor's checks keep running and are recorded (`in_maintenance: true` on the result), but its status, streaks and incidents do not change, no alert is sent, and the checks are left out of uptime. Health resumes from where it was when the window ends. An incident that is already open stays open; certificate-expiry warnings are still sent. Monitors carry `in_maintenance` (true while a window covers them). **Paid plans only** (`plans.maintenance_enabled`: Pro and Agency); a Free organization gets 403 `PLAN_LIMIT_REACHED` on create, and can still list and delete.

@@ -101,7 +101,9 @@ describe('LandingPage', () => {
     // Every plan card lists them, so visitors can see they are not paid extras.
     expect(screen.getAllByText('SSL certificate expiry warnings')).toHaveLength(plans.length)
     expect(screen.getAllByText('Website and API monitoring').length).toBeGreaterThanOrEqual(plans.length)
-    expect(screen.getByText(/Every plan includes the same features/)).toBeInTheDocument()
+    expect(screen.getByText(/Every plan includes website and API monitoring/)).toBeInTheDocument()
+    expect(screen.getByText(/Paid plans add maintenance windows/)).toBeInTheDocument()
+    expect(screen.getByText('Where can HawkEye send alerts?')).toBeInTheDocument()
     expect(screen.getByText('Does HawkEye warn me before my SSL certificate expires?')).toBeInTheDocument()
     expect(screen.getByText(/Can I monitor an API\?/)).toBeInTheDocument()
   })

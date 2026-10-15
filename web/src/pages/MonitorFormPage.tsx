@@ -1,3 +1,4 @@
+import { Alert } from '../components/Alert'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import {
@@ -146,11 +147,9 @@ export function MonitorFormPage() {
     <section className="card narrow">
       <h1>{editing ? 'Edit monitor' : 'Add a website or API to monitor'}</h1>
       {!editing && <p>Give your monitor a recognizable name and enter the website or API URL you want HawkEye to check.</p>}
-      {!loaded && !error && <p role="status">Loading…</p>}
+      {!loaded && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>}
       {generic && (
-        <div role="alert" className="error">
-          <p>{error.code === 'PLAN_LIMIT_REACHED' ? limitMessage(error) : error.message}</p>
-        </div>
+        <Alert>{error.code === 'PLAN_LIMIT_REACHED' ? limitMessage(error) : error.message}</Alert>
       )}
       {loaded && (
         <form onSubmit={onSubmit}>
@@ -167,10 +166,10 @@ export function MonitorFormPage() {
             </select>
             {f.method && <small className="error">{f.method}</small>}
             {writeMethod && (
-              <p role="note" className="banner inline">
+              <Alert tone="info" role="note">
                 <strong>This request is repeated on every check.</strong> Use {method} only on an endpoint you are authorized to monitor and that is safe to call
                 again and again. It needs a verified email address, and checks run at most every {WRITE_MIN_MINUTES} minutes.
-              </p>
+              </Alert>
             )}
           </div>
 

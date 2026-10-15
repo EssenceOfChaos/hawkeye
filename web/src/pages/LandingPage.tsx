@@ -52,9 +52,21 @@ const FEATURES = [
   },
   {
     icon: brand.icons.email,
-    title: 'Email alerts',
+    title: 'Alerts where you work',
     lead: 'The right signal. When it matters.',
-    text: 'HawkEye emails you when an outage is confirmed and when the website recovers: one message each, not a flood. Recipients must confirm their address before they receive anything.',
+    text: 'HawkEye alerts you when an outage is confirmed and when the website recovers: one message each, not a flood. Send alerts by email, to a Slack channel, or to your own systems as signed webhooks. Email recipients must confirm their address, and Slack and webhook destinations are sent a test message before they are saved.',
+  },
+  {
+    icon: brand.icons.websites,
+    title: 'Public status page',
+    lead: 'Tell your customers before they ask.',
+    text: 'Publish a status page at an address you choose, showing whether your services are up, their daily uptime and recent incidents. You decide which monitors appear and what they are called. Web addresses and error details are never shown.',
+  },
+  {
+    icon: brand.icons.history,
+    title: 'Maintenance windows',
+    lead: 'Planned work shouldn’t page you.',
+    text: 'Schedule a window for a deploy or upgrade, once or on a daily or weekly repeat. HawkEye keeps checking, but opens no incident, sends no alert, and leaves those checks out of your uptime. Included in the Pro and Agency plans.',
   },
   {
     icon: brand.icons.shield,
@@ -80,19 +92,21 @@ const AUDIENCES = [
 const STEPS = [
   { title: 'Add your website', text: 'Enter a name and URL. HawkEye validates the monitor configuration and adds it to your dashboard.' },
   { title: 'Let HawkEye keep watch', text: 'Your website is checked at your plan’s monitoring interval. Results are recorded so you can review status and response-time history.' },
-  { title: 'Get notified when something changes', text: 'When failures meet the detection threshold, HawkEye opens an incident and emails your alert recipients.' },
+  { title: 'Get notified when something changes', text: 'When failures meet the detection threshold, HawkEye opens an incident and alerts your destinations: email, Slack or a webhook.' },
   { title: 'Investigate and move forward', text: 'Review the incident, inspect the recorded results and take action. When successful checks confirm recovery, HawkEye resolves the incident and tells you.' },
 ]
 
 const FAQ = [
   { q: 'How does website monitoring work?', a: 'You add a website URL. HawkEye periodically sends an HTTP request, records the result, and evaluates whether repeated failures indicate a potential outage.' },
   { q: 'Do I need a credit card?', a: 'No. The free plan does not ask for one. A payment method is only needed if you choose a paid plan.' },
-  { q: 'What happens when my website goes down?', a: 'When repeated failures meet the incident threshold, HawkEye creates an incident and emails your alert recipients. It keeps checking, and tells you when the website recovers.' },
+  { q: 'What happens when my website goes down?', a: 'When repeated failures meet the incident threshold, HawkEye creates an incident and sends an alert to your email, Slack or webhook destinations. It keeps checking, and tells you when the website recovers.' },
   { q: 'Will HawkEye guarantee that my website is always available?', a: 'No monitoring service can guarantee that a website will always be available or detect every possible problem. HawkEye provides periodic checks and recorded results to help you identify and investigate availability issues.' },
-  { q: 'Does HawkEye warn me before my SSL certificate expires?', a: 'Yes, on every plan. For each HTTPS monitor, HawkEye reads the certificate your site presents during its checks, shows the expiry date and a countdown, and emails your alert recipients 30, 14, 7 and 1 days before it expires and again if it does. Renew the certificate and HawkEye picks up the new date automatically. It reports the certificate it sees for the monitored address; it cannot tell you about other hostnames or certificates revoked early.' },
-  { q: 'Does HawkEye send alerts by SMS?', a: 'Not yet. The current release supports email alerts.' },
+  { q: 'Does HawkEye warn me before my SSL certificate expires?', a: 'Yes, on every plan. For each HTTPS monitor, HawkEye reads the certificate your site presents during its checks, shows the expiry date and a countdown, and alerts your destinations 30, 14, 7 and 1 days before it expires and again if it does. Renew the certificate and HawkEye picks up the new date automatically. It reports the certificate it sees for the monitored address; it cannot tell you about other hostnames or certificates revoked early.' },
+  { q: 'Where can HawkEye send alerts?', a: 'To email addresses, to a Slack channel through an incoming webhook, and to any HTTPS endpoint as a signed JSON webhook so your own systems can react. Every alert is queued and retried if delivery fails. Slack and webhook destinations are tested when you add them and available on every plan. SMS is not available yet.' },
+  { q: 'Can I show my customers a status page?', a: 'Yes, on every plan. Choose an address, the monitors to show and the names to show them under, then publish. The page shows each service’s current state, daily uptime and recent incidents. It never shows your monitored web addresses or error details, and it stays private until you publish it. Daily history follows your plan: 7 days on Free, up to 90 on paid plans.' },
+  { q: 'How do I avoid false alerts during planned maintenance?', a: 'Schedule a maintenance window on a Pro or Agency plan. For all or some of your monitors, once or repeating daily or weekly, HawkEye keeps checking but does not open incidents or send alerts, and leaves those checks out of uptime. An incident that is already open stays open until the monitor recovers.' },
   { q: 'Can I monitor an API?', a: 'Yes. Choose the request method, add custom headers and a request body, and authenticate with Basic, a bearer token or an API-key header. You can then check the status code, look for text in the response, or verify a value in a JSON response. Passwords, tokens and API keys are stored encrypted and are never shown again. Methods that change data (POST, PUT, PATCH and DELETE) are repeated on every check, so they require a verified email address and run at most every 5 minutes.' },
-  { q: 'What happens if I downgrade?', a: 'Your existing monitors are never deleted automatically. You may not be able to add new ones until you are within the new plan’s limits, and history older than the new plan’s retention period is removed.' },
+  { q: 'What happens if I downgrade?', a: 'Your existing monitors are never deleted automatically. You may not be able to add new ones until you are within the new plan’s limits, and history older than the new plan’s retention period is removed. Maintenance windows you already created keep working, but you cannot create new ones until you are on a paid plan.' },
 ]
 
 function price(cents: number) {
@@ -114,7 +128,9 @@ function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: Plan; fe
         <li>{plan.history_retention_days} days of history</li>
         <li>Website and API monitoring</li>
         <li>SSL certificate expiry warnings</li>
-        <li>Email alerts for outages and recoveries</li>
+        <li>Email, Slack and webhook alerts</li>
+        <li>Public status page</li>
+        {plan.maintenance_enabled && <li>Maintenance windows</li>}
       </ul>
       {plan.monthly_price_cents === 0 ? (
         <Link className="button primary" to="/register">Start free</Link>
@@ -176,7 +192,8 @@ export function LandingPage() {
         )}
       </header>
 
-      <section className="hero" ref={heroRef}>
+      <section className="d-hero" ref={heroRef}>
+        <div className="d-hero-content hero">
         <div className="hero-text">
           <p className="eyebrow">Website monitoring, without the guesswork</p>
           <h1>Your websites. Always in sight.</h1>
@@ -201,6 +218,7 @@ export function LandingPage() {
             <li className="d-badge d-badge-soft d-badge-error">Outage alerts</li>
             <li className="d-badge d-badge-soft d-badge-warning">SSL expiry warnings</li>
             <li className="d-badge d-badge-soft d-badge-info">Performance history</li>
+            <li className="d-badge d-badge-soft d-badge-neutral">Public status page</li>
           </ul>
         </div>
         <img
@@ -211,6 +229,7 @@ export function LandingPage() {
           width={566}
           height={463}
         />
+        </div>
       </section>
 
       <section aria-labelledby="problem-h" className="section">
@@ -251,7 +270,7 @@ export function LandingPage() {
           <h2>Checks that tell the truth</h2>
           <p>
             A failed check is not an incident. A site counts as down only after consecutive failed checks, and as recovered only after
-            consecutive successful ones. You get one email when an outage is confirmed and one when it ends.
+            consecutive successful ones. You get one alert when an outage is confirmed and one when it ends.
           </p>
         </div>
         <img src={brand.alertBell} alt="" width={140} height={152} />
@@ -284,7 +303,7 @@ export function LandingPage() {
 
       <section aria-labelledby="pricing-h" className="section">
         <h2 id="pricing-h">Simple plans. Clear visibility.</h2>
-        <p className="hint">Start free. Upgrade when your monitoring needs grow. Every plan includes the same features: website and API monitoring, SSL certificate expiry warnings, incident tracking, email alerts, and uptime reports. Plans differ only in how many monitors you can have, how often they are checked, and how long history is kept. The free plan is a real plan, not a trial, and monitors are never deleted if you move to a smaller plan.</p>
+        <p className="hint">Start free. Upgrade when your monitoring needs grow. Every plan includes website and API monitoring, SSL certificate expiry warnings, incident tracking, email, Slack and webhook alerts, a public status page, and uptime reports. Paid plans add maintenance windows. Plans otherwise differ in how many monitors you can have, how often they are checked, and how long history is kept. The free plan is a real plan, not a trial, and monitors are never deleted if you move to a smaller plan.</p>
         {plans === null && (
           <div role="status" aria-label="Loading plans" className="plans-loading">
             <div className="d-skeleton h-56 w-full" />

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import type { DashboardSummary, Incident, RangeInfo, SeriesPoint, Usage } from '../api'
+import { Alert } from '../components/Alert'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { CertificatesPanel } from '../components/Certificate'
@@ -29,8 +30,8 @@ export function DashboardPage() {
         <h1>Dashboard</h1>
       </div>
 
-      {(summary.error || series.error) && <p role="alert" className="error">Could not load the dashboard. Try again in a moment.</p>}
-      {!s && !summary.error && <p role="status">Loading dashboard…</p>}
+      {(summary.error || series.error) && <Alert>Could not load the dashboard. Try again in a moment.</Alert>}
+      {!s && !summary.error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading dashboard…</p>}
 
       {s && s.monitors.total === 0 && (
         <section className="card empty">
@@ -43,10 +44,10 @@ export function DashboardPage() {
       {s && s.monitors.total > 0 && (
         <>
           {s.open_incidents > 0 && (
-            <p role="alert" className="banner inline outage">
+            <Alert>
               <span aria-hidden="true">✖</span> {s.open_incidents} ongoing incident{s.open_incidents === 1 ? '' : 's'}.{' '}
               <Link to="/incidents">See what’s down</Link>
-            </p>
+            </Alert>
           )}
 
           <CertificatesPanel certificates={s.certificates ?? []} tracked={s.certificates_tracked ?? 0} />

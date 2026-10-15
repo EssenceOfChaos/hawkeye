@@ -13,6 +13,20 @@
 @media (prefers-color-scheme: dark) {
   :root { --accent: #7ea6ff; --up: #56d364; --down: #ff7b72; }
 }
+/* daisyUI reads its colours from --color-* variables. Point them at the app's own palette and the system light/dark scheme (Canvas and
+   CanvasText follow color-scheme), so every d- component matches the rest of the app in both modes. The landing page keeps its own
+   data-theme="light", which sets these variables closer to the elements and wins there. */
+:root:not([data-theme]) {
+  --color-base-100: Canvas;
+  --color-base-200: color-mix(in srgb, CanvasText 5%, Canvas);
+  --color-base-300: color-mix(in srgb, CanvasText 12%, Canvas);
+  --color-base-content: CanvasText;
+  --color-primary: var(--accent);
+  --color-info: var(--accent);
+  --color-success: var(--up);
+  --color-error: var(--down);
+  --color-warning: #d9a400;
+}
 body { margin: 0; }
 #root { min-height: 100vh; display: flex; flex-direction: column; }
 main { flex: 1; width: 100%; box-sizing: border-box; max-width: 64rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
@@ -131,8 +145,13 @@ a.button.primary, button.primary, .button.primary { background: var(--accent); c
 .hero-value { font-size: 3.5rem; font-weight: 700; line-height: 1.1; letter-spacing: -.02em; }
 .hero-value.muted { opacity: .5; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .75rem; margin: 1rem 0 1.5rem; }
-.stat-tile { border: 1px solid var(--border); border-radius: .5rem; padding: .75rem 1rem; }
-.stat-value { font-size: 1.6rem; font-weight: 700; }
+.stats > .d-stats, .stats-row > .d-stats { border: 1px solid var(--border); outline: 0; background: transparent; }
+.d-stat { padding: .6rem 1rem; }
+.d-stat-title, .d-stat-desc { color: inherit; opacity: .75; }
+.d-stat-value { font-size: 1.6rem; font-weight: 700; }
+.d-alert { margin: .75rem 0; }
+.d-alert a { color: inherit; font-weight: 600; }
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .75rem; margin: 1rem 0; }
 .explain { margin-top: .5rem; max-width: 42rem; }
 .explain summary, .table-view summary { cursor: pointer; color: var(--accent); }
 .chart { margin: 1.5rem 0; padding: 0; transition: opacity .15s; }
@@ -176,7 +195,7 @@ td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 h1, h2, h3, .price strong, .step-no, .eyebrow { font-family: var(--font-display); }
 h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 .eyebrow { letter-spacing: .1em; }
-.hero-value, .stat-value, .mono, code, td time { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.hero-value, .d-stat-value, .mono, code, td time { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .hero-value { letter-spacing: -.04em; }
 
 /* Landing page motion and daisyUI-based pieces */
@@ -243,3 +262,18 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 .cert-timeline .d-timeline-end { padding: .25rem 0; }
 .cert-list { margin: 0; padding: 0; display: grid; gap: .5rem; }
 .cert-list li { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+
+/* Public status page */
+.status-wrap { max-width: 46rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+.status-bars { display: flex; gap: 2px; margin: .4rem 0 .2rem; }
+.status-hero { justify-content: flex-start; }
+.status-hero .d-hero-content { padding-inline: 0; justify-content: flex-start; }
+.status-hero h1 { margin-bottom: .25rem; }
+.status-bars > .d-tooltip { flex: 1; min-width: 2px; display: block; }
+.status-bars > .d-tooltip > span { display: block; height: 1.75rem; border-radius: 2px; background: var(--border); }
+.status-bars > .d-tooltip::before { white-space: nowrap; }
+.status-bars > .d-tooltip > .ok { background: var(--up); } .status-bars > .d-tooltip > .down { background: var(--down); } .status-bars > .d-tooltip > .degraded { background: #d9a400; }
+.status-row { padding: .8rem 0; border-top: 1px solid var(--border); }
+.status-row .head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; font-weight: 600; }
+.status-row .scale { display: flex; justify-content: space-between; font-size: .8rem; opacity: .75; }
+fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }

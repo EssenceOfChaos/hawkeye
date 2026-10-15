@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError } from '../api'
+import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { Field } from '../components/Field'
 import { brand } from '../brand'
@@ -89,8 +90,8 @@ export function ContactPage() {
         ) : (
           <>
             <p>Tell us what you need and we’ll route your message to the right place. Choose the topic that fits best.</p>
-            {loadFailed && <p role="alert" className="error">The contact form could not be loaded. Please try again in a moment.</p>}
-            {!categories && !loadFailed && <p role="status">Loading…</p>}
+            {loadFailed && <Alert>The contact form could not be loaded. Please try again in a moment.</Alert>}
+            {!categories && !loadFailed && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>}
             {categories && (
               <form onSubmit={onSubmit} noValidate>
                 <fieldset className="topics">
@@ -132,7 +133,7 @@ export function ContactPage() {
                   <label>Company<input tabIndex={-1} autoComplete="off" value={company} onChange={(e) => setCompany(e.target.value)} /></label>
                 </div>
 
-                {error && !Object.keys(fields).length && <p role="alert" className="error">{error.message}</p>}
+                {error && !Object.keys(fields).length && <Alert>{error.message}</Alert>}
                 <button type="submit" className="primary" disabled={busy}>{busy ? 'Sending…' : 'Send message'}</button>
                 {selected && <p className="hint">Topic: {selected.label}</p>}
               </form>

@@ -11,6 +11,8 @@ import { LandingPage } from './pages/LandingPage'
 import { MaintenancePage } from './pages/MaintenancePage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { MonitorFormPage } from './pages/MonitorFormPage'
+import { StatusPage } from './pages/StatusPage'
+import { StatusPageSettings } from './pages/StatusPageSettings'
 import { PrivacyPage, TermsPage } from './pages/LegalPages'
 import { MonitorsPage } from './pages/MonitorsPage'
 
@@ -52,6 +54,7 @@ export function AppRoutes() {
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
+      <Route path="/status/:slug" element={<StatusPage />} />
       <Route path="/reset-password" element={<main><ResetPasswordPage /></main>} />
       <Route path="/confirm-alert-address" element={<main><ConfirmAlertAddressPage /></main>} />
       <Route element={<RequireAuth />}>
@@ -62,6 +65,7 @@ export function AppRoutes() {
         <Route path="/incidents" element={<IncidentsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/maintenance" element={<MaintenancePage />} />
+        <Route path="/status-page" element={<StatusPageSettings />} />
         <Route path="/monitors" element={<MonitorsPage />} />
         <Route path="/monitors/new" element={<MonitorFormPage />} />
         <Route path="/monitors/:monitorID" element={<Lazy><MonitorDetailPage /></Lazy>} />

@@ -49,9 +49,11 @@ export function CertBadge({ monitor }: { monitor: Pick<Monitor, 'url' | 'ssl'> }
   const days = Math.floor(left / DAY)
   const text = tone === 'expired' ? 'Expired' : days >= 1 ? `${days} day${days === 1 ? '' : 's'}` : 'Under a day'
   return (
-    <span className={`d-badge cert-badge cert-${tone}`} title={`Certificate expires ${new Date(monitor.ssl.expires_at).toLocaleString()}`}>
-      <span aria-hidden="true">{tone === 'ok' ? '🔒' : tone === 'soon' ? '⚠' : '✖'}</span> {text}
-      <span className="sr-only"> until the SSL certificate expires ({TONE_TEXT[tone]})</span>
+    <span className="d-tooltip" data-tip={`Certificate expires ${new Date(monitor.ssl.expires_at).toLocaleString()}`}>
+      <span className={`d-badge cert-badge cert-${tone}`}>
+        <span aria-hidden="true">{tone === 'ok' ? '🔒' : tone === 'soon' ? '⚠' : '✖'}</span> {text}
+        <span className="sr-only"> until the SSL certificate expires ({TONE_TEXT[tone]})</span>
+      </span>
     </span>
   )
 }

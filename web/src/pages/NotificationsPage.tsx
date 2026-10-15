@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { api, ApiError, type NotificationSetting } from '../api'
+import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
@@ -10,9 +11,9 @@ type Channel = NotificationSetting['channel']
 const channelNames: Record<Channel, string> = { email: 'Email', slack: 'Slack', webhook: 'Webhook' }
 
 function StatusLabel({ s }: { s: NotificationSetting }) {
-  if (!s.verified) return <span className="badge unknown"><span aria-hidden="true">⏳</span> Waiting for confirmation</span>
-  if (!s.enabled) return <span className="badge paused"><span aria-hidden="true">⏸</span> Alerts off</span>
-  return <span className="badge up"><span aria-hidden="true">✔</span> Receiving alerts</span>
+  if (!s.verified) return <span className="d-badge d-badge-soft d-badge-warning"><span aria-hidden="true">⏳</span> Waiting for confirmation</span>
+  if (!s.enabled) return <span className="d-badge d-badge-soft d-badge-ghost"><span aria-hidden="true">⏸</span> Alerts off</span>
+  return <span className="d-badge d-badge-soft d-badge-success"><span aria-hidden="true">✔</span> Receiving alerts</span>
 }
 
 export function NotificationsPage() {
@@ -100,18 +101,18 @@ export function NotificationsPage() {
       <p>Everything listed here is told when a monitor is confirmed down, when it recovers, and when a certificate is about to expire: by email, in Slack, or by a signed webhook to your own systems.</p>
 
       {!verified && (
-        <p role="status" className="banner inline">
+        <Alert tone="warning" role="status">
           Verify your own email address first — until then you can’t add other recipients, and your own address won’t receive alerts.
-        </p>
+        </Alert>
       )}
-      {error && <p role="alert" className="error">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
+      {error && <Alert>{error}</Alert>}
+      {notice && <Alert tone="success" role="status">{notice}</Alert>}
       {secret && (
-        <p role="status" className="banner inline">
+        <Alert tone="warning" role="status">
           Signing secret: <code>{secret}</code>. Copy it now — it is not shown again. HawkEye signs every request with it (HMAC-SHA256 in the <code>X-HawkEye-Signature</code> header), so your server can check a request is genuine.
-        </p>
+        </Alert>
       )}
-      {items === null && !error && <p role="status">Loading…</p>}
+      {items === null && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>}
 
       {items && (
         <div className="table-wrap">
@@ -132,7 +133,9 @@ export function NotificationsPage() {
                   {isOwner && (
                     <td className="actions">
                       {s.verified && s.channel !== 'email' && (
-                        <button onClick={() => void run(() => api('POST', `/notification-settings/${s.id}/test`), 'Test message sent.')}>Send test</button>
+                        <span className="d-tooltip" data-tip="Deliver a test message to this destination now">
+                          <button onClick={() => void run(() => api('POST', `/notification-settings/${s.id}/test`), 'Test message sent.')}>Send test</button>
+                        </span>
                       )}
                       {s.verified ? (
                         <button onClick={() => void run(() => api('PATCH', `/notification-settings/${s.id}`, { enabled: !s.enabled }))}>

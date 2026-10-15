@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, type Incident } from '../api'
+import { Alert } from '../components/Alert'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 
@@ -76,12 +77,12 @@ export function IncidentsPage() {
       </div>
       <p>An incident starts when an outage is confirmed by consecutive failed checks and ends when the site has recovered.</p>
 
-      {error && <p role="alert" className="error">{error}</p>}
-      {items === null && !error && <p role="status">Loading incidents…</p>}
+      {error && <Alert>{error}</Alert>}
+      {items === null && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading incidents…</p>}
       {items?.length === 0 && (
         <section className="card empty">
           <h2>{filter ? 'No incidents match' : 'No incidents to report'}</h2>
-          <p>When a confirmed outage occurs you’ll see its timeline here, and HawkEye will email your alert recipients.</p>
+          <p>When a confirmed outage occurs you’ll see its timeline here, and HawkEye will alert your destinations.</p>
         </section>
       )}
       {items && items.length > 0 && (

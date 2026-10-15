@@ -32,10 +32,12 @@ export function UptimeHero({ uptime, label }: { uptime: Uptime; label: string })
 
 export function StatTile({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
-    <div className="stat-tile">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
-      {hint && <div className="hint">{hint}</div>}
+    <div className="d-stats">
+      <div className="d-stat">
+        <div className="d-stat-title">{label}</div>
+        <div className="d-stat-value">{value}</div>
+        {hint && <div className="d-stat-desc">{hint}</div>}
+      </div>
     </div>
   )
 }

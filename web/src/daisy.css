@@ -9,12 +9,12 @@
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
-@source "./pages/LandingPage.tsx";
-@source "./components/StatusBadge.tsx";
-@source "./components/Certificate.tsx";
+@source "./pages";
+@source "./components";
+@source not "./**/*.test.tsx";
 @plugin "daisyui" {
   prefix: "d-";
-  include: collapse, badge, steps, skeleton, footer, link, button, status, tooltip, countdown, timeline;
+  include: collapse, badge, steps, skeleton, footer, link, button, status, tooltip, countdown, timeline, stat, indicator, hero, alert, toggle, loading;
   themes: light --default;
   logs: false;
 }

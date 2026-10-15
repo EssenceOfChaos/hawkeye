@@ -63,6 +63,8 @@ type ExportOrg struct {
 	Monitors             []ExportMonitor   `json:"monitors"`
 	Incidents            []ExportIncident  `json:"incidents"`
 	AlertRecipients      []ExportRecipient `json:"alert_recipients"`
+	MaintenanceWindows   []ExportWindow    `json:"maintenance_windows"`
+	StatusPage           *ExportStatusPage `json:"status_page"`
 	CheckResultsRetained int               `json:"check_results_retained_count"`
 }
 
@@ -108,7 +110,26 @@ type ExportIncident struct {
 	Summary       *string    `json:"summary"`
 }
 
+type ExportWindow struct {
+	Name            string    `json:"name"`
+	StartsAt        time.Time `json:"starts_at"`
+	DurationMinutes int       `json:"duration_minutes"`
+	Repeat          string    `json:"repeat"`
+	AllMonitors     bool      `json:"all_monitors"`
+	MonitorIDs      []string  `json:"monitor_ids"`
+}
+
+type ExportStatusPage struct {
+	Slug        string   `json:"slug"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Published   bool     `json:"published"`
+	MonitorIDs  []string `json:"monitor_ids"`
+}
+
+// ExportRecipient is an alert destination. For Slack and webhook destinations the URL is a secret, so only the masked label is exported.
 type ExportRecipient struct {
+	Channel     string    `json:"channel"`
 	Destination string    `json:"destination"`
 	Enabled     bool      `json:"enabled"`
 	Verified    bool      `json:"verified"`
@@ -190,20 +211,49 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 	}
 	rows.Close()
 
-	rows, err = s.pool.Query(ctx, `SELECT destination, enabled, verified_at IS NOT NULL, created_at FROM notification_settings
+	rows, err = s.pool.Query(ctx, `SELECT channel, COALESCE(label, destination), enabled, verified_at IS NOT NULL, created_at FROM notification_settings
 		WHERE organization_id = $1 ORDER BY created_at, id`, o.ID)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
 		var r ExportRecipient
-		if err := rows.Scan(&r.Destination, &r.Enabled, &r.Verified, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.Channel, &r.Destination, &r.Enabled, &r.Verified, &r.CreatedAt); err != nil {
 			rows.Close()
 			return err
 		}
 		o.AlertRecipients = append(o.AlertRecipients, r)
 	}
 	rows.Close()
+
+	o.MaintenanceWindows = []ExportWindow{}
+	rows, err = s.pool.Query(ctx, `SELECT w.name, w.starts_at, w.duration_minutes, w.repeat, w.all_monitors,
+			COALESCE(array_agg(wm.monitor_id::text ORDER BY wm.monitor_id) FILTER (WHERE wm.monitor_id IS NOT NULL), '{}')
+		FROM maintenance_windows w LEFT JOIN maintenance_window_monitors wm ON wm.window_id = w.id
+		WHERE w.organization_id = $1 GROUP BY w.id ORDER BY w.starts_at, w.id`, o.ID)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var w ExportWindow
+		if err := rows.Scan(&w.Name, &w.StartsAt, &w.DurationMinutes, &w.Repeat, &w.AllMonitors, &w.MonitorIDs); err != nil {
+			rows.Close()
+			return err
+		}
+		o.MaintenanceWindows = append(o.MaintenanceWindows, w)
+	}
+	rows.Close()
+
+	var sp ExportStatusPage
+	err = s.pool.QueryRow(ctx, `SELECT p.slug, p.title, p.description, p.published,
+			COALESCE((SELECT array_agg(pm.monitor_id::text ORDER BY pm.position) FROM status_page_monitors pm WHERE pm.page_id = p.id), '{}')
+		FROM status_pages p WHERE p.organization_id = $1`, o.ID).Scan(&sp.Slug, &sp.Title, &sp.Description, &sp.Published, &sp.MonitorIDs)
+	switch {
+	case err == nil:
+		o.StatusPage = &sp
+	case !errors.Is(err, pgx.ErrNoRows):
+		return err
+	}
 	return s.pool.QueryRow(ctx, `SELECT count(*) FROM check_results r JOIN monitors m ON m.id = r.monitor_id WHERE m.organization_id = $1`, o.ID).Scan(&o.CheckResultsRetained)
 }
 

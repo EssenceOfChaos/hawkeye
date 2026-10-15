@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import type { CheckResult, Incident, Monitor, RangeInfo, SeriesPoint, Uptime, Usage } from '../api'
+import { Alert } from '../components/Alert'
 import { CertificateCard } from '../components/Certificate'
 import { RangePicker } from '../components/RangePicker'
 import { ResponseChart } from '../components/ResponseChart'
@@ -42,8 +43,8 @@ export function MonitorDetailPage() {
 
   return (
     <>
-      {!m && !monitor.error && <p role="status">Loading…</p>}
-      {monitor.error && !m && <p role="alert" className="error">{monitor.error.message}</p>}
+      {!m && !monitor.error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>}
+      {monitor.error && !m && <Alert>{monitor.error.message}</Alert>}
       {m && (
         <>
           <p className="hint"><Link to="/monitors">← Monitors</Link></p>

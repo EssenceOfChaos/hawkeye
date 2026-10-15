@@ -86,6 +86,17 @@ func TestExportContainsOnlyTheCallersDataAndNoSecrets(t *testing.T) {
 		t.Fatalf("set monitor auth: %d %v", r.Status, r.Body)
 	}
 	alice.call("POST", "/api/v1/notification-settings", map[string]string{"destination": "client@example.net"})
+	// A Slack destination is stored sealed; the export must show only its masked label, never the sealed value.
+	for _, q := range []string{
+		`INSERT INTO notification_settings (organization_id, channel, destination, label, fingerprint, verified_at)
+			VALUES ('` + aliceOrg + `', 'slack', 'enc:v1:SEALEDBLOB', 'hooks.slack.com/…', 'f1', now())`,
+		`INSERT INTO maintenance_windows (organization_id, name, starts_at, duration_minutes, all_monitors) VALUES ('` + aliceOrg + `', 'Quarterly upgrade', now(), 30, true)`,
+		`INSERT INTO status_pages (organization_id, slug, title, published) VALUES ('` + aliceOrg + `', 'alice-status', 'Alice status', true)`,
+	} {
+		if _, err := e.pool.Exec(t.Context(), q); err != nil {
+			t.Fatal(err)
+		}
+	}
 	e.signedWebhook(t, billingtest.SubscriptionEvent("evt_x", "customer.subscription.created", time.Now(),
 		billingtest.Sub{ID: "sub_secretid", Customer: "cus_secretid", Status: "active", Price: "price_pro", OrgID: aliceOrg, PeriodEnd: time.Now().Add(720 * time.Hour).Unix()}))
 
@@ -103,12 +114,12 @@ func TestExportContainsOnlyTheCallersDataAndNoSecrets(t *testing.T) {
 	if res.StatusCode != 200 || !strings.Contains(res.Header.Get("Content-Disposition"), "attachment") || res.Header.Get("Content-Type") != "application/json" {
 		t.Fatalf("%d %v", res.StatusCode, res.Header)
 	}
-	for _, want := range []string{"alice@example.com", "Alice Site", "client@example.net", `"plan": "pro"`, `"check_results_retained_count": 12`, `"role": "owner"`} {
+	for _, want := range []string{"alice@example.com", "Alice Site", "client@example.net", "hooks.slack.com/…", "Quarterly upgrade", "alice-status", `"plan": "pro"`, `"check_results_retained_count": 12`, `"role": "owner"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("export missing %q", want)
 		}
 	}
-	for _, leaked := range []string{"bob@example.com", "Bob's Secret Site", "cus_secretid", "sub_secretid", "$argon2id", "monitor-api-key"} {
+	for _, leaked := range []string{"bob@example.com", "Bob's Secret Site", "cus_secretid", "sub_secretid", "$argon2id", "monitor-api-key", "enc:v1", "SEALEDBLOB"} {
 		if strings.Contains(body, leaked) {
 			t.Errorf("export leaked %q", leaked)
 		}

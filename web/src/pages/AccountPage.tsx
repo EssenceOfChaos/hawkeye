@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { api, ApiError } from '../api'
+import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
@@ -54,7 +55,7 @@ function ChangePassword() {
           hint="At least 10 characters." value={next} onChange={(e) => setNext(e.target.value)} error={errors.next} />
         <Field label="Repeat new password" type="password" autoComplete="new-password" required value={confirm}
           onChange={(e) => setConfirm(e.target.value)} error={errors.confirm} />
-        {error && <p role="alert" className="error">{error}</p>}
+        {error && <Alert>{error}</Alert>}
         {done && <p role="status">Password changed. Other devices were signed out.</p>}
         <button type="submit" disabled={busy}>Change password</button>
       </form>
@@ -94,7 +95,7 @@ function ExportData() {
     <section className="card narrow-left" aria-labelledby="export-h">
       <h2 id="export-h">Export your data</h2>
       <p>Download your account details, organizations, monitors, incidents and alert recipients as a JSON file. Passwords and payment details are never included.</p>
-      {error && <p role="alert" className="error">{error}</p>}
+      {error && <Alert>{error}</Alert>}
       <button onClick={() => void download()} disabled={busy}>{busy ? 'Preparing…' : 'Download my data'}</button>
     </section>
   )
@@ -134,7 +135,7 @@ function DeleteAccount({ email }: { email: string }) {
       <form onSubmit={submit}>
         <Field label="Your password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         <Field label={`Type ${email} to confirm`} value={typed} autoComplete="off" required onChange={(e) => setTyped(e.target.value)} />
-        {error && <p role="alert" className="error">{error}</p>}
+        {error && <Alert>{error}</Alert>}
         <button type="submit" className="danger" disabled={busy || !matches || password === ''}>Delete my account</button>
       </form>
     </section>

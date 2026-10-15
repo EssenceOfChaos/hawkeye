@@ -27,7 +27,7 @@ const SUPPORT = 'support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> October 14, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> October 15, 2026</p>
       <p>
         HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -52,7 +52,7 @@ export function PrivacyPage() {
         <li>Your password, which we never store. We keep only a one-way hash made with the Argon2id algorithm.</li>
         <li>Whether your email address has been verified, and the name of the workspace (organization) created for your account.</li>
         <li>Your subscription plan, account status, and related service records.</li>
-        <li>Alert recipients you add (email addresses you ask us to notify, and Slack or webhook URLs, which we store encrypted) and their confirmation status.</li>
+        <li>Alert destinations you add: email addresses you ask us to notify and their confirmation status, and Slack or webhook URLs. We store those URLs and any webhook signing secret encrypted, and show you only the host name afterwards.</li>
         <li>Communications you send to us. If you use our contact form we receive the name, email address, subject, message, and optional website address you enter and, if you are signed in, your account identifier and plan.</li>
       </ul>
       <p>
@@ -67,6 +67,7 @@ export function PrivacyPage() {
         <li>For API checks, the request you configure: the request method, custom headers, a request body, authentication credentials (a username and password, a bearer token, or an API key), and the response checks you define.</li>
         <li>For each check: the time, the HTTP status code, the response time, whether your response checks passed, and a short error category if it failed. To evaluate response checks we read the response (up to the first 1 MB) while the check runs; we do not store its content.</li>
         <li>Incident and recovery records, alert settings, and records of the notifications we sent.</li>
+        <li>Maintenance windows you schedule: their names, times, repeat settings, and the monitors they cover. Checks made during a window are recorded and marked as such.</li>
         <li>For HTTPS monitors, the expiry date of the SSL certificate your website presents, and when we last read it. We do not store the certificate itself or any other detail from it.</li>
         <li>Usage counts needed to enforce your plan’s limits.</li>
       </ul>
@@ -75,6 +76,14 @@ export function PrivacyPage() {
         information in monitor URLs, custom headers, or request bodies. Put credentials only in the monitor’s Authentication fields: they are stored encrypted, are never shown again
         after you save them, are not included in data exports, and are sent only to the website or API you configure (they are removed from any request redirected to a different host). Custom headers and request bodies are not encrypted, are visible to the other members of your organization, and are included in your data export. HawkEye is designed to monitor websites and endpoints that you are authorized to monitor; do not configure monitoring in a way that exposes
         information you are not authorized to share.
+      </p>
+
+      <h3>Information you choose to publish</h3>
+      <p>
+        If you create a public status page, anyone who has its address can see the page title and description you enter, the names you give the monitors you add to it, each one’s current state (up, down, or under maintenance),
+        daily and overall uptime percentages, and the start and end times of recent incidents. We do not show monitored web addresses, error messages, or the causes of incidents on the page. The page is not visible until you
+        publish it, and you can unpublish or delete it at any time. Do not put personal or confidential information in the title, description, or monitor names. Public status pages may be cached by us for a short time (under a minute)
+        and, once published, may be copied or indexed by others, which we cannot control.
       </p>
 
       <h3>C. Technical and security information</h3>
@@ -168,6 +177,16 @@ export function PrivacyPage() {
       <h3>E. At your direction</h3>
       <p>We may disclose information when you request or authorize us to do so, for example by adding an alert recipient.</p>
 
+      <h3>F. Slack and webhook destinations</h3>
+      <p>
+        If you add a Slack or webhook destination, we send alert content to the address you provide: the monitor’s name and web address, the time of the event, a short description of the failure (or the certificate
+        expiry date), and a link back to HawkEye. That destination is operated by you or by a third party you chose (for example Slack), and its handling of the information is governed by its own terms and policies, not this
+        Policy. Treat these addresses as secrets: anyone who has a Slack webhook address can post to your channel.
+      </p>
+
+      <h3>G. Information on a public status page</h3>
+      <p>Information you publish on a status page (see Section 2) is visible to anyone with its address.</p>
+
       <p>
         We do not sell personal information or share it for cross-context behavioral advertising, and we do not use it for targeted advertising.
       </p>
@@ -191,8 +210,8 @@ export function PrivacyPage() {
         <li><strong>Billing records:</strong> Stripe keeps the transaction records it is legally required to keep. We keep only the identifiers and subscription state described in Section 2D, and delete them when you delete your account.</li>
       </ul>
       <p>
-        <strong>Closing your account.</strong> You can delete your account at any time under <Link to="/account">Account</Link>. Deletion is immediate: your account, your workspaces and monitoring history, and your alert recipients
-        are removed, and your subscription is cancelled and your Stripe customer record deleted. You can download your data first using the export on the same page. If you own a workspace that has other members, you must remove them or
+        <strong>Closing your account.</strong> You can delete your account at any time under <Link to="/account">Account</Link>. Deletion is immediate: your account, your workspaces and monitoring history, your alert destinations (including stored Slack and webhook addresses), maintenance windows and
+        status page are removed, and your subscription is cancelled and your Stripe customer record deleted. You can download your data first using the export on the same page. If you own a workspace that has other members, you must remove them or
         transfer it before you can delete your account.
       </p>
       <p>
@@ -306,7 +325,7 @@ export function PrivacyPage() {
 export function TermsPage() {
   return (
     <Shell title="HawkEye Terms and Conditions" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> October 14, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> October 15, 2026</p>
       <p>
         These Terms and Conditions (“Terms”) govern access to and use of the HawkEye website, applications, and website-monitoring services (together, the “Service”).
       </p>
@@ -347,7 +366,9 @@ export function TermsPage() {
         <li>Response-time measurements and monitoring history.</li>
         <li>SSL certificate expiry tracking for HTTPS monitors, with email warnings as the expiry date approaches (currently 30, 14, 7, and 1 days before, and when the certificate has expired).</li>
         <li>Incident detection, incident records, and recovery status.</li>
-        <li>Email notifications.</li>
+        <li>Alert notifications by email, to a Slack channel, or to a webhook address you provide, as described in Section 9.</li>
+        <li>An optional public status page showing the monitors you choose.</li>
+        <li>Maintenance windows, on the plans that include them, during which alerts and incidents are suppressed for the monitors you choose.</li>
         <li>Dashboard views and historical uptime and response-time reports.</li>
         <li>Plan-based monitor limits, check intervals, and history-retention periods.</li>
       </ul>
@@ -365,6 +386,8 @@ export function TermsPage() {
       <p>You must not use HawkEye to:</p>
       <ul>
         <li>Monitor a website or endpoint without the necessary authorization.</li>
+        <li>Send alerts to a Slack channel or webhook address that you are not authorized to use, or use alerts to send unsolicited or unlawful content to others.</li>
+        <li>Publish on a status page anything that is unlawful, infringing, misleading, or that you are not authorized to publish, including another party’s name or marks in a way that suggests their endorsement.</li>
         <li>Conduct denial-of-service attacks, stress tests, or excessive request campaigns.</li>
         <li>Attempt to bypass authentication, access controls, rate limits, or security measures.</li>
         <li>Probe internal networks, private systems, or infrastructure without explicit authorization. Checks are restricted from reaching private networks, and attempts to get around that restriction are prohibited.</li>
@@ -395,6 +418,10 @@ export function TermsPage() {
         <li><strong>Pro:</strong> up to 50 monitors, checks every minute, and 90 days of monitoring history.</li>
         <li><strong>Agency:</strong> up to 200 monitors, checks every minute, and 365 days of monitoring history.</li>
       </ul>
+      <p>
+        Every plan includes email, Slack, and webhook alerts and one public status page. Maintenance windows are included in the Pro and Agency plans. If you move to a plan that does not include maintenance windows, windows you
+        already created keep working, but you cannot create new ones.
+      </p>
       <p>
         We enforce plan limits through the application. If your account exceeds the limits of a plan (for example, after a downgrade), your existing monitors are kept, but we may prevent you from adding monitors or
         using features reserved for a higher plan until you are within the limits, consistently with the plan terms and applicable law.
@@ -487,13 +514,35 @@ export function TermsPage() {
         safety-critical monitoring system, or a substitute for your own operational and security controls.
       </p>
 
-      <h2>9. Alerts and Notifications</h2>
+      <h2>9. Alerts, Maintenance Windows, and Status Pages</h2>
+
+      <h3>A. Alerts and notifications</h3>
       <p>
-        You may configure the Service to send email notifications about incidents and recovery events. Email is currently the only notification channel. You are responsible for providing a valid notification address,
-        confirming it as the Service requires, and keeping your notification settings current.
+        You may configure the Service to send notifications about incidents, recovery events, and approaching certificate expiry to email addresses, to a Slack channel through a Slack incoming-webhook address, and to a webhook
+        address of your choice. SMS is not currently available. You are responsible for providing valid destinations, confirming email addresses as the Service requires,
+        keeping your notification settings current, and for the systems that receive webhooks, including verifying the signature we send and handling repeated deliveries.
       </p>
       <p>
-        Email delivery may be delayed, filtered, rejected, or interrupted by systems outside HawkEye’s control. You should not rely on an email alert as your sole means of detecting or responding to a critical event.
+        A Slack or webhook address is a credential. Keep it confidential: anyone who has it may be able to post to your Slack channel or to send requests to your endpoint pretending to be HawkEye. We store these addresses
+        encrypted, but you are responsible for revoking and replacing any that you believe have been exposed. Slack and your own endpoints are third-party systems outside HawkEye’s control, and their terms apply to your use of them.
+      </p>
+      <p>
+        Alerts may be delayed, filtered, rejected, rate-limited, duplicated, or interrupted by systems outside HawkEye’s control, including email providers, Slack, and your own servers. We retry failed deliveries for a limited
+        time and then stop. You should not rely on any single alert as your sole means of detecting or responding to a critical event.
+      </p>
+
+      <h3>B. Maintenance windows</h3>
+      <p>
+        During a maintenance window you schedule, the Service continues to run checks and record them, but does not open incidents, send alerts, or change a monitor’s status for the monitors the window covers, and excludes
+        those checks from uptime figures. You are responsible for the times, repeat settings, and monitors you select. We do not alert you to problems that occur during a window. If a monitor is still unavailable when a window ends,
+        alerting resumes only after the Service’s normal confirmation checks. Repeating windows run at fixed 24-hour or 7-day intervals in UTC and do not adjust for daylight saving time.
+      </p>
+
+      <h3>C. Public status pages</h3>
+      <p>
+        If you publish a status page, the information described in the Privacy Policy becomes visible to anyone with its address. You are solely responsible for what you publish and for choosing the monitors and names shown.
+        Status pages are generated automatically from check results, which are periodic and may be incomplete, delayed, or wrong. A status page is not a guarantee, certification, or statement by HawkEye about the availability of
+        your services, and you should not present it as one. We may unpublish or remove a status page that violates these Terms.
       </p>
 
       <h2>10. Data, Monitoring History, and Retention</h2>

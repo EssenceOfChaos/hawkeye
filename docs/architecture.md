@@ -22,7 +22,7 @@ internal/scheduler     finds due monitors, enqueues jobs, jitter, backpressure
 internal/worker        bounded-concurrency polling loops, metrics sampler
 internal/metrics       Prometheus metrics
 internal/incidents     incident engine (opened/resolved inside the result transaction) and incident queries
-internal/maintenance windows (rule in SQL: `in_maintenance`, migration `000013`; `checks.Store.Record` skips state changes and incidents while one applies), internal/notifications recipients + confirmation, enqueue (idempotent), email rendering, webhook/Slack channels (`channels.go`: sealed URLs, signing, SSRF-safe delivery; migration `000012`), retrying dispatcher
+internal/statuspage public status page (`/status/<slug>`; migration `000014`; 30 s cache; exposes only owner-chosen monitor names, states, daily uptime and incident times), internal/maintenance windows (rule in SQL: `in_maintenance`, migration `000013`; `checks.Store.Record` skips state changes and incidents while one applies), internal/notifications recipients + confirmation, enqueue (idempotent), email rendering, webhook/Slack channels (`channels.go`: sealed URLs, signing, SSRF-safe delivery; migration `000012`), retrying dispatcher
 internal/reports       range resolution (plan-clamped), check-based uptime, bucketed series, check history, dashboard summary
 internal/retention     batched per-plan data retention + credential housekeeping (runs inside cmd/worker)
 internal/billing       Stripe: provider interface (+ SDK implementation and fake), checkout/portal/cancel/resync, signed webhook intake, event processing

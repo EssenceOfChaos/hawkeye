@@ -24,6 +24,7 @@ import (
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/ratelimit"
+	"hawkeye/internal/statuspage"
 )
 
 // Pinger reports whether a dependency (PostgreSQL) is usable.
@@ -44,6 +45,7 @@ type Options struct {
 	Monitors      *monitors.Service
 	Notifications *notifications.Service
 	Maintenance   *maintenance.Service
+	StatusPages   *statuspage.Service
 	Billing       *billing.Service
 	Account       *account.Service
 	Contact       *contact.Service
@@ -153,7 +155,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, billing: o.Billing, account: o.Account, contact: o.Contact, log: o.Logger, secureCookies: o.SecureCookies}
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, statusPages: o.StatusPages, billing: o.Billing, account: o.Account, contact: o.Contact, log: o.Logger, secureCookies: o.SecureCookies}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		TokenLookup:    "header:X-CSRF-Token",
@@ -223,6 +225,18 @@ func registerAPI(e *echo.Echo, o Options) {
 	a.POST("/resend-verification", h.resendVerification, h.requireAuth, limit("resend"))
 
 	v1.GET("/plans", h.listPlans)
+	// The public status page: unauthenticated, so it gets its own, much higher, per-IP budget (it is also cached for 30 s).
+	var publicLimit echo.MiddlewareFunc
+	if h.limits.l != nil {
+		publicLimit = h.limits.byIP("public-status", 120, time.Minute)
+	} else {
+		publicLimit = middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+			Store:               middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(2), Burst: 120, ExpiresIn: time.Hour}),
+			IdentifierExtractor: func(c echo.Context) (string, error) { return c.RealIP(), nil },
+			DenyHandler:         func(echo.Context, string, error) error { return errRateLimited },
+		})
+	}
+	v1.GET("/public/status/:slug", h.publicStatus, publicLimit)
 	// Public contact form: per-IP burst and hourly caps, a spam trap, and per-address limits on the acknowledgement email.
 	contactLimits := []echo.MiddlewareFunc{limit("contact")}
 	if h.limits.l != nil {
@@ -267,6 +281,9 @@ func registerAPI(e *echo.Echo, o Options) {
 
 	// Alert recipients: any member can view; only owners change them; adding a recipient needs a verified
 	// email and is rate-limited because it causes mail to be sent to a third party.
+	scoped.GET("/status-page", h.getStatusPage)
+	scoped.PUT("/status-page", h.putStatusPage, requireOwner)
+	scoped.DELETE("/status-page", h.deleteStatusPage, requireOwner)
 	scoped.GET("/maintenance-windows", h.listMaintenance)
 	scoped.POST("/maintenance-windows", h.createMaintenance, requireOwner)
 	scoped.DELETE("/maintenance-windows/:windowID", h.deleteMaintenance, requireOwner)

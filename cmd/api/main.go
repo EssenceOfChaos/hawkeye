@@ -31,6 +31,7 @@ import (
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/ratelimit"
+	"hawkeye/internal/statuspage"
 )
 
 func main() {
@@ -116,6 +117,7 @@ func run() error {
 		Account:       account.NewService(pool, authSvc, provider, mailer, log, cfg.AppBaseURL),
 		Contact:       contact.NewService(mailer, log, cfg.SupportAddress, cfg.EmailFromAddress, cfg.AppBaseURL),
 		Maintenance:   maintenance.NewService(pool, planSvc),
+		StatusPages:   statuspage.NewService(pool),
 		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress, notifications.WithSecretBox(box)),
 		SecureCookies: cfg.IsProduction(), AuthRateLimitPerMin: cfg.AuthRateLimitPerMin, TrustForwardedFor: cfg.TrustForwardedFor,
 		HSTS: cfg.IsProduction(), Metrics: apiMetrics, Limiter: ratelimit.New(pool), Errors: reporter,

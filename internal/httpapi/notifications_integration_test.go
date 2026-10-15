@@ -331,3 +331,59 @@ func TestMaintenanceWindowsArePaidAndOwnerOnly(t *testing.T) {
 		t.Fatalf("bad id: %d", r.Status)
 	}
 }
+
+func TestStatusPageIsPublicOnlyOnceTheOwnerPublishesIt(t *testing.T) {
+	e := newEnv(t, 1000)
+	owner, _ := e.register(t, "owner@example.com")
+	other, _ := e.register(t, "other@example.com")
+	mon := owner.call("POST", "/api/v1/monitors", monitorBody("Website"))
+	if mon.Status != 201 {
+		t.Fatalf("%d %v", mon.Status, mon.Body)
+	}
+	id := mon.Body["monitor"].(map[string]any)["id"].(string)
+
+	anon := e.newClient(t)
+	if r := anon.do("GET", "/api/v1/public/status/acme", nil, false); r.Status != 404 {
+		t.Fatalf("no page yet: %d", r.Status)
+	}
+	if r := anon.do("PUT", "/api/v1/status-page", map[string]any{}, true); r.Status == 200 {
+		t.Fatal("anonymous callers cannot edit")
+	}
+	if g := owner.call("GET", "/api/v1/status-page", nil); g.Status != 200 || g.Body["status_page"] != nil {
+		t.Fatalf("%d %v", g.Status, g.Body)
+	}
+
+	cfg := map[string]any{"slug": "acme", "title": "Acme status", "published": false, "monitors": []map[string]any{{"monitor_id": id, "display_name": "Website"}}}
+	if r := owner.call("PUT", "/api/v1/status-page", cfg); r.Status != 200 {
+		t.Fatalf("%d %v", r.Status, r.Body)
+	}
+	if r := anon.do("GET", "/api/v1/public/status/acme", nil, false); r.Status != 404 {
+		t.Fatalf("a draft is not public: %d", r.Status)
+	}
+	cfg["published"] = true
+	if r := owner.call("PUT", "/api/v1/status-page", cfg); r.Status != 200 {
+		t.Fatalf("%d %v", r.Status, r.Body)
+	}
+	r := anon.do("GET", "/api/v1/public/status/acme", nil, false)
+	if r.Status != 200 || r.Body["title"] != "Acme status" || r.Body["overall"] != "operational" || len(r.Body["monitors"].([]any)) != 1 {
+		t.Fatalf("%d %v", r.Status, r.Body)
+	}
+
+	// Another organization cannot take the address, nor use this organization's monitor.
+	cfg2 := map[string]any{"slug": "ACME", "title": "Copycat", "monitors": []map[string]any{}}
+	if r := other.call("PUT", "/api/v1/status-page", cfg2); r.Status != 409 || errCode(r) != "SLUG_TAKEN" {
+		t.Fatalf("%d %v", r.Status, r.Body)
+	}
+	cfg2["slug"] = "copycat"
+	cfg2["monitors"] = []map[string]any{{"monitor_id": id}}
+	if r := other.call("PUT", "/api/v1/status-page", cfg2); r.Status != 400 || errCode(r) != "VALIDATION_ERROR" {
+		t.Fatalf("%d %v", r.Status, r.Body)
+	}
+
+	if r := owner.call("DELETE", "/api/v1/status-page", nil); r.Status != 204 {
+		t.Fatalf("%d", r.Status)
+	}
+	if r := anon.do("GET", "/api/v1/public/status/acme", nil, false); r.Status != 404 {
+		t.Fatalf("deleted: %d", r.Status)
+	}
+}

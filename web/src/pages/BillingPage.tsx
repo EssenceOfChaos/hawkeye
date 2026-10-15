@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { api, ApiError, type BillingSubscription, type Plan, type Usage } from '../api'
+import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
@@ -115,18 +116,18 @@ export function BillingPage() {
 
       {checkout === 'canceled' && <p role="status">Checkout was canceled. You haven’t been charged.</p>}
       {waiting && !sub?.paid_access && (
-        <p role="status" className="banner inline">
+        <Alert tone="warning" role="status">
           Thanks! We’re waiting for the payment provider to confirm your payment. This page updates automatically — your plan changes only once it’s confirmed.
-        </p>
+        </Alert>
       )}
       {checkout === 'success' && !waiting && sub?.paid_access && <p role="status">Your {sub.plan.name} plan is active. Thank you!</p>}
       {checkout === 'success' && !waiting && sub && !sub.paid_access && (
-        <p role="alert" className="error">
+        <Alert>
           We haven’t received confirmation yet. If you were charged, your plan will update shortly; if it doesn’t, contact support.
-        </p>
+        </Alert>
       )}
-      {error && <p role="alert" className="error">{error}</p>}
-      {!sub && !error && <p role="status">Loading…</p>}
+      {error && <Alert>{error}</Alert>}
+      {!sub && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>}
 
       {sub && status && usage && (
         <section className="card" aria-labelledby="cur-h">
@@ -146,10 +147,10 @@ export function BillingPage() {
             {Math.round(usage.plan.minimum_check_interval_seconds / 60)} min · {usage.plan.history_retention_days} days of history
           </p>
           {usage.over_limit && (
-            <p role="alert" className="error">
+            <Alert>
               You have {usage.monitors_used} monitors but your plan includes {usage.monitor_limit}. Nothing has been deleted. To add monitors,
               delete {usage.monitors_used - usage.monitor_limit} or upgrade.
-            </p>
+            </Alert>
           )}
           {sub.paid_access && isOwner && (
             <div className="row">
@@ -184,6 +185,9 @@ export function BillingPage() {
                     <li>{p.max_monitors} monitors</li>
                     <li>Checks every {Math.round(p.minimum_check_interval_seconds / 60)} min</li>
                     <li>{p.history_retention_days} days of history</li>
+                    <li>Email, Slack and webhook alerts</li>
+                    <li>Public status page</li>
+                    {p.maintenance_enabled && <li>Maintenance windows</li>}
                   </ul>
                   {!current && p.monthly_price_cents > 0 && !sub.paid_access && (
                     <button className="primary" disabled={!canBuy || busy !== null}
