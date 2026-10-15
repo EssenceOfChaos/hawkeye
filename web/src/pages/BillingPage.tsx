@@ -185,6 +185,7 @@ export function BillingPage() {
                     <li>{p.max_monitors} monitors</li>
                     <li>Checks every {Math.round(p.minimum_check_interval_seconds / 60)} min</li>
                     <li>{p.history_retention_days} days of history</li>
+                    {(p.max_regions ?? 1) > 1 && <li>Checks from up to {p.max_regions} locations</li>}
                     <li>Email, Slack and webhook alerts</li>
                     <li>Public status page</li>
                     {p.maintenance_enabled && <li>Maintenance windows</li>}

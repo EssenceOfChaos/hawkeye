@@ -55,10 +55,17 @@ type Worker struct {
 	log     *slog.Logger
 	rep     errtrack.Reporter
 	box     *secrets.Box // opens stored monitor credentials
+	region  string       // only jobs queued for this region are run
 }
 
 func New(pool *pgxpool.Pool, checker *checks.Checker, store *checks.Store, cfg Config, m *metrics.Metrics, log *slog.Logger) *Worker {
-	return &Worker{pool: pool, checker: checker, store: store, cfg: cfg.withDefaults(), m: m, log: log, rep: errtrack.Noop{}}
+	return &Worker{pool: pool, checker: checker, store: store, cfg: cfg.withDefaults(), m: m, log: log, rep: errtrack.Noop{}, region: queue.DefaultRegion}
+}
+
+// WithRegion makes the worker run only the jobs queued for region, and label its results with it.
+func (w *Worker) WithRegion(region string) *Worker {
+	w.region = region
+	return w
 }
 
 // WithSecrets sets the cipher used to open stored monitor credentials. Without it, checks that need a credential fail and are retried.
@@ -103,7 +110,7 @@ func (w *Worker) Run(ctx context.Context) {
 // ProcessOne claims and executes at most one job. It reports whether a job was found.
 func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 	w.m.LastPollUnix.SetToCurrentTime()
-	job, dropped, err := queue.Claim(ctx, w.pool, w.cfg.Lease, w.cfg.MaxAttempts)
+	job, dropped, err := queue.ClaimRegion(ctx, w.pool, w.region, w.cfg.Lease, w.cfg.MaxAttempts)
 	if dropped > 0 {
 		w.m.JobsDropped.Add(float64(dropped))
 		w.log.Warn("dropped jobs that exhausted their attempts", "count", dropped)
@@ -157,6 +164,7 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 		w.retry(ctx, job)
 		return true, nil
 	}
+	res.Region = w.region
 	_, err = w.store.Record(ctx, job.MonitorID, res)
 	switch {
 	case errors.Is(err, checks.ErrDiscarded):

@@ -82,6 +82,18 @@ const FEATURES = [
   },
 ]
 
+// Shown only when this installation really offers more than one location (the plans report how many each allows).
+const LOCATION_FEATURE = {
+  icon: brand.icons.shield,
+  title: 'Checks from several locations',
+  lead: 'One network hiccup is not an outage.',
+  text: 'On paid plans each monitor can be checked from several locations at once. A monitor counts as down only when most of its locations agree, so a problem at a single location never wakes you up, and you can see how each location sees your site.',
+}
+const LOCATION_FAQ = {
+  q: 'Can HawkEye check from more than one location?',
+  a: 'Yes, on paid plans. Pick the locations for each monitor; HawkEye checks from all of them and raises an incident only when most of them see a failure, which avoids false alarms from a problem at one location. The monitor page shows how each location sees your site. Free monitors are checked from the primary location.',
+}
+
 const AUDIENCES = [
   { title: 'Freelancers', lead: 'Spend less time checking. More time creating.', text: 'You’re responsible for the website, the fixes, the updates and the client relationship. HawkEye adds an automated layer of visibility, so you can identify availability problems without manually checking every project.' },
   { title: 'Web agencies', lead: 'Keep an eye on every client website.', text: 'As your client list grows, so does the work of keeping track of it. Centralize website monitoring, review incidents across projects, and use history to show the ongoing care you provide.' },
@@ -126,6 +138,7 @@ function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: Plan; fe
         <li>{plan.max_monitors} website monitors</li>
         <li>Checks every {mins} minute{mins === 1 ? '' : 's'}</li>
         <li>{plan.history_retention_days} days of history</li>
+        {(plan.max_regions ?? 1) > 1 && <li>Checks from up to {plan.max_regions} locations</li>}
         <li>Website and API monitoring</li>
         <li>SSL certificate expiry warnings</li>
         <li>Email, Slack and webhook alerts</li>
@@ -146,6 +159,7 @@ function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: Plan; fe
 export function LandingPage() {
   const { status } = useAuth()
   const [plans, setPlans] = useState<Plan[] | null>(null)
+  const multiLocation = plans?.some((p) => (p.max_regions ?? 1) > 1) ?? false
   const [billingEnabled, setBillingEnabled] = useState(false)
 
   useEffect(() => {
@@ -253,7 +267,7 @@ export function LandingPage() {
         <h2 id="features-h">Everything you need to keep watch.</h2>
         <p>Know what’s working, see what isn’t, and understand what happened.</p>
         <Reveal as="ul" className="features">
-          {FEATURES.map((f) => (
+          {[...FEATURES, ...(multiLocation ? [LOCATION_FEATURE] : [])].map((f) => (
             <li key={f.title} className="feature" data-reveal>
               <img src={f.icon} alt="" width={64} height={64} />
               <h3>{f.title}</h3>
@@ -335,7 +349,7 @@ export function LandingPage() {
       <section aria-labelledby="faq-h" className="section">
         <h2 id="faq-h" className="centered">Frequently asked questions</h2>
         <Reveal className="faq">
-          {FAQ.map((f) => (
+          {[...FAQ, ...(multiLocation ? [LOCATION_FAQ] : [])].map((f) => (
             <details key={f.q} className="d-collapse d-collapse-arrow border border-base-300 bg-base-100" data-reveal>
               <summary className="d-collapse-title font-semibold">{f.q}</summary>
               <div className="d-collapse-content">

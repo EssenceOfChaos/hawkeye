@@ -91,6 +91,7 @@ type ExportMonitor struct {
 	Body       *string            `json:"body"`
 	Auth       ExportAuth         `json:"auth"`
 	Assertions []checks.Assertion `json:"assertions"`
+	Regions    []string           `json:"regions"`
 }
 
 // ExportAuth names a monitor's authentication method and its non-secret settings.
@@ -180,7 +181,7 @@ func (s *Service) Export(ctx context.Context, userID uuid.UUID) (Export, error) 
 func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 	o.Monitors, o.Incidents, o.AlertRecipients = []ExportMonitor{}, []ExportIncident{}, []ExportRecipient{}
 	rows, err := s.pool.Query(ctx, `SELECT id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds, enabled, current_status, created_at,
-		request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), assertions
+		request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), assertions, regions
 		FROM monitors WHERE organization_id = $1 AND deleted_at IS NULL ORDER BY created_at, id`, o.ID)
 	if err != nil {
 		return err
@@ -188,7 +189,7 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 	for rows.Next() {
 		var m ExportMonitor
 		if err := rows.Scan(&m.ID, &m.Name, &m.URL, &m.Method, &m.ExpectedStatusCode, &m.CheckIntervalSeconds, &m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.CreatedAt,
-			&m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username, &m.Auth.HeaderName, &m.Assertions); err != nil {
+			&m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username, &m.Auth.HeaderName, &m.Assertions, &m.Regions); err != nil {
 			rows.Close()
 			return err
 		}

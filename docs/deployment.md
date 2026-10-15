@@ -99,6 +99,20 @@ Migrations are **forward-only**. Make every schema change _expand/contract_: rel
 
 `api` is stateless (sessions, rate limits and the job queue live in PostgreSQL), so run several replicas behind Caddy. Workers scale horizontally (jobs are claimed with `FOR UPDATE SKIP LOCKED`; `DISABLE_SCHEDULER=true` on all but one or two is fine, duplicates are harmless). A single host is a single point of failure: for HA, put the database on a managed HA service and run the stack on two hosts behind a load balancer.
 
+## Checking from several locations
+
+By default there is one location, `primary`, and nothing to configure. To offer more:
+
+1. Set the same `CHECK_REGIONS` on the API, the scheduler and every worker, for example `CHECK_REGIONS=us-east:US East,eu-west:Europe,ap-south:Asia`. The first entry is the primary: monitors that chose no location run there, so **do not rename or reorder it** once monitors exist (old results are labelled with its code).
+2. Run at least one worker per location, started with `WORKER_REGION=<code>` (default: the primary). Workers claim only the jobs queued for their location. Exactly one or two workers (any location) should run the scheduler; set `DISABLE_SCHEDULER=true` on the rest.
+3. Plans decide how many locations one monitor may use (`plans.max_regions`: Free 1, Pro 3, Agency 5), never more than you have configured. With one location configured nobody sees any multi-location options.
+
+**How a decision is made.** Each location keeps its own failure streak (`FAILURE_THRESHOLD` / `RECOVERY_THRESHOLD` apply per location). A monitor is down while a **majority** of its locations are down (all of them if it has two), so one location's network trouble never opens an incident. Uptime figures count the checks from all locations.
+
+**Reaching the database.** Workers talk to PostgreSQL directly: they claim jobs, read monitor settings *including the decrypted credentials of the monitors they check* (they hold `SECRETS_ENCRYPTION_KEY`), and write results. A worker in another data center therefore needs a private, encrypted path to the database (a VPN or private network between the sites, or the managed database's private endpoint) and `sslmode=verify-full`. **Do not expose PostgreSQL to the public internet**, and treat every location's host as trusted infrastructure. If you cannot give remote hosts that access, keep all workers together and run extra locations only once a probe API exists (not built yet).
+
+**A location with no workers.** Its jobs queue up and never run; that location's streak stops changing, and the rest of the quorum decides as long as a majority of locations are healthy. Backpressure is per location, so it does not slow the others. Watch `hawkeye_queue_oldest_age_seconds` (not yet per location) and remove the location from `CHECK_REGIONS` if you retire it: monitors that listed it fall back to the locations that remain.
+
 ## Local production-like stack
 
 `make smoke-up` builds the production images and starts them with a local Postgres, a private-CA TLS mail catcher and a self-signed site on `https://localhost:8443`; `make smoke` runs the checks; `make smoke-down` removes it. It uses its own Compose project (`hawkeye-smoke`) and never touches the dev stack.

@@ -76,9 +76,9 @@ func run() error {
 	metrics.RegisterPool(m.Registry, pool)
 	w := worker.New(pool,
 		checks.NewChecker(safehttp.Config{}), // strict production SSRF policy
-		checks.NewStore(pool, checks.Thresholds{Failure: cfg.FailureThreshold, Recovery: cfg.RecoveryThreshold}, incidents.Engine{}),
+		checks.NewStore(pool, checks.Thresholds{Failure: cfg.FailureThreshold, Recovery: cfg.RecoveryThreshold}, incidents.Engine{}).WithRegions(cfg.Regions()),
 		worker.Config{Concurrency: cfg.WorkerConcurrency, Lease: cfg.JobLease, MaxAttempts: cfg.JobMaxAttempts, PollInterval: cfg.PollInterval},
-		m, log).WithReporter(reporter).WithSecrets(box)
+		m, log).WithReporter(reporter).WithSecrets(box).WithRegion(cfg.Region())
 
 	var wg sync.WaitGroup
 	spawn := func(fn func()) {
@@ -87,7 +87,7 @@ func run() error {
 	}
 	spawn(func() { w.Run(ctx) })
 	if cfg.RunScheduler {
-		sched := scheduler.New(pool, scheduler.Config{Interval: cfg.SchedulerInterval, Batch: cfg.SchedulerBatch, MaxQueueDepth: cfg.QueueMaxDepth}, m, log).WithReporter(reporter)
+		sched := scheduler.New(pool, scheduler.Config{Interval: cfg.SchedulerInterval, Batch: cfg.SchedulerBatch, MaxQueueDepth: cfg.QueueMaxDepth}, m, log).WithReporter(reporter).WithRegions(cfg.Regions())
 		spawn(func() { sched.Run(ctx) })
 	}
 	if cfg.RunRetention {

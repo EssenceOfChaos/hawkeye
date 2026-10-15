@@ -134,6 +134,7 @@ type Result struct {
 	ErrorCategory  *string   `json:"error_category"`
 	ErrorSummary   *string   `json:"error_summary"`
 	InMaintenance  bool      `json:"in_maintenance"` // recorded during a maintenance window; not counted in uptime
+	Region         string    `json:"region"`         // where the check ran
 }
 
 // Results returns one page of a monitor's check history (newest first) and the total in the range.
@@ -144,7 +145,7 @@ func Results(ctx context.Context, db DB, orgID, monitorID uuid.UUID, r Range, li
 		return nil, 0, err
 	}
 	args = append(args, limit, offset)
-	rows, err := db.Query(ctx, fmt.Sprintf(`SELECT r.id, r.checked_at, r.success, r.http_status_code, r.response_time_ms, r.error_category, r.error_summary, r.in_maintenance
+	rows, err := db.Query(ctx, fmt.Sprintf(`SELECT r.id, r.checked_at, r.success, r.http_status_code, r.response_time_ms, r.error_category, r.error_summary, r.in_maintenance, r.region
 		FROM check_results r JOIN monitors m ON m.id = r.monitor_id WHERE %s
 		ORDER BY r.checked_at DESC, r.id DESC LIMIT $%d OFFSET $%d`, where, len(args)-1, len(args)), args...)
 	if err != nil {
@@ -155,7 +156,7 @@ func Results(ctx context.Context, db DB, orgID, monitorID uuid.UUID, r Range, li
 	for rows.Next() {
 		var x Result
 		var code *int16
-		if err := rows.Scan(&x.ID, &x.CheckedAt, &x.Success, &code, &x.ResponseTimeMs, &x.ErrorCategory, &x.ErrorSummary, &x.InMaintenance); err != nil {
+		if err := rows.Scan(&x.ID, &x.CheckedAt, &x.Success, &code, &x.ResponseTimeMs, &x.ErrorCategory, &x.ErrorSummary, &x.InMaintenance, &x.Region); err != nil {
 			return nil, 0, err
 		}
 		if code != nil {

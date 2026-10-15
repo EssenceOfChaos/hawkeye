@@ -9,12 +9,13 @@ afterEach(() => vi.unstubAllGlobals())
 const json = (status: number, body: unknown) =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
 
-function setup(postResponse: () => Promise<Response>) {
+function setup(postResponse: () => Promise<Response>, regionsResponse: () => Promise<Response> = () => json(200, {})) {
   document.cookie = 'csrf_token=t; path=/'
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string, init?: RequestInit) => {
       if (url.endsWith('/usage')) return json(200, { usage: { plan: { minimum_check_interval_seconds: 300 } } })
+      if (url.endsWith('/regions')) return regionsResponse()
       if (init?.method === 'POST') return postResponse()
       return json(200, {})
     }),
@@ -157,5 +158,28 @@ describe('MonitorFormPage editing', () => {
     await userEvent.selectOptions(screen.getByLabelText('Request method'), 'POST')
     await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/Verify your email address/)
+  })
+
+  it('offers locations only when the installation has several, limited by the plan', async () => {
+    let sent: { regions?: string[] } = {}
+    setup(
+      () => json(201, { monitor: {} }),
+      () => json(200, { regions: [{ code: 'us', name: 'US East' }, { code: 'eu', name: 'Europe' }, { code: 'ap', name: 'Asia' }], primary: 'us', max_regions: 2 }),
+    )
+    const post = (fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock
+    await fill('Home')
+    expect(await screen.findByLabelText('US East')).toBeChecked() // the primary is the default
+    await userEvent.click(screen.getByLabelText('Europe'))
+    expect(screen.getByLabelText('Asia')).toBeDisabled() // the plan allows two
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    await waitFor(() => expect(post.calls.some(([, init]) => init?.method === 'POST')).toBe(true))
+    sent = JSON.parse(post.calls.find(([, init]) => init?.method === 'POST')![1].body as string)
+    expect(sent.regions).toEqual(['us', 'eu'])
+  })
+
+  it('hides the locations picker on a single-location installation', async () => {
+    setup(() => json(201, { monitor: {} }), () => json(200, { regions: [{ code: 'primary', name: 'Primary' }], primary: 'primary', max_regions: 1 }))
+    await fill('Home')
+    expect(screen.queryByText('Check from')).not.toBeInTheDocument()
   })
 })

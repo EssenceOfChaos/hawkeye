@@ -21,6 +21,7 @@ import (
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/queue"
+	"hawkeye/internal/regions"
 	"hawkeye/internal/safehttp"
 	"hawkeye/internal/scheduler"
 	"hawkeye/internal/secrets"
@@ -422,5 +423,47 @@ func TestUnreadableCredentialsDoNotRecordAFailure(t *testing.T) {
 	e.pool.QueryRow(t.Context(), `SELECT count(*) FROM check_jobs WHERE monitor_id = $1`, id).Scan(&queued)
 	if queued == 0 {
 		t.Fatal("the job was dropped instead of being retried")
+	}
+}
+
+// Two workers, one per region, each run only their own region's job, and results say where they ran.
+func TestRegionalWorkersRunTheirOwnRegionsAndLabelResults(t *testing.T) {
+	e := newEnv(t)
+	set, _ := regions.Parse("us,eu")
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { hits.Add(1); w.WriteHeader(200) }))
+	defer srv.Close()
+	id := e.monitor(t, srv.URL)
+	e.pool.Exec(t.Context(), `UPDATE monitors SET regions = '{us,eu}' WHERE id = $1`, id)
+	sched := scheduler.New(e.pool, scheduler.Config{}, e.m, quiet).WithRegions(set)
+	mk := func(region string) *worker.Worker {
+		return worker.New(e.pool, checks.NewChecker(loopbackCfg()), checks.NewStore(e.pool, checks.Thresholds{Failure: 2, Recovery: 2}, incidents.Engine{}).WithRegions(set),
+			worker.Config{Concurrency: 1, PollInterval: 10 * time.Millisecond}, e.m, quiet).WithRegion(region)
+	}
+	us, eu := mk("us"), mk("eu")
+
+	e.pool.Exec(t.Context(), `UPDATE monitors SET next_check_at = now() WHERE id = $1`, id)
+	if st, err := sched.Tick(t.Context()); err != nil || st.Scheduled != 2 {
+		t.Fatalf("%+v %v", st, err)
+	}
+	if worked, err := us.ProcessOne(t.Context()); !worked || err != nil {
+		t.Fatalf("%v %v", worked, err)
+	}
+	if worked, _ := us.ProcessOne(t.Context()); worked {
+		t.Fatal("the us worker must leave the eu job alone")
+	}
+	if worked, err := eu.ProcessOne(t.Context()); !worked || err != nil {
+		t.Fatalf("%v %v", worked, err)
+	}
+	rows, _ := e.pool.Query(t.Context(), `SELECT region FROM check_results WHERE monitor_id = $1 ORDER BY region`, id)
+	var got []string
+	for rows.Next() {
+		var r string
+		rows.Scan(&r)
+		got = append(got, r)
+	}
+	rows.Close()
+	if strings.Join(got, ",") != "eu,us" || hits.Load() != 2 {
+		t.Fatalf("results from %v, %d requests", got, hits.Load())
 	}
 }

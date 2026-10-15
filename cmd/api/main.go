@@ -94,7 +94,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("secrets key: %w", err)
 	}
-	monitorSvc := monitors.NewService(pool, planSvc, monitors.WithSecretBox(box))
+	monitorSvc := monitors.NewService(pool, planSvc, monitors.WithSecretBox(box), monitors.WithRegions(cfg.Regions()))
 	// Credentials saved in plain text by an earlier version are encrypted once, here, before any request is served.
 	if n, err := monitorSvc.EncryptLegacySecrets(ctx); err != nil {
 		return fmt.Errorf("encrypt stored credentials: %w", err)
@@ -117,6 +117,7 @@ func run() error {
 		Account:       account.NewService(pool, authSvc, provider, mailer, log, cfg.AppBaseURL),
 		Contact:       contact.NewService(mailer, log, cfg.SupportAddress, cfg.EmailFromAddress, cfg.AppBaseURL),
 		Maintenance:   maintenance.NewService(pool, planSvc),
+		Regions:       cfg.Regions(),
 		StatusPages:   statuspage.NewService(pool),
 		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress, notifications.WithSecretBox(box)),
 		SecureCookies: cfg.IsProduction(), AuthRateLimitPerMin: cfg.AuthRateLimitPerMin, TrustForwardedFor: cfg.TrustForwardedFor,

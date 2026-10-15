@@ -18,6 +18,8 @@ export interface Plan {
   minimum_check_interval_seconds: number
   history_retention_days: number
   maintenance_enabled?: boolean
+  /** How many locations one monitor may be checked from on this plan (never more than the installation has). */
+  max_regions?: number
 }
 
 export interface Usage {
@@ -92,6 +94,8 @@ export interface Monitor {
   current_status: MonitorStatus
   /** A maintenance window covers this monitor right now: checks run but raise no alerts. */
   in_maintenance: boolean
+  /** Where it is checked from; empty means the primary location only. */
+  regions: string[]
   last_checked_at: string | null
   /** The HTTPS certificate as last seen by a check; null until the first one (and for http:// monitors). */
   ssl: SSLInfo | null
@@ -212,6 +216,19 @@ export interface SeriesPoint {
   failed: number
 }
 
+export interface RegionInfo {
+  code: string
+  name: string
+}
+
+export interface RegionStatus {
+  region: string
+  name: string
+  status: 'unknown' | 'up' | 'down'
+  last_checked_at: string | null
+  last_error: string | null
+}
+
 export interface CheckResult {
   id: number
   checked_at: string
@@ -220,6 +237,7 @@ export interface CheckResult {
   response_time_ms: number | null
   error_category: string | null
   error_summary: string | null
+  region: string
 }
 
 export interface DashboardSummary {
@@ -241,6 +259,7 @@ export interface MonitorInput {
   body?: string | null
   auth?: MonitorAuthInput
   assertions?: Assertion[]
+  regions?: string[]
 }
 
 /** An error response from the API, using the common `{error: {code, message, details}}` envelope. */

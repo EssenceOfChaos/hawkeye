@@ -16,6 +16,7 @@ import (
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/plans"
+	"hawkeye/internal/regions"
 )
 
 type Config struct {
@@ -52,10 +53,17 @@ type Scheduler struct {
 	log  *slog.Logger
 	rnd  func() float64 // [0,1); replaceable in tests
 	rep  errtrack.Reporter
+	regs regions.Set
 }
 
 func New(pool *pgxpool.Pool, cfg Config, m *metrics.Metrics, log *slog.Logger) *Scheduler {
-	return &Scheduler{pool: pool, cfg: cfg.withDefaults(), m: m, log: log, rnd: rand.Float64, rep: errtrack.Noop{}}
+	return &Scheduler{pool: pool, cfg: cfg.withDefaults(), m: m, log: log, rnd: rand.Float64, rep: errtrack.Noop{}, regs: regions.Default()}
+}
+
+// WithRegions sets the installation's regions (the default is a single "primary" region). A monitor gets one job per region it runs in.
+func (s *Scheduler) WithRegions(r regions.Set) *Scheduler {
+	s.regs = r
+	return s
 }
 
 // WithReporter sends unexpected scheduler errors to an error tracker.
@@ -93,6 +101,7 @@ type dueMonitor struct {
 	orgID    uuid.UUID
 	interval int
 	dueAt    time.Time
+	chosen   []string
 }
 
 // Tick enqueues jobs for due monitors in one transaction. Monitors are locked with SKIP LOCKED, so
@@ -101,18 +110,39 @@ type dueMonitor struct {
 func (s *Scheduler) Tick(ctx context.Context) (Stats, error) {
 	var st Stats
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		var depth int
 		var now time.Time
-		if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM check_jobs), now()`).Scan(&depth, &now); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT now()`).Scan(&now); err != nil {
 			return err
 		}
-		capacity := s.cfg.MaxQueueDepth - depth
+		// Backpressure is per region, so a region whose workers are down (its queue only grows) cannot stop the others from being checked.
+		depth := map[string]int{}
+		drows, err := tx.Query(ctx, `SELECT region, count(*) FROM check_jobs GROUP BY region`)
+		if err != nil {
+			return err
+		}
+		for drows.Next() {
+			var region string
+			var n int
+			if err := drows.Scan(&region, &n); err != nil {
+				drows.Close()
+				return err
+			}
+			depth[region] = n
+		}
+		drows.Close()
+		if err := drows.Err(); err != nil {
+			return err
+		}
+		capacity := s.cfg.MaxQueueDepth * len(s.regs.List())
+		for _, r := range s.regs.List() {
+			capacity -= depth[r.Code]
+		}
 		if capacity <= 0 {
 			st.Backpressure = true
 			return nil
 		}
 
-		rows, err := tx.Query(ctx, `SELECT id, organization_id, check_interval_seconds, next_check_at FROM monitors
+		rows, err := tx.Query(ctx, `SELECT id, organization_id, check_interval_seconds, next_check_at, regions FROM monitors
 			WHERE enabled AND deleted_at IS NULL AND next_check_at <= now()
 			ORDER BY next_check_at
 			FOR UPDATE SKIP LOCKED
@@ -123,7 +153,7 @@ func (s *Scheduler) Tick(ctx context.Context) (Stats, error) {
 		var due []dueMonitor
 		for rows.Next() {
 			var d dueMonitor
-			if err := rows.Scan(&d.id, &d.orgID, &d.interval, &d.dueAt); err != nil {
+			if err := rows.Scan(&d.id, &d.orgID, &d.interval, &d.dueAt, &d.chosen); err != nil {
 				rows.Close()
 				return err
 			}
@@ -134,17 +164,19 @@ func (s *Scheduler) Tick(ctx context.Context) (Stats, error) {
 			return err
 		}
 
-		planMin := map[uuid.UUID]int{}
+		type limits struct{ interval, regions int }
+		planLimits := map[uuid.UUID]limits{}
 		for _, d := range due {
-			min, ok := planMin[d.orgID]
+			lim, ok := planLimits[d.orgID]
 			if !ok {
 				p, err := plans.EffectivePlan(ctx, tx, d.orgID)
 				if err != nil {
 					return fmt.Errorf("plan for org %s: %w", d.orgID, err)
 				}
-				min = p.MinimumCheckIntervalSeconds
-				planMin[d.orgID] = min
+				lim = limits{p.MinimumCheckIntervalSeconds, p.MaxRegions}
+				planLimits[d.orgID] = lim
 			}
+			min := lim.interval
 			// The plan, not the stored value, has the last word on how often a monitor may run.
 			eff := time.Duration(max(d.interval, min)) * time.Second
 			if now.Sub(d.dueAt) > eff {
@@ -153,14 +185,21 @@ func (s *Scheduler) Tick(ctx context.Context) (Stats, error) {
 			// Jitter spreads monitors that were created or restarted together.
 			jitter := time.Duration(s.rnd() * float64(min64(time.Duration(float64(eff)*s.cfg.JitterFrac), s.cfg.MaxJitter)))
 
-			tag, err := tx.Exec(ctx, `INSERT INTO check_jobs (monitor_id) VALUES ($1) ON CONFLICT (monitor_id) DO NOTHING`, d.id)
-			if err != nil {
-				return err
-			}
-			if tag.RowsAffected() == 0 {
-				st.Skipped++ // previous check still queued or running
-			} else {
-				st.Scheduled++
+			for _, region := range s.regs.Effective(d.chosen, lim.regions) {
+				if depth[region] >= s.cfg.MaxQueueDepth {
+					st.Skipped++ // that region is backed up; try again next interval
+					continue
+				}
+				tag, err := tx.Exec(ctx, `INSERT INTO check_jobs (monitor_id, region) VALUES ($1, $2) ON CONFLICT (monitor_id, region) DO NOTHING`, d.id, region)
+				if err != nil {
+					return err
+				}
+				if tag.RowsAffected() == 0 {
+					st.Skipped++ // previous check still queued or running
+				} else {
+					st.Scheduled++
+					depth[region]++
+				}
 			}
 			// Next run is measured from now, not from the old due time: after an outage of the scheduler
 			// there is no backlog of catch-up checks.

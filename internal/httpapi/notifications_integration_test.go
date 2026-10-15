@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 	"testing"
 	"time"
 )
@@ -385,5 +386,34 @@ func TestStatusPageIsPublicOnlyOnceTheOwnerPublishesIt(t *testing.T) {
 	}
 	if r := anon.do("GET", "/api/v1/public/status/acme", nil, false); r.Status != 404 {
 		t.Fatalf("deleted: %d", r.Status)
+	}
+}
+
+func TestRegionsEndpointAndMonitorRegionValidation(t *testing.T) {
+	e := newEnv(t, 1000)
+	c, _ := e.register(t, "owner@example.com")
+	r := c.call("GET", "/api/v1/regions", nil)
+	list, _ := r.Body["regions"].([]any)
+	if r.Status != 200 || r.Body["primary"] != "primary" || len(list) != 1 || r.Body["max_regions"] != float64(1) {
+		t.Fatalf("%d %v", r.Status, r.Body)
+	}
+	body := monitorBody("Site")
+	body["regions"] = []string{"nope"}
+	if r := c.call("POST", "/api/v1/monitors", body); r.Status != 400 || errCode(r) != "VALIDATION_ERROR" {
+		t.Fatalf("unknown region: %d %v", r.Status, r.Body)
+	}
+	body["regions"] = []string{"primary"}
+	created := c.call("POST", "/api/v1/monitors", body)
+	if created.Status != 201 {
+		t.Fatalf("%d %v", created.Status, created.Body)
+	}
+	id := created.Body["monitor"].(map[string]any)["id"].(string)
+	got := c.call("GET", "/api/v1/monitors/"+id+"/regions", nil)
+	states, _ := got.Body["regions"].([]any)
+	if got.Status != 200 || len(states) != 1 || states[0].(map[string]any)["status"] != "unknown" {
+		t.Fatalf("%d %v", got.Status, got.Body)
+	}
+	if r := c.call("GET", "/api/v1/monitors/"+uuid.NewString()+"/regions", nil); r.Status != 404 {
+		t.Fatalf("%d", r.Status)
 	}
 }

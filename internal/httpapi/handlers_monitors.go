@@ -76,6 +76,11 @@ func (h *handlers) listPlans(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// A plan cannot offer more locations than this installation has.
+	installed := max(1, len(h.regions.List()))
+	for i := range list {
+		list[i].MaxRegions = min(list[i].MaxRegions, installed)
+	}
 	return c.JSON(http.StatusOK, map[string]any{"plans": list, "billing_enabled": h.billing != nil && h.billing.Enabled()})
 }
 

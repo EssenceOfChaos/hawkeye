@@ -14,6 +14,7 @@ import {
   type JsonOperator,
   type Monitor,
   type MonitorInput,
+  type RegionInfo,
   type RequestHeader,
 } from '../api'
 import { Field } from '../components/Field'
@@ -68,12 +69,21 @@ export function MonitorFormPage() {
   // The auth type whose secret is already stored; leaving the secret empty keeps it.
   const [storedAuthType, setStoredAuthType] = useState<AuthType | null>(null)
   const [assertions, setAssertions] = useState<Assertion[]>([])
+  const [allRegions, setAllRegions] = useState<RegionInfo[]>([])
+  const [maxRegions, setMaxRegions] = useState(1)
+  const [chosen, setChosen] = useState<string[]>([])
   const [error, setError] = useState<ApiError | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     api<{ usage: { plan: { minimum_check_interval_seconds: number } } }>('GET', '/usage')
       .then((r) => setMinAllowed(Math.ceil(r.usage.plan.minimum_check_interval_seconds / 60)))
+      .catch(() => undefined)
+    api<{ regions: RegionInfo[]; max_regions: number }>('GET', '/regions')
+      .then((r) => {
+        setAllRegions(r.regions ?? [])
+        setMaxRegions(r.max_regions ?? 1)
+      })
       .catch(() => undefined)
     if (!monitorID) return
     api<{ monitor: Monitor }>('GET', `/monitors/${monitorID}`)
@@ -92,6 +102,7 @@ export function MonitorFormPage() {
           setStoredAuthType(m.auth.secret_set ? m.auth.type : null)
         }
         setAssertions(m.assertions ?? [])
+        setChosen(m.regions ?? [])
         setLoaded(true)
       })
       .catch((e: ApiError) => setError(e))
@@ -120,6 +131,7 @@ export function MonitorFormPage() {
         ? assertions.map((a) => (a.type === 'json_path' ? a : { type: a.type, value: a.value }))
         : [],
     }
+    if (allRegions.length > 1) payload.regions = chosen
     if (authType === 'basic') payload.auth!.username = authUsername
     if (authType === 'header') payload.auth!.header_name = authHeaderName
     if (authType !== 'none' && authSecret !== '') payload.auth!.secret = authSecret
@@ -296,6 +308,31 @@ export function MonitorFormPage() {
               </small>
             </div>
           </fieldset>
+
+          {allRegions.length > 1 && (
+            <fieldset className="group">
+              <legend>Check from</legend>
+              {allRegions.map((r, i) => {
+                const on = chosen.includes(r.code) || (chosen.length === 0 && i === 0)
+                return (
+                  <label key={r.code}>
+                    <input type="checkbox" checked={on} disabled={!on && chosen.length >= maxRegions}
+                      onChange={(e) => {
+                        // Leaving everything unticked would mean "primary", so the list always starts from what is shown.
+                        const current = chosen.length === 0 ? [allRegions[0].code] : chosen
+                        setChosen(e.target.checked ? [...current, r.code] : current.filter((c) => c !== r.code))
+                      }} /> {r.name}
+                  </label>
+                )
+              })}
+              {f.regions && <small className="error">{f.regions}</small>}
+              <small className="hint">
+                {maxRegions > 1
+                  ? `Your plan can check each monitor from up to ${maxRegions} locations. A monitor counts as down only when most of its locations agree, so a problem at one location never raises an alert.`
+                  : 'Checking from several locations is available on paid plans. A monitor counts as down only when most of its locations agree.'}
+              </small>
+            </fieldset>
+          )}
 
           <Field label="Check every (minutes)" type="number" min={minIntervalMin} max={1440} value={intervalMin}
             onChange={(e) => setIntervalMin(e.target.value)} error={f.check_interval_seconds}

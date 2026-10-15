@@ -170,6 +170,15 @@ Alerts go only to destinations that are **enabled and verified**.
 | `POST /notification-settings/:id/resend-confirmation` | owner, verified email | 202; older links stop working |
 | `POST /notification-settings/confirm` | public | `{token}` from the confirmation email → 204; single use, valid 48 h |
 
+## Check locations
+
+| Method & path | Who | Notes |
+|---|---|---|
+| `GET /regions` | any member | `{regions: [{code, name}], primary, max_regions}`: the installation's locations and how many one monitor may use on the caller's plan (never more than exist). A single-location installation returns one region |
+| `GET /monitors/:id/regions` | any member | `{regions: [{region, name, status, last_checked_at, last_error}]}`: the locations the monitor runs in now (in the order chosen), each with its own status (`unknown`, `up`, `down`) |
+
+Monitors have `regions` (create and PATCH accept it; `[]` means the primary location only). An unknown or repeated code is a 400 `VALIDATION_ERROR`; more than the plan allows is 403 `PLAN_LIMIT_REACHED` with `limit_type: "regions"`. A monitor is down while a **majority** of its locations are down. Check results carry `region`.
+
 ## Status page
 
 One public page per organization at `/status/<slug>`, available on every plan. Only the monitors the owner adds appear, under the name the owner chooses. **Monitor URLs, error messages and causes are never exposed.** Nothing is public until `published` is true; a draft and a page that does not exist both answer 404.

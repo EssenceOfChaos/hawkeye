@@ -13,6 +13,7 @@ const (
 	LimitCheckInterval = "check_interval"
 	LimitTeamMembers   = "team_members"
 	LimitMaintenance   = "maintenance_windows"
+	LimitRegions       = "regions"
 )
 
 // LimitError is returned when an operation exceeds the organization's plan.
@@ -40,6 +41,8 @@ func (e *LimitError) Message() string {
 		return fmt.Sprintf("Your %s plan supports a check interval of at least %d seconds.", e.Plan.Name, e.Limit)
 	case LimitTeamMembers:
 		return fmt.Sprintf("Your %s plan includes up to %d team members.", e.Plan.Name, e.Limit)
+	case LimitRegions:
+		return fmt.Sprintf("Your %s plan can check each monitor from up to %d location%s.", e.Plan.Name, e.Limit, map[bool]string{true: "", false: "s"}[e.Limit == 1])
 	case LimitMaintenance:
 		return fmt.Sprintf("Maintenance windows are not included in your %s plan. Upgrade to silence alerts during planned work.", e.Plan.Name)
 	}
@@ -95,6 +98,18 @@ func (s *Service) CanUseMaintenance(ctx context.Context, db DB, orgID uuid.UUID)
 	}
 	if !p.MaintenanceEnabled {
 		return s.limitError(ctx, db, LimitMaintenance, 0, 0, p)
+	}
+	return nil
+}
+
+// CheckRegions returns a *LimitError when a monitor asks for more regions than the plan allows.
+func (s *Service) CheckRegions(ctx context.Context, db DB, orgID uuid.UUID, count int) error {
+	p, err := EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	if count > p.MaxRegions {
+		return s.limitError(ctx, db, LimitRegions, p.MaxRegions, count, p)
 	}
 	return nil
 }

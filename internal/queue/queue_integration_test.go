@@ -141,3 +141,25 @@ func TestSnapshot(t *testing.T) {
 		t.Fatalf("%+v %v", s, err)
 	}
 }
+
+func TestWorkersOnlyClaimTheirOwnRegion(t *testing.T) {
+	pool := testutil.NewPool(t)
+	ids := seed(t, pool, 1)
+	if _, err := pool.Exec(t.Context(), `INSERT INTO check_jobs (monitor_id, region) VALUES ($1, 'eu')`, ids[0]); err != nil {
+		t.Fatalf("the same monitor may have a job in each region: %v", err)
+	}
+	if _, err := pool.Exec(t.Context(), `INSERT INTO check_jobs (monitor_id, region) VALUES ($1, 'eu')`, ids[0]); err == nil {
+		t.Fatal("but only one per region")
+	}
+	if j, _, _ := queue.ClaimRegion(t.Context(), pool, "ap", time.Minute, 3); j != nil {
+		t.Fatalf("a region with no jobs must get none: %+v", j)
+	}
+	eu, _, _ := queue.ClaimRegion(t.Context(), pool, "eu", time.Minute, 3)
+	primary, _, _ := queue.Claim(t.Context(), pool, time.Minute, 3)
+	if eu == nil || primary == nil || eu.ID == primary.ID {
+		t.Fatalf("each region gets its own job: %+v %+v", eu, primary)
+	}
+	if again, _, _ := queue.ClaimRegion(t.Context(), pool, "eu", time.Minute, 3); again != nil {
+		t.Fatal("the eu job is leased")
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hawkeye/internal/billing"
+	"hawkeye/internal/regions"
 	"hawkeye/internal/secrets"
 	"log/slog"
 	"net/mail"
@@ -68,6 +69,11 @@ type Config struct {
 	AppVersion string
 
 	// Monitoring engine (worker process).
+	// CheckRegions lists where checks can run: "code[:Name],…", the first being the primary. WorkerRegion is the one this worker process serves
+	// (default: the primary). Every process (API, scheduler, workers) must be given the same CheckRegions.
+	CheckRegions string
+	WorkerRegion string
+
 	WorkerConcurrency int
 	RunScheduler      bool
 	SchedulerInterval time.Duration
@@ -104,6 +110,20 @@ func (c Config) IsProduction() bool { return c.AppEnv == EnvProduction }
 // Billing returns the payment-provider settings. Billing is simply disabled when none are set.
 // SecretBox returns the cipher used to protect stored monitor credentials. Outside production a key is derived from SESSION_SECRET when none
 // is set, so a fresh checkout works; production refuses to start without a dedicated key (see validation).
+// Regions returns the configured regions (a single "primary" region when CHECK_REGIONS is empty).
+func (c Config) Regions() regions.Set {
+	set, _ := regions.Parse(c.CheckRegions) // validated by Load
+	return set
+}
+
+// Region is the region this worker process serves: WORKER_REGION, or the primary.
+func (c Config) Region() string {
+	if c.WorkerRegion != "" {
+		return c.WorkerRegion
+	}
+	return c.Regions().Primary()
+}
+
 func (c Config) SecretBox() (*secrets.Box, error) {
 	if c.SecretsKey != "" {
 		return secrets.New(c.SecretsKey)
@@ -185,6 +205,8 @@ func load(get func(string) string) (Config, error) {
 		AuthRateLimitPerMin: integer("AUTH_RATE_LIMIT_PER_MIN", 10),
 		TrustForwardedFor:   boolean("TRUST_FORWARDED_FOR"),
 
+		CheckRegions:      str("CHECK_REGIONS", ""),
+		WorkerRegion:      str("WORKER_REGION", ""),
 		WorkerConcurrency: integer("WORKER_CONCURRENCY", 10),
 		RunScheduler:      !boolean("DISABLE_SCHEDULER"),
 		SchedulerInterval: duration("SCHEDULER_INTERVAL", time.Second),
@@ -292,6 +314,11 @@ func load(get func(string) string) (Config, error) {
 	// worker pick up a job that is still running.
 	if c.JobLease < time.Minute {
 		errs = append(errs, errors.New("JOB_LEASE: must be at least 1m (longer than the maximum check time)"))
+	}
+	if set, err := regions.Parse(c.CheckRegions); err != nil {
+		errs = append(errs, fmt.Errorf("CHECK_REGIONS: %w", err))
+	} else if c.WorkerRegion != "" && !set.Has(c.WorkerRegion) {
+		errs = append(errs, errors.New("WORKER_REGION: must be one of the codes listed in CHECK_REGIONS"))
 	}
 	if c.WorkerMetricsPort < 1 || c.WorkerMetricsPort > 65535 {
 		errs = append(errs, errors.New("WORKER_METRICS_PORT: must be between 1 and 65535"))

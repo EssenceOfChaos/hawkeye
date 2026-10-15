@@ -61,6 +61,8 @@ type Result struct {
 	// CertExpiresAt is when the monitored host's TLS certificate expires, when the check reached one (HTTPS monitors only). It is also set
 	// when the handshake failed because that certificate had already expired.
 	CertExpiresAt *time.Time
+	// Region is where the check ran; the worker sets it. Empty means the primary region.
+	Region string
 }
 
 // Checker runs checks through the SSRF-safe HTTP client.

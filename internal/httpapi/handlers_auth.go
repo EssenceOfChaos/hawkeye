@@ -18,6 +18,7 @@ import (
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
+	"hawkeye/internal/regions"
 	"hawkeye/internal/statuspage"
 	"hawkeye/internal/validation"
 )
@@ -32,6 +33,7 @@ type handlers struct {
 	notifications *notifications.Service
 	maintenance   *maintenance.Service
 	statusPages   *statuspage.Service
+	regions       regions.Set
 	billing       *billing.Service
 	account       *account.Service
 	contact       *contact.Service

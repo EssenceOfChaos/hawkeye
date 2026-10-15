@@ -28,11 +28,19 @@ type Job struct {
 	Reclaimed bool // the previous holder's lease expired
 }
 
-// Claim leases the oldest runnable job, or returns nil when there is none. dropped counts jobs
-// discarded because they exhausted their attempts.
+// DefaultRegion is the region of jobs queued without one.
+const DefaultRegion = "primary"
+
+// Claim leases the oldest runnable job of the default region. See ClaimRegion.
 func Claim(ctx context.Context, db DB, lease time.Duration, maxAttempts int) (job *Job, dropped int, err error) {
+	return ClaimRegion(ctx, db, DefaultRegion, lease, maxAttempts)
+}
+
+// ClaimRegion leases the oldest runnable job queued for region, or returns nil when there is none. dropped counts jobs
+// of the region discarded because they exhausted their attempts.
+func ClaimRegion(ctx context.Context, db DB, region string, lease time.Duration, maxAttempts int) (job *Job, dropped int, err error) {
 	tag, err := db.Exec(ctx, `DELETE FROM check_jobs
-		WHERE attempts >= $1 AND (status = 'queued' OR locked_until < now())`, maxAttempts)
+		WHERE region = $2 AND attempts >= $1 AND (status = 'queued' OR locked_until < now())`, maxAttempts, region)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -43,11 +51,11 @@ func Claim(ctx context.Context, db DB, lease time.Duration, maxAttempts int) (jo
 			status = 'running', locked_until = now() + $1::interval, attempts = j.attempts + 1
 		WHERE j.id = (
 			SELECT id FROM check_jobs
-			WHERE (status = 'queued' AND run_at <= now()) OR (status = 'running' AND locked_until < now())
+			WHERE region = $2 AND ((status = 'queued' AND run_at <= now()) OR (status = 'running' AND locked_until < now()))
 			ORDER BY run_at
 			FOR UPDATE SKIP LOCKED
 			LIMIT 1)
-		RETURNING j.id, j.monitor_id, j.attempts, (j.attempts > 1)`, lease).
+		RETURNING j.id, j.monitor_id, j.attempts, (j.attempts > 1)`, lease, region).
 		Scan(&j.ID, &j.MonitorID, &j.Attempts, &j.Reclaimed)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, dropped, nil

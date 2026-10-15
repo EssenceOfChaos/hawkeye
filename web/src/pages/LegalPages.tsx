@@ -153,7 +153,7 @@ export function PrivacyPage() {
       <h3>A. Service providers</h3>
       <p>We use these providers to operate HawkEye. They may process information only to provide their services to us.</p>
       <ul>
-        <li><strong>Vultr</strong>: server hosting. Our application and database run on servers in the United States.</li>
+        <li><strong>Vultr</strong>: server hosting. Our application and database run on servers in the United States. If we run checks from additional locations, the servers there also temporarily handle your monitor settings and credentials while they perform your checks.</li>
         <li><strong>Stripe</strong>: payment processing and subscription billing.</li>
         <li><strong>Resend</strong>: delivery of our emails, such as verification, password reset, and alert emails. Resend processes the recipient address and the content of those emails.</li>
         <li><strong>Cloudflare</strong>: domain name (DNS) services and the forwarding of messages sent to our support address.</li>
@@ -364,6 +364,7 @@ export function TermsPage() {
       <ul>
         <li>Periodic HTTP or HTTPS availability checks, including API checks with a chosen request method, custom headers, a request body, authentication, and checks of the response.</li>
         <li>Response-time measurements and monitoring history.</li>
+        <li>On paid plans, checks of a monitor from more than one location, where the Service offers them, with the monitor treated as down only when most of its locations report a failure.</li>
         <li>SSL certificate expiry tracking for HTTPS monitors, with email warnings as the expiry date approaches (currently 30, 14, 7, and 1 days before, and when the certificate has expired).</li>
         <li>Incident detection, incident records, and recovery status.</li>
         <li>Alert notifications by email, to a Slack channel, or to a webhook address you provide, as described in Section 9.</li>
@@ -419,7 +420,7 @@ export function TermsPage() {
         <li><strong>Agency:</strong> up to 200 monitors, checks every minute, and 365 days of monitoring history.</li>
       </ul>
       <p>
-        Every plan includes email, Slack, and webhook alerts and one public status page. Maintenance windows are included in the Pro and Agency plans. If you move to a plan that does not include maintenance windows, windows you
+        Paid plans may check each monitor from several locations, up to the limit shown at checkout. Every plan includes email, Slack, and webhook alerts and one public status page. Maintenance windows are included in the Pro and Agency plans. If you move to a plan that does not include maintenance windows, windows you
         already created keep working, but you cannot create new ones.
       </p>
       <p>

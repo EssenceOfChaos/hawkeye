@@ -24,6 +24,7 @@ import (
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/ratelimit"
+	"hawkeye/internal/regions"
 	"hawkeye/internal/statuspage"
 )
 
@@ -45,6 +46,7 @@ type Options struct {
 	Monitors      *monitors.Service
 	Notifications *notifications.Service
 	Maintenance   *maintenance.Service
+	Regions       regions.Set
 	StatusPages   *statuspage.Service
 	Billing       *billing.Service
 	Account       *account.Service
@@ -155,7 +157,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, statusPages: o.StatusPages, billing: o.Billing, account: o.Account, contact: o.Contact, log: o.Logger, secureCookies: o.SecureCookies}
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, regions: o.Regions, statusPages: o.StatusPages, billing: o.Billing, account: o.Account, contact: o.Contact, log: o.Logger, secureCookies: o.SecureCookies}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		TokenLookup:    "header:X-CSRF-Token",
@@ -281,6 +283,8 @@ func registerAPI(e *echo.Echo, o Options) {
 
 	// Alert recipients: any member can view; only owners change them; adding a recipient needs a verified
 	// email and is rate-limited because it causes mail to be sent to a third party.
+	scoped.GET("/regions", h.listRegions)
+	scoped.GET("/monitors/:monitorID/regions", h.monitorRegions)
 	scoped.GET("/status-page", h.getStatusPage)
 	scoped.PUT("/status-page", h.putStatusPage, requireOwner)
 	scoped.DELETE("/status-page", h.deleteStatusPage, requireOwner)

@@ -10,6 +10,7 @@ import (
 
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/plans"
+	"hawkeye/internal/regions"
 	"hawkeye/internal/testutil"
 	"hawkeye/internal/validation"
 )
@@ -310,5 +311,99 @@ func TestMonitorExposesCertificateExpiryAndResetsItWhenTheURLChanges(t *testing.
 	pool.QueryRow(t.Context(), `SELECT ssl_notified_bucket FROM monitors WHERE id = $1`, m.ID).Scan(&bucket)
 	if bucket != nil {
 		t.Fatal("warning state must reset with the URL")
+	}
+}
+
+func regionSvc(t *testing.T, plan string) (*monitors.Service, *pgxpool.Pool, uuid.UUID) {
+	t.Helper()
+	_, pool, org := setup(t, plan, "active")
+	set, _ := regions.Parse("us:US East,eu:Europe,ap:Asia,sa:South America")
+	return monitors.NewService(pool, plans.NewService("http://app.test"), monitors.WithSecretBox(testutil.SecretBox()), monitors.WithRegions(set)), pool, org
+}
+
+func TestMonitorRegionsAreValidatedAndLimitedByPlan(t *testing.T) {
+	svc, _, org := regionSvc(t, "pro") // Pro: up to 3 regions
+	in := newIn("Site")
+	in.Regions = []string{"eu", "ap", "us"}
+	m, err := svc.Create(t.Context(), org, in)
+	if err != nil || len(m.Regions) != 3 || m.Regions[0] != "eu" {
+		t.Fatalf("%+v %v", m.Regions, err)
+	}
+	if plain, err := svc.Create(t.Context(), org, newIn("Plain")); err != nil || plain.Regions == nil || len(plain.Regions) != 0 {
+		t.Fatalf("no regions means the primary only, and is a list, not null: %#v %v", plain.Regions, err)
+	}
+
+	var le *plans.LimitError
+	in.Regions = []string{"us", "eu", "ap", "sa"}
+	if _, err := svc.Create(t.Context(), org, in); !errors.As(err, &le) || le.Kind != plans.LimitRegions || le.Limit != 3 {
+		t.Fatalf("a fourth region is over the Pro limit: %v", err)
+	}
+	var ve *validation.Error
+	for name, regs := range map[string][]string{"unknown": {"mars"}, "repeat": {"us", "us"}} {
+		in.Regions = regs
+		if _, err := svc.Create(t.Context(), org, in); !errors.As(err, &ve) || ve.Fields["regions"] == "" {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+
+	only := []string{"sa"}
+	if got, err := svc.Update(t.Context(), org, m.ID, monitors.UpdateInput{Regions: &only}); err != nil || len(got.Regions) != 1 || got.Regions[0] != "sa" {
+		t.Fatalf("%+v %v", got.Regions, err)
+	}
+	empty := []string{}
+	if got, _ := svc.Update(t.Context(), org, m.ID, monitors.UpdateInput{Regions: &empty}); len(got.Regions) != 0 {
+		t.Fatalf("clearing the regions: %v", got.Regions)
+	}
+	name := "Renamed"
+	if got, err := svc.Update(t.Context(), org, m.ID, monitors.UpdateInput{Name: &name}); err != nil || got.Name != "Renamed" {
+		t.Fatalf("other edits leave regions alone: %v", err)
+	}
+}
+
+func TestFreePlanChecksFromOneRegionOnly(t *testing.T) {
+	svc, _, org := regionSvc(t, "free")
+	in := newIn("Site")
+	in.Regions = []string{"eu"}
+	if _, err := svc.Create(t.Context(), org, in); err != nil {
+		t.Fatalf("one non-primary region is fine: %v", err)
+	}
+	in.Regions = []string{"eu", "us"}
+	var le *plans.LimitError
+	if _, err := svc.Create(t.Context(), org, in); !errors.As(err, &le) || le.Kind != plans.LimitRegions || le.Next == nil {
+		t.Fatalf("want a plan limit with an upgrade: %v", err)
+	}
+}
+
+func TestRegionStatusesShowEachRegionsView(t *testing.T) {
+	svc, pool, org := regionSvc(t, "pro")
+	in := newIn("Site")
+	in.Regions = []string{"us", "eu"}
+	m, _ := svc.Create(t.Context(), org, in)
+	pool.Exec(t.Context(), `INSERT INTO monitor_region_state (monitor_id, region, status, consecutive_failures, last_checked_at, last_error)
+		VALUES ($1, 'eu', 'down', 2, now(), 'Received HTTP 503')`, m.ID)
+	got, err := svc.RegionStatuses(t.Context(), org, m.ID)
+	if err != nil || len(got) != 2 || got[0].Region != "us" || got[0].Status != "unknown" || got[0].Name != "US East" ||
+		got[1].Region != "eu" || got[1].Status != "down" || got[1].LastError == nil || *got[1].LastError != "Received HTTP 503" {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if _, err := svc.RegionStatuses(t.Context(), uuid.New(), m.ID); !errors.Is(err, monitors.ErrNotFound) {
+		t.Fatalf("another organization's monitor: %v", err)
+	}
+}
+
+func TestEditingARequestForgetsEachRegionsStreak(t *testing.T) {
+	svc, pool, org := regionSvc(t, "pro")
+	in := newIn("Site")
+	in.Regions = []string{"us", "eu"}
+	m, _ := svc.Create(t.Context(), org, in)
+	pool.Exec(t.Context(), `INSERT INTO monitor_region_state (monitor_id, region, status, consecutive_failures) VALUES ($1, 'us', 'down', 3)`, m.ID)
+	url := "https://example.org"
+	if _, err := svc.Update(t.Context(), org, m.ID, monitors.UpdateInput{URL: &url}); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	pool.QueryRow(t.Context(), `SELECT count(*) FROM monitor_region_state WHERE monitor_id = $1`, m.ID).Scan(&n)
+	if n != 0 {
+		t.Fatalf("%d region states survived a change of target", n)
 	}
 }

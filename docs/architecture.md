@@ -90,7 +90,7 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
   grants a plan except a successfully applied provider state.
 - **Brand assets:** `web/src/assets/brand/` holds the cleaned artwork from the supplied pack; `scripts/prepare_brand_assets.py` reproduces it
   (see `docs/branding.md`).
-- **Not yet:** multi-region verification (the single threshold rule is the extension point), retention of old results (Phase 6).
+- **Multi-region checks (`internal/regions`, migration `000015`):** a monitor lists the locations it runs in (`monitors.regions`, empty = primary only), capped by `plans.max_regions`. The scheduler queues one job per monitor *and* region (`UNIQUE (monitor_id, region)`; backpressure per region); a worker started with `WORKER_REGION` claims only its region's jobs and labels results (`check_results.region`). `Store.Record` keeps one streak per region (`monitor_region_state`) and decides the monitor's state in the same transaction: down while a majority of its effective regions are down (`regions.Quorum`), recovered when that majority is lost. A monitor with a single effective region takes the original code path unchanged. Results from a region the monitor no longer uses, and from maintenance windows, are recorded but change nothing. Remote workers need private access to PostgreSQL (see `docs/deployment.md`).
 
 ## Decisions and assumptions
 

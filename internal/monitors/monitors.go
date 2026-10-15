@@ -20,6 +20,7 @@ import (
 
 	"hawkeye/internal/checks"
 	"hawkeye/internal/plans"
+	"hawkeye/internal/regions"
 	"hawkeye/internal/secrets"
 	"hawkeye/internal/validation"
 )
@@ -84,6 +85,7 @@ type Monitor struct {
 	SSL                           *SSLInfo           `json:"ssl"` // null until a check has seen the monitor's TLS certificate
 	Enabled                       bool               `json:"enabled"`
 	CurrentStatus                 string             `json:"current_status"`
+	Regions                       []string           `json:"regions"`        // where it is checked from; empty means the primary region only
 	InMaintenance                 bool               `json:"in_maintenance"` // a maintenance window covers it right now: checks run but raise no alerts
 	LastCheckedAt                 *time.Time         `json:"last_checked_at"`
 	LastSuccessAt                 *time.Time         `json:"last_success_at"`
@@ -150,6 +152,7 @@ type CreateInput struct {
 	Body                 *string            `json:"body"`
 	Auth                 *AuthInput         `json:"auth"`
 	Assertions           []checks.Assertion `json:"assertions"`
+	Regions              []string           `json:"regions"`
 }
 
 type UpdateInput struct {
@@ -163,6 +166,7 @@ type UpdateInput struct {
 	Body                 Nullable[string]    `json:"body"`
 	Auth                 *AuthInput          `json:"auth"`
 	Assertions           *[]checks.Assertion `json:"assertions"`
+	Regions              *[]string           `json:"regions"`
 }
 
 type ListFilter struct {
@@ -177,6 +181,7 @@ type Service struct {
 	pool  *pgxpool.Pool
 	plans *plans.Service
 	box   *secrets.Box // encrypts stored credentials; without it, saving a credential fails rather than storing plain text
+	regs  regions.Set  // the regions a monitor may be checked from
 }
 
 // Option configures a Service.
@@ -185,8 +190,11 @@ type Option func(*Service)
 // WithSecretBox sets the cipher that protects stored monitor credentials.
 func WithSecretBox(b *secrets.Box) Option { return func(s *Service) { s.box = b } }
 
+// WithRegions sets the regions monitors may choose from (the default is a single "primary" region).
+func WithRegions(r regions.Set) Option { return func(s *Service) { s.regs = r } }
+
 func NewService(pool *pgxpool.Pool, p *plans.Service, opts ...Option) *Service {
-	s := &Service{pool: pool, plans: p}
+	s := &Service{pool: pool, plans: p, regs: regions.Default()}
 	for _, o := range opts {
 		o(s)
 	}
@@ -243,7 +251,7 @@ func (s *Service) EncryptLegacySecrets(ctx context.Context) (int, error) {
 const cols = `id, organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
 	enabled, current_status, last_checked_at, last_success_at, consecutive_failures, consecutive_successes, created_at, updated_at,
 	request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), auth_secret IS NOT NULL,
-	assertions, ssl_expires_at, ssl_checked_at, in_maintenance(organization_id, id, now())`
+	assertions, ssl_expires_at, ssl_checked_at, in_maintenance(organization_id, id, now()), regions`
 
 func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	var m Monitor
@@ -251,7 +259,7 @@ func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	err := row.Scan(&m.ID, &m.OrganizationID, &m.Name, &m.URL, &m.Method, &m.ExpectedStatusCode, &m.CheckIntervalSeconds,
 		&m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.LastCheckedAt, &m.LastSuccessAt, &m.ConsecutiveFailures,
 		&m.ConsecutiveSuccesses, &m.CreatedAt, &m.UpdatedAt, &m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username,
-		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked, &m.InMaintenance)
+		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked, &m.InMaintenance, &m.Regions)
 	m.EffectiveCheckIntervalSeconds = max(m.CheckIntervalSeconds, minInterval)
 	if sslExpires != nil {
 		now := time.Now()
@@ -274,6 +282,7 @@ type fields struct {
 	keepSecret        bool        // the stored secret stays: auth type unchanged and no new secret
 	hasSecret         bool        // a secret is stored for the current auth type
 	assertions        []checks.Assertion
+	regions           []string
 }
 
 // setAuth applies an auth input on top of the current type, keeping the stored secret when allowed.
@@ -482,6 +491,22 @@ func lockOrg(ctx context.Context, tx pgx.Tx, orgID uuid.UUID) error {
 	return err
 }
 
+// cleanRegions validates a requested list of regions: each must be configured, with no repeats. An empty list means the primary region.
+func (s *Service) cleanRegions(chosen []string) ([]string, error) {
+	out := []string{}
+	for _, c := range chosen {
+		c = strings.ToLower(strings.TrimSpace(c))
+		switch {
+		case !s.regs.Has(c):
+			return nil, validation.New("regions", fmt.Sprintf("%q is not an available region", c))
+		case slices.Contains(out, c):
+			return nil, validation.New("regions", fmt.Sprintf("%q is listed twice", c))
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
 func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (Monitor, error) {
 	var out Monitor
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
@@ -506,6 +531,9 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 			f.timeout = *in.TimeoutSeconds
 		}
 		f.headers, f.body, f.assertions = slices.Clone(in.Headers), in.Body, slices.Clone(in.Assertions)
+		if f.regions, err = s.cleanRegions(in.Regions); err != nil {
+			return err
+		}
 		f.setAuth(in.Auth, checks.AuthNone, false)
 		if in.Auth == nil {
 			f.auth.Type = checks.AuthNone
@@ -521,6 +549,9 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 				return err
 			}
 		}
+		if err := s.plans.CheckRegions(ctx, tx, orgID, len(f.regions)); err != nil {
+			return err
+		}
 		id := uuid.New() // chosen here so the credential can be encrypted for exactly this monitor
 		sealed, err := s.sealSecret(f.auth.Secret, id)
 		if err != nil {
@@ -528,10 +559,10 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		}
 		out, err = scan(tx.QueryRow(ctx, `INSERT INTO monitors
 			(id, organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
-			 request_headers, request_body, auth_type, auth_username, auth_header_name, auth_secret, assertions)
-			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14) RETURNING `+cols,
+			 request_headers, request_body, auth_type, auth_username, auth_header_name, auth_secret, assertions, regions)
+			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16) RETURNING `+cols,
 			orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout,
-			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, sealed, f.assertions, id), minInterval)
+			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, sealed, f.assertions, id, f.regions), minInterval)
 		return err
 	})
 	return out, err
@@ -612,7 +643,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		}
 		f := fields{name: cur.Name, url: cur.URL, method: cur.Method, expected: cur.ExpectedStatusCode,
 			interval: cur.CheckIntervalSeconds, timeout: cur.TimeoutSeconds, headers: slices.Clone(cur.Headers),
-			body: cur.Body, assertions: slices.Clone(cur.Assertions),
+			body: cur.Body, assertions: slices.Clone(cur.Assertions), regions: slices.Clone(cur.Regions),
 			auth: checks.Auth{Type: cur.Auth.Type, Username: cur.Auth.Username, HeaderName: cur.Auth.HeaderName}}
 		f.setAuth(in.Auth, cur.Auth.Type, cur.Auth.SecretSet)
 		if in.Headers != nil {
@@ -623,6 +654,11 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		}
 		if in.Assertions != nil {
 			f.assertions = slices.Clone(*in.Assertions)
+		}
+		if in.Regions != nil {
+			if f.regions, err = s.cleanRegions(*in.Regions); err != nil {
+				return err
+			}
 		}
 		if in.Name != nil {
 			f.name = *in.Name
@@ -651,6 +687,13 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 				return err
 			}
 		}
+		// Only a requested change of regions is checked against the plan, like the interval.
+		regionsChanged := in.Regions != nil && !slices.Equal(f.regions, cur.Regions)
+		if regionsChanged {
+			if err := s.plans.CheckRegions(ctx, tx, orgID, len(f.regions)); err != nil {
+				return err
+			}
+		}
 		// A changed request (target, headers, body or credentials) invalidates the previous health state.
 		reset := f.url != cur.URL || f.method != cur.Method || !slices.Equal(f.headers, cur.Headers) ||
 			!equalPtr(f.body, cur.Body) || f.auth.Type != cur.Auth.Type || f.auth.Username != cur.Auth.Username || f.auth.HeaderName != cur.Auth.HeaderName ||
@@ -668,12 +711,19 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			request_headers=$10, request_body=$11, auth_type=$12, auth_username=NULLIF($13,''),
 			auth_header_name=NULLIF($14,''),
 			auth_secret = CASE WHEN $12 = 'none' THEN NULL WHEN $15 THEN auth_secret ELSE NULLIF($16,'') END,
-			assertions=$17,
+			assertions=$17, regions=$19,
 			ssl_expires_at = CASE WHEN $18 THEN NULL ELSE ssl_expires_at END, ssl_checked_at = CASE WHEN $18 THEN NULL ELSE ssl_checked_at END,
 			ssl_notified_bucket = CASE WHEN $18 THEN NULL ELSE ssl_notified_bucket END, ssl_notified_for = CASE WHEN $18 THEN NULL ELSE ssl_notified_for END
 			WHERE id = $1 AND organization_id = $2 RETURNING `+cols,
 			id, orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout, reset,
-			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.keepSecret, sealed, f.assertions, f.url != cur.URL), minInterval)
+			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.keepSecret, sealed, f.assertions, f.url != cur.URL, f.regions), minInterval)
+		if err != nil {
+			return err
+		}
+		// Streaks recorded by each region no longer describe the monitor after its request or its regions changed.
+		if reset || regionsChanged {
+			_, err = tx.Exec(ctx, `DELETE FROM monitor_region_state WHERE monitor_id = $1`, id)
+		}
 		return err
 	})
 	return out, err
@@ -718,4 +768,51 @@ func (s *Service) Delete(ctx context.Context, orgID, id uuid.UUID) error {
 			WHERE monitor_id = $1 AND status = 'open'`, id)
 		return err
 	})
+}
+
+// RegionStatus is how one of a monitor's regions currently sees it.
+type RegionStatus struct {
+	Region        string     `json:"region"`
+	Name          string     `json:"name"`
+	Status        string     `json:"status"` // unknown, up or down
+	LastCheckedAt *time.Time `json:"last_checked_at"`
+	LastError     *string    `json:"last_error"`
+}
+
+// RegionStatuses lists the regions the monitor runs in now, in the order chosen, with each region's own status.
+func (s *Service) RegionStatuses(ctx context.Context, orgID, id uuid.UUID) ([]RegionStatus, error) {
+	m, err := s.Get(ctx, orgID, id)
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.plans.Plan(ctx, s.pool, orgID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.pool.Query(ctx, `SELECT region, status, last_checked_at, last_error FROM monitor_region_state WHERE monitor_id = $1`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	known := map[string]RegionStatus{}
+	for rows.Next() {
+		var r RegionStatus
+		if err := rows.Scan(&r.Region, &r.Status, &r.LastCheckedAt, &r.LastError); err != nil {
+			return nil, err
+		}
+		known[r.Region] = r
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := []RegionStatus{}
+	for _, code := range s.regs.Effective(m.Regions, p.MaxRegions) {
+		r, ok := known[code]
+		if !ok {
+			r = RegionStatus{Region: code, Status: "unknown"}
+		}
+		r.Name = s.regs.Name(code)
+		out = append(out, r)
+	}
+	return out, nil
 }

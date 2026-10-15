@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import type { CheckResult, Incident, Monitor, RangeInfo, SeriesPoint, Uptime, Usage } from '../api'
+import type { CheckResult, Incident, Monitor, RangeInfo, RegionStatus, SeriesPoint, Uptime, Usage } from '../api'
 import { Alert } from '../components/Alert'
 import { CertificateCard } from '../components/Certificate'
 import { RangePicker } from '../components/RangePicker'
@@ -24,6 +24,8 @@ export function MonitorDetailPage() {
   const series = useApi<{ points: SeriesPoint[]; bucket_seconds: number; range: RangeInfo }>(`/monitors/${monitorID}/response-times?range=${range}`)
   const results = useApi<{ results: CheckResult[]; total: number }>(`/monitors/${monitorID}/results?range=${range}&limit=${PAGE}&offset=${offset}`)
   const incidents = useApi<{ incidents: Incident[]; total: number }>(`/monitors/${monitorID}/incidents?limit=5`)
+  const locations = useApi<{ regions: RegionStatus[] }>(`/monitors/${monitorID}/regions`)
+  const several = (locations.data?.regions?.length ?? 0) > 1
 
   if (monitor.error?.status === 404) {
     return (
@@ -104,6 +106,35 @@ export function MonitorDetailPage() {
             </ul>
           </section>
 
+          {several && locations.data && (
+            <section aria-labelledby="loc-h" className="card">
+              <h2 id="loc-h">Locations</h2>
+              <p className="hint">The monitor counts as down only when most locations agree.</p>
+              <div className="table-wrap">
+                <table>
+                  <caption className="sr-only">How each location currently sees this monitor</caption>
+                  <thead>
+                    <tr><th>Location</th><th>Status</th><th>Last checked</th><th>Latest problem</th></tr>
+                  </thead>
+                  <tbody>
+                    {locations.data.regions.map((r) => (
+                      <tr key={r.region}>
+                        <td>{r.name}</td>
+                        <td>
+                          {r.status === 'up' && <span className="d-badge d-badge-soft d-badge-success"><span aria-hidden="true">✔</span> Up</span>}
+                          {r.status === 'down' && <span className="d-badge d-badge-soft d-badge-error"><span aria-hidden="true">✖</span> Down</span>}
+                          {r.status === 'unknown' && <span className="d-badge d-badge-soft d-badge-ghost">Waiting</span>}
+                        </td>
+                        <td>{r.last_checked_at ? formatDateTime(r.last_checked_at) : '—'}</td>
+                        <td>{r.status === 'down' ? r.last_error ?? '' : ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
           <section aria-labelledby="hist-h" style={{ opacity: results.loading ? 0.55 : 1 }}>
             <h2 id="hist-h">Check history</h2>
             {results.data?.results.length === 0 && <p>No checks in this period yet.</p>}
@@ -112,12 +143,13 @@ export function MonitorDetailPage() {
                 <table>
                   <caption className="sr-only">Individual checks, newest first</caption>
                   <thead>
-                    <tr><th>When</th><th>Result</th><th className="num">HTTP</th><th className="num">Response</th><th>Details</th></tr>
+                    <tr><th>When</th>{several && <th>Location</th>}<th>Result</th><th className="num">HTTP</th><th className="num">Response</th><th>Details</th></tr>
                   </thead>
                   <tbody>
                     {results.data.results.map((r) => (
                       <tr key={r.id}>
                         <td><time dateTime={r.checked_at}>{formatDateTime(r.checked_at)}</time></td>
+                        {several && <td>{locations.data?.regions.find((x) => x.region === r.region)?.name ?? r.region}</td>}
                         <td>
                           {r.success
                             ? <span className="badge up"><span aria-hidden="true">✔</span> Success</span>
