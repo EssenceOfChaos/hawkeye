@@ -118,7 +118,37 @@ func prodBase() map[string]string {
 		"APP_ENV": "production", "APP_BASE_URL": "https://app.example.org", "API_BASE_URL": "https://app.example.org",
 		"DATABASE_URL": "postgres://u:p@db.example.org/monitoring?sslmode=require", "SESSION_SECRET": strings.Repeat("a", 40),
 		"EMAIL_PROVIDER": "smtp", "SMTP_HOST": "smtp.example.org", "SMTP_USERNAME": "u", "SMTP_PASSWORD": "p", "EMAIL_FROM_ADDRESS": "alerts@hawkeye.example.org",
-		"CONTACT_TO_ADDRESS": "support@hawkeye.example.org",
+		"CONTACT_TO_ADDRESS":     "support@hawkeye.example.org",
+		"SECRETS_ENCRYPTION_KEY": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=", // 32 bytes
+	}
+}
+
+func TestProductionRequiresAValidSecretsKey(t *testing.T) {
+	b := prodBase()
+	delete(b, "SECRETS_ENCRYPTION_KEY")
+	if _, err := load(env(b)); err == nil || !strings.Contains(err.Error(), "SECRETS_ENCRYPTION_KEY") {
+		t.Fatalf("production must refuse to start without a credentials key: %v", err)
+	}
+	for _, bad := range []string{"not base64!!", "c2hvcnQ="} {
+		b["SECRETS_ENCRYPTION_KEY"] = bad
+		if _, err := load(env(b)); err == nil || !strings.Contains(err.Error(), "SECRETS_ENCRYPTION_KEY") {
+			t.Fatalf("bad key %q accepted: %v", bad, err)
+		}
+	}
+}
+
+func TestDevelopmentDerivesAKeyButProductionNeverDoes(t *testing.T) {
+	c, err := load(env(map[string]string{"DATABASE_URL": "postgres://u:p@localhost/db", "SESSION_SECRET": "dev-secret"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.SecretBox(); err != nil {
+		t.Fatalf("development should derive a key: %v", err)
+	}
+	c.AppEnv = EnvProduction
+	c.SecretsKey = ""
+	if _, err := c.SecretBox(); err == nil {
+		t.Fatal("production must never fall back to a derived key")
 	}
 }
 

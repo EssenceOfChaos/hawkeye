@@ -68,13 +68,17 @@ func run() error {
 		return err
 	}
 	defer flushErrors()
+	box, err := cfg.SecretBox()
+	if err != nil {
+		return fmt.Errorf("secrets key: %w", err)
+	}
 	m := metrics.New()
 	metrics.RegisterPool(m.Registry, pool)
 	w := worker.New(pool,
 		checks.NewChecker(safehttp.Config{}), // strict production SSRF policy
 		checks.NewStore(pool, checks.Thresholds{Failure: cfg.FailureThreshold, Recovery: cfg.RecoveryThreshold}, incidents.Engine{}),
 		worker.Config{Concurrency: cfg.WorkerConcurrency, Lease: cfg.JobLease, MaxAttempts: cfg.JobMaxAttempts, PollInterval: cfg.PollInterval},
-		m, log).WithReporter(reporter)
+		m, log).WithReporter(reporter).WithSecrets(box)
 
 	var wg sync.WaitGroup
 	spawn := func(fn func()) {

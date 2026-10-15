@@ -36,8 +36,8 @@ describe('LandingPage', () => {
     // Paid checkout is not built yet, so the page must not pretend it is.
     expect(screen.getByRole('button', { name: /open soon/i })).toBeDisabled()
     expect(screen.getAllByRole('link', { name: /start monitoring free/i }).length).toBeGreaterThan(0)
-    // Features that are not built (SSL expiry, exports, branded reports, SMS) must not be advertised.
-    expect(screen.queryByText(/ssl|branded|priority support/i)).not.toBeInTheDocument()
+    // Features that are not built (exports, branded reports, priority support, team seats, SMS) must not be advertised.
+    expect(screen.queryByText(/branded|priority support|team members|csv export/i)).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /Always in sight/ })).toBeInTheDocument()
   })
 
@@ -89,5 +89,20 @@ describe('LandingPage', () => {
     expect(await within(footer).findByRole('link', { name: 'Dashboard' })).toBeInTheDocument()
     expect(within(footer).queryByRole('link', { name: 'Sign up' })).not.toBeInTheDocument()
     expect(within(footer).queryByRole('link', { name: 'Log in' })).not.toBeInTheDocument()
+  })
+
+  it('advertises what the product really does: website and API checks and SSL certificate warnings, on every plan', async () => {
+    renderLanding((url) =>
+      url.includes('/plans') ? json(200, { plans }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }),
+    )
+    await screen.findByText('50 website monitors')
+    expect(screen.getByRole('heading', { name: 'Website and API monitoring' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'SSL certificate alerts' })).toBeInTheDocument()
+    // Every plan card lists them, so visitors can see they are not paid extras.
+    expect(screen.getAllByText('SSL certificate expiry warnings')).toHaveLength(plans.length)
+    expect(screen.getAllByText('Website and API monitoring').length).toBeGreaterThanOrEqual(plans.length)
+    expect(screen.getByText(/Every plan includes the same features/)).toBeInTheDocument()
+    expect(screen.getByText('Does HawkEye warn me before my SSL certificate expires?')).toBeInTheDocument()
+    expect(screen.getByText(/Can I monitor an API\?/)).toBeInTheDocument()
   })
 })

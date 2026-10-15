@@ -87,6 +87,21 @@ Symptoms: `HawkEyeAlertEmailBacklog`/`HawkEyeAlertEmailFailing`. Delivery errors
 
 More specific runbooks:
 
+### Certificate warnings are not arriving
+
+Warnings use the same queue as outage alerts, so first follow *Alerts are not arriving*. Then check what the monitor knows: `SELECT ssl_expires_at, ssl_checked_at, ssl_notified_bucket, ssl_notified_for FROM monitors WHERE id = '…';`.
+`ssl_expires_at` null means no check has read a certificate (an `http://` URL, a failing TLS handshake that is not an expiry, or no check has run yet). `ssl_notified_bucket` is the smallest warning bucket already queued for that certificate;
+the delivery rows are `SELECT * FROM notification_deliveries WHERE event_type = 'ssl_expiry' AND monitor_id = '…';`. A bucket is handled even if nobody could be notified at the time (no verified, enabled recipient), and is never re-sent: to repeat a warning,
+`UPDATE monitors SET ssl_notified_bucket = NULL, ssl_notified_for = NULL WHERE id = '…';` and the next check queues it again for the current bucket.
+
+### Stored credentials cannot be opened
+
+Alert `HawkEyeCredentialsUnreadable` (`hawkeye_worker_errors_total{stage="secrets"}`), worker log line `cannot open monitor credentials`. Monitors that use authentication are **not being checked**: the
+worker retries them and records no result, deliberately, so customers get no false outage alerts. Cause: the worker's `SECRETS_ENCRYPTION_KEY` is missing, differs from the API's, or was changed after
+credentials were saved (the error says "wrong key or value moved"). Fix: restore the original key in `.env.production` for **both** `api` and `worker` and restart them; checks resume on their own.
+If the key is truly lost, the stored credentials cannot be recovered: clear them (`UPDATE monitors SET auth_type='none', auth_secret=NULL, auth_username=NULL, auth_header_name=NULL WHERE auth_secret IS NOT NULL;`),
+generate a new key (`openssl rand -base64 32`) and tell affected customers to enter their credentials again. Rotating the key on purpose has the same effect, so there is no routine rotation: do it only after a suspected leak.
+
 ### Billing is out of sync with Stripe
 
 (1) Look at their organization's row and recent events:

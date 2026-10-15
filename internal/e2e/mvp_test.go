@@ -68,7 +68,7 @@ func newStack(t *testing.T) *stack {
 	bcfg := billing.Config{SecretKey: "sk_test_x", WebhookSecret: billingtest.Secret, PricePro: "price_pro", PriceAgency: "price_agency", AppBaseURL: "https://app.test"}
 	app := httpapi.New(httpapi.Options{
 		Logger: log, DB: pool, RequestTimeout: 10 * time.Second, BodyLimit: "1M", AuthRateLimitPerMin: 1000,
-		Auth: authSvc, Orgs: organizations.NewService(pool), Plans: planSvc, Monitors: monitors.NewService(pool, planSvc), Pool: pool, PgPool: pool,
+		Auth: authSvc, Orgs: organizations.NewService(pool), Plans: planSvc, Monitors: monitors.NewService(pool, planSvc, monitors.WithSecretBox(testutil.SecretBox())), Pool: pool, PgPool: pool,
 		Notifications: notifications.NewService(pool, mail, log, "https://app.test", "alerts@hawkeye.test"),
 		Billing:       billing.NewService(pool, fake, bcfg, m, log), Account: account.NewService(pool, authSvc, fake, mail, log, "https://app.example.com"),
 		Limiter: ratelimit.New(pool), Metrics: metrics.NewAPI(), HSTS: true, EmailActionLimitPerHour: 50,

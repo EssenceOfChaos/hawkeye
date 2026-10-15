@@ -70,7 +70,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 	opts := httpapi.Options{
 		Logger: log, DB: pool, RequestTimeout: 10 * time.Second, BodyLimit: "1M",
 		Auth: svc, Orgs: organizations.NewService(pool), AuthRateLimitPerMin: rateLimit,
-		Plans: planSvc, Monitors: monitors.NewService(pool, planSvc), Pool: pool, PgPool: pool,
+		Plans: planSvc, Monitors: monitors.NewService(pool, planSvc, monitors.WithSecretBox(testutil.SecretBox())), Pool: pool, PgPool: pool,
 		Notifications: notifications.NewService(pool, mail, log, "http://app.test", "alerts@test"),
 		Billing:       billing.NewService(pool, o.provider, o.billingCfg, metrics.New(), log),
 		Account:       account.NewService(pool, svc, o.provider, mail, log, "https://app.example.com"),

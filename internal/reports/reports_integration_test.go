@@ -1,6 +1,7 @@
 package reports_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -234,5 +235,42 @@ func TestDashboardSummaryCountsAndOpenIncidents(t *testing.T) {
 	}
 	if s.Monitors != (reports.MonitorCounts{Total: 4, Up: 1, Down: 1, Pending: 1, Paused: 1}) || s.OpenIncidents != 1 || s.Uptime.TotalChecks != 10 {
 		t.Fatalf("%+v", s)
+	}
+}
+
+func TestDashboardListsCertificatesNeedingAttentionSoonestFirst(t *testing.T) {
+	e := newEnv(t)
+	now := time.Now()
+	set := func(id uuid.UUID, d time.Duration) {
+		e.pool.Exec(t.Context(), `UPDATE monitors SET ssl_expires_at = $2 WHERE id = $1`, id, now.Add(d))
+	}
+	soon, expired, month, far := e.monitor(t, e.org, "soon"), e.monitor(t, e.org, "expired"), e.monitor(t, e.org, "month"), e.monitor(t, e.org, "far")
+	paused, deleted, none := e.monitor(t, e.org, "paused"), e.monitor(t, e.org, "deleted"), e.monitor(t, e.org, "none")
+	_ = none
+	set(soon, 3*24*time.Hour)
+	set(expired, -2*24*time.Hour)
+	set(month, 29*24*time.Hour)
+	set(far, 90*24*time.Hour)
+	set(paused, time.Hour)
+	set(deleted, time.Hour)
+	e.pool.Exec(t.Context(), `UPDATE monitors SET enabled = false WHERE id = $1`, paused)
+	e.pool.Exec(t.Context(), `UPDATE monitors SET deleted_at = now() WHERE id = $1`, deleted)
+	var otherOrg uuid.UUID
+	e.pool.QueryRow(t.Context(), `INSERT INTO organizations (name) VALUES ('other') RETURNING id`).Scan(&otherOrg)
+	set(e.monitor(t, otherOrg, "someone else's"), time.Hour)
+
+	s, err := reports.DashboardSummary(t.Context(), e.pool, e.org, rng(t, "24h"), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, c := range s.Certificates {
+		got = append(got, c.MonitorName+":"+c.Status)
+	}
+	if want := "expired:expired soon:expiring month:expiring"; strings.Join(got, " ") != want {
+		t.Fatalf("certificates = %v, want %q (no far-away, paused, deleted, other-tenant or certificate-less monitors)", got, want)
+	}
+	if s.Certificates[1].DaysRemaining != 3 {
+		t.Fatalf("days remaining %d", s.Certificates[1].DaysRemaining)
 	}
 }

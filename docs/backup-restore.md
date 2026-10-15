@@ -10,7 +10,7 @@ All state is in PostgreSQL. Backups are logical dumps (`pg_dump -Fc`, compressed
 | RTO (time to recover) | < 1 h including provisioning | `scripts/restore.sh` + redeploy |
 | Retention | 14 daily, 8 weekly offsite | `--keep-days`, plus your storage lifecycle rules |
 
-Secrets are **not** in the database: keep `.env.production` in a password manager/secret store and back it up separately (without `SESSION_SECRET` all users are signed out, without the Stripe/SMTP keys billing and mail stop).
+Monitor credentials (API keys and passwords customers save for API monitors) are in the database but **encrypted**, with the key in `.env.production` as `SECRETS_ENCRYPTION_KEY`. A restore therefore needs *both* the dump and that key: keep the key in a password manager, never in the same place as the dumps, and restore the **same** key. Other secrets are **not** in the database: keep `.env.production` in a password manager/secret store and back it up separately (without `SESSION_SECRET` all users are signed out, without the Stripe/SMTP keys billing and mail stop).
 
 ## Taking a backup
 

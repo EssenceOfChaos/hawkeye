@@ -131,11 +131,24 @@ func (h *handlers) createMonitor(c echo.Context) error {
 	if err := bind(c, &in); err != nil {
 		return err
 	}
+	if err := requireVerifiedForWriteMethod(c, in.Method); err != nil {
+		return err
+	}
 	m, err := h.monitors.Create(c.Request().Context(), currentOrg(c), in)
 	if err != nil {
 		return mapError(err)
 	}
 	return c.JSON(http.StatusCreated, map[string]any{"monitor": m})
+}
+
+// requireVerifiedForWriteMethod keeps state-changing request methods (POST, PUT, PATCH, DELETE) behind a verified email address: a monitor
+// repeats the request on every check, so an anonymous throwaway account must not be able to aim it at someone else's API.
+func requireVerifiedForWriteMethod(c echo.Context, method *string) error {
+	if method == nil || !monitors.IsWriteMethod(*method) || currentUser(c).EmailVerified() {
+		return nil
+	}
+	return &APIError{Status: http.StatusForbidden, Code: "EMAIL_NOT_VERIFIED",
+		Message: "Verify your email address to monitor with POST, PUT, PATCH or DELETE requests."}
 }
 
 func (h *handlers) getMonitor(c echo.Context) error {
@@ -157,6 +170,9 @@ func (h *handlers) updateMonitor(c echo.Context) error {
 	}
 	var in monitors.UpdateInput
 	if err := bind(c, &in); err != nil {
+		return err
+	}
+	if err := requireVerifiedForWriteMethod(c, in.Method); err != nil {
 		return err
 	}
 	m, err := h.monitors.Update(c.Request().Context(), currentOrg(c), id, in)

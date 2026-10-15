@@ -23,6 +23,7 @@ import (
 	"hawkeye/internal/queue"
 	"hawkeye/internal/safehttp"
 	"hawkeye/internal/scheduler"
+	"hawkeye/internal/secrets"
 	"hawkeye/internal/testutil"
 	"hawkeye/internal/worker"
 )
@@ -56,7 +57,7 @@ func newEnv(t *testing.T) *env {
 
 func (e *env) worker(cfg safehttp.Config) *worker.Worker {
 	return worker.New(e.pool, checks.NewChecker(cfg), checks.NewStore(e.pool, checks.Thresholds{Failure: 2, Recovery: 2}, nil),
-		worker.Config{Concurrency: 5, PollInterval: 20 * time.Millisecond}, e.m, quiet)
+		worker.Config{Concurrency: 5, PollInterval: 20 * time.Millisecond}, e.m, quiet).WithSecrets(testutil.SecretBox())
 }
 
 func (e *env) monitor(t *testing.T, url string) uuid.UUID {
@@ -365,9 +366,13 @@ func TestAPICheckSendsRequestAndRecordsAssertionFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 	id := e.monitor(t, srv.URL)
+	sealed, err := testutil.SecretBox().Seal("tok", id.String())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := e.pool.Exec(t.Context(), `UPDATE monitors SET method = 'POST', request_headers = '[{"name":"X-Env","value":"prod"}]',
-		request_body = '{"q":1}', auth_type = 'bearer', auth_secret = 'tok',
-		assertions = '[{"type":"json_path","path":"status","operator":"equals","value":"ok"}]' WHERE id = $1`, id); err != nil {
+		request_body = '{"q":1}', auth_type = 'bearer', auth_secret = $2,
+		assertions = '[{"type":"json_path","path":"status","operator":"equals","value":"ok"}]' WHERE id = $1`, id, sealed); err != nil {
 		t.Fatal(err)
 	}
 	w := e.worker(loopbackCfg())
@@ -384,5 +389,38 @@ func TestAPICheckSendsRequestAndRecordsAssertionFailure(t *testing.T) {
 	e.round(t, w)
 	if s := e.state(t, id); s.Successes != 1 {
 		t.Fatalf("%+v", s)
+	}
+}
+
+// A credential that cannot be opened is an operator problem (wrong or missing key), not a failing website: no result may be recorded and no
+// incident opened, and the job must be retried so the check resumes once the key is fixed.
+func TestUnreadableCredentialsDoNotRecordAFailure(t *testing.T) {
+	e := newEnv(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) }))
+	defer srv.Close()
+	id := e.monitor(t, srv.URL)
+	otherKey, _ := secrets.NewFromPassphrase("some-other-key")
+	sealed, _ := otherKey.Seal("tok", id.String())
+	if _, err := e.pool.Exec(t.Context(), `UPDATE monitors SET auth_type = 'bearer', auth_secret = $2 WHERE id = $1`, id, sealed); err != nil {
+		t.Fatal(err)
+	}
+	w := e.worker(loopbackCfg()) // holds the test key, not "some-other-key"
+	e.pool.Exec(t.Context(), `UPDATE monitors SET next_check_at = now() WHERE id = $1`, id)
+	if _, err := e.sched.Tick(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if worked, err := w.ProcessOne(t.Context()); err != nil || !worked {
+		t.Fatalf("worked=%v err=%v", worked, err)
+	}
+	var results, incidents int
+	e.pool.QueryRow(t.Context(), `SELECT count(*) FROM check_results WHERE monitor_id = $1`, id).Scan(&results)
+	e.pool.QueryRow(t.Context(), `SELECT count(*) FROM incidents WHERE monitor_id = $1`, id).Scan(&incidents)
+	if results != 0 || incidents != 0 {
+		t.Fatalf("results=%d incidents=%d: an unreadable credential must not look like an outage", results, incidents)
+	}
+	var queued int
+	e.pool.QueryRow(t.Context(), `SELECT count(*) FROM check_jobs WHERE monitor_id = $1`, id).Scan(&queued)
+	if queued == 0 {
+		t.Fatal("the job was dropped instead of being retried")
 	}
 }

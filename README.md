@@ -2,10 +2,10 @@
 
 # Hawkeye
 
-Multi-tenant website monitoring SaaS: add websites, detect downtime, get alerts, review uptime.
+Multi-tenant website and API monitoring SaaS: add websites and APIs, detect downtime, get alerts, review uptime.
 Go + Echo REST API, PostgreSQL, React + TypeScript frontend.
 
-**Status:** all 8 phases complete: auth and tenancy, monitors with plan limits, the monitoring engine (durable scheduler/queue, SSRF-safe checks), incidents and email alerts, dashboard/uptime/charts/retention, Stripe billing (verified against the Stripe sandbox; real webhook delivery still needs `stripe listen`, see `docs/billing.md`), and production readiness (hardened images, HTTPS, backups, monitoring, security review). **Before real customers:** replace the placeholder Privacy/Terms (`docs/legal-placeholders.md`) and read the residual risks in `docs/security-review.md`.
+**Status:** all 8 phases complete: auth and tenancy, monitors with plan limits, the monitoring engine (durable scheduler/queue, SSRF-safe checks), incidents and email alerts, dashboard/uptime/charts/retention, Stripe billing (verified against the Stripe sandbox; real webhook delivery still needs `stripe listen`, see `docs/billing.md`), and production readiness (hardened images, HTTPS, backups, monitoring, security review). It also checks APIs (custom methods, headers, body, authentication, response assertions; credentials encrypted at rest) and warns before HTTPS certificates expire (30, 14, 7 and 1 days before, and when expired). **Before real customers:** have a lawyer review the Privacy Policy and Terms (`docs/legal-placeholders.md`), set `SECRETS_ENCRYPTION_KEY`, and read the residual risks in `docs/security-review.md`.
 See `docs/architecture.md` for the design and `docs/deployment.md` to deploy.
 
 ## Prerequisites
@@ -56,7 +56,7 @@ API reference: `docs/api.md`. Security notes: `docs/security.md`. Running the en
 | `make test`, `make test-race`            | Go tests                                                                                    |
 | `make lint`                              | gofmt, vet, web lint                                                                        |
 | `make build`                             | Build binaries into `bin/` and the web bundle                                               |
-| `make smoke-up` / `smoke` / `smoke-down` | Build and run the production images locally (HTTPS, mail catcher), run 34 checks, tear down |
+| `make smoke-up` / `smoke` / `smoke-down` | Build and run the production images locally (HTTPS, mail catcher), run 36 checks, tear down |
 | `make vuln`                              | `govulncheck`                                                                               |
 
 ## Configuration

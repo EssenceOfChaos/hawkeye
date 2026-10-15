@@ -126,6 +126,14 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
 2 Auth & tenancy · 3 Monitors & plans · 4 Scheduler/workers & SSRF-safe checks · 5 Incidents & notifications ·
 6 Dashboard & retention · 7 Stripe billing · 8 Production readiness (all complete).
 
+## API checks
+
+Monitors can send any of GET/HEAD/POST/PUT/PATCH/DELETE/OPTIONS with custom headers, a body, Basic/Bearer/API-key auth and response assertions (`internal/checks/request.go`). Credentials are encrypted at rest (`internal/secrets`, `docs/security.md`); state-changing methods need a verified email and a 5-minute minimum interval.
+
+## SSL certificate expiry
+
+The checker watches the TLS handshake with the monitored host (`httptrace`, `internal/checks/checker.go`) and returns the leaf certificate's `NotAfter` in `Result.CertExpiresAt`; an expired certificate is also captured from the verification error. `Store.Record` saves it on the monitor and, inside the same transaction, asks `incidents.Engine.CertificateExpiring` to queue warnings when the certificate enters a new bucket (30/14/7/1 days, 0 = expired; `checks.SSLBuckets`). Deliveries reuse the alert queue (`notification_deliveries`, migration `000011`), de-duplicated per monitor, recipient, certificate and bucket. The UI shows a countdown and timeline (`web/src/components/Certificate.tsx`).
+
 ## Phase 8 additions
 
 Production Dockerfiles and Compose (`deploy/`, `docs/deployment.md`); SMTP sender; shared PostgreSQL rate limiter; API metrics on a private port (`:9091`) and alert rules; optional Sentry error tracking; account export/deletion/change-password; legal placeholder pages; backup/restore scripts (`docs/backup-restore.md`); egress firewall; smoke test (`scripts/smoke.sh`); security review (`docs/security-review.md`).

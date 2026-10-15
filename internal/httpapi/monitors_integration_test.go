@@ -194,8 +194,10 @@ func TestPlansEndpointAndOverLimitAfterDowngrade(t *testing.T) {
 func TestAPIMonitorOverHTTP(t *testing.T) {
 	e := newEnv(t, 1000)
 	c, _ := e.register(t, "api@example.com")
+	e.verify(t, c, "api@example.com") // write methods need a verified address
 	body := monitorBody("API")
 	body["method"] = "post"
+	body["check_interval_seconds"] = 600
 	body["headers"] = []map[string]string{{"name": "X-Env", "value": "prod"}}
 	body["body"] = `{"ping":true}`
 	body["auth"] = map[string]string{"type": "basic", "username": "svc", "secret": "hunter2"}
@@ -221,5 +223,48 @@ func TestAPIMonitorOverHTTP(t *testing.T) {
 	fields, _ := r.Body["error"].(map[string]any)["details"].(map[string]any)["fields"].(map[string]any)
 	if r.Status != 400 || fields["headers[0].name"] == nil || fields["assertions[0].path"] == nil {
 		t.Fatalf("validation: %d %v", r.Status, r.Body)
+	}
+}
+
+func TestStateChangingMethodsRequireAVerifiedEmail(t *testing.T) {
+	e := newEnv(t, 1000)
+	c, _ := e.register(t, "newbie@example.com")
+
+	// Read-only requests, even with credentials and assertions, are open to every account.
+	read := monitorBody("Reader")
+	read["method"] = "OPTIONS"
+	if r := c.call("POST", "/api/v1/monitors", read); r.Status != 201 {
+		t.Fatalf("OPTIONS monitor: %d %v", r.Status, r.Body)
+	}
+	id := ""
+	for _, m := range []string{"POST", "put", "PATCH", "Delete"} {
+		w := monitorBody("Writer")
+		w["method"] = m
+		w["check_interval_seconds"] = 600
+		r := c.call("POST", "/api/v1/monitors", w)
+		if r.Status != 403 || r.Body["error"].(map[string]any)["code"] != "EMAIL_NOT_VERIFIED" {
+			t.Fatalf("%s monitor created by an unverified account: %d %v", m, r.Status, r.Body)
+		}
+	}
+	// Switching an existing monitor to a write method is blocked the same way.
+	g := c.call("POST", "/api/v1/monitors", monitorBody("Plain"))
+	id = g.Body["monitor"].(map[string]any)["id"].(string)
+	if r := c.call("PATCH", "/api/v1/monitors/"+id, map[string]any{"method": "DELETE", "check_interval_seconds": 600}); r.Status != 403 {
+		t.Fatalf("patch to DELETE by an unverified account: %d", r.Status)
+	}
+
+	e.verify(t, c, "newbie@example.com")
+	w := monitorBody("Writer")
+	w["method"] = "POST"
+	w["check_interval_seconds"] = 600
+	if r := c.call("POST", "/api/v1/monitors", w); r.Status != 201 {
+		t.Fatalf("verified account: %d %v", r.Status, r.Body)
+	}
+	// And the repeat-rate floor applies on top of the plan's.
+	w["check_interval_seconds"] = 60
+	r := c.call("POST", "/api/v1/monitors", w)
+	fields, _ := r.Body["error"].(map[string]any)["details"].(map[string]any)["fields"].(map[string]any)
+	if r.Status != 400 || fields["check_interval_seconds"] == nil {
+		t.Fatalf("fast write monitor: %d %v", r.Status, r.Body)
 	}
 }

@@ -30,7 +30,7 @@ func setupPool(t *testing.T, plan, status string, conns int32) (*monitors.Servic
 		SELECT $1, id, $3 FROM plans WHERE code = $2`, org, plan, status); err != nil {
 		t.Fatal(err)
 	}
-	return monitors.NewService(pool, plans.NewService("http://app.test")), pool, org
+	return monitors.NewService(pool, plans.NewService("http://app.test"), monitors.WithSecretBox(testutil.SecretBox())), pool, org
 }
 
 func newIn(name string) monitors.CreateInput {
@@ -283,5 +283,32 @@ func TestResumeAndTargetChangeMakeMonitorDueImmediately(t *testing.T) {
 	svc.Update(t.Context(), org, m.ID, monitors.UpdateInput{URL: &u})
 	if !due() {
 		t.Fatal("a new target should be checked right away")
+	}
+}
+
+func TestMonitorExposesCertificateExpiryAndResetsItWhenTheURLChanges(t *testing.T) {
+	svc, pool, org := setup(t, "free", "active")
+	m, err := svc.Create(t.Context(), org, newIn("Site"))
+	if err != nil || m.SSL != nil {
+		t.Fatalf("a new monitor has no certificate information: %+v %v", m.SSL, err)
+	}
+	pool.Exec(t.Context(), `UPDATE monitors SET ssl_expires_at = now() + interval '10 days 1 hour', ssl_checked_at = now(),
+		ssl_notified_bucket = 14, ssl_notified_for = ssl_expires_at WHERE id = $1`, m.ID)
+	got, err := svc.Get(t.Context(), org, m.ID)
+	if err != nil || got.SSL == nil || got.SSL.DaysRemaining != 10 || got.SSL.Status != "expiring" || got.SSL.CheckedAt.IsZero() {
+		t.Fatalf("%+v %v", got.SSL, err)
+	}
+	// Renaming keeps it; pointing the monitor at another address forgets it, because the certificate belonged to the old host.
+	if u, err := svc.Update(t.Context(), org, m.ID, monitors.UpdateInput{Name: strp("Renamed")}); err != nil || u.SSL == nil {
+		t.Fatalf("rename lost the certificate: %+v %v", u.SSL, err)
+	}
+	u, err := svc.Update(t.Context(), org, m.ID, monitors.UpdateInput{URL: strp("https://other.example.com")})
+	if err != nil || u.SSL != nil {
+		t.Fatalf("a new URL must clear the certificate: %+v %v", u.SSL, err)
+	}
+	var bucket *int
+	pool.QueryRow(t.Context(), `SELECT ssl_notified_bucket FROM monitors WHERE id = $1`, m.ID).Scan(&bucket)
+	if bucket != nil {
+		t.Fatal("warning state must reset with the URL")
 	}
 }

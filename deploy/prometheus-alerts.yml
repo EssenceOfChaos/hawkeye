@@ -67,6 +67,10 @@ groups:
         for: 10m
         labels: {severity: ticket}
         annotations: {summary: "Sustained internal worker errors (database trouble?)"}
+      - alert: HawkEyeCredentialsUnreadable
+        expr: increase(hawkeye_worker_errors_total{stage="secrets"}[15m]) > 0
+        labels: {severity: page}
+        annotations: {summary: "Monitors with stored credentials are not being checked: the encryption key is missing or wrong", runbook: "docs/operations.md#stored-credentials-cannot-be-opened"}
       - alert: HawkEyeMostChecksFailing
         expr: sum(rate(hawkeye_checks_total{result="failure"}[10m])) / clamp_min(sum(rate(hawkeye_checks_total[10m])), 0.001) > 0.5
         for: 10m

@@ -20,6 +20,7 @@ import (
 
 	"hawkeye/internal/checks"
 	"hawkeye/internal/plans"
+	"hawkeye/internal/secrets"
 	"hawkeye/internal/validation"
 )
 
@@ -38,6 +39,19 @@ const (
 
 // Methods lists the accepted request methods. Only some of them may carry a body.
 var Methods = []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+
+// IsWriteMethod reports whether a method changes state on the target. Such monitors repeat a state-changing request on every check, so they
+// need a verified email address (enforced by the API layer) and a slower minimum interval.
+func IsWriteMethod(method string) bool {
+	switch strings.ToUpper(strings.TrimSpace(method)) {
+	case "POST", "PUT", "PATCH", "DELETE":
+		return true
+	}
+	return false
+}
+
+// MinWriteIntervalSeconds is the fastest a monitor using a write method may run, whatever the plan allows.
+const MinWriteIntervalSeconds = 300
 
 func bodyAllowed(method string) bool {
 	return method == "POST" || method == "PUT" || method == "PATCH" || method == "DELETE"
@@ -67,6 +81,7 @@ type Monitor struct {
 	Body                          *string            `json:"body"`
 	Auth                          AuthInfo           `json:"auth"`
 	Assertions                    []checks.Assertion `json:"assertions"`
+	SSL                           *SSLInfo           `json:"ssl"` // null until a check has seen the monitor's TLS certificate
 	Enabled                       bool               `json:"enabled"`
 	CurrentStatus                 string             `json:"current_status"`
 	LastCheckedAt                 *time.Time         `json:"last_checked_at"`
@@ -75,6 +90,14 @@ type Monitor struct {
 	ConsecutiveSuccesses          int                `json:"consecutive_successes"`
 	CreatedAt                     time.Time          `json:"created_at"`
 	UpdatedAt                     time.Time          `json:"updated_at"`
+}
+
+// SSLInfo describes the TLS certificate of an HTTPS monitor as last seen by a check.
+type SSLInfo struct {
+	ExpiresAt     time.Time `json:"expires_at"`
+	CheckedAt     time.Time `json:"checked_at"`
+	DaysRemaining int       `json:"days_remaining"` // whole days; negative once expired
+	Status        string    `json:"status"`         // valid, expiring (30 days or fewer) or expired
 }
 
 // AuthInfo describes a monitor's authentication without its secret, which the API never returns.
@@ -152,22 +175,90 @@ type ListFilter struct {
 type Service struct {
 	pool  *pgxpool.Pool
 	plans *plans.Service
+	box   *secrets.Box // encrypts stored credentials; without it, saving a credential fails rather than storing plain text
 }
 
-func NewService(pool *pgxpool.Pool, p *plans.Service) *Service { return &Service{pool: pool, plans: p} }
+// Option configures a Service.
+type Option func(*Service)
+
+// WithSecretBox sets the cipher that protects stored monitor credentials.
+func WithSecretBox(b *secrets.Box) Option { return func(s *Service) { s.box = b } }
+
+func NewService(pool *pgxpool.Pool, p *plans.Service, opts ...Option) *Service {
+	s := &Service{pool: pool, plans: p}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
+
+// sealSecret encrypts a credential for storage, bound to the monitor it belongs to. An empty secret stays empty.
+func (s *Service) sealSecret(secret string, monitorID uuid.UUID) (string, error) {
+	if secret == "" {
+		return "", nil
+	}
+	return s.box.Seal(secret, monitorID.String())
+}
+
+// EncryptLegacySecrets encrypts any credential stored in plain text by an earlier version. It is idempotent and safe to run from several
+// processes at once, and returns how many values it converted.
+func (s *Service) EncryptLegacySecrets(ctx context.Context) (int, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, auth_secret FROM monitors WHERE auth_secret IS NOT NULL AND auth_secret NOT LIKE 'enc:v1:%'`)
+	if err != nil {
+		return 0, err
+	}
+	type row struct {
+		id     uuid.UUID
+		secret string
+	}
+	var todo []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.secret); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		todo = append(todo, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, r := range todo {
+		sealed, err := s.sealSecret(r.secret, r.id)
+		if err != nil {
+			return n, err
+		}
+		tag, err := s.pool.Exec(ctx, `UPDATE monitors SET auth_secret = $2 WHERE id = $1 AND auth_secret = $3`, r.id, sealed, r.secret)
+		if err != nil {
+			return n, err
+		}
+		n += int(tag.RowsAffected())
+	}
+	return n, nil
+}
 
 const cols = `id, organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
 	enabled, current_status, last_checked_at, last_success_at, consecutive_failures, consecutive_successes, created_at, updated_at,
 	request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), auth_secret IS NOT NULL,
-	assertions`
+	assertions, ssl_expires_at, ssl_checked_at`
 
 func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	var m Monitor
+	var sslExpires, sslChecked *time.Time
 	err := row.Scan(&m.ID, &m.OrganizationID, &m.Name, &m.URL, &m.Method, &m.ExpectedStatusCode, &m.CheckIntervalSeconds,
 		&m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.LastCheckedAt, &m.LastSuccessAt, &m.ConsecutiveFailures,
 		&m.ConsecutiveSuccesses, &m.CreatedAt, &m.UpdatedAt, &m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username,
-		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions)
+		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked)
 	m.EffectiveCheckIntervalSeconds = max(m.CheckIntervalSeconds, minInterval)
+	if sslExpires != nil {
+		now := time.Now()
+		m.SSL = &SSLInfo{ExpiresAt: *sslExpires, DaysRemaining: checks.SSLDaysRemaining(*sslExpires, now), Status: checks.SSLStatus(*sslExpires, now)}
+		if sslChecked != nil {
+			m.SSL.CheckedAt = *sslChecked
+		}
+	}
 	return m, err
 }
 
@@ -369,6 +460,9 @@ func (f *fields) validate() error {
 	if f.timeout < 1 || f.timeout > 30 {
 		bad["timeout_seconds"] = "must be between 1 and 30"
 	}
+	if IsWriteMethod(f.method) && f.interval < MinWriteIntervalSeconds {
+		bad["check_interval_seconds"] = fmt.Sprintf("must be at least %d minutes for %s, because the request is repeated on every check", MinWriteIntervalSeconds/60, f.method)
+	}
 	f.validateRequest(bad)
 	if len(bad) > 0 {
 		return &validation.Error{Fields: bad}
@@ -404,6 +498,8 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		}
 		if in.CheckIntervalSeconds != nil {
 			f.interval = *in.CheckIntervalSeconds
+		} else if IsWriteMethod(f.method) {
+			f.interval = max(f.interval, MinWriteIntervalSeconds)
 		}
 		if in.TimeoutSeconds != nil {
 			f.timeout = *in.TimeoutSeconds
@@ -424,12 +520,17 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 				return err
 			}
 		}
+		id := uuid.New() // chosen here so the credential can be encrypted for exactly this monitor
+		sealed, err := s.sealSecret(f.auth.Secret, id)
+		if err != nil {
+			return fmt.Errorf("protect credentials: %w", err)
+		}
 		out, err = scan(tx.QueryRow(ctx, `INSERT INTO monitors
-			(organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
+			(id, organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
 			 request_headers, request_body, auth_type, auth_username, auth_header_name, auth_secret, assertions)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14) RETURNING `+cols,
+			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14) RETURNING `+cols,
 			orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout,
-			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.auth.Secret, f.assertions), minInterval)
+			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, sealed, f.assertions, id), minInterval)
 		return err
 	})
 	return out, err
@@ -553,6 +654,10 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		reset := f.url != cur.URL || f.method != cur.Method || !slices.Equal(f.headers, cur.Headers) ||
 			!equalPtr(f.body, cur.Body) || f.auth.Type != cur.Auth.Type || f.auth.Username != cur.Auth.Username || f.auth.HeaderName != cur.Auth.HeaderName ||
 			f.auth.Secret != ""
+		sealed, err := s.sealSecret(f.auth.Secret, id)
+		if err != nil {
+			return fmt.Errorf("protect credentials: %w", err)
+		}
 		out, err = scan(tx.QueryRow(ctx, `UPDATE monitors SET name=$3, url=$4, method=$5, expected_status_code=$6,
 			check_interval_seconds=$7, timeout_seconds=$8,
 			next_check_at = CASE WHEN $9 THEN now() ELSE next_check_at END,
@@ -562,10 +667,12 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			request_headers=$10, request_body=$11, auth_type=$12, auth_username=NULLIF($13,''),
 			auth_header_name=NULLIF($14,''),
 			auth_secret = CASE WHEN $12 = 'none' THEN NULL WHEN $15 THEN auth_secret ELSE NULLIF($16,'') END,
-			assertions=$17
+			assertions=$17,
+			ssl_expires_at = CASE WHEN $18 THEN NULL ELSE ssl_expires_at END, ssl_checked_at = CASE WHEN $18 THEN NULL ELSE ssl_checked_at END,
+			ssl_notified_bucket = CASE WHEN $18 THEN NULL ELSE ssl_notified_bucket END, ssl_notified_for = CASE WHEN $18 THEN NULL ELSE ssl_notified_for END
 			WHERE id = $1 AND organization_id = $2 RETURNING `+cols,
 			id, orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout, reset,
-			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.keepSecret, f.auth.Secret, f.assertions), minInterval)
+			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.keepSecret, sealed, f.assertions, f.url != cur.URL), minInterval)
 		return err
 	})
 	return out, err
@@ -595,7 +702,10 @@ func (s *Service) SetEnabled(ctx context.Context, orgID, id uuid.UUID, enabled b
 // An open incident is closed without notifications: nobody needs a recovery email for a monitor they removed.
 func (s *Service) Delete(ctx context.Context, orgID, id uuid.UUID) error {
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE monitors SET deleted_at = now(), enabled = false
+		// A deleted monitor keeps its history for a while, but never its credentials, headers or request body.
+		tag, err := tx.Exec(ctx, `UPDATE monitors SET deleted_at = now(), enabled = false,
+			auth_type = 'none', auth_secret = NULL, auth_username = NULL, auth_header_name = NULL,
+			request_headers = '[]', request_body = NULL
 			WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL`, id, orgID)
 		if err != nil {
 			return err

@@ -34,9 +34,9 @@ const PROBLEMS = [
 const FEATURES = [
   {
     icon: brand.icons.websites,
-    title: 'Uptime monitoring',
-    lead: 'Know when a website stops responding.',
-    text: 'HawkEye checks your websites at regular intervals and records whether they respond successfully. When repeated failures meet the alert threshold, an incident is created and your notifications are triggered.',
+    title: 'Website and API monitoring',
+    lead: 'Know when a website or API stops responding.',
+    text: 'HawkEye checks your websites and APIs at regular intervals and records whether they respond successfully. Send custom requests with headers, a body and authentication, and verify what comes back, including values in a JSON response. When repeated failures meet the alert threshold, an incident is created and your notifications are triggered.',
   },
   {
     icon: brand.icons.analytics,
@@ -57,16 +57,16 @@ const FEATURES = [
     text: 'HawkEye emails you when an outage is confirmed and when the website recovers: one message each, not a flood. Recipients must confirm their address before they receive anything.',
   },
   {
-    icon: brand.icons.settings,
-    title: 'One dashboard',
-    lead: 'Every website. One clear picture.',
-    text: 'Review availability, response times, recent incidents and plan usage in one workspace, without jumping between separate tools.',
+    icon: brand.icons.shield,
+    title: 'SSL certificate alerts',
+    lead: 'Never be surprised by an expired certificate.',
+    text: 'HawkEye reads the SSL certificate of every HTTPS monitor and shows a live countdown to its expiry. You get an email 30, 14, 7 and 1 days before it expires, and again if it does, so there is time to renew.',
   },
   {
-    icon: brand.icons.shield,
-    title: 'Historical uptime reports',
-    lead: 'Understand performance beyond the last check.',
-    text: 'Review check-based uptime and incident history across the time periods your plan supports.',
+    icon: brand.icons.settings,
+    title: 'One dashboard, clear reports',
+    lead: 'Every website. One clear picture.',
+    text: 'Review availability, response times, recent incidents, expiring certificates and check-based uptime history in one workspace, for the time periods your plan supports.',
   },
 ]
 
@@ -74,7 +74,7 @@ const AUDIENCES = [
   { title: 'Freelancers', lead: 'Spend less time checking. More time creating.', text: 'You’re responsible for the website, the fixes, the updates and the client relationship. HawkEye adds an automated layer of visibility, so you can identify availability problems without manually checking every project.' },
   { title: 'Web agencies', lead: 'Keep an eye on every client website.', text: 'As your client list grows, so does the work of keeping track of it. Centralize website monitoring, review incidents across projects, and use history to show the ongoing care you provide.' },
   { title: 'Independent business owners', lead: 'Your website is too important to leave unchecked.', text: 'Downtime can interrupt inquiries, sales and customer service. HawkEye helps you know when availability problems arise so you can investigate sooner.' },
-  { title: 'Developers and small teams', lead: 'Make availability visible.', text: 'Keep a practical record of HTTP responses, failures and latency trends: straightforward visibility without adopting a complex observability stack.' },
+  { title: 'Developers and small teams', lead: 'Make availability visible.', text: 'Keep a practical record of HTTP responses, failures and latency trends. Check your APIs too: send authenticated requests and verify the JSON that comes back, without adopting a complex observability stack.' },
 ]
 
 const STEPS = [
@@ -89,8 +89,9 @@ const FAQ = [
   { q: 'Do I need a credit card?', a: 'No. The free plan does not ask for one. A payment method is only needed if you choose a paid plan.' },
   { q: 'What happens when my website goes down?', a: 'When repeated failures meet the incident threshold, HawkEye creates an incident and emails your alert recipients. It keeps checking, and tells you when the website recovers.' },
   { q: 'Will HawkEye guarantee that my website is always available?', a: 'No monitoring service can guarantee that a website will always be available or detect every possible problem. HawkEye provides periodic checks and recorded results to help you identify and investigate availability issues.' },
+  { q: 'Does HawkEye warn me before my SSL certificate expires?', a: 'Yes, on every plan. For each HTTPS monitor, HawkEye reads the certificate your site presents during its checks, shows the expiry date and a countdown, and emails your alert recipients 30, 14, 7 and 1 days before it expires and again if it does. Renew the certificate and HawkEye picks up the new date automatically. It reports the certificate it sees for the monitored address; it cannot tell you about other hostnames or certificates revoked early.' },
   { q: 'Does HawkEye send alerts by SMS?', a: 'Not yet. The current release supports email alerts.' },
-  { q: 'Can I monitor an API?', a: 'HawkEye currently performs HTTP and HTTPS availability checks. You can set the expected status codes, but not validate response content.' },
+  { q: 'Can I monitor an API?', a: 'Yes. Choose the request method, add custom headers and a request body, and authenticate with Basic, a bearer token or an API-key header. You can then check the status code, look for text in the response, or verify a value in a JSON response. Passwords, tokens and API keys are stored encrypted and are never shown again. Methods that change data (POST, PUT, PATCH and DELETE) are repeated on every check, so they require a verified email address and run at most every 5 minutes.' },
   { q: 'What happens if I downgrade?', a: 'Your existing monitors are never deleted automatically. You may not be able to add new ones until you are within the new plan’s limits, and history older than the new plan’s retention period is removed.' },
 ]
 
@@ -111,6 +112,8 @@ function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: Plan; fe
         <li>{plan.max_monitors} website monitors</li>
         <li>Checks every {mins} minute{mins === 1 ? '' : 's'}</li>
         <li>{plan.history_retention_days} days of history</li>
+        <li>Website and API monitoring</li>
+        <li>SSL certificate expiry warnings</li>
         <li>Email alerts for outages and recoveries</li>
       </ul>
       {plan.monthly_price_cents === 0 ? (
@@ -196,6 +199,7 @@ export function LandingPage() {
           <ul className="value-strip">
             <li className="d-badge d-badge-soft d-badge-success">Uptime tracking</li>
             <li className="d-badge d-badge-soft d-badge-error">Outage alerts</li>
+            <li className="d-badge d-badge-soft d-badge-warning">SSL expiry warnings</li>
             <li className="d-badge d-badge-soft d-badge-info">Performance history</li>
           </ul>
         </div>
@@ -280,7 +284,7 @@ export function LandingPage() {
 
       <section aria-labelledby="pricing-h" className="section">
         <h2 id="pricing-h">Simple plans. Clear visibility.</h2>
-        <p className="hint">Start free. Upgrade when your monitoring needs grow. The free plan is a real plan, not a trial, and monitors are never deleted if you move to a smaller plan.</p>
+        <p className="hint">Start free. Upgrade when your monitoring needs grow. Every plan includes the same features: website and API monitoring, SSL certificate expiry warnings, incident tracking, email alerts, and uptime reports. Plans differ only in how many monitors you can have, how often they are checked, and how long history is kept. The free plan is a real plan, not a trial, and monitors are never deleted if you move to a smaller plan.</p>
         {plans === null && (
           <div role="status" aria-label="Loading plans" className="plans-loading">
             <div className="d-skeleton h-56 w-full" />

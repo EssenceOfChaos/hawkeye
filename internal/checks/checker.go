@@ -10,7 +10,9 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
+	"sync"
 	"time"
 
 	"hawkeye/internal/safehttp"
@@ -56,6 +58,9 @@ type Result struct {
 	ResponseTimeMs *int
 	ErrorCategory  string
 	ErrorSummary   string
+	// CertExpiresAt is when the monitored host's TLS certificate expires, when the check reached one (HTTPS monitors only). It is also set
+	// when the handshake failed because that certificate had already expired.
+	CertExpiresAt *time.Time
 }
 
 // Checker runs checks through the SSRF-safe HTTP client.
@@ -103,6 +108,12 @@ func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
 	}
 	req.Header.Set("User-Agent", userAgent)
 
+	// Watch the TLS handshake with the monitored host (not hosts it redirects to) to learn when its certificate expires.
+	cert := &certWatch{host: req.URL.Hostname()}
+	if req.URL.Scheme == "https" {
+		req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{TLSHandshakeDone: cert.handshakeDone}))
+	}
+
 	client := safehttp.New(c.cfg, t.Timeout)
 	if secretHeader := applyAuth(req, t.Auth); secretHeader != "" {
 		// Credentials only go to the monitored host. Go already drops Authorization when a redirect leaves
@@ -121,9 +132,13 @@ func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
 
 	resp, err := client.Do(req)
 	elapsed := int(c.now().Sub(res.CheckedAt) / time.Millisecond)
+	res.CertExpiresAt = cert.expiry()
 	if err != nil {
 		if ctx.Err() != nil {
 			return Result{}, ctx.Err() // caller shut down; the outcome says nothing about the site
+		}
+		if res.CertExpiresAt == nil {
+			res.CertExpiresAt = expiredCertificate(err, c.now())
 		}
 		res.ErrorCategory, res.ErrorSummary = Classify(err)
 		return finish()
@@ -184,6 +199,50 @@ func applyAuth(req *http.Request, a Auth) string {
 		return a.HeaderName
 	}
 	return ""
+}
+
+// certWatch records the expiry of the certificate presented by the monitored host. Handshake callbacks can arrive on other goroutines.
+type certWatch struct {
+	host string
+	mu   sync.Mutex
+	at   *time.Time
+}
+
+func (w *certWatch) handshakeDone(cs tls.ConnectionState, err error) {
+	// Only the monitored host's own certificate counts: a redirect to another host must not overwrite it.
+	if err != nil || len(cs.PeerCertificates) == 0 || !strings.EqualFold(cs.ServerName, w.host) {
+		return
+	}
+	na := cs.PeerCertificates[0].NotAfter
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.at == nil {
+		w.at = &na
+	}
+}
+
+func (w *certWatch) expiry() *time.Time {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.at
+}
+
+// expiredCertificate returns the certificate's expiry when a handshake failed because the server's own certificate had expired.
+func expiredCertificate(err error, now time.Time) *time.Time {
+	var cv *tls.CertificateVerificationError
+	if !errors.As(err, &cv) || len(cv.UnverifiedCertificates) == 0 {
+		return nil
+	}
+	var inv x509.CertificateInvalidError
+	if !errors.As(cv.Err, &inv) || inv.Reason != x509.Expired {
+		return nil
+	}
+	leaf := cv.UnverifiedCertificates[0]
+	if !leaf.NotAfter.Before(now) {
+		return nil // an intermediate expired, not the site's certificate
+	}
+	na := leaf.NotAfter
+	return &na
 }
 
 func truncate(s string, n int) string {

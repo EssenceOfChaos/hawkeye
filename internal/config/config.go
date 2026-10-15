@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hawkeye/internal/billing"
+	"hawkeye/internal/secrets"
 	"log/slog"
 	"net/mail"
 	"net/url"
@@ -35,6 +36,8 @@ type Config struct {
 	DBConnectTimout time.Duration
 
 	SessionSecret string
+	// SecretsKey (base64, 32 bytes) encrypts stored monitor credentials. Required in production; development derives a key from SESSION_SECRET.
+	SecretsKey string
 
 	LogLevel slog.Level
 
@@ -99,6 +102,18 @@ func dbSSLMode(raw string) string {
 func (c Config) IsProduction() bool { return c.AppEnv == EnvProduction }
 
 // Billing returns the payment-provider settings. Billing is simply disabled when none are set.
+// SecretBox returns the cipher used to protect stored monitor credentials. Outside production a key is derived from SESSION_SECRET when none
+// is set, so a fresh checkout works; production refuses to start without a dedicated key (see validation).
+func (c Config) SecretBox() (*secrets.Box, error) {
+	if c.SecretsKey != "" {
+		return secrets.New(c.SecretsKey)
+	}
+	if c.IsProduction() {
+		return nil, secrets.ErrNoKey
+	}
+	return secrets.NewFromPassphrase("development:" + c.SessionSecret)
+}
+
 func (c Config) Billing() billing.Config {
 	return billing.Config{SecretKey: c.StripeSecretKey, WebhookSecret: c.StripeWebhookSecret,
 		PricePro: c.StripePricePro, PriceAgency: c.StripePriceAgency, AppBaseURL: c.AppBaseURL}
@@ -161,6 +176,7 @@ func load(get func(string) string) (Config, error) {
 		DBMaxConns:      int32(integer("DB_MAX_CONNS", 10)),
 		DBConnectTimout: duration("DB_CONNECT_TIMEOUT", 10*time.Second),
 		SessionSecret:   str("SESSION_SECRET", ""),
+		SecretsKey:      str("SECRETS_ENCRYPTION_KEY", ""),
 		RequestTimeout:  duration("REQUEST_TIMEOUT", 30*time.Second),
 		BodyLimit:       str("BODY_LIMIT", "1M"),
 		ShutdownTimeout: duration("SHUTDOWN_TIMEOUT", 15*time.Second),
@@ -209,6 +225,11 @@ func load(get func(string) string) (Config, error) {
 		SupportAddress:   str("CONTACT_TO_ADDRESS", "support@example.com"),
 	}
 
+	if c.SecretsKey != "" {
+		if _, err := secrets.New(c.SecretsKey); err != nil {
+			errs = append(errs, fmt.Errorf("SECRETS_ENCRYPTION_KEY: %w", err))
+		}
+	}
 	if err := c.LogLevel.UnmarshalText([]byte(str("LOG_LEVEL", "info"))); err != nil {
 		errs = append(errs, errors.New("LOG_LEVEL: must be one of debug, info, warn, error"))
 	}
@@ -281,6 +302,9 @@ func load(get func(string) string) (Config, error) {
 
 	// Production must never fall back to a development secret.
 	if c.IsProduction() {
+		if c.SecretsKey == "" {
+			errs = append(errs, errors.New("SECRETS_ENCRYPTION_KEY: required in production (generate with: openssl rand -base64 32); it encrypts stored monitor credentials"))
+		}
 		if c.SessionSecret == "" || c.SessionSecret == placeholderSessionSecret {
 			errs = append(errs, errors.New("SESSION_SECRET: must be set to a unique random value in production"))
 		} else if len(c.SessionSecret) < minSessionSecretLen {

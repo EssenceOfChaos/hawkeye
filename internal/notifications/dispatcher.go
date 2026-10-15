@@ -110,15 +110,17 @@ func (d *Dispatcher) ProcessOne(ctx context.Context) (bool, error) {
 				next_attempt_at = now() + $1::interval
 			WHERE id = (SELECT id FROM notification_deliveries WHERE status = 'pending' AND next_attempt_at <= now()
 				ORDER BY next_attempt_at FOR UPDATE SKIP LOCKED LIMIT 1)
-			RETURNING id, incident_id, notification_setting_id, event_type, attempt_count)
+			RETURNING id, incident_id, monitor_id, notification_setting_id, event_type, attempt_count, ssl_expires_at, ssl_bucket)
 		SELECT p.id, p.attempt_count, p.event_type, s.destination, s.enabled, s.verified_at IS NOT NULL,
-			i.started_at, i.resolved_at, COALESCE(i.summary, ''), m.name, m.url
+			COALESCE(i.started_at, now()), i.resolved_at, COALESCE(i.summary, ''), m.id::text, m.name, m.url,
+			COALESCE(p.ssl_expires_at, now()), COALESCE(p.ssl_bucket, 0)
 		FROM picked p
 		JOIN notification_settings s ON s.id = p.notification_setting_id
-		JOIN incidents i ON i.id = p.incident_id
-		JOIN monitors m ON m.id = i.monitor_id`, d.cfg.Lease).
+		LEFT JOIN incidents i ON i.id = p.incident_id
+		JOIN monitors m ON m.id = COALESCE(i.monitor_id, p.monitor_id)`, d.cfg.Lease).
 		Scan(&c.id, &c.attempts, &c.alert.Event, &c.alert.To, &c.enabled, &c.verified,
-			&c.alert.StartedAt, &c.alert.ResolvedAt, &c.alert.Cause, &c.alert.MonitorName, &c.alert.MonitorURL)
+			&c.alert.StartedAt, &c.alert.ResolvedAt, &c.alert.Cause, &c.alert.MonitorID, &c.alert.MonitorName, &c.alert.MonitorURL,
+			&c.alert.SSLExpiresAt, &c.alert.SSLBucket)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}

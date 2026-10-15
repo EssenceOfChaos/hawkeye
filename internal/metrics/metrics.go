@@ -42,7 +42,7 @@ type Metrics struct {
 	BillingOldest  prometheus.Gauge
 	BillingFailed  prometheus.Gauge
 
-	WorkerErrors *prometheus.CounterVec // stage=claim|load|record|complete|sample|schedule
+	WorkerErrors *prometheus.CounterVec // stage=claim|load|record|complete|sample|schedule|secrets
 	LastPollUnix prometheus.Gauge
 }
 

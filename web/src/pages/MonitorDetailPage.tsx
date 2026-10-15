@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import type { CheckResult, Incident, Monitor, RangeInfo, SeriesPoint, Uptime, Usage } from '../api'
+import { CertificateCard } from '../components/Certificate'
 import { RangePicker } from '../components/RangePicker'
 import { ResponseChart } from '../components/ResponseChart'
 import { StatusBadge } from '../components/StatusBadge'
@@ -56,6 +57,8 @@ export function MonitorDetailPage() {
             {m.method} {m.url} · every {Math.round(m.effective_check_interval_seconds / 60)} min ·{' '}
             {m.last_checked_at ? `last checked ${formatDateTime(m.last_checked_at)}` : 'not checked yet'}
           </p>
+
+          <CertificateCard monitor={m} />
 
           <RangePicker value={range} options={options} onChange={changeRange} />
 

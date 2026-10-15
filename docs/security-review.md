@@ -16,6 +16,9 @@ This is a self-review by the developer of the system, not an independent penetra
 | No account deletion/export; Stripe customer would outlive the account | implemented; deletion cancels Stripe first |
 | `SMTP_CA_FILE` declared but never read | parsed + test that every SMTP setting is read |
 | Rate limits were per-process | shared PostgreSQL limiter |
+| API-check credentials stored in plain text (and in every backup) | AES-256-GCM at rest, bound to the monitor, key from `SECRETS_ENCRYPTION_KEY`, fail-closed; legacy values encrypted at API startup |
+| API checks could be aimed at third-party APIs with state-changing methods by any new account, at 1-minute intervals | POST/PUT/PATCH/DELETE need a verified email and a 5-minute minimum interval |
+| Deleted monitors kept credentials, headers and body for 30 days | wiped immediately on delete |
 
 ## Checklist (plan §9)
 
@@ -37,7 +40,7 @@ SQL: all queries are parameterised; the few places that assemble SQL (dynamic `U
 
 ## Residual risks and launch blockers
 
-1. **Privacy policy and Terms are placeholders** (`docs/legal-placeholders.md`). Blocker.
+1. **Privacy policy and Terms** are now written but have not had attorney review (`docs/legal-placeholders.md`). Blocker until reviewed.
 2. **`deploy/egress-filter.sh` is untested on Linux.** The application-level SSRF guard is tested, but run `scripts/verify-egress.sh` on the real host; without the firewall a bug in `safehttp` would be exploitable.
 3. **No independent penetration test**; no formal audit log.
 4. `govulncheck` lists one vulnerability in an unused `x/crypto/openpgp` package with no upstream fix; not reachable from our code, accepted.
@@ -46,3 +49,5 @@ SQL: all queries are parameterised; the few places that assemble SQL (dynamic `U
 7. Stripe: refunds/disputes are manual; the webhook delivery hop (Stripe → our endpoint) needs verifying with `stripe listen` or a real endpoint. Rotate the sandbox keys that were pasted into chat, and use restricted keys in production.
 8. SMTP was verified only against a fake server and Mailpit, not a real provider; send a test through yours and check SPF/DKIM/DMARC.
 9. Single-host deployment is a single point of failure (see `docs/deployment.md`).
+10. Credential encryption uses one static key with no rotation tooling; losing it means customers must re-enter credentials. Custom headers and request bodies are not encrypted (documented and warned about in the UI and Terms).
+11. A verified email is a modest barrier for state-changing API checks; a determined abuser can still verify an address. Watch for abuse and consider paid-plan gating if it appears.

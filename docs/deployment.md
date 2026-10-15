@@ -31,7 +31,7 @@ internet ─443/80─▶ web (Caddy: TLS, HSTS, CSP, static SPA, proxies /api /h
 1. `cp deploy/.env.production.example .env.production` and fill every `CHANGE_ME`. Generate `SESSION_SECRET` with `openssl rand -base64 48`. Keep the file `chmod 600`, out of git.
 2. Run migrations once: `docker compose --env-file .env.production -f deploy/docker-compose.prod.yml run --rm migrate` (or `make migrate` against the target `DATABASE_URL`). Migrations are embedded in the binary and forward-only.
 3. Build and start: `docker compose --env-file .env.production -f deploy/docker-compose.prod.yml up -d --build`. Caddy obtains the certificate on first request; watch `docker compose logs -f web`.
-4. Verify: `scripts/smoke.sh https://your-domain` (34 checks: health, redirect to HTTPS, HSTS and CSP headers, security-sensitive routes, auth flow; `--full` also drives the registration and account-deletion lifecycle and needs a mail API).
+4. Verify: `scripts/smoke.sh https://your-domain` (36 checks: health, redirect to HTTPS, HSTS and CSP headers, security-sensitive routes, auth flow; `--full` also drives the registration and account-deletion lifecycle and needs a mail API).
 5. Apply the egress firewall on the host and prove it: `sudo ALLOW_TCP=... ALLOW_DNS=... deploy/egress-filter.sh apply`, then `scripts/verify-egress.sh`. **This script has not been tested on Linux by the author; do not skip the verifier.**
 6. Add the Stripe webhook endpoint `https://your-domain/api/v1/webhooks/stripe`, put its signing secret in `STRIPE_WEBHOOK_SECRET`, restart `api` and `worker`.
 7. Load `deploy/prometheus-alerts.yml`, add an external uptime check on `/readyz`, schedule backups (`docs/backup-restore.md`).
@@ -79,8 +79,9 @@ Why not Resend's dashboard templates? They can only be used through Resend's HTT
 
 ## Configuration
 
-`deploy/.env.production.example` lists every variable with comments; `internal/config/config.go` is the authoritative parser and validator. In production (`APP_ENV=production`) the process **refuses to start** if: `SESSION_SECRET` is short or a placeholder, base URLs are not https, `EMAIL_PROVIDER` is not smtp, `SMTP_TLS=none`, the sender is an example domain, or the database URL does not use TLS.
+`deploy/.env.production.example` lists every variable with comments; `internal/config/config.go` is the authoritative parser and validator. In production (`APP_ENV=production`) the process **refuses to start** if: `SESSION_SECRET` is short or a placeholder, base URLs are not https, `EMAIL_PROVIDER` is not smtp, `SMTP_TLS=none`, the sender is an example domain, or the database URL does not use TLS, or `SECRETS_ENCRYPTION_KEY` is missing or not 32 bytes of base64.
 
+**`SECRETS_ENCRYPTION_KEY`** (generate with `openssl rand -base64 32`) encrypts the API keys, tokens and passwords customers save for API monitors (AES-256-GCM, each value bound to its monitor). It must be identical for `api` and `worker`. **Back it up off the server, separately from database dumps** (a dump plus the key restores everything; neither alone exposes credentials), and never change it casually: credentials saved under another key cannot be opened (`docs/operations.md#stored-credentials-cannot-be-opened`). When upgrading from a version that stored credentials in plain text, the API encrypts them once at startup.
 ## Upgrades
 
 1. Take a backup (`scripts/backup.sh`), and note the current `APP_VERSION`.

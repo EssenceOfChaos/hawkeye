@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import type { DashboardSummary, Incident, RangeInfo, SeriesPoint, Usage } from '../api'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
+import { CertificatesPanel } from '../components/Certificate'
 import { RangePicker } from '../components/RangePicker'
 import { ResponseChart } from '../components/ResponseChart'
 import { AvgResponseTile, StatTile, UptimeHero } from '../components/Uptime'
@@ -47,6 +48,8 @@ export function DashboardPage() {
               <Link to="/incidents">See what’s down</Link>
             </p>
           )}
+
+          <CertificatesPanel certificates={s.certificates ?? []} tracked={s.certificates_tracked ?? 0} />
 
           <RangePicker value={range} options={options} onChange={setRange} />
 

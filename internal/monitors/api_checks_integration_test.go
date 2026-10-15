@@ -6,8 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"hawkeye/internal/checks"
 	"hawkeye/internal/monitors"
+	"hawkeye/internal/plans"
+	"hawkeye/internal/secrets"
+	"hawkeye/internal/testutil"
 	"hawkeye/internal/validation"
 )
 
@@ -40,9 +45,19 @@ func TestCreateAPIMonitorNeverReturnsTheSecret(t *testing.T) {
 	if strings.Contains(string(b), "s3cret") {
 		t.Fatalf("secret leaked in JSON: %s", b)
 	}
+	// The database holds only the encrypted credential, bound to this monitor.
 	var stored string
-	if err := pool.QueryRow(t.Context(), `SELECT auth_secret FROM monitors WHERE id = $1`, m.ID).Scan(&stored); err != nil || stored != "s3cret" {
-		t.Fatalf("stored secret %q %v", stored, err)
+	if err := pool.QueryRow(t.Context(), `SELECT auth_secret FROM monitors WHERE id = $1`, m.ID).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(stored, "s3cret") || !secrets.IsSealed(stored) {
+		t.Fatalf("credential stored without encryption: %q", stored)
+	}
+	if plain, err := testutil.SecretBox().Open(stored, m.ID.String()); err != nil || plain != "s3cret" {
+		t.Fatalf("stored credential does not open for its own monitor: %q %v", plain, err)
+	}
+	if _, err := testutil.SecretBox().Open(stored, uuid.NewString()); err == nil {
+		t.Fatal("stored credential opens for a different monitor")
 	}
 
 	// A plain monitor gets empty, non-null collections and no auth.
@@ -104,10 +119,22 @@ func TestUpdateKeepsSecretUnlessReplacedOrTypeChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stored := func() *string {
+	rawStored := func() *string {
 		var s *string
 		pool.QueryRow(t.Context(), `SELECT auth_secret FROM monitors WHERE id = $1`, m.ID).Scan(&s)
 		return s
+	}
+	// stored returns the decrypted credential (the database only ever holds the encrypted form).
+	stored := func() *string {
+		raw := rawStored()
+		if raw == nil {
+			return nil
+		}
+		plain, err := testutil.SecretBox().Open(*raw, m.ID.String())
+		if err != nil {
+			t.Fatalf("stored credential unreadable: %v", err)
+		}
+		return &plain
 	}
 	// Changing only the username keeps the password.
 	u, err := svc.Update(t.Context(), org, m.ID, monitors.UpdateInput{Auth: &monitors.AuthInput{Type: "basic", Username: "v"}})
@@ -164,5 +191,87 @@ func TestUpdateRequestFields(t *testing.T) {
 	u, err = svc.Update(t.Context(), org, m.ID, monitors.UpdateInput{Auth: &monitors.AuthInput{Type: "bearer", Secret: strp("rotated")}})
 	if err != nil || u.CurrentStatus != "unknown" {
 		t.Fatalf("new credentials must reset health state: %+v %v", u, err)
+	}
+}
+
+func TestSavingACredentialFailsClosedWithoutAnEncryptionKey(t *testing.T) {
+	_, pool, org := setup(t, "free", "active")
+	noKey := monitors.NewService(pool, plans.NewService("http://app.test")) // no WithSecretBox
+	if _, err := noKey.Create(t.Context(), org, apiIn()); err == nil {
+		t.Fatal("a credential was accepted although it could not be encrypted")
+	}
+	var n int
+	pool.QueryRow(t.Context(), `SELECT count(*) FROM monitors WHERE organization_id = $1`, org).Scan(&n)
+	if n != 0 {
+		t.Fatalf("%d monitors stored", n)
+	}
+	// Monitors without credentials do not need a key.
+	if _, err := noKey.Create(t.Context(), org, newIn("plain")); err != nil {
+		t.Fatalf("plain monitor: %v", err)
+	}
+}
+
+func TestLegacyPlainTextCredentialsAreEncryptedOnce(t *testing.T) {
+	svc, pool, org := setup(t, "free", "active")
+	var id uuid.UUID
+	if err := pool.QueryRow(t.Context(), `INSERT INTO monitors (organization_id, name, url, check_interval_seconds, timeout_seconds, auth_type, auth_secret)
+		VALUES ($1, 'old', 'https://example.com', 300, 10, 'bearer', 'legacy-token') RETURNING id`, org).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	n, err := svc.EncryptLegacySecrets(t.Context())
+	if err != nil || n != 1 {
+		t.Fatalf("converted %d, err %v", n, err)
+	}
+	var stored string
+	pool.QueryRow(t.Context(), `SELECT auth_secret FROM monitors WHERE id = $1`, id).Scan(&stored)
+	if plain, err := testutil.SecretBox().Open(stored, id.String()); err != nil || plain != "legacy-token" {
+		t.Fatalf("%q %v", plain, err)
+	}
+	if n, err := svc.EncryptLegacySecrets(t.Context()); err != nil || n != 0 {
+		t.Fatalf("second run converted %d (err %v); it must be idempotent", n, err)
+	}
+}
+
+func TestDeletingAMonitorWipesCredentialsAndRequestMaterial(t *testing.T) {
+	svc, pool, org := setup(t, "free", "active")
+	m, err := svc.Create(t.Context(), org, apiIn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Delete(t.Context(), org, m.ID); err != nil {
+		t.Fatal(err)
+	}
+	var secret, body *string
+	var typ string
+	var headers string
+	if err := pool.QueryRow(t.Context(), `SELECT auth_secret, request_body, auth_type, request_headers::text FROM monitors WHERE id = $1`, m.ID).
+		Scan(&secret, &body, &typ, &headers); err != nil {
+		t.Fatal(err)
+	}
+	if secret != nil || body != nil || typ != "none" || headers != "[]" {
+		t.Fatalf("deleted monitor still holds request material: secret=%v body=%v type=%s headers=%s", secret, body, typ, headers)
+	}
+}
+
+func TestWriteMethodsNeedASlowerInterval(t *testing.T) {
+	svc, _, org := setup(t, "pro", "active") // pro allows 1-minute checks
+	in := newIn("writer")
+	in.Method = strp("DELETE")
+	in.CheckIntervalSeconds = new(int)
+	*in.CheckIntervalSeconds = 60
+	_, err := svc.Create(t.Context(), org, in)
+	var ve *validation.Error
+	if !errors.As(err, &ve) || ve.Fields["check_interval_seconds"] == "" {
+		t.Fatalf("a 1-minute DELETE monitor was accepted: %v", err)
+	}
+	in.CheckIntervalSeconds = nil // default: raised to the write-method minimum, not the plan's 60 s
+	m, err := svc.Create(t.Context(), org, in)
+	if err != nil || m.CheckIntervalSeconds < monitors.MinWriteIntervalSeconds {
+		t.Fatalf("default interval %d err %v", m.CheckIntervalSeconds, err)
+	}
+	// Read-only methods keep the plan's speed.
+	g := newIn("reader")
+	if m, err := svc.Create(t.Context(), org, g); err != nil || m.CheckIntervalSeconds != 60 {
+		t.Fatalf("GET interval %d err %v", m.CheckIntervalSeconds, err)
 	}
 }

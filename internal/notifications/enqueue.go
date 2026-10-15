@@ -3,6 +3,7 @@ package notifications
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -10,8 +11,9 @@ import (
 
 // Event types.
 const (
-	EventOutage   = "outage"
-	EventRecovery = "recovery"
+	EventOutage    = "outage"
+	EventRecovery  = "recovery"
+	EventSSLExpiry = "ssl_expiry"
 )
 
 // Enqueue records one pending delivery per enabled, verified destination of the organization.
@@ -22,7 +24,21 @@ func Enqueue(ctx context.Context, tx pgx.Tx, orgID, incidentID uuid.UUID, event 
 	tag, err := tx.Exec(ctx, `INSERT INTO notification_deliveries (incident_id, notification_setting_id, event_type)
 		SELECT $2, s.id, $3 FROM notification_settings s
 		WHERE s.organization_id = $1 AND s.enabled AND s.verified_at IS NOT NULL
-		ON CONFLICT (incident_id, notification_setting_id, event_type) DO NOTHING`, orgID, incidentID, event)
+		ON CONFLICT (incident_id, notification_setting_id, event_type) WHERE incident_id IS NOT NULL DO NOTHING`, orgID, incidentID, event)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// EnqueueSSL queues a certificate-expiry warning for every enabled, verified recipient of the organization. It is idempotent per monitor,
+// recipient, certificate (its expiry date) and bucket, so a retry can never send the same warning twice.
+func EnqueueSSL(ctx context.Context, tx pgx.Tx, orgID, monitorID uuid.UUID, expiresAt time.Time, bucket int) (int, error) {
+	tag, err := tx.Exec(ctx, `INSERT INTO notification_deliveries (monitor_id, notification_setting_id, event_type, ssl_expires_at, ssl_bucket)
+		SELECT $2, s.id, $3, $4, $5 FROM notification_settings s
+		WHERE s.organization_id = $1 AND s.enabled AND s.verified_at IS NOT NULL
+		ON CONFLICT (monitor_id, notification_setting_id, ssl_expires_at, ssl_bucket) WHERE event_type = 'ssl_expiry' DO NOTHING`,
+		orgID, monitorID, EventSSLExpiry, expiresAt, bucket)
 	if err != nil {
 		return 0, err
 	}

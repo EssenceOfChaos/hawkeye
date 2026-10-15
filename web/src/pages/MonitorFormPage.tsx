@@ -5,6 +5,8 @@ import {
   ApiError,
   BODY_METHODS,
   HTTP_METHODS,
+  WRITE_METHODS,
+  WRITE_MIN_MINUTES,
   type Assertion,
   type AuthType,
   type HttpMethod,
@@ -95,6 +97,9 @@ export function MonitorFormPage() {
   }, [monitorID])
 
   const bodyAllowed = BODY_METHODS.includes(method)
+  // POST, PUT, PATCH and DELETE change things on the target, and the request is repeated on every check.
+  const writeMethod = WRITE_METHODS.includes(method)
+  const minIntervalMin = writeMethod ? Math.max(minAllowed, WRITE_MIN_MINUTES) : minAllowed
   const assertionsAllowed = method !== 'HEAD'
   const keepsSecret = storedAuthType === authType
 
@@ -161,6 +166,12 @@ export function MonitorFormPage() {
               ))}
             </select>
             {f.method && <small className="error">{f.method}</small>}
+            {writeMethod && (
+              <p role="note" className="banner inline">
+                <strong>This request is repeated on every check.</strong> Use {method} only on an endpoint you are authorized to monitor and that is safe to call
+                again and again. It needs a verified email address, and checks run at most every {WRITE_MIN_MINUTES} minutes.
+              </p>
+            )}
           </div>
 
           <fieldset className="group">
@@ -222,7 +233,7 @@ export function MonitorFormPage() {
               <Field label={secretLabel} type="password" autoComplete="new-password" value={authSecret}
                 onChange={(e) => setAuthSecret(e.target.value)} error={f['auth.secret']}
                 placeholder={keepsSecret ? '••••••••' : undefined}
-                hint={keepsSecret ? 'Saved and hidden. Leave empty to keep it, or enter a new one to replace it.' : 'Stored securely and never shown again.'} />
+                hint={keepsSecret ? 'Saved and hidden. Leave empty to keep it, or enter a new one to replace it.' : 'Stored encrypted and never shown again.'} />
             )}
           </fieldset>
 
@@ -287,9 +298,11 @@ export function MonitorFormPage() {
             </div>
           </fieldset>
 
-          <Field label="Check every (minutes)" type="number" min={minAllowed} max={1440} value={intervalMin}
+          <Field label="Check every (minutes)" type="number" min={minIntervalMin} max={1440} value={intervalMin}
             onChange={(e) => setIntervalMin(e.target.value)} error={f.check_interval_seconds}
-            hint={`Your plan allows checks every ${minAllowed} minute(s) or slower. Leave empty for the default.`} />
+            hint={writeMethod
+              ? `${method} monitors run at most every ${WRITE_MIN_MINUTES} minutes. Leave empty for the default.`
+              : `Your plan allows checks every ${minAllowed} minute(s) or slower. Leave empty for the default.`} />
           <div className="row">
             <button type="submit" disabled={busy}>{editing ? 'Save changes' : 'Add monitor'}</button>
             <Link to="/monitors">Cancel</Link>

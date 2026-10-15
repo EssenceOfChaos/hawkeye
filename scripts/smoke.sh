@@ -90,9 +90,16 @@ if [ -n "$FULL_EMAIL" ]; then
     sleep 2
     check "support received the message, tagged, with Reply-To and branded HTML" '"${CURL[@]}" "$MAIL_API/api/v1/messages" | grep -q "\[Something isn.t working\] Smoke test message" && ID=$("${CURL[@]}" "$MAIL_API/api/v1/search?query=subject:%22Smoke+test+message%22" | jq_ "d[\"messages\"][0][\"ID\"]") && M=$("${CURL[@]}" "$MAIL_API/api/v1/message/$ID") && echo "$M" | grep -q "support@hawkeye.test" && echo "$M" | grep -q "hawkeye-logo.png"'
   fi
+  EXPECT_TOTAL=1
+  if [ -n "$MAIL_API" ]; then # POST monitors need a verified address, which only this mode can complete
+    EXPECT_TOTAL=2
+    R="$(post /monitors '{"name":"Smoke API monitor","url":"https://example.com","method":"POST","check_interval_seconds":600,"body":"{\"ping\":true}","auth":{"type":"bearer","secret":"smoke-secret-value"},"assertions":[{"type":"json_path","path":"ok","operator":"equals","value":"true"}]}')"
+    check "an API monitor with a credential and a POST method can be created (201)" '[ "$(echo "$R" | tail -1)" = 201 ]'
+    check "the credential is never returned, only that it is set" '! echo "$R" | grep -q smoke-secret-value && echo "$R" | grep -q "\"secret_set\":true"'
+  fi
   R="$(post /monitors '{"name":"Smoke monitor","url":"https://example.com"}')"
   check "a monitor can be created (201)"          '[ "$(echo "$R" | tail -1)" = 201 ]'
-  check "the dashboard summary works"             '"${CURL[@]}" -b "$JAR" "$BASE/api/v1/dashboard/summary" | grep -q "\"total\":1"'
+  check "the dashboard summary works"             '"${CURL[@]}" -b "$JAR" "$BASE/api/v1/dashboard/summary" | grep -q "\"total\":$EXPECT_TOTAL"'
   R="$(post /account/delete "{\"password\":\"$PW\",\"confirm_email\":\"$FULL_EMAIL\"}")"
   check "account deletion returns 204"            '[ "$(echo "$R" | tail -1)" = 204 ]'
   R="$(post /auth/login "{\"email\":\"$FULL_EMAIL\",\"password\":\"$PW\"}")"

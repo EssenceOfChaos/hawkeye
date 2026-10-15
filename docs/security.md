@@ -99,6 +99,15 @@ TLS roots; a malicious site can make us send a GET/HEAD with our fixed `User-Age
 
 See `docs/security-review.md` for the review and residual risks.
 
+## Monitor credentials and request material (API checks)
+
+- **Encrypted at rest:** passwords, bearer tokens and API-key values are sealed with AES-256-GCM before they are stored (`internal/secrets`), using `SECRETS_ENCRYPTION_KEY`. Every value gets a random nonce and is bound to its monitor's ID, so a value copied to another row, tampered with, or opened with the wrong key fails to decrypt. A database dump or backup alone does not reveal credentials. Production refuses to start without the key; saving a credential with no key fails rather than storing plain text.
+- **Write-only:** the API never returns a credential (only `secret_set`), exports exclude it, and the worker decrypts it only in memory for the check. It is dropped from any request redirected to another host. Deleting a monitor erases its credentials, custom headers and request body at once.
+- **Unreadable credential = operator error, not an outage:** if the worker cannot decrypt, it records no result and retries, so customers never get false alerts (alert `HawkEyeCredentialsUnreadable`).
+- **Not encrypted:** custom headers and the request body (visible to every member of the organization and included in exports). The UI and Terms tell users to keep secrets in Authentication only.
+- **State-changing methods** (POST, PUT, PATCH, DELETE) repeat on every check, so they need a verified email address and an interval of at least 5 minutes. This limits abuse of the monitor as a request cannon, but does not make it impossible: the Terms put responsibility for the requests on the customer, and the SSRF protections (public hosts, ports 80/443, no redirects to private addresses) still apply.
+- **Key handling:** one key, no rotation tooling. Rotating or losing it makes stored credentials unreadable and users must re-enter them (`docs/operations.md`).
+
 ## Known gaps
 
 - Console email provider (development) logs verification/reset links; it is refused in production.

@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { api, ApiError, type Monitor, type Usage } from '../api'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
+import { CertBadge } from '../components/Certificate'
 import { StatusBadge } from '../components/StatusBadge'
 
 const PAGE_SIZE = 25
@@ -110,7 +111,7 @@ export function MonitorsPage() {
           <table>
             <caption className="sr-only">Your monitors</caption>
             <thead>
-              <tr><th>Name</th><th>Status</th><th>Interval</th><th>Last check</th><th>Actions</th></tr>
+              <tr><th>Name</th><th>Status</th><th>SSL</th><th>Interval</th><th>Last check</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {monitors.map((m) => (
@@ -120,6 +121,7 @@ export function MonitorsPage() {
                     <div className="hint mono">{m.url}</div>
                   </td>
                   <td><StatusBadge monitor={m} /></td>
+                  <td><CertBadge monitor={m} /></td>
                   <td>every {Math.round(m.effective_check_interval_seconds / 60)} min</td>
                   <td>{m.last_checked_at ? new Date(m.last_checked_at).toLocaleString() : 'Not yet'}</td>
                   <td className="actions">

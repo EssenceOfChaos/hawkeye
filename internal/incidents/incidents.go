@@ -41,6 +41,16 @@ func (Engine) Opened(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, failur
 	return err
 }
 
+// CertificateExpiring queues the certificate-expiry warning for a monitor's organization (see checks.SSLBuckets).
+func (Engine) CertificateExpiring(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, expiresAt time.Time, bucket int) error {
+	var orgID uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT organization_id FROM monitors WHERE id = $1`, monitorID).Scan(&orgID); err != nil {
+		return err
+	}
+	_, err := notifications.EnqueueSSL(ctx, tx, orgID, monitorID, expiresAt, bucket)
+	return err
+}
+
 // Resolved closes the monitor's open incident, if any, and enqueues recovery notifications.
 // successes is the length of the current success streak; the incident ends at its first check.
 func (Engine) Resolved(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, successes int) error {

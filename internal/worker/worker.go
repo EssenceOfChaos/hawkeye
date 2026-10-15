@@ -4,6 +4,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math/rand/v2"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/queue"
 	"hawkeye/internal/scheduler"
+	"hawkeye/internal/secrets"
 )
 
 type Config struct {
@@ -52,10 +54,17 @@ type Worker struct {
 	m       *metrics.Metrics
 	log     *slog.Logger
 	rep     errtrack.Reporter
+	box     *secrets.Box // opens stored monitor credentials
 }
 
 func New(pool *pgxpool.Pool, checker *checks.Checker, store *checks.Store, cfg Config, m *metrics.Metrics, log *slog.Logger) *Worker {
 	return &Worker{pool: pool, checker: checker, store: store, cfg: cfg.withDefaults(), m: m, log: log, rep: errtrack.Noop{}}
+}
+
+// WithSecrets sets the cipher used to open stored monitor credentials. Without it, checks that need a credential fail and are retried.
+func (w *Worker) WithSecrets(b *secrets.Box) *Worker {
+	w.box = b
+	return w
 }
 
 // WithReporter sends unexpected worker errors to an error tracker.
@@ -127,6 +136,19 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 		w.m.WorkerErrors.WithLabelValues("load").Inc()
 		w.retry(ctx, job)
 		return true, err
+	}
+	if t.Auth.Secret != "" {
+		// A credential that cannot be opened (missing or wrong key) is an operator problem, not a failing website: retry and report it, and
+		// never record a check result, so no false incident is opened for the customer.
+		plain, err := w.box.Open(t.Auth.Secret, job.MonitorID.String())
+		if err != nil {
+			w.m.WorkerErrors.WithLabelValues("secrets").Inc()
+			w.log.ErrorContext(ctx, "cannot open monitor credentials", "monitor_id", job.MonitorID, "error", err)
+			w.rep.Capture(ctx, fmt.Errorf("monitor %s: open credentials: %w", job.MonitorID, err), map[string]string{"component": "worker"})
+			w.retry(ctx, job)
+			return true, nil
+		}
+		t.Auth.Secret = plain
 	}
 	t.Timeout = time.Duration(timeoutSecs) * time.Second
 

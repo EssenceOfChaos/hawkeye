@@ -139,4 +139,23 @@ describe('MonitorFormPage editing', () => {
     expect(sent.auth).toEqual({ type: 'basic', username: 'svc' })
     expect(sent.body).toBeNull()
   })
+
+  it('warns that state-changing methods repeat on every check, and raises the minimum interval', async () => {
+    setup(() => json(201, { monitor: {} }))
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Request method'), 'DELETE')
+    expect(screen.getByRole('note')).toHaveTextContent(/repeated on every check/)
+    expect(screen.getByRole('note')).toHaveTextContent(/verified email/)
+    expect(screen.getByLabelText('Check every (minutes)')).toHaveAttribute('min', '5')
+    await userEvent.selectOptions(screen.getByLabelText('Request method'), 'OPTIONS')
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+
+  it('shows the server message when a write method needs a verified email', async () => {
+    setup(() => json(403, { error: { code: 'EMAIL_NOT_VERIFIED', message: 'Verify your email address to monitor with POST, PUT, PATCH or DELETE requests.' } }))
+    await fill('Writer')
+    await userEvent.selectOptions(screen.getByLabelText('Request method'), 'POST')
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Verify your email address/)
+  })
 })

@@ -223,3 +223,23 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 .topic.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
 .topic:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
 .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+/* SSL certificate panel (daisyUI countdown + timeline, coloured with the app's own palette so dark mode works) */
+.cert-layout { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); align-items: start; }
+.cert-status { font-weight: 700; margin: 0 0 .25rem; }
+.cert-ok { color: var(--up); } .cert-soon { color: #b26a00; } .cert-expired { color: var(--down); }
+@media (prefers-color-scheme: dark) { .cert-soon { color: #f0b429; } }
+.cert-digits { display: flex; gap: 1.25rem; margin: .25rem 0 .5rem; }
+.cert-digit { display: grid; justify-items: center; }
+.cert-digit .d-countdown { font-family: var(--font-mono); font-size: 2.5rem; font-weight: 700; }
+.cert-expired { font-weight: 600; }
+.cert-badge { font-weight: 600; border-color: currentColor; background: transparent; white-space: nowrap; }
+.cert-timeline-h { margin: 0 0 .5rem; font-size: 1rem; }
+.cert-timeline { --timeline-col-start: 1.25rem; margin: 0; padding: 0; }
+.cert-timeline li hr { background: var(--border); }
+.cert-timeline li.reached hr { background: var(--accent); }
+.cert-timeline li.reached .d-timeline-middle { color: var(--accent); }
+.cert-timeline li.expired .d-timeline-middle { color: var(--down); }
+.cert-timeline .d-timeline-end { padding: .25rem 0; }
+.cert-list { margin: 0; padding: 0; display: grid; gap: .5rem; }
+.cert-list li { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }

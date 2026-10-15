@@ -79,18 +79,23 @@ interval raised to the plan minimum, so a downgrade takes effect without rewriti
   otherwise as `text/plain`, unless a `Content-Type` header is set.
 - `auth`: `{type: "none"}`, `{type: "basic", username, secret}`, `{type: "bearer", secret}` or `{type: "header", header_name, secret}`.
   The secret is write-only: responses carry `{type, username?, header_name?, secret_set}`. On PATCH, omitting `secret` keeps the stored
-  one as long as `type` is unchanged; `type: "none"` deletes it. Data exports never include it.
+  one as long as `type` is unchanged; `type: "none"` deletes it. Data exports never include it. It is stored encrypted (AES-256-GCM, bound to the monitor, key from
+  `SECRETS_ENCRYPTION_KEY`); deleting a monitor erases its credentials, headers and body immediately.
 - `assertions`: up to 10, all of which must pass after the status check. `{type: "body_contains" | "body_not_contains", value}`
   searches the first 1 MiB of the body. `{type: "json_path", path, operator, value?}` parses the body as JSON (failing above 1 MiB);
   `path` looks like `data.items[0].status` (a leading `$.` is optional); `operator` is `equals`, `not_equals`, `contains` (substring
   of a string, or an element of an array), `exists` or `not_exists`. Strings compare as text, numbers numerically, and other values
   by their JSON form (`true`, `null`). Not allowed with `HEAD`. A failed assertion is recorded with `error_category: "assertion"`.
 
+**State-changing methods.** `POST`, `PUT`, `PATCH` and `DELETE` repeat a request that changes things on the target, so they need a **verified email address**
+(otherwise 403 `EMAIL_NOT_VERIFIED`, when creating a monitor or switching an existing one to such a method) and a **check interval of at least 5 minutes**
+(`check_interval_seconds` below 300 is a 400 on that field; the default for such a monitor is raised to 300 s). Read-only methods (`GET`, `HEAD`, `OPTIONS`) keep the plan's speed.
+
 Validation errors for list items name the item, for example `headers[0].name` or `assertions[2].path`.
 
 **URL rules.** `http`/`https` only, no credentials, ports 80/443 only, no `localhost`/`.local`/`.internal`/single-label hosts,
-no literal private/loopback/link-local/metadata IPs. This is early feedback only — the real SSRF defence (DNS resolution and
-dial-time validation) arrives with the checker in Phase 4. Editing the URL, method, headers, body or authentication resets health state to `unknown`.
+no literal private/loopback/link-local/metadata IPs. This is early feedback only; the real SSRF defence (DNS resolution and
+dial-time validation) is in the checker (`internal/safehttp`). Editing the URL, method, headers, body or authentication resets health state to `unknown`.
 
 ## Incidents
 
@@ -121,7 +126,7 @@ the retention cutoff. Every response echoes the effective window: `range: {from,
 | `GET /monitors/:id/uptime` | `{range, uptime}` (see below) |
 | `GET /monitors/:id/response-times` | `{range, bucket_seconds, points: [{t, avg_ms, max_ms, checks, failed}]}`. At most 150 points: the bucket width (1 min up to 3 days) is chosen from the window. Buckets with no checks are **omitted**, so charts show gaps rather than zeros. `avg_ms`/`max_ms` cover successful checks only and are null for a bucket that only had failures |
 | `GET /monitors/:id/results` | check history, newest first: `{range, results: [{id, checked_at, success, http_status_code, response_time_ms, error_category, error_summary}], total, limit, offset}`; `limit` 1–200 (default 50) |
-| `GET /dashboard/summary` | `{range, summary: {monitors: {total, up, down, pending, paused}, open_incidents, uptime, generated_at}}`. Counts and open incidents are *current*; `uptime` follows the range. Paused wins over status in the counts; deleted monitors are excluded |
+| `GET /dashboard/summary` | `{range, summary: {monitors: {total, up, down, pending, paused}, open_incidents, uptime, certificates, certificates_tracked, generated_at}}`. `certificates` lists up to five enabled HTTPS monitors whose certificate expires within 30 days or already has (`{monitor_id, monitor_name, expires_at, days_remaining, status: expiring|expired}`, soonest first); `certificates_tracked` counts monitors with a known expiry. Counts and open incidents are *current*; `uptime` follows the range. Paused wins over status in the counts; deleted monitors are excluded |
 | `GET /dashboard/recent-incidents` | `limit` 1–20 (default 5) |
 | `GET /dashboard/response-times` | same shape as the per-monitor series, averaged across all live monitors |
 
@@ -164,9 +169,20 @@ Alerts go only to destinations that are **enabled and verified**.
 | `POST /notification-settings/:id/resend-confirmation` | owner, verified email | 202; older links stop working |
 | `POST /notification-settings/confirm` | public | `{token}` from the confirmation email → 204; single use, valid 48 h |
 
+## SSL certificate expiry
+
+Every monitor object carries `ssl`: `null` until a check has seen the certificate (and always for `http://` monitors), otherwise
+`{expires_at, checked_at, days_remaining, status}` with `status` `valid` (more than 30 days left), `expiring` (30 or fewer) or `expired`;
+`days_remaining` is whole days and negative once expired. It is read on **every check** from the TLS handshake with the monitored host itself (never from a host the
+request is redirected to), and it is also recorded when the handshake failed *because the site's certificate had expired*. Changing a monitor's URL clears it. Available on every plan.
+
+**Warning emails** go to the organization's enabled, verified alert recipients when the certificate first falls inside a bucket: **30, 14, 7 and 1 day(s)** before expiry, and once more
+when it has **expired** (bucket 0). They use the same delivery queue as outage alerts (`event_type = 'ssl_expiry'`, retries, idempotency). Each (monitor, recipient, certificate expiry date, bucket) is sent at most once;
+a renewed certificate (new expiry date) restarts the schedule. A recipient added after a bucket was handled does not receive a backlog. Paused and deleted monitors send nothing.
+
 ## Notification delivery
 
-One logical notification exists per (incident, recipient, event) — a unique constraint — created in the same transaction as the incident,
+One logical notification exists per (incident, recipient, event) — or, for certificate warnings, per (monitor, recipient, certificate expiry, bucket) — — a unique constraint — created in the same transaction as the incident,
 so it cannot be lost or duplicated. The worker's dispatcher claims due deliveries with a visibility timeout and sends them; transient
 failures retry with backoff 1 m, 5 m, 15 m, 1 h, 3 h up to `NOTIFY_MAX_ATTEMPTS` (default 6), then the delivery is marked `failed`.
 Permanent errors (`email.ErrPermanent`) fail immediately. Delivery is at-least-once: a crash between sending and recording can cause one duplicate email.

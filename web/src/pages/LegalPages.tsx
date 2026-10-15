@@ -64,13 +64,16 @@ export function PrivacyPage() {
       <p>When you configure a website or endpoint for monitoring, we process information needed to operate the Service, which includes:</p>
       <ul>
         <li>Monitor name and URL, and your monitoring settings (such as check interval and accepted status codes).</li>
-        <li>For each check: the time, the HTTP status code, the response time, and a short error category if it failed. We do not store the content of the pages we check.</li>
+        <li>For API checks, the request you configure: the request method, custom headers, a request body, authentication credentials (a username and password, a bearer token, or an API key), and the response checks you define.</li>
+        <li>For each check: the time, the HTTP status code, the response time, whether your response checks passed, and a short error category if it failed. To evaluate response checks we read the response (up to the first 1 MB) while the check runs; we do not store its content.</li>
         <li>Incident and recovery records, alert settings, and records of the notifications we sent.</li>
+        <li>For HTTPS monitors, the expiry date of the SSL certificate your website presents, and when we last read it. We do not store the certificate itself or any other detail from it.</li>
         <li>Usage counts needed to enforce your plan’s limits.</li>
       </ul>
       <p>
         A monitored URL may itself contain information identifying a person or account. Do not include passwords, secret tokens, private credentials, or other sensitive
-        information in monitor URLs. HawkEye is designed to monitor websites and endpoints that you are authorized to monitor; do not configure monitoring in a way that exposes
+        information in monitor URLs, custom headers, or request bodies. Put credentials only in the monitor’s Authentication fields: they are stored encrypted, are never shown again
+        after you save them, are not included in data exports, and are sent only to the website or API you configure (they are removed from any request redirected to a different host). Custom headers and request bodies are not encrypted, are visible to the other members of your organization, and are included in your data export. HawkEye is designed to monitor websites and endpoints that you are authorized to monitor; do not configure monitoring in a way that exposes
         information you are not authorized to share.
       </p>
 
@@ -179,12 +182,12 @@ export function PrivacyPage() {
       <p>Other retention periods:</p>
       <ul>
         <li><strong>Resolved incidents</strong> follow the same plan periods. Incidents that are still open are kept until they are resolved.</li>
-        <li><strong>Monitors you delete</strong> are permanently removed after 30 days.</li>
+        <li><strong>Monitors you delete</strong> are permanently removed after 30 days. Their credentials, custom headers, and request body are erased immediately when you delete them.</li>
         <li><strong>Sessions and one-time links</strong> (sign-in sessions, password-reset and verification links) expire automatically, within 14 days, 1 hour, and 48 hours respectively, and are then removed.</li>
         <li><strong>Copies of Stripe event notifications</strong> are deleted after 90 days (180 days if processing failed).</li>
         <li><strong>Rate-limit counters</strong> are deleted within 24 hours.</li>
         <li><strong>Support messages</strong> are kept in our support mailbox for as long as needed to help you and to keep a record of the request.</li>
-        <li><strong>Backups:</strong> we keep routine backups for disaster recovery for up to about 60 days. Data you delete from the live Service can remain in backups until they expire, and is not used for any other purpose.</li>
+        <li><strong>Backups:</strong> we keep routine backups for disaster recovery for up to about 60 days. Data you delete from the live Service can remain in backups until they expire, and is not used for any other purpose. Stored monitor credentials remain encrypted in backups, and the encryption key is kept separately from them.</li>
         <li><strong>Billing records:</strong> Stripe keeps the transaction records it is legally required to keep. We keep only the identifiers and subscription state described in Section 2D, and delete them when you delete your account.</li>
       </ul>
       <p>
@@ -206,6 +209,7 @@ export function PrivacyPage() {
       <ul>
         <li>Encrypted connections (HTTPS) for all traffic to and from the Service, with strict transport security.</li>
         <li>Passwords stored only as Argon2id hashes; one-time tokens stored only as hashes.</li>
+        <li>Monitor credentials (passwords, tokens, and API keys you give us for API checks) encrypted before storage, and never returned by our API or included in data exports.</li>
         <li>Strict separation of each customer’s data, and protection against cross-site request forgery.</li>
         <li>Restrictions that stop monitoring checks from reaching private or internal networks.</li>
         <li>Rate limiting and abuse protection on sign-in and email-sending features.</li>
@@ -339,8 +343,9 @@ export function TermsPage() {
       </p>
       <p>Depending on your plan, the Service includes:</p>
       <ul>
-        <li>Periodic HTTP or HTTPS availability checks.</li>
+        <li>Periodic HTTP or HTTPS availability checks, including API checks with a chosen request method, custom headers, a request body, authentication, and checks of the response.</li>
         <li>Response-time measurements and monitoring history.</li>
+        <li>SSL certificate expiry tracking for HTTPS monitors, with email warnings as the expiry date approaches (currently 30, 14, 7, and 1 days before, and when the certificate has expired).</li>
         <li>Incident detection, incident records, and recovery status.</li>
         <li>Email notifications.</li>
         <li>Dashboard views and historical uptime and response-time reports.</li>
@@ -364,12 +369,18 @@ export function TermsPage() {
         <li>Attempt to bypass authentication, access controls, rate limits, or security measures.</li>
         <li>Probe internal networks, private systems, or infrastructure without explicit authorization. Checks are restricted from reaching private networks, and attempts to get around that restriction are prohibited.</li>
         <li>Interfere with or impair the operation of any website, network, or service.</li>
-        <li>Collect, expose, or transmit credentials, confidential data, or sensitive personal information through monitor configurations.</li>
+        <li>Place credentials, confidential data, or sensitive personal information anywhere in a monitor except its Authentication fields. In particular, do not put secrets in the URL, custom headers, or request body: those are not encrypted and are visible to the other members of your organization.</li>
+        <li>Send requests that create, change, or delete data on a system you are not authorized to modify.</li>
         <li>Harass, threaten, defraud, or unlawfully surveil others.</li>
         <li>Circumvent subscription limits, security controls, or access restrictions.</li>
         <li>Reverse engineer or exploit the Service, except where applicable law expressly permits it.</li>
         <li>Use the Service in a manner that violates applicable law or infringes another party’s rights.</li>
       </ul>
+      <p>
+        <strong>Requests that change data.</strong> Monitors that use the POST, PUT, PATCH, or DELETE methods send that request on every check. You are solely responsible for the effects of the requests
+        your monitors send, including requests that create, change, or delete data, and for choosing endpoints that are safe to call repeatedly. To limit misuse, these monitors require a verified email address
+        and run at most every five minutes. You authorize us to store the credentials you provide, encrypted, and to use them only to make the checks you configure.
+      </p>
       <p>
         We may suspend or restrict monitoring that reasonably appears to violate these Terms, create a security risk, or expose HawkEye or others to material harm. Where reasonably practicable and legally
         permitted, we will provide notice and an opportunity to address the issue.
@@ -462,7 +473,10 @@ export function TermsPage() {
         Monitoring may be affected by network conditions, DNS resolution, hosting-provider issues, firewalls, rate limits, third-party outages, configuration errors, or other circumstances outside HawkEye’s control.
       </p>
       <p>
-        A successful check does not prove that a website is free from defects or security vulnerabilities. A failed check does not necessarily establish that a website is unavailable to all visitors.
+        Certificate expiry information is read from the certificate the monitored address presented to HawkEye during a check. It can differ from what other visitors see (for example, if your site serves different certificates to different locations or hostnames), and HawkEye does not detect revoked or otherwise invalid certificates other than by failing the check. Certificate warnings are a courtesy reminder; you remain responsible for renewing your certificates.
+      </p>
+      <p>
+        Response checks evaluate the response body (up to its first 1 MB) at the time of the check. A successful check does not prove that a website is free from defects or security vulnerabilities. A failed check does not necessarily establish that a website is unavailable to all visitors.
       </p>
       <p>
         HawkEye cannot guarantee that every outage or performance problem will be detected, that every alert will be delivered immediately, or that all incidents will be correctly classified. You remain responsible for

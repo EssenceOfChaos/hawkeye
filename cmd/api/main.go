@@ -88,6 +88,17 @@ func run() error {
 	}
 
 	planSvc := plans.NewService(cfg.AppBaseURL)
+	box, err := cfg.SecretBox()
+	if err != nil {
+		return fmt.Errorf("secrets key: %w", err)
+	}
+	monitorSvc := monitors.NewService(pool, planSvc, monitors.WithSecretBox(box))
+	// Credentials saved in plain text by an earlier version are encrypted once, here, before any request is served.
+	if n, err := monitorSvc.EncryptLegacySecrets(ctx); err != nil {
+		return fmt.Errorf("encrypt stored credentials: %w", err)
+	} else if n > 0 {
+		log.InfoContext(ctx, "encrypted stored monitor credentials", "count", n)
+	}
 
 	var provider billing.Provider
 	if bc := cfg.Billing(); bc.Enabled() {
@@ -99,7 +110,7 @@ func run() error {
 
 	e := httpapi.New(httpapi.Options{
 		Logger: log, DB: pool, RequestTimeout: cfg.RequestTimeout, BodyLimit: cfg.BodyLimit,
-		Auth: authSvc, Orgs: organizations.NewService(pool), Plans: planSvc, Monitors: monitors.NewService(pool, planSvc), Pool: pool, PgPool: pool,
+		Auth: authSvc, Orgs: organizations.NewService(pool), Plans: planSvc, Monitors: monitorSvc, Pool: pool, PgPool: pool,
 		Billing:       billingSvc,
 		Account:       account.NewService(pool, authSvc, provider, mailer, log, cfg.AppBaseURL),
 		Contact:       contact.NewService(mailer, log, cfg.SupportAddress, cfg.EmailFromAddress, cfg.AppBaseURL),

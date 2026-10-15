@@ -3,6 +3,7 @@ package reports
 import (
 	"context"
 	"fmt"
+	"hawkeye/internal/checks"
 	"math"
 	"time"
 
@@ -179,7 +180,20 @@ type Summary struct {
 	Monitors      MonitorCounts `json:"monitors"`
 	OpenIncidents int           `json:"open_incidents"`
 	Uptime        Uptime        `json:"uptime"`
-	GeneratedAt   time.Time     `json:"generated_at"`
+	// Certificates lists up to five enabled HTTPS monitors whose certificate expires within 30 days (or already has), soonest first.
+	Certificates []CertificateAlert `json:"certificates"`
+	// CertificatesTracked is how many enabled monitors have a known certificate expiry (so the dashboard can say "all good").
+	CertificatesTracked int       `json:"certificates_tracked"`
+	GeneratedAt         time.Time `json:"generated_at"`
+}
+
+// CertificateAlert is one certificate that needs attention soon.
+type CertificateAlert struct {
+	MonitorID     uuid.UUID `json:"monitor_id"`
+	MonitorName   string    `json:"monitor_name"`
+	ExpiresAt     time.Time `json:"expires_at"`
+	DaysRemaining int       `json:"days_remaining"`
+	Status        string    `json:"status"` // expiring or expired
 }
 
 func DashboardSummary(ctx context.Context, db DB, orgID uuid.UUID, r Range, now time.Time) (Summary, error) {
@@ -198,6 +212,30 @@ func DashboardSummary(ctx context.Context, db DB, orgID uuid.UUID, r Range, now 
 		WHERE m.organization_id = $1 AND m.deleted_at IS NULL AND i.status = 'open'`, orgID).Scan(&s.OpenIncidents); err != nil {
 		return s, err
 	}
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM monitors WHERE organization_id = $1 AND deleted_at IS NULL AND enabled AND ssl_expires_at IS NOT NULL`,
+		orgID).Scan(&s.CertificatesTracked); err != nil {
+		return s, err
+	}
+	s.Certificates = []CertificateAlert{}
+	rows, err := db.Query(ctx, `SELECT id, name, ssl_expires_at FROM monitors
+		WHERE organization_id = $1 AND deleted_at IS NULL AND enabled AND ssl_expires_at IS NOT NULL AND ssl_expires_at <= $2::timestamptz + interval '30 days'
+		ORDER BY ssl_expires_at, id LIMIT 5`, orgID, now)
+	if err != nil {
+		return s, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var c CertificateAlert
+		if err := rows.Scan(&c.MonitorID, &c.MonitorName, &c.ExpiresAt); err != nil {
+			return s, err
+		}
+		c.DaysRemaining, c.Status = checks.SSLDaysRemaining(c.ExpiresAt, now), checks.SSLStatus(c.ExpiresAt, now)
+		s.Certificates = append(s.Certificates, c)
+	}
+	if err := rows.Err(); err != nil {
+		return s, err
+	}
+	rows.Close()
 	s.Uptime, err = ComputeUptime(ctx, db, orgID, nil, r)
 	return s, err
 }

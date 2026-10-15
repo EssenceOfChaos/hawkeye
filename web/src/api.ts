@@ -35,6 +35,13 @@ export type HttpMethod = (typeof HTTP_METHODS)[number]
 /** Methods that may send a request body. */
 export const BODY_METHODS: readonly HttpMethod[] = ['POST', 'PUT', 'PATCH', 'DELETE']
 
+/**
+ * Methods that change state on the target. The request is repeated on every check, so the server requires a verified email address and a
+ * slower interval for them (monitors.MinWriteIntervalSeconds = 300 s).
+ */
+export const WRITE_METHODS: readonly HttpMethod[] = BODY_METHODS
+export const WRITE_MIN_MINUTES = 5
+
 export interface RequestHeader {
   name: string
   value: string
@@ -83,6 +90,24 @@ export interface Monitor {
   enabled: boolean
   current_status: MonitorStatus
   last_checked_at: string | null
+  /** The HTTPS certificate as last seen by a check; null until the first one (and for http:// monitors). */
+  ssl: SSLInfo | null
+}
+
+export interface SSLInfo {
+  expires_at: string
+  checked_at: string
+  /** Whole days left; negative once expired. */
+  days_remaining: number
+  status: 'valid' | 'expiring' | 'expired'
+}
+
+export interface CertificateAlert {
+  monitor_id: string
+  monitor_name: string
+  expires_at: string
+  days_remaining: number
+  status: 'expiring' | 'expired'
 }
 
 export interface NotificationSetting {
@@ -162,6 +187,8 @@ export interface DashboardSummary {
   monitors: { total: number; up: number; down: number; pending: number; paused: number }
   open_incidents: number
   uptime: Uptime
+  certificates: CertificateAlert[]
+  certificates_tracked: number
   generated_at: string
 }
 

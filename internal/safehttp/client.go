@@ -2,6 +2,8 @@ package safehttp
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -36,6 +38,8 @@ type Config struct {
 	AllowPort    func(int) bool
 	MaxRedirects int
 	DialTimeout  time.Duration
+	// RootCAs replaces the system trust store. Production leaves it nil; tests use it to trust a throwaway certificate authority.
+	RootCAs *x509.CertPool
 }
 
 func (c Config) withDefaults() Config {
@@ -96,6 +100,7 @@ func New(cfg Config, timeout time.Duration) *http.Client {
 		DisableCompression:     true,
 		ForceAttemptHTTP2:      false,
 		TLSHandshakeTimeout:    cfg.DialTimeout,
+		TLSClientConfig:        &tls.Config{RootCAs: cfg.RootCAs, MinVersion: tls.VersionTLS12},
 		ResponseHeaderTimeout:  timeout,
 		MaxResponseHeaderBytes: 64 << 10,
 	}
