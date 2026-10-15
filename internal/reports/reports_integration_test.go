@@ -247,7 +247,7 @@ func TestDashboardListsCertificatesNeedingAttentionSoonestFirst(t *testing.T) {
 	soon, expired, month, far := e.monitor(t, e.org, "soon"), e.monitor(t, e.org, "expired"), e.monitor(t, e.org, "month"), e.monitor(t, e.org, "far")
 	paused, deleted, none := e.monitor(t, e.org, "paused"), e.monitor(t, e.org, "deleted"), e.monitor(t, e.org, "none")
 	_ = none
-	set(soon, 3*24*time.Hour)
+	set(soon, 3*24*time.Hour+time.Hour) // padded: Postgres truncates to µs, so an exact 72h would floor to 2 days
 	set(expired, -2*24*time.Hour)
 	set(month, 29*24*time.Hour)
 	set(far, 90*24*time.Hour)
