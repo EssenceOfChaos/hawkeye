@@ -89,6 +89,8 @@ export interface Monitor {
   timeout_seconds: number
   enabled: boolean
   current_status: MonitorStatus
+  /** A maintenance window covers this monitor right now: checks run but raise no alerts. */
+  in_maintenance: boolean
   last_checked_at: string | null
   /** The HTTPS certificate as last seen by a check; null until the first one (and for http:// monitors). */
   ssl: SSLInfo | null
@@ -110,11 +112,24 @@ export interface CertificateAlert {
   status: 'expiring' | 'expired'
 }
 
+export interface MaintenanceWindow {
+  id: string
+  name: string
+  starts_at: string
+  duration_minutes: number
+  repeat: 'none' | 'daily' | 'weekly'
+  all_monitors: boolean
+  monitor_ids: string[]
+  status: 'active' | 'upcoming' | 'ended'
+  next_start: string | null
+  created_at: string
+}
+
 export interface NotificationSetting {
   id: string
   user_id: string | null
-  channel: 'email'
-  destination: string
+  channel: 'email' | 'webhook' | 'slack'
+  destination: string // the address, or for webhook and Slack a masked host such as hooks.slack.com/…
   enabled: boolean
   verified: boolean
   created_at: string

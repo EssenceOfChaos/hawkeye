@@ -52,7 +52,7 @@ export function PrivacyPage() {
         <li>Your password, which we never store. We keep only a one-way hash made with the Argon2id algorithm.</li>
         <li>Whether your email address has been verified, and the name of the workspace (organization) created for your account.</li>
         <li>Your subscription plan, account status, and related service records.</li>
-        <li>Alert recipients you add (email addresses you ask us to notify) and their confirmation status.</li>
+        <li>Alert recipients you add (email addresses you ask us to notify, and Slack or webhook URLs, which we store encrypted) and their confirmation status.</li>
         <li>Communications you send to us. If you use our contact form we receive the name, email address, subject, message, and optional website address you enter and, if you are signed in, your account identifier and plan.</li>
       </ul>
       <p>

@@ -8,6 +8,7 @@ import { ContactPage } from './pages/ContactPage'
 import { BillingPage } from './pages/BillingPage'
 import { IncidentsPage } from './pages/IncidentsPage'
 import { LandingPage } from './pages/LandingPage'
+import { MaintenancePage } from './pages/MaintenancePage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { MonitorFormPage } from './pages/MonitorFormPage'
 import { PrivacyPage, TermsPage } from './pages/LegalPages'
@@ -60,6 +61,7 @@ export function AppRoutes() {
         <Route path="/account" element={<AccountPage />} />
         <Route path="/incidents" element={<IncidentsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/maintenance" element={<MaintenancePage />} />
         <Route path="/monitors" element={<MonitorsPage />} />
         <Route path="/monitors/new" element={<MonitorFormPage />} />
         <Route path="/monitors/:monitorID" element={<Lazy><MonitorDetailPage /></Lazy>} />

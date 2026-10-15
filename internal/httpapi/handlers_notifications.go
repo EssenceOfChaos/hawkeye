@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -55,8 +56,21 @@ func (h *handlers) createSetting(c echo.Context) error {
 	if err := bind(c, &in); err != nil {
 		return err
 	}
-	if in.Channel != "" && in.Channel != "email" {
-		return mapError(validation.New("channel", "only \"email\" is supported"))
+	switch in.Channel {
+	case "", notifications.ChannelEmail:
+	case notifications.ChannelWebhook, notifications.ChannelSlack:
+		// The test message is delivered before anything is saved; the signing secret is shown only in this response.
+		s, secret, err := h.notifications.CreateURL(c.Request().Context(), currentOrg(c), in.Channel, in.Destination)
+		if err != nil {
+			return mapError(err)
+		}
+		out := map[string]any{"notification_setting": s}
+		if secret != "" {
+			out["signing_secret"] = secret
+		}
+		return c.JSON(http.StatusCreated, out)
+	default:
+		return mapError(validation.New("channel", "must be email, webhook or slack"))
 	}
 	// Adding a recipient emails a third party: cap how often any one address can be targeted.
 	if !h.emailBudget(c, "alert-confirm", in.Destination) {
@@ -68,6 +82,21 @@ func (h *handlers) createSetting(c echo.Context) error {
 		return mapError(err)
 	}
 	return c.JSON(http.StatusCreated, map[string]any{"notification_setting": s})
+}
+
+// testSetting re-sends the test message to a webhook or Slack destination.
+func (h *handlers) testSetting(c echo.Context) error {
+	id, err := settingID(c)
+	if err != nil {
+		return err
+	}
+	if err := h.notifications.Test(c.Request().Context(), currentOrg(c), id); err != nil {
+		if errors.Is(err, notifications.ErrNotTestable) {
+			return mapError(validation.New("destination", err.Error()))
+		}
+		return mapError(err)
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 func (h *handlers) updateSetting(c echo.Context) error {

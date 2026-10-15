@@ -17,6 +17,7 @@ import (
 	"hawkeye/internal/billing"
 	"hawkeye/internal/contact"
 	"hawkeye/internal/errtrack"
+	"hawkeye/internal/maintenance"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
@@ -42,6 +43,7 @@ type Options struct {
 	Plans         *plans.Service
 	Monitors      *monitors.Service
 	Notifications *notifications.Service
+	Maintenance   *maintenance.Service
 	Billing       *billing.Service
 	Account       *account.Service
 	Contact       *contact.Service
@@ -151,7 +153,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, billing: o.Billing, account: o.Account, contact: o.Contact, log: o.Logger, secureCookies: o.SecureCookies}
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, billing: o.Billing, account: o.Account, contact: o.Contact, log: o.Logger, secureCookies: o.SecureCookies}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		TokenLookup:    "header:X-CSRF-Token",
@@ -265,10 +267,14 @@ func registerAPI(e *echo.Echo, o Options) {
 
 	// Alert recipients: any member can view; only owners change them; adding a recipient needs a verified
 	// email and is rate-limited because it causes mail to be sent to a third party.
+	scoped.GET("/maintenance-windows", h.listMaintenance)
+	scoped.POST("/maintenance-windows", h.createMaintenance, requireOwner)
+	scoped.DELETE("/maintenance-windows/:windowID", h.deleteMaintenance, requireOwner)
 	scoped.GET("/notification-settings", h.listSettings)
 	scoped.POST("/notification-settings", h.createSetting, requireOwner, requireVerifiedEmail, limit("create-alert"))
 	scoped.PATCH("/notification-settings/:settingID", h.updateSetting, requireOwner)
 	scoped.DELETE("/notification-settings/:settingID", h.deleteSetting, requireOwner)
+	scoped.POST("/notification-settings/:settingID/test", h.testSetting, requireOwner, requireVerifiedEmail, limit("create-alert"))
 	scoped.POST("/notification-settings/:settingID/resend-confirmation", h.resendSettingConfirmation, requireOwner, requireVerifiedEmail, limit("resend-alert"))
 
 	org := v1.Group("/organizations", h.requireAuth)

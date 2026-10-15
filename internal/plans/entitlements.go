@@ -12,6 +12,7 @@ const (
 	LimitMonitors      = "monitors"
 	LimitCheckInterval = "check_interval"
 	LimitTeamMembers   = "team_members"
+	LimitMaintenance   = "maintenance_windows"
 )
 
 // LimitError is returned when an operation exceeds the organization's plan.
@@ -39,6 +40,8 @@ func (e *LimitError) Message() string {
 		return fmt.Sprintf("Your %s plan supports a check interval of at least %d seconds.", e.Plan.Name, e.Limit)
 	case LimitTeamMembers:
 		return fmt.Sprintf("Your %s plan includes up to %d team members.", e.Plan.Name, e.Limit)
+	case LimitMaintenance:
+		return fmt.Sprintf("Maintenance windows are not included in your %s plan. Upgrade to silence alerts during planned work.", e.Plan.Name)
 	}
 	return "Your plan limit has been reached."
 }
@@ -81,6 +84,19 @@ func (s *Service) GetHistoryRetention(ctx context.Context, db DB, orgID uuid.UUI
 func (s *Service) CanExportReports(ctx context.Context, db DB, orgID uuid.UUID) (bool, error) {
 	p, err := EffectivePlan(ctx, db, orgID)
 	return p.ReportsEnabled, err
+}
+
+// CanUseMaintenance returns a *LimitError when the plan does not include maintenance windows. It guards creating one;
+// listing and deleting stay available after a downgrade.
+func (s *Service) CanUseMaintenance(ctx context.Context, db DB, orgID uuid.UUID) error {
+	p, err := EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	if !p.MaintenanceEnabled {
+		return s.limitError(ctx, db, LimitMaintenance, 0, 0, p)
+	}
+	return nil
 }
 
 func countMonitors(ctx context.Context, db DB, orgID uuid.UUID) (n int, err error) {

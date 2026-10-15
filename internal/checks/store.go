@@ -47,10 +47,10 @@ func NewStore(pool *pgxpool.Pool, th Thresholds, inc Incidents) *Store {
 func (s *Store) Record(ctx context.Context, monitorID uuid.UUID, r Result) (Outcome, error) {
 	var out Outcome
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		var enabled bool
-		err := tx.QueryRow(ctx, `SELECT current_status, consecutive_failures, consecutive_successes, enabled
-			FROM monitors WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, monitorID).
-			Scan(&out.Before.Status, &out.Before.Failures, &out.Before.Successes, &enabled)
+		var enabled, maintenance bool
+		err := tx.QueryRow(ctx, `SELECT current_status, consecutive_failures, consecutive_successes, enabled, in_maintenance(organization_id, id, $2)
+			FROM monitors WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, monitorID, r.FinishedAt).
+			Scan(&out.Before.Status, &out.Before.Failures, &out.Before.Successes, &enabled, &maintenance)
 		if errors.Is(err, pgx.ErrNoRows) || err == nil && !enabled {
 			return ErrDiscarded
 		}
@@ -60,13 +60,19 @@ func (s *Store) Record(ctx context.Context, monitorID uuid.UUID, r Result) (Outc
 
 		summary := truncate(r.ErrorSummary, maxSummaryLen)
 		if _, err := tx.Exec(ctx, `INSERT INTO check_results
-			(monitor_id, checked_at, finished_at, success, http_status_code, response_time_ms, error_category, error_summary)
-			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''))`,
-			monitorID, r.CheckedAt, r.FinishedAt, r.Success, r.StatusCode, r.ResponseTimeMs, r.ErrorCategory, summary); err != nil {
+			(monitor_id, checked_at, finished_at, success, http_status_code, response_time_ms, error_category, error_summary, in_maintenance)
+			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''), $9)`,
+			monitorID, r.CheckedAt, r.FinishedAt, r.Success, r.StatusCode, r.ResponseTimeMs, r.ErrorCategory, summary, maintenance); err != nil {
 			return fmt.Errorf("insert result: %w", err)
 		}
 
-		out.After, out.Transition = Apply(out.Before, r.Success, s.thresholds)
+		// During maintenance the result is recorded but changes nothing about the monitor's health: no streaks, no status
+		// change, no incident, no alert. The state picks up where it left off when the window ends.
+		if maintenance {
+			out.After = out.Before
+		} else {
+			out.After, out.Transition = Apply(out.Before, r.Success, s.thresholds)
+		}
 		_, err = tx.Exec(ctx, `UPDATE monitors SET current_status = $2, consecutive_failures = $3, consecutive_successes = $4,
 			last_checked_at = $5, last_success_at = CASE WHEN $6 THEN $5 ELSE last_success_at END
 			WHERE id = $1`, monitorID, out.After.Status, out.After.Failures, out.After.Successes, r.FinishedAt, r.Success)
@@ -76,7 +82,7 @@ func (s *Store) Record(ctx context.Context, monitorID uuid.UUID, r Result) (Outc
 		if err := s.recordCertificate(ctx, tx, monitorID, r); err != nil {
 			return err
 		}
-		if s.incidents == nil {
+		if s.incidents == nil || maintenance {
 			return nil
 		}
 		if out.Transition == WentDown {

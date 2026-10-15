@@ -90,4 +90,26 @@ describe('NotificationsPage', () => {
     expect(calls.some((c) => c.startsWith('DELETE'))).toBe(false)
     confirm.mockRestore()
   })
+
+  it('adds a webhook, shows the signing secret once, and offers a test message', async () => {
+    const calls = setup({
+      items: [mk('1', 'me@example.com', { user_id: 'u' }), { ...mk('2', 'hooks.example.com/…'), channel: 'webhook' }],
+      onPost: () => json(201, { notification_setting: { ...mk('new', 'hooks.example.com/…'), channel: 'webhook' }, signing_secret: 'whsec_abc' }),
+    })
+    await screen.findByText('me@example.com')
+    expect(screen.getByRole('button', { name: 'Send test' })).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Channel'), 'webhook')
+    await userEvent.type(screen.getByLabelText('Webhook URL'), 'https://example.com/hook')
+    await userEvent.click(screen.getByRole('button', { name: 'Add destination' }))
+    expect(await screen.findByText('whsec_abc')).toBeInTheDocument()
+    expect(screen.getByText(/not shown again/)).toBeInTheDocument()
+    expect(calls.some((c) => c.startsWith('POST') && c.endsWith('/notification-settings'))).toBe(true)
+  })
+
+  it('asks for a Slack URL when Slack is chosen', async () => {
+    setup({ items: [mk('1', 'me@example.com', { user_id: 'u' })] })
+    await screen.findByText('me@example.com')
+    await userEvent.selectOptions(screen.getByLabelText('Channel'), 'slack')
+    expect(screen.getByLabelText('Slack incoming webhook URL')).toBeInTheDocument()
+  })
 })

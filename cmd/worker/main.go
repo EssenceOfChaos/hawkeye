@@ -122,7 +122,7 @@ func run() error {
 		return err
 	}
 	dispatcher := notifications.NewDispatcher(pool, mailer,
-		notifications.DispatcherConfig{MaxAttempts: cfg.NotifyMaxAttempts, AppBaseURL: cfg.AppBaseURL, From: cfg.EmailFromAddress}, m, log).WithReporter(reporter)
+		notifications.DispatcherConfig{MaxAttempts: cfg.NotifyMaxAttempts, AppBaseURL: cfg.AppBaseURL, From: cfg.EmailFromAddress}, m, log).WithReporter(reporter).WithSecrets(box)
 	spawn(func() { dispatcher.Run(ctx) })
 	spawn(func() {
 		t := time.NewTicker(15 * time.Second)

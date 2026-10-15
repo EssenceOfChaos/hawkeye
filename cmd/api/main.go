@@ -24,6 +24,7 @@ import (
 	"hawkeye/internal/healthcheck"
 	"hawkeye/internal/httpapi"
 	"hawkeye/internal/logging"
+	"hawkeye/internal/maintenance"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
@@ -114,7 +115,8 @@ func run() error {
 		Billing:       billingSvc,
 		Account:       account.NewService(pool, authSvc, provider, mailer, log, cfg.AppBaseURL),
 		Contact:       contact.NewService(mailer, log, cfg.SupportAddress, cfg.EmailFromAddress, cfg.AppBaseURL),
-		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress),
+		Maintenance:   maintenance.NewService(pool, planSvc),
+		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress, notifications.WithSecretBox(box)),
 		SecureCookies: cfg.IsProduction(), AuthRateLimitPerMin: cfg.AuthRateLimitPerMin, TrustForwardedFor: cfg.TrustForwardedFor,
 		HSTS: cfg.IsProduction(), Metrics: apiMetrics, Limiter: ratelimit.New(pool), Errors: reporter,
 		GlobalRateLimitPerMin: cfg.GlobalRateLimitPerMin, EmailActionLimitPerHour: cfg.EmailActionLimitPerHour,

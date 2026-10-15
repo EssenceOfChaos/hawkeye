@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,6 +18,8 @@ import (
 
 	"hawkeye/internal/auth"
 	"hawkeye/internal/email"
+	"hawkeye/internal/secrets"
+	"hawkeye/internal/validation"
 )
 
 const MaxSettingsPerOrganization = 10
@@ -26,6 +29,8 @@ var (
 	ErrDuplicate    = errors.New("destination already configured")
 	ErrTooMany      = errors.New("too many notification destinations")
 	ErrInvalidToken = errors.New("invalid or expired token")
+	// ErrNotTestable means the destination is an email address (those are verified by a link, not a test message).
+	ErrNotTestable = errors.New("only webhook and Slack destinations can be tested")
 )
 
 type Setting struct {
@@ -51,13 +56,28 @@ type Service struct {
 	appBaseURL string
 	from       string
 	tokenTTL   time.Duration
+	box        *secrets.Box // seals webhook and Slack URLs; without it, adding one fails rather than storing a URL in clear
+	http       *http.Client
 }
 
-func NewService(pool *pgxpool.Pool, mail email.Sender, log *slog.Logger, appBaseURL, from string) *Service {
-	return &Service{pool: pool, mail: mail, log: log, appBaseURL: appBaseURL, from: from, tokenTTL: 48 * time.Hour}
+type Option func(*Service)
+
+// WithSecretBox sets the key that seals webhook and Slack URLs and signing secrets.
+func WithSecretBox(b *secrets.Box) Option { return func(s *Service) { s.box = b } }
+
+// WithHTTPClient replaces the client used to send test messages (tests use a local server).
+func WithHTTPClient(c *http.Client) Option { return func(s *Service) { s.http = c } }
+
+func NewService(pool *pgxpool.Pool, mail email.Sender, log *slog.Logger, appBaseURL, from string, opts ...Option) *Service {
+	s := &Service{pool: pool, mail: mail, log: log, appBaseURL: appBaseURL, from: from, tokenTTL: 48 * time.Hour, http: NewHTTPClient()}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
-const cols = `id, user_id, channel, destination, enabled, verified_at IS NOT NULL, created_at`
+// For webhook and Slack destinations the stored destination is sealed, so what is shown is the masked label.
+const cols = `id, user_id, channel, COALESCE(label, destination), enabled, verified_at IS NOT NULL, created_at`
 
 func scan(row pgx.Row) (Setting, error) {
 	var s Setting
@@ -145,6 +165,104 @@ func (s *Service) SetEnabled(ctx context.Context, orgID, id uuid.UUID, enabled b
 		return Setting{}, ErrNotFound
 	}
 	return st, err
+}
+
+// CreateURL adds a webhook or Slack destination. A test message is delivered first and the destination is only saved
+// (already verified) if the receiver accepts it, so a typo or a revoked URL is reported immediately. The URL is sealed
+// before storage. For webhooks the returned signing secret is shown to the caller exactly once; it cannot be read back.
+func (s *Service) CreateURL(ctx context.Context, orgID uuid.UUID, channel, rawURL string) (st Setting, signingSecret string, err error) {
+	u, label, err := ParseURL(channel, rawURL)
+	if err != nil {
+		return Setting{}, "", err
+	}
+	id := uuid.New()
+	sealedURL, err := s.box.Seal(u.String(), id.String())
+	if err != nil {
+		return Setting{}, "", err
+	}
+	var sealedSecret *string
+	if channel == ChannelWebhook {
+		signingSecret = NewSigningSecret()
+		v, err := s.box.Seal(signingSecret, id.String())
+		if err != nil {
+			return Setting{}, "", err
+		}
+		sealedSecret = &v
+	}
+	if err := s.sendTest(ctx, channel, u.String(), signingSecret); err != nil {
+		return Setting{}, "", validation.New("destination", "the test message was not delivered ("+testReason(err)+")")
+	}
+
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM organizations WHERE id = $1 FOR UPDATE`, orgID); err != nil {
+			return err
+		}
+		var n int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM notification_settings WHERE organization_id = $1`, orgID).Scan(&n); err != nil {
+			return err
+		}
+		if n >= MaxSettingsPerOrganization {
+			return ErrTooMany
+		}
+		st, err = scan(tx.QueryRow(ctx, `INSERT INTO notification_settings (id, organization_id, channel, destination, label, fingerprint, signing_secret, verified_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, now()) RETURNING `+cols, id, orgID, channel, sealedURL, label, Fingerprint(u), sealedSecret))
+		return err
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return Setting{}, "", ErrDuplicate
+		}
+		return Setting{}, "", err
+	}
+	return st, signingSecret, nil
+}
+
+// Test sends a test message to an existing webhook or Slack destination.
+func (s *Service) Test(ctx context.Context, orgID, id uuid.UUID) error {
+	var channel, sealedURL string
+	var sealedSecret *string
+	err := s.pool.QueryRow(ctx, `SELECT channel, destination, signing_secret FROM notification_settings
+		WHERE id = $1 AND organization_id = $2`, id, orgID).Scan(&channel, &sealedURL, &sealedSecret)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if channel == ChannelEmail {
+		return ErrNotTestable
+	}
+	target, err := s.box.Open(sealedURL, id.String())
+	if err != nil {
+		return err
+	}
+	secret := ""
+	if sealedSecret != nil {
+		if secret, err = s.box.Open(*sealedSecret, id.String()); err != nil {
+			return err
+		}
+	}
+	if err := s.sendTest(ctx, channel, target, secret); err != nil {
+		return validation.New("destination", "the test message was not delivered ("+testReason(err)+")")
+	}
+	return nil
+}
+
+func (s *Service) sendTest(ctx context.Context, channel, target, secret string) error {
+	a := Alert{Event: EventTest, AppBaseURL: s.appBaseURL}
+	body, header, err := buildRequest(channel, a, secret, "", time.Now())
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, postTimeout)
+	defer cancel()
+	return post(ctx, s.http, target, body, header)
+}
+
+// testReason is the part of a delivery error that is safe and useful to show the user.
+func testReason(err error) string {
+	return clean(err.Error())
 }
 
 func (s *Service) Delete(ctx context.Context, orgID, id uuid.UUID) error {

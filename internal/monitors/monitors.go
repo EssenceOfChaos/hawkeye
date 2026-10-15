@@ -84,6 +84,7 @@ type Monitor struct {
 	SSL                           *SSLInfo           `json:"ssl"` // null until a check has seen the monitor's TLS certificate
 	Enabled                       bool               `json:"enabled"`
 	CurrentStatus                 string             `json:"current_status"`
+	InMaintenance                 bool               `json:"in_maintenance"` // a maintenance window covers it right now: checks run but raise no alerts
 	LastCheckedAt                 *time.Time         `json:"last_checked_at"`
 	LastSuccessAt                 *time.Time         `json:"last_success_at"`
 	ConsecutiveFailures           int                `json:"consecutive_failures"`
@@ -242,7 +243,7 @@ func (s *Service) EncryptLegacySecrets(ctx context.Context) (int, error) {
 const cols = `id, organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
 	enabled, current_status, last_checked_at, last_success_at, consecutive_failures, consecutive_successes, created_at, updated_at,
 	request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), auth_secret IS NOT NULL,
-	assertions, ssl_expires_at, ssl_checked_at`
+	assertions, ssl_expires_at, ssl_checked_at, in_maintenance(organization_id, id, now())`
 
 func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	var m Monitor
@@ -250,7 +251,7 @@ func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	err := row.Scan(&m.ID, &m.OrganizationID, &m.Name, &m.URL, &m.Method, &m.ExpectedStatusCode, &m.CheckIntervalSeconds,
 		&m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.LastCheckedAt, &m.LastSuccessAt, &m.ConsecutiveFailures,
 		&m.ConsecutiveSuccesses, &m.CreatedAt, &m.UpdatedAt, &m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username,
-		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked)
+		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked, &m.InMaintenance)
 	m.EffectiveCheckIntervalSeconds = max(m.CheckIntervalSeconds, minInterval)
 	if sslExpires != nil {
 		now := time.Now()

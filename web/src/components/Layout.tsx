@@ -25,6 +25,7 @@ export function Layout() {
           <NavLink to="/monitors">Monitors</NavLink>
           <NavLink to="/incidents">Incidents</NavLink>
           <NavLink to="/notifications">Alerts</NavLink>
+          <NavLink to="/maintenance">Maintenance</NavLink>
           <NavLink to="/billing">Billing</NavLink>
         </nav>
         <span className="spacer" />

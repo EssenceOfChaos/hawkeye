@@ -24,16 +24,17 @@ type Plan struct {
 	MaxTeamMembers              int       `json:"max_team_members"`
 	ReportsEnabled              bool      `json:"reports_enabled"`
 	BrandedReportsEnabled       bool      `json:"branded_reports_enabled"`
+	MaintenanceEnabled          bool      `json:"maintenance_enabled"`
 	Active                      bool      `json:"-"`
 }
 
 const planCols = `p.id, p.code, p.name, p.monthly_price_cents, p.max_monitors, p.minimum_check_interval_seconds,
-	p.history_retention_days, p.max_team_members, p.reports_enabled, p.branded_reports_enabled, p.active`
+	p.history_retention_days, p.max_team_members, p.reports_enabled, p.branded_reports_enabled, p.maintenance_enabled, p.active`
 
 func scanPlan(row pgx.Row, extra ...any) (Plan, error) {
 	var p Plan
 	dest := append([]any{&p.ID, &p.Code, &p.Name, &p.MonthlyPriceCents, &p.MaxMonitors, &p.MinimumCheckIntervalSeconds,
-		&p.HistoryRetentionDays, &p.MaxTeamMembers, &p.ReportsEnabled, &p.BrandedReportsEnabled, &p.Active}, extra...)
+		&p.HistoryRetentionDays, &p.MaxTeamMembers, &p.ReportsEnabled, &p.BrandedReportsEnabled, &p.MaintenanceEnabled, &p.Active}, extra...)
 	err := row.Scan(dest...)
 	return p, err
 }

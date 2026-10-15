@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"math/rand/v2"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	"hawkeye/internal/email"
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/metrics"
+	"hawkeye/internal/secrets"
 )
 
 // Delivery statuses.
@@ -65,10 +67,24 @@ type Dispatcher struct {
 	m    *metrics.Metrics
 	log  *slog.Logger
 	rep  errtrack.Reporter
+	http *http.Client // reaches webhook and Slack URLs
+	box  *secrets.Box // opens stored webhook and Slack URLs and signing secrets
 }
 
 func NewDispatcher(pool *pgxpool.Pool, mail email.Sender, cfg DispatcherConfig, m *metrics.Metrics, log *slog.Logger) *Dispatcher {
-	return &Dispatcher{pool: pool, mail: mail, cfg: cfg.withDefaults(), m: m, log: log, rep: errtrack.Noop{}}
+	return &Dispatcher{pool: pool, mail: mail, cfg: cfg.withDefaults(), m: m, log: log, rep: errtrack.Noop{}, http: NewHTTPClient()}
+}
+
+// WithSecrets sets the key that opens stored webhook and Slack URLs. Without it those deliveries fail permanently.
+func (d *Dispatcher) WithSecrets(b *secrets.Box) *Dispatcher {
+	d.box = b
+	return d
+}
+
+// WithHTTPClient replaces the client used for webhook and Slack deliveries (tests use a local server).
+func (d *Dispatcher) WithHTTPClient(c *http.Client) *Dispatcher {
+	d.http = c
+	return d
 }
 
 // WithReporter sends alert deliveries that failed permanently to an error tracker.
@@ -95,11 +111,14 @@ func (d *Dispatcher) Run(ctx context.Context) {
 }
 
 type claimed struct {
-	id       uuid.UUID
-	attempts int
-	alert    Alert
-	enabled  bool
-	verified bool
+	id        uuid.UUID
+	settingID uuid.UUID
+	attempts  int
+	alert     Alert
+	channel   string
+	secret    string // webhook signing secret, sealed
+	enabled   bool
+	verified  bool
 }
 
 // ProcessOne claims and attempts at most one due delivery. It reports whether one was found.
@@ -111,14 +130,14 @@ func (d *Dispatcher) ProcessOne(ctx context.Context) (bool, error) {
 			WHERE id = (SELECT id FROM notification_deliveries WHERE status = 'pending' AND next_attempt_at <= now()
 				ORDER BY next_attempt_at FOR UPDATE SKIP LOCKED LIMIT 1)
 			RETURNING id, incident_id, monitor_id, notification_setting_id, event_type, attempt_count, ssl_expires_at, ssl_bucket)
-		SELECT p.id, p.attempt_count, p.event_type, s.destination, s.enabled, s.verified_at IS NOT NULL,
+		SELECT p.id, s.id, s.channel, COALESCE(s.signing_secret, ''), p.attempt_count, p.event_type, s.destination, s.enabled, s.verified_at IS NOT NULL,
 			COALESCE(i.started_at, now()), i.resolved_at, COALESCE(i.summary, ''), m.id::text, m.name, m.url,
 			COALESCE(p.ssl_expires_at, now()), COALESCE(p.ssl_bucket, 0)
 		FROM picked p
 		JOIN notification_settings s ON s.id = p.notification_setting_id
 		LEFT JOIN incidents i ON i.id = p.incident_id
 		JOIN monitors m ON m.id = COALESCE(i.monitor_id, p.monitor_id)`, d.cfg.Lease).
-		Scan(&c.id, &c.attempts, &c.alert.Event, &c.alert.To, &c.enabled, &c.verified,
+		Scan(&c.id, &c.settingID, &c.channel, &c.secret, &c.attempts, &c.alert.Event, &c.alert.To, &c.enabled, &c.verified,
 			&c.alert.StartedAt, &c.alert.ResolvedAt, &c.alert.Cause, &c.alert.MonitorID, &c.alert.MonitorName, &c.alert.MonitorURL,
 			&c.alert.SSLExpiresAt, &c.alert.SSLBucket)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -134,11 +153,11 @@ func (d *Dispatcher) ProcessOne(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 	c.alert.AppBaseURL, c.alert.From = d.cfg.AppBaseURL, d.cfg.From
-	sendErr := d.mail.Send(ctx, Render(c.alert))
+	sendErr := d.send(ctx, c)
 	switch {
 	case sendErr == nil:
 		d.finish(ctx, c, StatusSent, "")
-	case errors.Is(sendErr, email.ErrPermanent) || c.attempts >= d.cfg.MaxAttempts:
+	case errors.Is(sendErr, email.ErrPermanent) || errors.Is(sendErr, errPermanent) || c.attempts >= d.cfg.MaxAttempts:
 		d.log.Warn("alert delivery failed permanently", "delivery_id", c.id, "attempts", c.attempts)
 		d.rep.Capture(ctx, sendErr, map[string]string{"component": "notifications", "delivery_id": c.id.String(), "event": c.alert.Event})
 		d.finish(ctx, c, StatusFailed, sendErr.Error())
@@ -151,6 +170,28 @@ func (d *Dispatcher) ProcessOne(ctx context.Context) (bool, error) {
 		return true, err
 	}
 	return true, nil
+}
+
+// send delivers one alert over the destination's channel. For webhook and Slack, alert.To holds the sealed URL.
+func (d *Dispatcher) send(ctx context.Context, c claimed) error {
+	if c.channel == ChannelEmail {
+		return d.mail.Send(ctx, Render(c.alert))
+	}
+	target, err := d.box.Open(c.alert.To, c.settingID.String())
+	if err != nil {
+		return permanent("stored destination cannot be opened")
+	}
+	secret := ""
+	if c.channel == ChannelWebhook {
+		if secret, err = d.box.Open(c.secret, c.settingID.String()); err != nil {
+			return permanent("stored signing secret cannot be opened")
+		}
+	}
+	body, header, err := buildRequest(c.channel, c.alert, secret, c.id.String(), time.Now())
+	if err != nil {
+		return permanent("%v", err)
+	}
+	return post(ctx, d.http, target, body, header)
 }
 
 func (d *Dispatcher) finish(ctx context.Context, c claimed, status, errText string) {

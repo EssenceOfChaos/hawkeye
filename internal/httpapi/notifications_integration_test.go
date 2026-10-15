@@ -274,3 +274,60 @@ func TestIncidentTenantIsolation(t *testing.T) {
 		t.Fatalf("alice: %v", r.Body)
 	}
 }
+
+func TestWebhookAndSlackDestinationsAreValidatedBeforeAnythingIsSent(t *testing.T) {
+	e := newEnv(t, 1000)
+	c, _ := e.register(t, "owner@example.com")
+	e.verify(t, c, "owner@example.com")
+
+	for name, body := range map[string]map[string]string{
+		"plain http":        {"channel": "webhook", "destination": "http://example.com/hook"},
+		"private address":   {"channel": "webhook", "destination": "https://127.0.0.1/hook"},
+		"not slack":         {"channel": "slack", "destination": "https://example.com/services/T/B/X"},
+		"missing":           {"channel": "webhook", "destination": ""},
+		"unsupported kind":  {"channel": "sms", "destination": "+15555550100"},
+		"email not allowed": {"channel": "webhook", "destination": "a@example.com"},
+	} {
+		if r := c.call("POST", "/api/v1/notification-settings", body); r.Status != 400 || errCode(r) != "VALIDATION_ERROR" {
+			t.Errorf("%s: %d %v", name, r.Status, r.Body)
+		}
+	}
+
+	list := c.call("GET", "/api/v1/notification-settings", nil).Body["notification_settings"].([]any)
+	id := list[0].(map[string]any)["id"].(string)
+	if r := c.call("POST", "/api/v1/notification-settings/"+id+"/test", nil); r.Status != 400 || errCode(r) != "VALIDATION_ERROR" {
+		t.Fatalf("an email destination has no test message: %d %v", r.Status, r.Body)
+	}
+}
+
+func TestMaintenanceWindowsArePaidAndOwnerOnly(t *testing.T) {
+	e := newEnv(t, 1000)
+	c, _ := e.register(t, "owner@example.com")
+	if r := c.call("GET", "/api/v1/maintenance-windows", nil); r.Status != 200 || len(r.Body["maintenance_windows"].([]any)) != 0 {
+		t.Fatalf("list: %d %v", r.Status, r.Body)
+	}
+	body := map[string]any{"name": "Deploy", "starts_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339), "duration_minutes": 30, "all_monitors": true}
+	if r := c.call("POST", "/api/v1/maintenance-windows", body); r.Status != 403 || errCode(r) != "PLAN_LIMIT_REACHED" {
+		t.Fatalf("free plan: %d %v", r.Status, r.Body)
+	}
+	if _, err := e.pool.Exec(t.Context(), `UPDATE subscriptions SET plan_id = (SELECT id FROM plans WHERE code = 'pro')`); err != nil {
+		t.Fatal(err)
+	}
+	r := c.call("POST", "/api/v1/maintenance-windows", body)
+	if r.Status != 201 {
+		t.Fatalf("pro plan: %d %v", r.Status, r.Body)
+	}
+	w := r.Body["maintenance_window"].(map[string]any)
+	if w["status"] != "upcoming" || w["name"] != "Deploy" {
+		t.Fatalf("%v", w)
+	}
+	if r := c.call("POST", "/api/v1/maintenance-windows", map[string]any{"name": "", "duration_minutes": 0}); r.Status != 400 || errCode(r) != "VALIDATION_ERROR" {
+		t.Fatalf("validation: %d %v", r.Status, r.Body)
+	}
+	if r := c.call("DELETE", "/api/v1/maintenance-windows/"+w["id"].(string), nil); r.Status != 204 {
+		t.Fatalf("delete: %d", r.Status)
+	}
+	if r := c.call("DELETE", "/api/v1/maintenance-windows/not-a-uuid", nil); r.Status != 404 {
+		t.Fatalf("bad id: %d", r.Status)
+	}
+}

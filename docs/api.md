@@ -163,11 +163,38 @@ Alerts go only to destinations that are **enabled and verified**.
 | Method & path | Who | Notes |
 |---|---|---|
 | `GET /notification-settings` | any member | `{notification_settings: [{id, user_id, channel, destination, enabled, verified, created_at}], max}` |
-| `POST /notification-settings` | owner, verified email | `{destination}` (channel `email` only). Your own address is verified at once; any other address is emailed a confirmation link and gets no alerts until confirmed. Rate-limited. 409 `DESTINATION_EXISTS`, 403 `NOTIFICATION_SETTINGS_LIMIT` (max 10) |
+| `POST /notification-settings` | owner, verified email | `{channel?, destination}`; `channel` is `email` (default), `slack` or `webhook`. **Email:** your own address is verified at once; any other address is emailed a confirmation link and gets no alerts until confirmed. **Slack / webhook:** `destination` is an `https://` URL (Slack: `https://hooks.slack.com/services/…`; no IP addresses, port 443 only). A test message is delivered first and nothing is saved unless the receiver accepts it (400 `VALIDATION_ERROR` naming the reason). The URL is stored encrypted and listings show only its host (`hooks.slack.com/…`). A webhook also returns `signing_secret` **once**. Rate-limited. 409 `DESTINATION_EXISTS`, 403 `NOTIFICATION_SETTINGS_LIMIT` (max 10) |
+| `POST /notification-settings/:id/test` | owner, verified email | Sends a test message to a Slack or webhook destination → 204; 400 if it is not delivered or the destination is an email address |
 | `PATCH /notification-settings/:id` | owner | `{enabled}` only; to change an address, delete and re-add |
 | `DELETE /notification-settings/:id` | owner | 204 |
 | `POST /notification-settings/:id/resend-confirmation` | owner, verified email | 202; older links stop working |
 | `POST /notification-settings/confirm` | public | `{token}` from the confirmation email → 204; single use, valid 48 h |
+
+## Maintenance windows
+
+Planned periods during which a monitor's checks keep running and are recorded (`in_maintenance: true` on the result), but its status, streaks and incidents do not change, no alert is sent, and the checks are left out of uptime. Health resumes from where it was when the window ends. An incident that is already open stays open; certificate-expiry warnings are still sent. Monitors carry `in_maintenance` (true while a window covers them). **Paid plans only** (`plans.maintenance_enabled`: Pro and Agency); a Free organization gets 403 `PLAN_LIMIT_REACHED` on create, and can still list and delete.
+
+| Method & path | Who | Notes |
+|---|---|---|
+| `GET /maintenance-windows` | any member | `{maintenance_windows: [{id, name, starts_at, duration_minutes, repeat, all_monitors, monitor_ids, status, next_start, created_at}], max}`. `status` is `active`, `upcoming` or `ended` (a finished one-off); `next_start` is the next occurrence, `null` once a one-off is over |
+| `POST /maintenance-windows` | owner | `{name, starts_at, duration_minutes, repeat?, all_monitors?, monitor_ids?}` → 201. `starts_at` is an RFC 3339 instant (a start in the past begins now, but a one-off that has already ended is refused). `duration_minutes` 1–10080; for `repeat` `daily`/`weekly` it must be shorter than the period. Repeats are exact multiples of 24 h / 7 d after `starts_at` (UTC; they do not follow daylight saving). Either `all_monitors: true` (includes monitors added later) or a non-empty `monitor_ids` of your own monitors. 403 `MAINTENANCE_WINDOWS_LIMIT` (max 50) |
+| `DELETE /maintenance-windows/:id` | owner | 204 |
+
+To change a window, delete it and create a new one.
+
+### Webhook and Slack alerts
+
+Every enabled, verified destination receives outage, recovery and certificate-expiry alerts through the same durable queue as email (retries with backoff, at-least-once). A 2xx is success; 408, 429, 5xx and network errors are retried; any other 4xx (for example 404/410 for a revoked URL) fails the delivery permanently. Requests go through the SSRF-safe client, so private addresses are refused.
+
+Webhook requests are `POST` with `Content-Type: application/json` and these headers: `X-HawkEye-Event` (`outage`, `recovery`, `ssl_expiry`, `test`), `X-HawkEye-Delivery` (stable across retries; use it to drop duplicates), `X-HawkEye-Timestamp` (Unix seconds) and `X-HawkEye-Signature` = `sha256=` + hex HMAC-SHA256 of `"<timestamp>.<raw body>"` keyed with the signing secret. Reject requests whose signature does not match or whose timestamp is old. Body:
+
+```json
+{"event": "outage", "sent_at": "2026-10-12T15:00:00Z", "url": "https://app.example.com/incidents",
+ "monitor": {"id": "…", "name": "Site", "url": "https://example.com"},
+ "incident": {"started_at": "…", "resolved_at": null, "cause": "Received HTTP 503"}}
+```
+
+`ssl_expiry` carries `certificate: {expires_at, warning_days}` instead of `incident` (`warning_days` 30, 14, 7, 1, or 0 once expired); `test` carries neither. Slack destinations receive an equivalent message in Slack's incoming-webhook format (unsigned).
 
 ## SSL certificate expiry
 

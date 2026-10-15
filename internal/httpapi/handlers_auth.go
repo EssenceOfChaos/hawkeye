@@ -13,6 +13,7 @@ import (
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/contact"
+	"hawkeye/internal/maintenance"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/organizations"
@@ -28,6 +29,7 @@ type handlers struct {
 	pool          plans.DB
 	db            *pgxpool.Pool
 	notifications *notifications.Service
+	maintenance   *maintenance.Service
 	billing       *billing.Service
 	account       *account.Service
 	contact       *contact.Service
@@ -81,13 +83,19 @@ func mapError(err error) error {
 		return &APIError{Status: http.StatusConflict, Code: "NO_BILLING_ACCOUNT", Message: "There is no billing account yet. Choose a plan first."}
 	case errors.Is(err, billing.ErrNoSubscription):
 		return &APIError{Status: http.StatusConflict, Code: "NO_ACTIVE_SUBSCRIPTION", Message: "There is no active subscription."}
+	case errors.Is(err, maintenance.ErrNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Maintenance window not found."}
+	case errors.Is(err, maintenance.ErrTooMany):
+		return &APIError{Status: http.StatusForbidden, Code: "MAINTENANCE_WINDOWS_LIMIT",
+			Message: "You can have at most 50 maintenance windows. Delete one to add another.",
+			Details: map[string]any{"limit": maintenance.MaxWindowsPerOrganization}}
 	case errors.Is(err, notifications.ErrNotFound):
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Notification setting not found."}
 	case errors.Is(err, notifications.ErrDuplicate):
-		return &APIError{Status: http.StatusConflict, Code: "DESTINATION_EXISTS", Message: "This address is already receiving alerts."}
+		return &APIError{Status: http.StatusConflict, Code: "DESTINATION_EXISTS", Message: "This destination is already receiving alerts."}
 	case errors.Is(err, notifications.ErrTooMany):
 		return &APIError{Status: http.StatusForbidden, Code: "NOTIFICATION_SETTINGS_LIMIT",
-			Message: "You can have at most 10 alert recipients. Remove one to add another.",
+			Message: "You can have at most 10 alert destinations. Remove one to add another.",
 			Details: map[string]any{"limit": notifications.MaxSettingsPerOrganization}}
 	case errors.Is(err, notifications.ErrInvalidToken):
 		return &APIError{Status: http.StatusBadRequest, Code: "INVALID_TOKEN", Message: "This link is invalid or has expired."}
