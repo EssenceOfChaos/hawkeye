@@ -2,6 +2,8 @@
 #   SITE_ADDRESS  your domain (e.g. hawkeye.example.com): Caddy obtains and renews a certificate by itself.
 #                 Use ":80" only for local testing (plain HTTP, no certificate).
 #   ACME_EMAIL    contact address for the certificate authority (expiry notices). Required.
+#   WWW_ADDRESS   optional, e.g. www.hawkeye.example.com: gets its own certificate and redirects to SITE_ADDRESS. Unset, it is an unused
+#                 listener on :8081 inside the container (nothing is published), so local and smoke stacks are unaffected.
 {
 	email {$ACME_EMAIL}
 	servers {
@@ -11,6 +13,10 @@
 			idle 2m
 		}
 	}
+}
+
+{$WWW_ADDRESS::8081} {
+	redir https://{$SITE_ADDRESS}{uri} permanent
 }
 
 {$SITE_ADDRESS::80} {
