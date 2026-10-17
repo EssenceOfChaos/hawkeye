@@ -8,27 +8,17 @@ import { inScope, parallax, prefersReducedMotion, rotateScramble } from '../moti
 
 // Simple Icons paths (CC0), 24x24.
 const SOCIALS = [
-  { name: 'X', path: 'M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z' },
-  { name: 'LinkedIn', path: 'M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z' },
-  { name: 'GitHub', path: 'M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12' },
-  { name: 'YouTube', path: 'M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z' },
+  { name: 'X', href: 'https://x.com/HawkEyeObs', path: 'M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z' },
+  { name: 'Facebook', href: 'https://www.facebook.com/people/HawkEye/61595561066921/', path: 'M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 2.103-.287 1.564h-3.246v8.245C19.396 23.238 24 18.179 24 12.044c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.628 3.874 10.35 9.101 11.647Z' },
+  { name: 'LinkedIn', href: 'https://www.linkedin.com/company/hawkeye-observer/', path: 'M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z' },
 ]
 
 const PHRASES = ['watches your websites.', 'alerts you to incidents.', 'tracks your uptime.', 'measures response times.']
 
 const PROBLEMS = [
-  {
-    title: 'The outage you didn’t see coming',
-    text: 'A website goes offline and you find out from a customer. HawkEye helps shorten that blind spot by checking availability and notifying you when an outage is confirmed.',
-  },
-  {
-    title: 'The performance problem hiding in plain sight',
-    text: 'A slow response can be an early warning sign. Track response times over time and spot changes that deserve a closer look.',
-  },
-  {
-    title: 'The growing list of websites',
-    text: 'Managing one website is straightforward. Managing ten, fifty, or a hundred is different. Bring your websites together in one dashboard and see which ones need attention.',
-  },
+  { title: 'The outage you didn’t see coming', text: 'Hear it from HawkEye, not from a customer.' },
+  { title: 'The slowdown hiding in plain sight', text: 'Slow responses are an early warning. Spot them sooner.' },
+  { title: 'The growing list of websites', text: 'Ten sites or a hundred: one dashboard shows what needs attention.' },
 ]
 
 const FEATURES = [
@@ -36,49 +26,49 @@ const FEATURES = [
     icon: brand.icons.websites,
     title: 'Website and API monitoring',
     lead: 'Know when a website or API stops responding.',
-    text: 'HawkEye checks your websites and APIs at regular intervals and records whether they respond successfully. Send custom requests with headers, a body and authentication, and verify what comes back, including values in a JSON response. When repeated failures meet the alert threshold, an incident is created and your notifications are triggered.',
+    text: 'Send custom requests, authenticate, and verify what comes back.',
   },
   {
     icon: brand.icons.analytics,
     title: 'Response-time tracking',
-    lead: 'Spot slowdowns before they become bigger problems.',
-    text: 'A website can be online and still deliver a frustrating experience. Track response times, review historical trends, and investigate when a website becomes slower than usual.',
+    lead: 'Spot slowdowns early.',
+    text: 'Track response times and review trends over time.',
   },
   {
     icon: brand.icons.history,
     title: 'Incident tracking',
-    lead: 'Every incident. Clearly accounted for.',
-    text: 'See when a problem began and when service recovered. Keep an organized history of incidents instead of piecing together events from messages and browser tabs.',
+    lead: 'Every incident, clearly accounted for.',
+    text: 'See when a problem began and when service recovered.',
   },
   {
     icon: brand.icons.email,
     title: 'Alerts where you work',
     lead: 'The right signal. When it matters.',
-    text: 'HawkEye alerts you when an outage is confirmed and when the website recovers: one message each, not a flood. Send alerts by email, to a Slack channel, or to your own systems as signed webhooks. Email recipients must confirm their address, and Slack and webhook destinations are sent a test message before they are saved.',
+    text: 'One alert when an outage is confirmed, one when it ends. Email, Slack or webhook.',
   },
   {
     icon: brand.icons.websites,
     title: 'Public status page',
     lead: 'Tell your customers before they ask.',
-    text: 'Publish a status page at an address you choose, showing whether your services are up, their daily uptime and recent incidents. You decide which monitors appear and what they are called. Web addresses and error details are never shown.',
+    text: 'Share live status, uptime and incidents. You choose what appears.',
   },
   {
     icon: brand.icons.history,
     title: 'Maintenance windows',
     lead: 'Planned work shouldn’t page you.',
-    text: 'Schedule a window for a deploy or upgrade, once or on a daily or weekly repeat. HawkEye keeps checking, but opens no incident, sends no alert, and leaves those checks out of your uptime. Included in the Pro and Agency plans.',
+    text: 'Pause alerts during deploys. Included in Pro and Agency.',
   },
   {
     icon: brand.icons.shield,
     title: 'SSL certificate alerts',
     lead: 'Never be surprised by an expired certificate.',
-    text: 'HawkEye reads the SSL certificate of every HTTPS monitor and shows a live countdown to its expiry. You get an email 30, 14, 7 and 1 days before it expires, and again if it does, so there is time to renew.',
+    text: 'A live countdown, plus warnings 30, 14, 7 and 1 days before expiry.',
   },
   {
     icon: brand.icons.settings,
     title: 'One dashboard, clear reports',
     lead: 'Every website. One clear picture.',
-    text: 'Review availability, response times, recent incidents, expiring certificates and check-based uptime history in one workspace, for the time periods your plan supports.',
+    text: 'Availability, response times, incidents and certificates in one place.',
   },
 ]
 
@@ -87,7 +77,7 @@ const LOCATION_FEATURE = {
   icon: brand.icons.shield,
   title: 'Checks from several locations',
   lead: 'One network hiccup is not an outage.',
-  text: 'On paid plans each monitor can be checked from several locations at once. A monitor counts as down only when most of its locations agree, so a problem at a single location never wakes you up, and you can see how each location sees your site.',
+  text: 'On paid plans, a monitor is down only when most locations agree.',
 }
 const LOCATION_FAQ = {
   q: 'Can HawkEye check from more than one location?',
@@ -95,17 +85,17 @@ const LOCATION_FAQ = {
 }
 
 const AUDIENCES = [
-  { title: 'Freelancers', lead: 'Spend less time checking. More time creating.', text: 'You’re responsible for the website, the fixes, the updates and the client relationship. HawkEye adds an automated layer of visibility, so you can identify availability problems without manually checking every project.' },
-  { title: 'Web agencies', lead: 'Keep an eye on every client website.', text: 'As your client list grows, so does the work of keeping track of it. Centralize website monitoring, review incidents across projects, and use history to show the ongoing care you provide.' },
-  { title: 'Independent business owners', lead: 'Your website is too important to leave unchecked.', text: 'Downtime can interrupt inquiries, sales and customer service. HawkEye helps you know when availability problems arise so you can investigate sooner.' },
-  { title: 'Developers and small teams', lead: 'Make availability visible.', text: 'Keep a practical record of HTTP responses, failures and latency trends. Check your APIs too: send authenticated requests and verify the JSON that comes back, without adopting a complex observability stack.' },
+  { title: 'Freelancers', lead: 'Spend less time checking. More time creating.', text: 'Know when a client site is down without refreshing every project.' },
+  { title: 'Web agencies', lead: 'Keep an eye on every client website.', text: 'Monitor every client in one place and show the care you provide.' },
+  { title: 'Independent business owners', lead: 'Your website is too important to leave unchecked.', text: 'Hear about downtime before your customers do.' },
+  { title: 'Developers and small teams', lead: 'Make availability visible.', text: 'Check your APIs too: authenticated requests and JSON checks, no complex stack.' },
 ]
 
 const STEPS = [
-  { title: 'Add your website', text: 'Enter a name and URL. HawkEye validates the monitor configuration and adds it to your dashboard.' },
-  { title: 'Let HawkEye keep watch', text: 'Your website is checked at your plan’s monitoring interval. Results are recorded so you can review status and response-time history.' },
-  { title: 'Get notified when something changes', text: 'When failures meet the detection threshold, HawkEye opens an incident and alerts your destinations: email, Slack or a webhook.' },
-  { title: 'Investigate and move forward', text: 'Review the incident, inspect the recorded results and take action. When successful checks confirm recovery, HawkEye resolves the incident and tells you.' },
+  { title: 'Add your website', text: 'Enter a name and URL. It joins your dashboard.' },
+  { title: 'Let HawkEye keep watch', text: 'Checked at your plan’s interval, with every result recorded.' },
+  { title: 'Get notified when something changes', text: 'Confirmed failures open an incident and alert you by email, Slack or webhook.' },
+  { title: 'Investigate and move forward', text: 'Review the incident. When checks recover, HawkEye resolves it and tells you.' },
 ]
 
 const FAQ = [
@@ -127,8 +117,8 @@ function price(cents: number) {
 
 function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: Plan; featured: boolean; billingEnabled: boolean; signedIn: boolean }) {
   const mins = Math.round(plan.minimum_check_interval_seconds / 60)
-  return (
-    <li className={`plan${featured ? ' featured' : ''}`} data-reveal>
+  const card = (
+    <div className={`plan${featured ? ' featured' : ''}`}>
       <h3>{plan.name}</h3>
       <p className="price">
         <strong>{price(plan.monthly_price_cents)}</strong>
@@ -152,8 +142,10 @@ function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: Plan; fe
       ) : (
         <button disabled>Paid plans open soon</button>
       )}
-    </li>
+    </div>
   )
+  // The featured plan gets daisyUI's gold aura instead of a solid border.
+  return <li className="plan-slot" data-reveal>{featured ? <div className="d-aura d-aura-gold plan-aura">{card}</div> : card}</li>
 }
 
 export function LandingPage() {
@@ -194,7 +186,7 @@ export function LandingPage() {
   return (
     <div className="landing" data-theme="light" ref={rootRef}>
       <header className="landing-header">
-        <img className="landing-logo" src={brand.logo} alt="HawkEye" width={150} height={54} />
+        <img className="landing-logo" src={brand.logo} alt="HawkEye" width={220} height={43} />
         <span className="spacer" />
         {signedIn ? (
           <Link className="button primary" to="/dashboard">Open dashboard</Link>
@@ -208,9 +200,11 @@ export function LandingPage() {
 
       <section className="d-hero" ref={heroRef}>
         <div className="d-hero-content hero">
-        <div className="hero-text">
+        <div className="hero-title">
           <p className="eyebrow">Website monitoring, without the guesswork</p>
           <h1>Your websites. Always in sight.</h1>
+        </div>
+        <div className="hero-text">
           <p className="scramble-line">
             <span className="sr-only">HawkEye watches your websites, alerts you to incidents, tracks your uptime and measures response times.</span>
             <span aria-hidden="true">
@@ -232,7 +226,7 @@ export function LandingPage() {
             <li className="d-badge d-badge-soft d-badge-error">Outage alerts</li>
             <li className="d-badge d-badge-soft d-badge-warning">SSL expiry warnings</li>
             <li className="d-badge d-badge-soft d-badge-info">Performance history</li>
-            <li className="d-badge d-badge-soft d-badge-neutral">Public status page</li>
+            <li className="d-badge d-badge-soft d-badge-accent">Public status page</li>
           </ul>
         </div>
         <img
@@ -362,7 +356,7 @@ export function LandingPage() {
 
       <footer className="landing-footer d-footer">
         <aside>
-          <img src={brand.logo} alt="HawkEye" width={120} height={43} />
+          <img src={brand.logo} alt="HawkEye" width={160} height={32} />
           <p>
             Your websites. Always in sight.
             <br />
@@ -392,10 +386,9 @@ export function LandingPage() {
           <h6 className="d-footer-title">Follow</h6>
           <div className="social">
             {SOCIALS.map((s) => (
-              // Placeholders: accounts do not exist yet, so these are disabled buttons, not links.
-              <button key={s.name} type="button" className="d-btn d-btn-circle d-btn-ghost" disabled title={`${s.name}: coming soon`} aria-label={`${s.name} (coming soon)`}>
+              <a key={s.name} href={s.href} target="_blank" rel="noopener noreferrer" className="d-btn d-btn-circle d-btn-ghost" aria-label={`HawkEye on ${s.name}`}>
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d={s.path} /></svg>
-              </button>
+              </a>
             ))}
           </div>
         </nav>

@@ -66,10 +66,18 @@ describe('LandingPage', () => {
     icons.forEach((img) => expect(img).toHaveAttribute('alt', ''))
   })
 
-  it('social links are disabled placeholders, not links to accounts that do not exist', () => {
+  it('social icons link to the HawkEye accounts in a new tab', () => {
     renderLanding(() => json(200, { plans: [] }))
-    for (const name of ['X', 'LinkedIn', 'GitHub', 'YouTube']) {
-      expect(screen.getByRole('button', { name: `${name} (coming soon)` })).toBeDisabled()
+    const expected = {
+      X: 'https://x.com/HawkEyeObs',
+      Facebook: 'https://www.facebook.com/people/HawkEye/61595561066921/',
+      LinkedIn: 'https://www.linkedin.com/company/hawkeye-observer/',
+    }
+    for (const [name, href] of Object.entries(expected)) {
+      const link = screen.getByRole('link', { name: `HawkEye on ${name}` })
+      expect(link).toHaveAttribute('href', href)
+      expect(link).toHaveAttribute('target', '_blank')
+      expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
     }
   })
 

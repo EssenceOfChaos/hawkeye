@@ -116,7 +116,7 @@ var layout = template.Must(template.New("email").Parse(`<!doctype html>
 <tr><td align="center" style="padding:24px 12px;">
   <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;">
     <tr><td style="padding:0 4px 16px 4px;">
-      {{if .LogoURL}}<img src="{{.LogoURL}}" width="150" alt="HawkEye" style="display:block;border:0;height:auto;width:150px;">{{else}}<span style="font:700 22px Arial,Helvetica,sans-serif;color:{{.Ink}};">HawkEye</span>{{end}}
+      {{if .LogoURL}}<img src="{{.LogoURL}}" width="190" alt="HawkEye" style="display:block;border:0;height:auto;width:190px;">{{else}}<span style="font:700 22px Arial,Helvetica,sans-serif;color:{{.Ink}};">HawkEye</span>{{end}}
     </td></tr>
     <tr><td style="background:#ffffff;border:1px solid {{.Border}};border-top:4px solid {{.Accent}};border-radius:8px;padding:28px 28px 24px 28px;font:16px/1.55 Arial,Helvetica,sans-serif;color:{{.Ink}};">
       {{if .Heading}}<h1 style="margin:0 0 16px 0;font:700 22px/1.3 Arial,Helvetica,sans-serif;color:{{.Ink}};">{{.Heading}}</h1>{{end}}

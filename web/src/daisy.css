@@ -14,7 +14,15 @@
 @source not "./**/*.test.tsx";
 @plugin "daisyui" {
   prefix: "d-";
-  include: collapse, badge, steps, skeleton, footer, link, button, status, tooltip, countdown, timeline, stat, indicator, hero, alert, toggle, loading;
+  include: collapse, badge, steps, skeleton, footer, link, button, status, tooltip, countdown, timeline, stat, indicator, hero, alert, toggle, loading, aura;
   themes: light --default;
   logs: false;
+}
+
+/* daisyUI's aura rotates by animating --d-aura-angle. With the d- prefix the plugin does not register that property, and an unregistered custom
+   property cannot be animated smoothly: the angle just flips halfway through each cycle, which makes the aura disappear and reappear. */
+@property --d-aura-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
 }

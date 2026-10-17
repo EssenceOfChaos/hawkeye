@@ -5,7 +5,7 @@ function Shell({ title, children, draft = true }: { title: string; children: Rea
   return (
     <div className="legal">
       <header className="legal-header">
-        <Link to="/" aria-label="HawkEye home"><img src={brand.logo} alt="HawkEye" width={120} height={43} /></Link>
+        <Link to="/" aria-label="HawkEye home"><img src={brand.logo} alt="HawkEye" width={160} height={32} /></Link>
       </header>
       <main>
         {draft && (

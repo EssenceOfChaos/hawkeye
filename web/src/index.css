@@ -73,7 +73,7 @@ progress { width: 100%; height: 1rem; }
 .brandmark { display: inline-flex; align-items: center; gap: .5rem; }
 .brandmark img { border-radius: 8px; }
 .wordmark { font-weight: 800; font-size: 1.15rem; letter-spacing: -.01em; }
-.wordmark span { color: var(--accent); }
+.wordmark span { color: var(--gold, #d49a1c); } /* the gold "Eye" of the logo */
 .card .brandmark { margin-bottom: .75rem; }
 .topbar nav { display: flex; gap: 1rem; }
 .topbar nav a { text-decoration: none; padding: .25rem 0; border-bottom: 2px solid transparent; color: inherit; }
@@ -97,9 +97,14 @@ a.button.primary, button.primary, .button.primary { background: var(--accent); c
 .landing-header, .hero, .section, .landing-footer { max-width: 70rem; margin: 0 auto; padding-left: 1rem; padding-right: 1rem; box-sizing: border-box; }
 .landing-header { display: flex; align-items: center; gap: 1rem; padding-top: 1rem; padding-bottom: 1rem; }
 .landing-logo { height: auto; }
-.hero { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: center; padding-top: 2rem; padding-bottom: 3rem; }
-.hero h1 { font-size: clamp(1.9rem, 4vw, 2.8rem); line-height: 1.15; margin-bottom: 1rem; }
+.hero { display: grid; grid-template-columns: 1fr 1fr; grid-template-areas: 'title title' 'text art'; column-gap: 2rem; row-gap: 1rem; align-items: center; padding-top: 2rem; padding-bottom: 3rem; }
+.hero-title { grid-area: title; }
+.hero-text { grid-area: text; }
+.hero-art { grid-area: art; }
+.hero h1 { font-size: clamp(1.9rem, 4vw, 2.8rem); line-height: 1.15; margin-bottom: 0; }
 .hero p { font-size: 1.1rem; max-width: 34rem; }
+/* The eyebrow sits in the full-width title row, so the 34rem paragraph limit would only make it wrap. */
+.hero .eyebrow { max-width: none; }
 .hero-art { width: 100%; height: auto; -webkit-mask-image: linear-gradient(to right, #000 90%, transparent); mask-image: linear-gradient(to right, #000 90%, transparent); }
 .section { padding-top: 2.5rem; padding-bottom: 2.5rem; }
 .section h2 { font-size: 1.6rem; margin: 0 0 1rem; }
@@ -114,6 +119,10 @@ a.button.primary, button.primary, .button.primary { background: var(--accent); c
 .split img { object-fit: contain; max-width: 30%; height: auto; }
 .plan { background: #fff; border: 1px solid var(--border); border-radius: .75rem; padding: 1.25rem; display: flex; flex-direction: column; gap: .5rem; }
 .plan.featured { border: 2px solid var(--accent); }
+.plan-slot { display: flex; }
+.plan-slot > .plan { flex: 1; }
+.plan-aura { display: flex; flex: 1; --d-aura-radius: .75rem; --d-aura-padding: .1875rem; }
+.plan-aura > .plan, .plan-aura > .plan.featured { flex: 1; border: 0; }
 .plan h3 { margin: 0; }
 .plan .price strong { font-size: 2rem; }
 .plan ul { padding-left: 1.1rem; flex: 1; }
@@ -124,10 +133,9 @@ a.button.primary, button.primary, .button.primary { background: var(--accent); c
 .landing-footer nav { gap: .5rem; }
 .landing-footer .d-link { color: inherit; opacity: .85; }
 .landing-footer .social { display: flex; gap: .25rem; }
-.landing-footer .social .d-btn[disabled] { opacity: .55; cursor: not-allowed; }
 .copyright { box-sizing: border-box; max-width: 70rem; margin: 0 auto; padding: 0 1rem 2.5rem; opacity: .7; font-size: .9rem; }
 @media (max-width: 760px) {
-  .hero { grid-template-columns: 1fr; }
+  .hero { grid-template-columns: 1fr; grid-template-areas: 'title' 'text' 'art'; }
   .split { flex-direction: column; text-align: center; }
   .split img { max-width: 50%; }
 }
@@ -179,7 +187,7 @@ td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 .app-plans .soon { display: inline-block; margin-left: .5rem; }
 
 .eyebrow { text-transform: uppercase; letter-spacing: .08em; font-size: .8rem; font-weight: 600; color: var(--muted, #555); margin: 0 0 .5rem; }
-.value-strip { list-style: none; display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; padding: 0; margin: 1.25rem 0 0; font-weight: 600; }
+.value-strip { list-style: none; display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; padding: 0; margin: 2.25rem 0 0; font-weight: 600; }
 .steps { list-style: none; padding: 0; margin: 1.5rem 0 0; display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
 .step-no { font-variant-numeric: tabular-nums; margin-right: .25rem; }
 .feature p + p { margin-top: .5rem; }
@@ -200,7 +208,9 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 
 /* Landing page motion and daisyUI-based pieces */
 .reveal-armed [data-reveal] { opacity: 0; }
-.scramble-line { font-family: var(--font-display); font-size: clamp(1.15rem, 2.4vw, 1.6rem); font-weight: 600; margin: .25rem 0 1rem; min-height: 3.2rem; }
+/* `.hero p` (1.1rem) would otherwise win over this class, so the selector is as specific as that one. */
+.hero .scramble-line, .scramble-line { font-family: var(--font-display); font-size: clamp(1.25rem, 2.6vw, 1.5rem); line-height: 1.3; font-weight: 600; margin: 0 0 1rem; min-height: 1.4em; }
+@media (max-width: 40rem) { .hero .scramble-line { min-height: 2.8em; } }
 .scramble { color: var(--accent); font-family: var(--font-mono); font-size: .92em; white-space: normal; }
 .value-strip .d-badge { font-weight: 600; padding: .9rem .9rem; }
 .step-no.d-badge { margin-right: .4rem; }
