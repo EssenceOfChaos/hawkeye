@@ -117,3 +117,30 @@ func TestBuildMessagePlainTextWhenNoHTML(t *testing.T) {
 		t.Fatalf("%v\n%s", err, raw)
 	}
 }
+
+func TestUntrustedValuesCannotAddLinesOrControlCharactersToTheMessage(t *testing.T) {
+	c := Content{
+		Heading:     "Down: evil\r\n\r\nYour password was reset, call 555-0100",
+		Paragraphs:  []string{"Monitor \"shop\"\nTo stay safe visit https://evil.example\x00"},
+		Facts:       []Fact{{Label: "Website\nFake", Value: "https://x.example\r\nPassword: hunter2"}},
+		Quote:       "line one\r\nline two\x07\x1b[31m",
+		Note:        "note\nsecond line",
+		ButtonLabel: "Open\nnow", ButtonURL: "https://app.example.com/a b\r\nBcc: x@y.z", AppBaseURL: "https://app.example.com",
+	}
+	text := c.RenderText()
+	for _, bad := range []string{"\r", "\x00", "\x07", "\x1b"} {
+		if strings.Contains(text, bad) || strings.Contains(c.RenderHTML(), bad) {
+			t.Fatalf("control character %q reached the message", bad)
+		}
+	}
+	for _, line := range strings.Split(text, "\n") {
+		for _, fake := range []string{"Your password was reset", "To stay safe", "Password:", "Fake:", "second line", "Bcc:"} {
+			if strings.HasPrefix(line, fake) {
+				t.Fatalf("an untrusted value started its own line: %q", line)
+			}
+		}
+	}
+	if !strings.Contains(text, "> line one\n> line two") {
+		t.Fatalf("the quote must keep its line breaks:\n%s", text)
+	}
+}

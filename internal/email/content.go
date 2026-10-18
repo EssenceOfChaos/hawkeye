@@ -38,8 +38,66 @@ func (c Content) Message(from, to, subject string) Message {
 	return Message{From: from, To: to, Subject: subject, Text: c.RenderText(), HTML: c.RenderHTML()}
 }
 
+// oneLine turns any value into a single printable line: control characters (including line breaks and tabs) are dropped or become spaces, and
+// runs of whitespace collapse. A monitor name, cause or sender name can therefore never add lines, fake headings or fake "labels" to a message.
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || r == '\t' {
+			return ' '
+		}
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+			return -1
+		}
+		return r
+	}, s)), " ")
+}
+
+// multiLine keeps line breaks (normalised to \n) but drops every other control character.
+func multiLine(s string) string {
+	s = strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return r
+		}
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// noSpace is for URLs: no whitespace or control characters at all.
+func noSpace(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r <= 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// clean returns a copy that is safe to compose into a message, whatever the caller put in it. Everything is a single line except Quote, the one
+// field meant to hold the visitor's multi-line text. The renderers call it themselves, so no caller can forget.
+func (c Content) clean() Content {
+	c.Preheader, c.Heading, c.ButtonLabel, c.Note = oneLine(c.Preheader), oneLine(c.Heading), oneLine(c.ButtonLabel), oneLine(c.Note)
+	c.ButtonURL, c.AppBaseURL = noSpace(c.ButtonURL), noSpace(c.AppBaseURL)
+	c.Quote = multiLine(c.Quote)
+	ps := make([]string, len(c.Paragraphs))
+	for i, p := range c.Paragraphs {
+		ps[i] = oneLine(p)
+	}
+	c.Paragraphs = ps
+	fs := make([]Fact, len(c.Facts))
+	for i, f := range c.Facts {
+		fs[i] = Fact{Label: oneLine(f.Label), Value: oneLine(f.Value)}
+	}
+	c.Facts = fs
+	return c
+}
+
 // RenderText is the plain-text alternative.
 func (c Content) RenderText() string {
+	c = c.clean()
 	var b strings.Builder
 	if c.Heading != "" {
 		b.WriteString(c.Heading + "\n\n")
@@ -147,6 +205,7 @@ var layout = template.Must(template.New("email").Parse(`<!doctype html>
 
 // RenderHTML is the branded HTML body.
 func (c Content) RenderHTML() string {
+	c = c.clean()
 	d := htmlData{Content: c, Accent: c.accent(), Ink: colInk, Bg: colBg, Border: colBorder, Muted: colMuted}
 	if c.AppBaseURL != "" {
 		d.LogoURL = c.AppBaseURL + "/email/hawkeye-logo.png"
