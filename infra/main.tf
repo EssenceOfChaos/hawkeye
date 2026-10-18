@@ -103,13 +103,15 @@ resource "vultr_instance" "server" {
   }
 
   # cloud-init runs once, at first boot. Nothing secret goes here: user_data can be read by anyone holding the Vultr API key.
-  user_data = base64encode(templatefile("${path.module}/cloud-init.yaml.tftpl", {
+  # Pass PLAIN text: the provider base64-encodes user_data itself. (Encoding it here too double-encodes it, cloud-init then ignores it as
+  # "non-multipart userdata", and the server boots with none of the setup: no deploy user, password SSH still on.)
+  user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
     ssh_public_key        = local.ssh_key
     deploy_authorized_key = var.deploy_authorized_key
     repo_url              = var.repo_url
     dns_resolvers         = join(",", var.dns_resolvers)
     swap_gb               = var.swap_gb
-  }))
+  })
 
   lifecycle {
     # The server is replaceable, not editable: to apply a changed cloud-init, replace it on purpose with `tofu apply -replace=vultr_instance.server`.

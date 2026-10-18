@@ -109,9 +109,23 @@ wait_for_server() {
   say "Waiting for first-boot setup on $ip (a few minutes)"
   for i in $(seq 1 90); do
     if rssh "$ip" "$KH" 'test -f /var/lib/hawkeye-firstboot-done' 2>/dev/null; then ok "first-boot setup is finished"; return 0; fi
+    # If a deploy login still does not work after ~6 minutes, the setup file was not applied: say why instead of waiting out the clock.
+    if [ "$i" = 36 ]; then diagnose_server "$ip"; fi
     sleep 10
   done
-  die "the server did not finish first-boot setup in 15 minutes; look at /var/log/hawkeye-cloud-init.log on it"
+  diagnose_server "$ip"
+}
+
+diagnose_server() { # root still has the SSH key Vultr installed, so we can look inside even when cloud-init did not create the deploy user
+  local ip="$1"
+  echo; warn "first-boot setup has not finished. What the server says (read-only):"
+  # shellcheck disable=SC2086
+  ssh $(ssh_opts "$KH") "root@$ip" '
+    echo "-- cloud-init status:"; cloud-init status --long 2>&1 | head -8
+    echo "-- deploy user:"; id deploy 2>&1
+    echo "-- cloud-init warnings:"; grep -E "WARNING|ERROR|Traceback" /var/log/cloud-init.log 2>/dev/null | tail -6 | cut -c1-200
+    echo "-- first-boot log:"; tail -12 /var/log/hawkeye-cloud-init.log 2>&1' 2>&1 || warn "could not even log in as root"
+  die "the server was not set up by cloud-init (see above). Rehearsals can simply be destroyed and recreated: scripts/rebuild.sh destroy --workspace $WS"
 }
 
 smoke_url() { # wait for the site to answer with a valid certificate, then run the full smoke test
