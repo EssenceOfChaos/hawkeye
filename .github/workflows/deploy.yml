@@ -1,0 +1,49 @@
+name: Deploy
+
+# Deploys main to production after CI passes on a push to main. Can also be run by hand from the Actions tab (workflow_dispatch).
+# One-time setup (secrets, the SSH key on the VM): docs/deployment.md, "Automated deploys".
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Only a successful CI run for a push to main (not a pull request that happens to come from a branch called main).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    environment: production   # add "required reviewers" to this environment in GitHub if you want an approval click before each deploy
+    timeout-minutes: 25
+    steps:
+      - name: Work out the commit to deploy
+        id: sha
+        run: |
+          sha="${{ github.event.workflow_run.head_sha || github.sha }}"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "bad sha $sha"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Set up SSH
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Deploy
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER_NAME: ${{ secrets.DEPLOY_USER }}
+        run: |
+          # The sha is the only thing sent. The key on the VM is restricted to running scripts/deploy.sh (forced command).
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 "$USER_NAME@$HOST" "${{ steps.sha.outputs.sha }}"

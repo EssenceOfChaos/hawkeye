@@ -19,3 +19,4 @@ skills-lock.json
 
 # Throwaway test certificates for the local production-like stack
 deploy/smoke/certs/
+.deploy.lock
