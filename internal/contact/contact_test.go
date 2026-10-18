@@ -132,3 +132,27 @@ func TestAcknowledgementGoesToTheSender(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+func TestAcknowledgementEchoesNothingTheVisitorWrote(t *testing.T) {
+	s, m := newSvc()
+	in := valid()
+	in.Name = "Your account is locked, visit https://evil.example now"
+	in.Subject = "Urgent: verify your card at evil.example"
+	s.Acknowledge(context.Background(), in, "HK-ABC123")
+	got := m.Messages()[0]
+	for _, bad := range []string{"evil.example", "account is locked", "Urgent"} {
+		if strings.Contains(got.Text, bad) || strings.Contains(got.HTML, bad) || strings.Contains(got.Subject, bad) {
+			t.Fatalf("visitor text %q reached the acknowledgement:\n%s", bad, got.Text)
+		}
+	}
+}
+
+func TestAcknowledgementRefusesAnAddressThatCouldInjectHeaders(t *testing.T) {
+	s, m := newSvc()
+	in := valid()
+	in.Email = "ada@example.org\r\nBcc: evil@example.com"
+	s.Acknowledge(context.Background(), in, "HK-ABC123")
+	if len(m.Messages()) != 0 {
+		t.Fatalf("sent to %q", m.Messages()[0].To)
+	}
+}

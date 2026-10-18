@@ -232,3 +232,35 @@ func TestSMTPSettingsAreAllReadFromTheEnvironment(t *testing.T) {
 		t.Fatalf("%+v", c)
 	}
 }
+
+func TestDBMaxConnsRejectsValuesThatWouldWrapAroundInt32(t *testing.T) {
+	for _, bad := range []string{"4294967297", "2147483648", "-1", "0", "ten"} { // 4294967297 used to wrap silently to 1
+		if _, err := load(env(map[string]string{"DATABASE_URL": "postgres://x", "DB_MAX_CONNS": bad})); err == nil || !strings.Contains(err.Error(), "DB_MAX_CONNS") {
+			t.Errorf("DB_MAX_CONNS=%q accepted: %v", bad, err)
+		}
+	}
+	c, err := load(env(map[string]string{"DATABASE_URL": "postgres://x", "DB_MAX_CONNS": "25"}))
+	if err != nil || c.DBMaxConns != 25 {
+		t.Fatalf("valid value rejected: %v %+v", err, c.DBMaxConns)
+	}
+}
+
+func TestWorkerConcurrencyHasAnUpperBound(t *testing.T) {
+	if _, err := load(env(map[string]string{"DATABASE_URL": "postgres://x", "WORKER_CONCURRENCY": "100000"})); err == nil || !strings.Contains(err.Error(), "WORKER_CONCURRENCY") {
+		t.Fatalf("expected an error, got %v", err)
+	}
+}
+
+func TestWorkerPoolConnsIsConcurrencyPlusHeadroomButNotBelowDBMaxConns(t *testing.T) {
+	cases := []struct {
+		conc int
+		max  int32
+		want int32
+	}{{10, 10, 14}, {10, 50, 50}, {0, 2, 5}, {1 << 40, 5, MaxWorkerConcurrency + 4}}
+	for _, c := range cases {
+		got := Config{WorkerConcurrency: c.conc, DBMaxConns: c.max}.WorkerPoolConns()
+		if got != c.want {
+			t.Errorf("concurrency %d, max conns %d: got %d, want %d", c.conc, c.max, got, c.want)
+		}
+	}
+}

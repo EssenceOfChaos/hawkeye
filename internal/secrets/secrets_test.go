@@ -80,3 +80,19 @@ func TestKeyValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestPassphraseKeysAreStableAndDistinct(t *testing.T) {
+	a1, _ := NewFromPassphrase("secret-a")
+	a2, _ := NewFromPassphrase("secret-a")
+	b, _ := NewFromPassphrase("secret-b")
+	sealed, err := a1.Seal("token", "monitor-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := a2.Open(sealed, "monitor-1"); err != nil || got != "token" {
+		t.Fatalf("same secret must derive the same key: %q %v", got, err)
+	}
+	if _, err := b.Open(sealed, "monitor-1"); err == nil {
+		t.Fatal("a different secret must not open the value")
+	}
+}

@@ -57,7 +57,7 @@ func run() error {
 	defer stop()
 
 	// Connections: one per concurrent check, the scheduler, the sampler and some headroom.
-	pool, err := database.Connect(ctx, cfg.DatabaseURL, max(cfg.DBMaxConns, int32(cfg.WorkerConcurrency)+4), cfg.DBConnectTimout)
+	pool, err := database.Connect(ctx, cfg.DatabaseURL, cfg.WorkerPoolConns(), cfg.DBConnectTimout)
 	if err != nil {
 		return err
 	}

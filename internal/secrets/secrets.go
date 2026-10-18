@@ -7,6 +7,7 @@ package secrets
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hkdf"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -38,11 +39,16 @@ func New(encodedKey string) (*Box, error) {
 	return fromKey(key)
 }
 
-// NewFromPassphrase derives a key from an arbitrary string. It exists for development and tests, where a random key per run would make
-// stored values unreadable after a restart; production uses New with a dedicated random key.
-func NewFromPassphrase(passphrase string) (*Box, error) {
-	sum := sha256.Sum256([]byte("hawkeye/secrets/v1:" + passphrase))
-	return fromKey(sum[:])
+// NewFromPassphrase derives a key from a high-entropy secret string (in development, the session secret). It exists so a development
+// database stays readable across restarts without a dedicated key; config.SecretBox refuses to use it in production, which requires New with a
+// random key. The derivation is HKDF-SHA256 (RFC 5869), the standard way to turn an already-random secret into a key. It is NOT a password
+// hash and must never be given a human-chosen password: a low-entropy input would need a slow KDF such as Argon2id or scrypt instead.
+func NewFromPassphrase(secret string) (*Box, error) {
+	key, err := hkdf.Key(sha256.New, []byte(secret), []byte("hawkeye/secrets/v1"), "dev-and-test key derivation", 32)
+	if err != nil {
+		return nil, err
+	}
+	return fromKey(key)
 }
 
 func fromKey(key []byte) (*Box, error) {

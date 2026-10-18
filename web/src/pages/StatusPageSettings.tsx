@@ -82,7 +82,10 @@ export function StatusPageSettings() {
     }
   }
 
-  const link = `${window.location.origin}/status/${slug}`
+  // The address comes from a text field, so only link to it when it is a well-formed slug (what the server accepts), and encode it anyway.
+  const linkable = /^[a-z0-9-]{3,40}$/.test(slug)
+  const path = `/status/${encodeURIComponent(slug)}`
+  const link = `${window.location.origin}${path}`
 
   return (
     <>
@@ -96,9 +99,9 @@ export function StatusPageSettings() {
       </p>
       {error && <Alert>{error}</Alert>}
       {notice && <Alert tone="success" role="status">{notice}</Alert>}
-      {exists && published && (
+      {exists && published && linkable && (
         <p>
-          Public at <a href={`/status/${slug}`} target="_blank" rel="noreferrer">{link}</a>
+          Public at <a href={path} target="_blank" rel="noreferrer">{link}</a>
         </p>
       )}
       {!loaded && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>}

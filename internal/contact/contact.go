@@ -156,15 +156,23 @@ func (s *Service) Submit(ctx context.Context, in Submission) (string, error) {
 }
 
 // Acknowledge tells the sender their message arrived. It is best-effort: failure is logged, never returned.
+//
+// The recipient is an address the visitor typed, possibly someone else's, so this email carries nothing the visitor wrote except that address:
+// echoing their name or subject would let anyone send a victim a genuine-looking HawkEye email with text of their choosing (phishing).
+// The submission is cleaned again here, so a caller that did not validate it cannot put control characters into the recipient.
 func (s *Service) Acknowledge(ctx context.Context, in Submission, ref string) {
+	if err := Validate(&in); err != nil {
+		s.log.WarnContext(ctx, "contact acknowledgement skipped: invalid submission", "error", err)
+		return
+	}
 	cat, _ := lookup(in.Category)
 	c := email.Content{
 		Preheader: "We received your message and will reply by email.", Heading: "We received your message",
 		Paragraphs: []string{
-			"Thanks for contacting HawkEye, " + in.Name + ". We have your message and will reply to this email address.",
+			"Thanks for contacting HawkEye. We have your message and will reply to this email address.",
 			"Your reference is " + ref + ". Please quote it if you write to us again about this.",
 		},
-		Facts: []email.Fact{{Label: "Topic", Value: cat.Label}, {Label: "Subject", Value: in.Subject}},
+		Facts: []email.Fact{{Label: "Topic", Value: cat.Label}, {Label: "Reference", Value: ref}},
 		Note:  "You are receiving this because someone submitted the contact form with this address. If that was not you, you can ignore this email.", AppBaseURL: s.appBaseURL,
 	}
 	if err := s.mail.Send(ctx, c.Message(s.from, in.Email, "We received your message to HawkEye ("+ref+")")); err != nil {

@@ -124,6 +124,22 @@ func (c Config) Region() string {
 	return c.Regions().Primary()
 }
 
+// MaxWorkerConcurrency bounds WORKER_CONCURRENCY (validated at load); it also keeps the worker's pool size far inside int32.
+const MaxWorkerConcurrency = 1000
+
+// WorkerPoolConns is the database pool size for the worker: one connection per concurrent check, the scheduler, the sampler and some
+// headroom, but never fewer than DB_MAX_CONNS. The range is checked here, next to the conversion, not only at load time.
+func (c Config) WorkerPoolConns() int32 {
+	n := c.WorkerConcurrency
+	if n < 1 { // load() rejects values outside 1..MaxWorkerConcurrency; clamping here only keeps the conversion below provably in range
+		n = 1
+	}
+	if n > MaxWorkerConcurrency {
+		n = MaxWorkerConcurrency
+	}
+	return max(c.DBMaxConns, int32(n)+4)
+}
+
 func (c Config) SecretBox() (*secrets.Box, error) {
 	if c.SecretsKey != "" {
 		return secrets.New(c.SecretsKey)
@@ -162,6 +178,20 @@ func load(get func(string) string) (Config, error) {
 		}
 		return n
 	}
+	// integer32 is for settings stored in an int32: ParseInt with bitSize 32 rejects values that would silently wrap (for example
+	// 4294967297 becoming 1) instead of narrowing an int after the fact.
+	integer32 := func(key string, def int32) int32 {
+		v := strings.TrimSpace(get(key))
+		if v == "" {
+			return def
+		}
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: must be an integer that fits in 32 bits", key))
+			return def
+		}
+		return int32(n)
+	}
 	duration := func(key string, def time.Duration) time.Duration {
 		v := strings.TrimSpace(get(key))
 		if v == "" {
@@ -193,7 +223,7 @@ func load(get func(string) string) (Config, error) {
 		AppBaseURL:      str("APP_BASE_URL", "http://localhost:3000"),
 		APIBaseURL:      str("API_BASE_URL", "http://localhost:8080"),
 		DatabaseURL:     str("DATABASE_URL", ""),
-		DBMaxConns:      int32(integer("DB_MAX_CONNS", 10)),
+		DBMaxConns:      integer32("DB_MAX_CONNS", 10),
 		DBConnectTimout: duration("DB_CONNECT_TIMEOUT", 10*time.Second),
 		SessionSecret:   str("SESSION_SECRET", ""),
 		SecretsKey:      str("SECRETS_ENCRYPTION_KEY", ""),
@@ -309,6 +339,9 @@ func load(get func(string) string) (Config, error) {
 		if v < 1 {
 			errs = append(errs, fmt.Errorf("%s: must be at least 1", key))
 		}
+	}
+	if c.WorkerConcurrency > MaxWorkerConcurrency {
+		errs = append(errs, fmt.Errorf("WORKER_CONCURRENCY: must be at most %d", MaxWorkerConcurrency))
 	}
 	// A lease shorter than the longest possible check (30s timeout plus connection setup) would let a second
 	// worker pick up a job that is still running.
