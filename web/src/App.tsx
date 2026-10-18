@@ -15,6 +15,7 @@ import { StatusPage } from './pages/StatusPage'
 import { StatusPageSettings } from './pages/StatusPageSettings'
 import { PrivacyPage, TermsPage } from './pages/LegalPages'
 import { MonitorsPage } from './pages/MonitorsPage'
+import { NotFoundPage } from './pages/NotFoundPage'
 
 // The chart pages pull in the charting library; load them only when visited so the landing and auth pages stay light.
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
@@ -70,8 +71,8 @@ export function AppRoutes() {
         <Route path="/monitors/new" element={<MonitorFormPage />} />
         <Route path="/monitors/:monitorID" element={<Lazy><MonitorDetailPage /></Lazy>} />
         <Route path="/monitors/:monitorID/edit" element={<MonitorFormPage />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   )
 }

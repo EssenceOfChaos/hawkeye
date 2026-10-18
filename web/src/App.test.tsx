@@ -21,6 +21,19 @@ function renderAt(path: string) {
 }
 
 describe('routing', () => {
+  it('shows the 404 page for an unknown address instead of redirecting a visitor who is not signed in', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => jsonResponse(401, { error: { code: 'UNAUTHENTICATED', message: 'Authentication required.' } })))
+    renderAt('/no-such-page')
+    expect(await screen.findByRole('heading', { level: 1, name: /Beyond our field of view/ })).toBeInTheDocument()
+  })
+
+  it('shows the 404 page for an unknown address to signed-in users too', async () => {
+    const user = { id: 'u', email: 'a@example.com', email_verified_at: '2026-01-01T00:00:00Z' }
+    vi.stubGlobal('fetch', vi.fn(() => jsonResponse(200, { user, organizations: [] })))
+    renderAt('/monitors/1/unknown/extra')
+    expect(await screen.findByRole('heading', { level: 1, name: /Beyond our field of view/ })).toBeInTheDocument()
+  })
+
   it('sends anonymous visitors to the login page', async () => {
     vi.stubGlobal('fetch', vi.fn(() => jsonResponse(401, { error: { code: 'UNAUTHENTICATED', message: 'Authentication required.' } })))
     renderAt('/monitors')

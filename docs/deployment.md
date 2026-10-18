@@ -104,6 +104,15 @@ hand on the VM (`scripts/deploy.sh`, defaults to the tip of `origin/main`) or fr
 Rollback only restores the **code**; migrations are forward-only (see Upgrades and Rollback below), which is why every schema change must be expand/contract.
 The script sets `APP_VERSION` in `.env.production` to the commit sha so logs and Sentry releases name the exact version.
 
+## Unknown pages (404)
+
+The web app is a single-page app, so Caddy has to know which addresses are real pages. `@app` in `deploy/Caddyfile` lists them: those get the app shell with
+HTTP 200; real files (hashed assets, icons, email images) are served as files; everything else gets the same shell with **HTTP 404**, and the app renders its
+404 page (`web/src/pages/NotFoundPage.tsx`). A missing `/assets/*` file is a plain empty 404, and `/api/*` keeps the API's JSON 404.
+**When you add a page in `web/src/App.tsx`, add it to the `@app` pattern too.** `web/src/routes.test.ts` fails if you forget. To try it locally:
+`docker run --rm -p 8089:80 -v $PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro -v $PWD/web/dist:/srv:ro -e ACME_EMAIL=a@example.com -e SITE_ADDRESS=:80 caddy:2.11.7-alpine`
+(API routes answer 503 there because no API container is running), then `curl -i http://localhost:8089/nope`.
+
 ## Upgrades
 
 1. Take a backup (`scripts/backup.sh`), and note the current `APP_VERSION`.

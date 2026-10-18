@@ -8,6 +8,8 @@ const apiTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8080'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    // Tests only: src/routes.test.ts reads ../deploy/Caddyfile. The dev server keeps Vite's default (this directory only).
+    fs: process.env.VITEST ? { allow: ['..'] } : undefined,
     port: 3000,
     proxy: {
       '/api': apiTarget,

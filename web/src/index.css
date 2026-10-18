@@ -287,3 +287,56 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 .status-row .head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; font-weight: 600; }
 .status-row .scale { display: flex; justify-content: space-between; font-size: .8rem; opacity: .75; }
 fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
+
+/* 404 page (src/pages/NotFoundPage.tsx). Always dark, whatever the system theme; every class is prefixed nf- so nothing else is affected. */
+.nf { --nf-navy: #091c33; --nf-gold: #e8b95e; --nf-text: #eaf1fa; --nf-muted: #a9b9cd; --nf-line: #ffffff1c;
+  min-height: 100svh; position: relative; overflow: hidden; display: flex; flex-direction: column; background: var(--nf-navy); color: var(--nf-text); color-scheme: dark; }
+.nf::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image: linear-gradient(#a3bdd208 1px, transparent 1px), linear-gradient(90deg, #a3bdd208 1px, transparent 1px); background-size: 45px 45px;
+  mask-image: linear-gradient(to bottom, transparent, #000 20%, transparent 85%); }
+.nf::after { content: ""; position: absolute; pointer-events: none; top: 100px; left: 50%; transform: translateX(-50%); width: min(100%, 650px); height: 430px;
+  background: radial-gradient(ellipse, #c18d2520, transparent 65%); }
+.nf-header, .nf-main, .nf-footer { position: relative; z-index: 1; }
+.nf-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 18px clamp(20px, 5vw, 56px); border-bottom: 1px solid var(--nf-line); }
+.nf-brand { display: inline-flex; border-radius: 6px; }
+.nf-brand img { display: block; height: auto; max-width: 100%; }
+.nf-status { font-size: 11px; letter-spacing: 1.8px; color: var(--nf-muted); display: flex; align-items: center; gap: 8px; }
+.nf-dot { height: 7px; width: 7px; background: var(--nf-gold); border-radius: 50%; box-shadow: 0 0 12px var(--nf-gold); flex: none; }
+.nf-main { width: 100%; max-width: 950px; margin: auto; padding: 48px 20px 54px; text-align: center; box-sizing: border-box; }
+.nf-eyebrow { margin: 0; font-size: 11px; letter-spacing: 3px; color: #d7ad63; font-weight: 700; }
+.nf-radar { height: 265px; width: 265px; margin: 16px auto 14px; position: relative; display: grid; place-items: center; }
+.nf-circle { position: absolute; border: 1px solid #d8ad6133; border-radius: 50%; }
+.nf-c1 { width: 100%; height: 100%; } .nf-c2 { width: 72%; height: 72%; } .nf-c3 { width: 44%; height: 44%; }
+.nf-axis { position: absolute; background: #d8ad6120; } .nf-axis-x { width: 100%; height: 1px; } .nf-axis-y { height: 100%; width: 1px; }
+.nf-sweep { position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 270deg, #d4a45308 305deg, #e4b96848 359deg, transparent 360deg); animation: nf-spin 7s linear infinite; }
+.nf-number { font-size: 105px; font-weight: 850; letter-spacing: -10px; color: #f4d18d; text-shadow: 0 0 38px #e7b85c38; z-index: 2; padding-right: 10px; }
+.nf-reticle { position: absolute; width: 9px; height: 9px; border: 1px solid #f5c778; transform: rotate(45deg); right: 24px; top: 70px; box-shadow: 0 0 12px #c89a49; }
+.nf h1 { font-size: clamp(29px, 5vw, 44px); letter-spacing: -1.6px; line-height: 1.15; margin: 0 0 14px; font-weight: 750; color: var(--nf-text); }
+.nf h1:focus { outline: none; }
+.nf-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.nf-desc { color: var(--nf-muted); line-height: 1.8; font-size: 15px; max-width: 480px; margin: 0 auto 26px; }
+.nf-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.nf-button { display: inline-flex; align-items: center; gap: .6em; text-decoration: none; cursor: pointer; border-radius: 7px; padding: 13px 22px; min-height: 44px; box-sizing: border-box;
+  font-size: 13px; font-weight: 750; letter-spacing: .2px; transition: transform .2s, background .2s; font-family: inherit; }
+.nf-button:hover { transform: translateY(-2px); }
+.nf-button:focus-visible, .nf-brand:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+.nf-primary { background: linear-gradient(135deg, #f1ce87, #d6a34e); color: #132139; border: 1px solid #f0ca7d; }
+.nf-secondary { background: #12243c; color: #e1eaf5; border: 1px solid #3d516a; }
+.nf-info { margin: 35px auto 0; max-width: 620px; display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid #ffffff1f; border-radius: 8px; background: #ffffff04; text-align: left; }
+.nf-info > div { padding: 16px; border-right: 1px solid var(--nf-line); } .nf-info > div:last-child { border: 0; }
+.nf-info small { display: block; font-size: 10.5px; letter-spacing: 1.5px; color: #9bb0c8; margin-bottom: 7px; }
+.nf-info strong { font-size: 12.5px; font-weight: 600; color: #d8e4f2; }
+.nf-info .nf-gold { color: var(--nf-gold); }
+.nf-footer { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--nf-line); padding: 19px clamp(20px, 5vw, 56px); font-size: 11px; color: #9bb0c8; letter-spacing: .5px; }
+@keyframes nf-spin { to { transform: rotate(360deg); } }
+@media (max-width: 520px) {
+  .nf-status { letter-spacing: 1px; font-size: 10px; }
+  .nf-header { padding-top: 14px; padding-bottom: 14px; }
+  .nf-info { grid-template-columns: 1fr; }
+  .nf-info > div { border-right: 0; border-bottom: 1px solid var(--nf-line); } .nf-info > div:last-child { border: 0; }
+  .nf-footer { flex-direction: column; text-align: center; }
+  .nf-radar { width: 225px; height: 225px; } .nf-number { font-size: 88px; }
+}
+@media (max-width: 380px) { .nf-status { display: none; } }
+@media (prefers-reduced-motion: reduce) { .nf-sweep { animation: none; } .nf-button { transition: none; } .nf-button:hover { transform: none; } }

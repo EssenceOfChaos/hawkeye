@@ -15,13 +15,7 @@
 	}
 }
 
-{$WWW_ADDRESS::8081} {
-	redir https://{$SITE_ADDRESS}{uri} permanent
-}
-
-{$SITE_ADDRESS::80} {
-	encode zstd gzip
-
+(security_headers) {
 	header {
 		Strict-Transport-Security "max-age=63072000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
@@ -35,6 +29,16 @@
 		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
 		-Server
 	}
+}
+
+{$WWW_ADDRESS::8081} {
+	redir https://{$SITE_ADDRESS}{uri} permanent
+}
+
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	import security_headers
 
 	# API, health and readiness go to the API container. Prometheus metrics are NOT proxied (they live on private ports).
 	@backend path /api/* /healthz /readyz
@@ -50,12 +54,38 @@
 	@assets path /assets/*
 	header @assets Cache-Control "public, max-age=31536000, immutable"
 
+	# The app is a single-page app, so the server must know which addresses are real pages; anything else gets the same shell with HTTP 404
+	# (handle_errors below), and the app renders its 404 page. KEEP IN STEP WITH THE ROUTES IN web/src/App.tsx (web/src/routes.test.ts checks this).
+	@app path_regexp app (?i)^/(?:(?:login|register|forgot-password|contact|privacy|terms|reset-password|confirm-alert-address|verify-email|dashboard|billing|account|incidents|notifications|maintenance|status-page|monitors(?:/new|/[^/]+(?:/edit)?)?|status/[^/]+))?/?$
+	handle @app {
+		root * /srv
+		rewrite * /index.html
+		header Cache-Control "no-cache"
+		file_server
+	}
+
+	# Everything else: a real file (hashed assets, icons, email images) is served; a missing one is an error 404 that handle_errors turns into the page.
 	handle {
 		root * /srv
 		@html not path /assets/*
 		header @html Cache-Control "no-cache"
-		try_files {path} /index.html
 		file_server
+	}
+
+	# Error pages are separate from the normal route, so they repeat the headers and compression. Other errors keep Caddy's default (empty) body.
+	handle_errors {
+		import security_headers
+		encode zstd gzip
+		@missing {
+			expression {err.status_code} == 404
+			not path /assets/*   # a missing script or style stays a plain 404, never an HTML page in its place
+		}
+		handle @missing {
+			root * /srv
+			rewrite * /index.html
+			header Cache-Control "no-store"
+			file_server
+		}
 	}
 
 	# Access logs must not contain secrets: one-time tokens arrive in the query string of the emailed links, and sessions in cookies.
