@@ -1,0 +1,113 @@
+#cloud-config
+# First-boot setup for a HawkEye server. Runs once. Rendered by OpenTofu/Terraform (infra/main.tf); NO secrets belong in this file.
+# What it leaves you with: the deploy user, key-only SSH, ufw, fail2ban, Docker, the repo at /home/deploy/hawkeye, swap, the worker egress
+# firewall as a systemd unit, and the nightly backup cron. What it does not do: .env.production, the backup env file, DNS, restoring data.
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - iptables
+  - age
+  - rclone
+  - cron
+
+users:
+  - default
+  - name: deploy
+    gecos: HawkEye deploy
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${jsonencode(ssh_public_key)}
+%{ if deploy_authorized_key != "" ~}
+      - ${jsonencode(deploy_authorized_key)}
+%{ endif ~}
+
+write_files:
+  # Key-only SSH, no root login. This file sorts before cloud-init's own 50-cloud-init.conf, and sshd uses the first value it sees.
+  - path: /etc/ssh/sshd_config.d/10-hawkeye.conf
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+
+  # The egress firewall for the worker network (deploy/egress-filter.sh). It reapplies at every boot; docs/deployment.md explains it.
+  - path: /etc/systemd/system/hawkeye-egress.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=HawkEye worker egress filter
+      After=docker.service
+      Requires=docker.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/home/deploy/hawkeye
+      Environment=ALLOW_TCP=172.30.10.5:5432
+      Environment=ALLOW_DNS=${dns_resolvers}
+      ExecStart=/home/deploy/hawkeye/deploy/egress-filter.sh apply
+      ExecStop=/home/deploy/hawkeye/deploy/egress-filter.sh remove
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # Nightly database dump to object storage. It fails harmlessly (and says why in the log) until ~/.hawkeye-backup.env exists.
+  - path: /etc/cron.d/hawkeye-backup
+    permissions: "0644"
+    content: |
+      15 3 * * * deploy cd /home/deploy/hawkeye && scripts/backup-offsite.sh >> /home/deploy/backups/backup.log 2>&1
+
+  # Heartbeat to healthchecks.io every minute. Silent until ~/.hawkeye-heartbeat.env exists (scripts/heartbeat.sh).
+  - path: /etc/cron.d/hawkeye-heartbeat
+    permissions: "0644"
+    content: |
+      * * * * * deploy /home/deploy/hawkeye/scripts/heartbeat.sh >> /home/deploy/backups/heartbeat.log 2>&1
+
+  - path: /usr/local/sbin/hawkeye-firstboot.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euxo pipefail
+
+      # Swap: building the Go and Node images on a small server needs it.
+      if [ ${swap_gb} -gt 0 ] && [ ! -f /swapfile ]; then
+        fallocate -l ${swap_gb}G /swapfile
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+      fi
+
+      # Docker Engine and Compose v2 from Docker's own installer.
+      curl -fsSL https://get.docker.com | sh
+      usermod -aG docker deploy
+      systemctl enable --now docker
+
+      # Host firewall (Vultr's network firewall is the outer layer). Only Caddy publishes ports; Postgres and metrics never do.
+      ufw default deny incoming
+      ufw default allow outgoing
+      ufw allow OpenSSH
+      ufw allow 80/tcp
+      ufw allow 443/tcp
+      ufw --force enable
+      systemctl restart ssh
+
+      # The repo, then the egress rules (the unit runs a script from the repo).
+      sudo -u deploy git clone ${repo_url} /home/deploy/hawkeye
+      sudo -u deploy mkdir -p /home/deploy/backups
+      systemctl daemon-reload
+      systemctl enable --now hawkeye-egress
+
+      touch /var/lib/hawkeye-firstboot-done
+      echo "first-boot setup finished"
+
+runcmd:
+  - [bash, -c, "/usr/local/sbin/hawkeye-firstboot.sh > /var/log/hawkeye-cloud-init.log 2>&1"]

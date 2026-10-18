@@ -1,6 +1,6 @@
 // Brand artwork. The logo, emblem and app icons come from scripts/prepare_glossy_logos.py, the feature icons from scripts/prepare_glossy_icons.py; the rest from scripts/prepare_brand_assets.py.
 import appIcon from './assets/brand/app-icon.png'
-import dashboardLaptop from './assets/brand/dashboard-laptop.png'
+import dashboardLaptop from './assets/brand/dashboard-laptop.webp'
 import iconAnalytics from './assets/brand/icon-analytics.png'
 import iconDashboard from './assets/brand/icon-dashboard.png'
 import iconEmail from './assets/brand/icon-email.png'

@@ -17,7 +17,7 @@ if you regenerate the art at another size, update the size check and the crop ro
 glossy gold-ringed navy badges from the ChatGPT icon sheet, hand-cropped (an automatic cut-out left a white halo outside the ring). The originals are in
 `web/src/assets/brand/source/icons/`; `python3 scripts/prepare_glossy_icons.py` (Pillow and numpy) centres each on a square canvas and writes the 256px PNGs.
 Each badge carries its own navy, so it works on any background. The old blue icons, `alert-bell.png`, `cloud-security.png` and `website-magnifier.png` were removed;
-`dashboard-laptop.png` (the landing hero illustration) is still the older artwork.
+`dashboard-laptop.png` was replaced by `dashboard-laptop.webp`, the hero laptop on the landing page: `python3 scripts/prepare_hero_laptop.py` resizes the glossy mockup in `source/dashboard-laptop-mockup.png` to 1100px wide lossy WebP with alpha (145 KB). It is an illustration (alt text says so): its sidebar labels (Reports, Settings) and "Online" wording are not the app's exact ones.
 
 The in-app wordmark is HTML text with a
 gold "Eye". The brand blue is still the UI accent colour; gold appears in the logo, the app wordmark and the Pro plan's aura.

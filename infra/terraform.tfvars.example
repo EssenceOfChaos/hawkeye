@@ -1,0 +1,5 @@
+# Copy to terraform.tfvars (git-ignored) and adjust. Nothing here is secret.
+# region              = "ewr"
+# plan                = "vc2-2c-4gb"
+# ssh_public_key_path = "~/.ssh/id_ed25519.pub"
+# deploy_authorized_key = "restrict,command=\"cd /home/deploy/hawkeye && scripts/deploy.sh\" ssh-ed25519 AAAA... github-actions-deploy"
