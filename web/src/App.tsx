@@ -1,6 +1,8 @@
-import { lazy, Suspense } from 'react'
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router'
+import { Suspense } from 'react'
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router'
 import { AuthProvider, useAuth } from './auth'
+import { lazyWithReload } from './chunkReload'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
 import { ConfirmAlertAddressPage, ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage, VerifyEmailPage } from './pages/AuthPages'
 import { AccountPage } from './pages/AccountPage'
@@ -18,8 +20,8 @@ import { MonitorsPage } from './pages/MonitorsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 
 // The chart pages pull in the charting library; load them only when visited so the landing and auth pages stay light.
-const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
-const MonitorDetailPage = lazy(() => import('./pages/MonitorDetailPage').then((m) => ({ default: m.MonitorDetailPage })))
+const DashboardPage = lazyWithReload(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
+const MonitorDetailPage = lazyWithReload(() => import('./pages/MonitorDetailPage').then((m) => ({ default: m.MonitorDetailPage })))
 
 function RequireAuth() {
   const { status } = useAuth()
@@ -77,11 +79,21 @@ export function AppRoutes() {
   )
 }
 
+/** Routes inside an error boundary that resets when the page changes. */
+function GuardedRoutes() {
+  const { pathname } = useLocation()
+  return (
+    <ErrorBoundary resetKey={pathname}>
+      <AppRoutes />
+    </ErrorBoundary>
+  )
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <GuardedRoutes />
       </AuthProvider>
     </BrowserRouter>
   )

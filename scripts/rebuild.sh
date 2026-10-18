@@ -32,6 +32,7 @@ while [ $# -gt 0 ]; do
   esac; shift
 done
 
+WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT   # scratch space (it briefly holds the decrypted backup); deleted when the script ends
 say()  { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 ok()   { printf '  \033[32mok\033[0m   %s\n' "$*"; }
 warn() { printf '  \033[33mwarn\033[0m %s\n' "$*"; }
@@ -153,7 +154,7 @@ cmd_preflight() {
   git ls-tree -r origin/main --name-only | grep -q '^scripts/deploy.sh$' && ok "origin/main has the deploy scripts" || die "origin/main does not contain scripts/deploy.sh"
   [ -z "$(git status --porcelain -- scripts deploy docker-compose* 2>/dev/null)" ] && ok "scripts/ and deploy/ are committed" || warn "uncommitted changes in scripts/ or deploy/: the new server clones main from GitHub, so it will not have them until they are committed and pushed"
   tf init -input=false >/dev/null && tf validate >/dev/null && ok "infra/ validates"
-  local tmp; tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' RETURN
+  local tmp="$WORK/preflight"; mkdir -p "$tmp"
   # shellcheck disable=SC1090
   ( set -a; . "$SECRETS/.hawkeye-backup.env"; set +a
     export RCLONE_CONFIG_OFFSITE_TYPE=s3 RCLONE_CONFIG_OFFSITE_PROVIDER=Other RCLONE_CONFIG_OFFSITE_ENDPOINT="https://$BACKUP_ENDPOINT"
@@ -165,8 +166,7 @@ cmd_preflight() {
 
 cmd_plan() { cmd_preflight; say "Plan (workspace: $WS)"; ws_select; prepare_live; tf plan -input=false; }
 
-prepare_live() { # production only: remember where the site points today, and the deploy key, in a git-ignored file
-  [ "$WS" = default ] || return 0
+prepare_live() { # remember where the site points today, and the deploy key, in a git-ignored file (rehearsals get the same deploy key, so it is tested too)
   if [ ! -f "$LIVE" ]; then
     local old; old="$(cf "zones/$ZONE/dns_records?type=A&name=$SITE" | jq -r '.result[0].content')"
     [ -n "$old" ] && [ "$old" != null ] || die "no A record for $SITE found in Cloudflare"
@@ -210,7 +210,7 @@ cmd_stage() {
   [ -n "$ip" ] || die "no server in workspace $WS yet: run create first"
   say "Stage $host ($ip): restore the newest backup and start it WITHOUT the worker"
   wait_for_server "$ip"
-  tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+  tmp="$WORK/stage"; mkdir -p "$tmp"
   sed -e "s|^SITE_ADDRESS=.*|SITE_ADDRESS=$host|" -e "s|^APP_BASE_URL=.*|APP_BASE_URL=https://$host|" -e "s|^API_BASE_URL=.*|API_BASE_URL=https://$host|" -e '/^WWW_ADDRESS=/d' "$ENVFILE" > "$tmp/env"
   run rscp "$KH" "$tmp/env" "deploy@$ip:hawkeye/.env.production"
   run rssh "$ip" "$KH" 'chmod 600 ~/hawkeye/.env.production'
@@ -243,7 +243,7 @@ THIS IS THE REAL SWITCH. What happens, in order:
 The old server is left stopped, not deleted, so 'rollback' can bring it back. Expect roughly 5 to 15 minutes of downtime.
 EOF
   confirm "cutover $SITE" always
-  tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+  tmp="$WORK/cutover"; mkdir -p "$tmp"
   say "1/4 Freeze the old server and take the final backup"
   frozen="$(date -u +%Y%m%dT%H%M%SZ)"
   run rssh "$old" "$INFRA/.known_hosts_old" "cd ~/hawkeye && $COMPOSE stop web api worker"

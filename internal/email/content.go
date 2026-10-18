@@ -130,15 +130,20 @@ func (c Content) RenderText() string {
 	return b.String()
 }
 
-// Brand colours (kept in step with web/src/index.css).
+// Brand colours (kept in step with web/src/index.css): deep navy and champagne gold, like the sign-in pages. Solid hex only: many mail clients
+// ignore gradients, rgba() and CSS variables.
 const (
-	colInk    = "#0b1d4a"
-	colAccent = "#1f4fd8"
-	colBg     = "#f6f8fc"
-	colBorder = "#d6dcec"
-	colDown   = "#c62828"
-	colUp     = "#1a7f37"
-	colMuted  = "#5b6785"
+	colPage   = "#091c33" // the page behind the card
+	colPanel  = "#0f2744" // the card
+	colPanel2 = "#0b1f38" // wells inside the card (quoted text)
+	colBorder = "#2a4262"
+	colText   = "#eaf1fa"
+	colBody   = "#d3deec"
+	colMuted  = "#a9b9cd"
+	colGold   = "#e8b95e"
+	colDown   = "#ff8a80"
+	colUp     = "#56d364"
+	colInk    = "#132139" // text on a gold, red or green button
 )
 
 func (c Content) accent() string {
@@ -148,52 +153,54 @@ func (c Content) accent() string {
 	case ToneSuccess:
 		return colUp
 	}
-	return colAccent
+	return colGold
 }
 
 type htmlData struct {
 	Content
-	Accent, Ink, Bg, Border, Muted string
-	LogoURL                        string
+	Accent, Ink, Gold                                  string
+	Page, Panel, Panel2, Border, Text, BodyText, Muted string
+	LogoURL                                            string
 }
 
 // The layout is a single-column, table-based, inline-styled design: the only approach that renders consistently in Gmail, Outlook and Apple Mail.
-// Every value is escaped by html/template; URLs are filtered to safe schemes.
+// The dark colours are set with both bgcolor attributes and CSS so clients that ignore one still get them, and the page declares itself dark-only
+// so clients do not invert it. Every value is escaped by html/template; URLs are filtered to safe schemes.
 var layout = template.Must(template.New("email").Parse(`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light only">
-<meta name="supported-color-schemes" content="light only">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
 <title>{{.Heading}}</title>
 </head>
-<body style="margin:0;padding:0;background:{{.Bg}};">
+<body bgcolor="{{.Page}}" style="margin:0;padding:0;background:{{.Page}};">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">{{.Preheader}}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{{.Bg}};">
-<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="{{.Page}}" style="background:{{.Page}};">
+<tr><td align="center" style="padding:28px 12px;">
   <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;">
-    <tr><td style="padding:0 4px 16px 4px;">
-      {{if .LogoURL}}<img src="{{.LogoURL}}" width="190" alt="HawkEye" style="display:block;border:0;height:auto;width:190px;">{{else}}<span style="font:700 22px Arial,Helvetica,sans-serif;color:{{.Ink}};">HawkEye</span>{{end}}
+    <tr><td style="padding:0 4px 18px 4px;">
+      {{if .LogoURL}}<img src="{{.LogoURL}}" width="200" alt="HawkEye" style="display:block;border:0;height:auto;width:200px;">{{else}}<span style="font:700 24px Arial,Helvetica,sans-serif;color:{{.Text}};">Hawk<span style="color:{{.Gold}};">Eye</span></span>{{end}}
     </td></tr>
-    <tr><td style="background:#ffffff;border:1px solid {{.Border}};border-top:4px solid {{.Accent}};border-radius:8px;padding:28px 28px 24px 28px;font:16px/1.55 Arial,Helvetica,sans-serif;color:{{.Ink}};">
-      {{if .Heading}}<h1 style="margin:0 0 16px 0;font:700 22px/1.3 Arial,Helvetica,sans-serif;color:{{.Ink}};">{{.Heading}}</h1>{{end}}
-      {{range .Paragraphs}}<p style="margin:0 0 16px 0;">{{.}}</p>{{end}}
-      {{if .Facts}}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;border-top:1px solid {{$.Border}};">
+    <tr><td bgcolor="{{.Panel}}" style="background:{{.Panel}};border:1px solid {{.Border}};border-top:3px solid {{.Accent}};border-radius:10px;padding:30px 30px 26px 30px;font:16px/1.6 Arial,Helvetica,sans-serif;color:{{.BodyText}};">
+      {{if .Heading}}<h1 style="margin:0 0 18px 0;font:700 24px/1.3 Arial,Helvetica,sans-serif;color:{{.Text}};">{{.Heading}}</h1>{{end}}
+      {{range .Paragraphs}}<p style="margin:0 0 16px 0;color:{{$.BodyText}};">{{.}}</p>{{end}}
+      {{if .Facts}}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 22px 0;border-top:1px solid {{$.Border}};">
         {{range .Facts}}<tr>
-          <td style="padding:8px 12px 8px 0;border-bottom:1px solid {{$.Border}};font:13px Arial,Helvetica,sans-serif;color:{{$.Muted}};width:38%;vertical-align:top;">{{.Label}}</td>
-          <td style="padding:8px 0;border-bottom:1px solid {{$.Border}};font:14px Arial,Helvetica,sans-serif;color:{{$.Ink}};word-break:break-word;">{{.Value}}</td>
+          <td style="padding:9px 12px 9px 0;border-bottom:1px solid {{$.Border}};font:12px Arial,Helvetica,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:{{$.Muted}};width:38%;vertical-align:top;">{{.Label}}</td>
+          <td style="padding:9px 0;border-bottom:1px solid {{$.Border}};font:14px Arial,Helvetica,sans-serif;color:{{$.Text}};word-break:break-word;">{{.Value}}</td>
         </tr>{{end}}
       </table>{{end}}
-      {{if .Quote}}<div style="margin:0 0 20px 0;padding:14px 16px;background:{{.Bg}};border-left:4px solid {{.Accent}};border-radius:4px;font:15px/1.55 Arial,Helvetica,sans-serif;white-space:pre-wrap;word-break:break-word;">{{.Quote}}</div>{{end}}
-      {{if .ButtonURL}}<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 20px 0;"><tr><td style="background:{{.Accent}};border-radius:6px;">
-        <a href="{{.ButtonURL}}" style="display:inline-block;padding:12px 22px;font:700 16px Arial,Helvetica,sans-serif;color:#ffffff;text-decoration:none;">{{.ButtonLabel}}</a>
+      {{if .Quote}}<div style="margin:0 0 22px 0;padding:14px 16px;background:{{.Panel2}};border-left:3px solid {{.Accent}};border-radius:4px;font:15px/1.6 Arial,Helvetica,sans-serif;color:{{.Text}};white-space:pre-wrap;word-break:break-word;">{{.Quote}}</div>{{end}}
+      {{if .ButtonURL}}<table role="presentation" cellpadding="0" cellspacing="0" style="margin:10px 0 22px 0;"><tr><td bgcolor="{{.Accent}}" style="background:{{.Accent}};border-radius:7px;">
+        <a href="{{.ButtonURL}}" style="display:inline-block;padding:13px 26px;font:700 16px Arial,Helvetica,sans-serif;color:{{.Ink}};text-decoration:none;">{{.ButtonLabel}}</a>
       </td></tr></table>
-      <p style="margin:0 0 16px 0;font-size:12px;color:{{.Muted}};">Button not working? Copy this link into your browser:<br><a href="{{.ButtonURL}}" style="color:{{.Accent}};word-break:break-all;">{{.ButtonURL}}</a></p>{{end}}
-      {{if .Note}}<p style="margin:0;font-size:13px;color:{{.Muted}};">{{.Note}}</p>{{end}}
+      <p style="margin:0 0 16px 0;font-size:12px;line-height:1.6;color:{{.Muted}};">Button not working? Copy this link into your browser:<br><a href="{{.ButtonURL}}" style="color:{{.Accent}};word-break:break-all;">{{.ButtonURL}}</a></p>{{end}}
+      {{if .Note}}<p style="margin:0;font-size:13px;line-height:1.6;color:{{.Muted}};">{{.Note}}</p>{{end}}
     </td></tr>
-    <tr><td style="padding:16px 4px 0 4px;font:12px/1.6 Arial,Helvetica,sans-serif;color:{{.Muted}};">
-      <strong style="color:{{.Ink}};">HawkEye</strong> &middot; Your websites. Always in sight.<br>
+    <tr><td style="padding:18px 4px 0 4px;font:12px/1.7 Arial,Helvetica,sans-serif;color:{{.Muted}};">
+      <strong style="color:{{.Text}};">Hawk<span style="color:{{.Gold}};">Eye</span></strong> &middot; Your websites. Always in sight.<br>
       {{if .AppBaseURL}}<a href="{{.AppBaseURL}}/privacy" style="color:{{.Muted}};">Privacy</a> &middot; <a href="{{.AppBaseURL}}/terms" style="color:{{.Muted}};">Terms</a> &middot; <a href="{{.AppBaseURL}}/contact" style="color:{{.Muted}};">Contact us</a>{{end}}
     </td></tr>
   </table>
@@ -206,7 +213,7 @@ var layout = template.Must(template.New("email").Parse(`<!doctype html>
 // RenderHTML is the branded HTML body.
 func (c Content) RenderHTML() string {
 	c = c.clean()
-	d := htmlData{Content: c, Accent: c.accent(), Ink: colInk, Bg: colBg, Border: colBorder, Muted: colMuted}
+	d := htmlData{Content: c, Accent: c.accent(), Ink: colInk, Gold: colGold, Page: colPage, Panel: colPanel, Panel2: colPanel2, Border: colBorder, Text: colText, BodyText: colBody, Muted: colMuted}
 	if c.AppBaseURL != "" {
 		d.LogoURL = c.AppBaseURL + "/email/hawkeye-logo.png"
 	}

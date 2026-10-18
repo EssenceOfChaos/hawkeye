@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"hawkeye/internal/billing"
+	"hawkeye/internal/canary"
 	"hawkeye/internal/checks"
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/metrics"
@@ -54,8 +55,9 @@ type Worker struct {
 	m       *metrics.Metrics
 	log     *slog.Logger
 	rep     errtrack.Reporter
-	box     *secrets.Box // opens stored monitor credentials
-	region  string       // only jobs queued for this region are run
+	box     *secrets.Box   // opens stored monitor credentials
+	region  string         // only jobs queued for this region are run
+	canary  *canary.Canary // optional: tells our own network trouble apart from a customer's site being down
 }
 
 func New(pool *pgxpool.Pool, checker *checks.Checker, store *checks.Store, cfg Config, m *metrics.Metrics, log *slog.Logger) *Worker {
@@ -65,6 +67,13 @@ func New(pool *pgxpool.Pool, checker *checks.Checker, store *checks.Store, cfg C
 // WithRegion makes the worker run only the jobs queued for region, and label its results with it.
 func (w *Worker) WithRegion(region string) *Worker {
 	w.region = region
+	return w
+}
+
+// WithCanary makes the worker double-check suspicious failures: a failed check whose cause could be this server's own network (DNS, connection,
+// timeout) is dropped, not recorded, when the canary says the server cannot reach independent public sites either.
+func (w *Worker) WithCanary(c *canary.Canary) *Worker {
+	w.canary = c
 	return w
 }
 
@@ -165,6 +174,14 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 	res.Region = w.region
+	if !res.Success && w.canary != nil && mayBeOurNetwork(res.ErrorCategory) && w.canary.Impaired(ctx) {
+		// Not recorded at all: no failed row in the history, no failure streak, no incident, no alert. The monitor's next scheduled check counts
+		// normally once the network is back.
+		w.m.ChecksTotal.WithLabelValues("inconclusive", res.ErrorCategory).Inc()
+		w.log.WarnContext(ctx, "check result discarded: this server cannot reach independent public sites, so the failure says nothing about the monitored site",
+			"monitor_id", job.MonitorID, "category", res.ErrorCategory)
+		return true, w.complete(ctx, job)
+	}
 	_, err = w.store.Record(ctx, job.MonitorID, res)
 	switch {
 	case errors.Is(err, checks.ErrDiscarded):
@@ -182,6 +199,16 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 	w.m.ChecksTotal.WithLabelValues(result, category).Inc()
 	w.m.CheckDuration.Observe(res.FinishedAt.Sub(res.CheckedAt).Seconds())
 	return true, w.complete(ctx, job)
+}
+
+// mayBeOurNetwork is true for failures this server's own network trouble could cause. A response from the site (an error status, a failed
+// assertion), a certificate problem or a blocked destination show the network worked, so they are never second-guessed.
+func mayBeOurNetwork(category string) bool {
+	switch category {
+	case checks.CatDNS, checks.CatConnect, checks.CatTimeout, checks.CatOther:
+		return true
+	}
+	return false
 }
 
 func (w *Worker) complete(ctx context.Context, job *queue.Job) error {

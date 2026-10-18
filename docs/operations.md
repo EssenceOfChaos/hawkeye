@@ -13,6 +13,8 @@ Starts with Phase 4; extended in Phase 8.
 
 | Metric | Meaning / alert idea |
 |---|---|
+| `hawkeye_canary_up` | 1 while this worker reaches independent public sites, 0 while it does not (the canary). Alert if 0 for 3 min |
+| `hawkeye_checks_total{result="inconclusive",category}` | failures dropped (never recorded) because the canary said our own network was down |
 | `hawkeye_scheduler_lag_seconds` | age of the most overdue monitor. Alert if > 2 × the shortest interval (60 s plans: > 120 s) |
 | `hawkeye_queue_depth{state}`, `hawkeye_queue_oldest_job_age_seconds` | work waiting / running. Oldest age growing = workers too few or stuck |
 | `hawkeye_scheduler_backpressure_total` | queue hit `QUEUE_MAX_DEPTH`; add workers or raise concurrency |
@@ -161,7 +163,23 @@ The target resolves to a private/reserved address or redirects to one; this is t
 
 ### Many dns or timeout failures across unrelated sites
 
-Suspect worker-side DNS or egress networking, not the customers' sites.
+Suspect worker-side DNS or egress networking, not the customers' sites. The canary (below) already stops these from becoming false outages.
+
+### Canary: our own network is down
+
+HawkEye checks customers' sites from one server. If that server's network or DNS breaks, every check fails, so the worker double-checks: when a check fails in a way our own network could cause
+(`dns`, `connect`, `timeout`, `other`; never an HTTP error status, a failed assertion or a certificate error), it probes three independent public endpoints (Cloudflare, Google, Apple; the same
+SSRF-safe client and DNS path customers' checks use). If most of them are unreachable too, the result is **dropped, not recorded**: no failed row in the history, no streak, no incident, no alert,
+and the job is completed so the monitor's next scheduled check counts normally. The verdict is reused for 15 s, so a burst of failures causes one round of probes. A background probe every `CANARY_INTERVAL`
+(default 60 s) keeps `hawkeye_canary_up` current.
+
+- **Seeing it:** `hawkeye_canary_up == 0` (alert `HawkEyeCanaryImpaired`), `hawkeye_checks_total{result="inconclusive"}`, and the worker log lines `canary: this server cannot reach ...` / `the network is back`.
+- **What to do:** it is a problem on the server, not on customers' sites. Check DNS from the worker network (`docker run --rm --network hawkeye_checks curlimages/curl -sI https://www.cloudflare.com`), the egress filter
+  (`scripts/verify-egress.sh`; the resolver IPs in `ALLOW_DNS` must be the server's real ones) and the provider's status page. Monitors are not being checked meanwhile; they catch up when it recovers.
+- **Settings:** `CANARY_URLS` (comma-separated https URLs; empty = the three built-in ones; `off` disables the canary and logs a warning at startup) and `CANARY_INTERVAL` (at least 10 s). A strict majority of the
+  endpoints must answer for the network to count as healthy. Using endpoints you do not control means they can change: if one is retired, replace it here.
+- **Limits:** a monitored site that is truly down at the same moment our network fails is noticed on its next check once the canary recovers. A canary outage never hides a real failure it cannot rule out: an
+  inconclusive canary (cancelled, or no endpoints configured) counts as healthy.
 
 ### Wipe a poisoned queue
 

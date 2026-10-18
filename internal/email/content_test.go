@@ -5,6 +5,8 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/mail"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -20,7 +22,7 @@ func sample() Content {
 
 func TestBrandedHTMLUsesBrandColoursAndLogo(t *testing.T) {
 	h := sample().RenderHTML()
-	for _, want := range []string{"#1f4fd8", "#0b1d4a", "https://app.example.com/email/hawkeye-logo.png", `href="https://app.example.com/verify-email?token=abc123"`, "Verify email", "Preview text", "/privacy", "/contact"} {
+	for _, want := range []string{"#e8b95e", "#091c33", "#0f2744", "https://app.example.com/email/hawkeye-logo.png", `href="https://app.example.com/verify-email?token=abc123"`, "Verify email", "Preview text", "/privacy", "/contact"} {
 		if !strings.Contains(h, want) {
 			t.Errorf("html missing %q", want)
 		}
@@ -33,11 +35,11 @@ func TestBrandedHTMLUsesBrandColoursAndLogo(t *testing.T) {
 func TestToneChangesAccent(t *testing.T) {
 	c := sample()
 	c.Tone = ToneAlert
-	if !strings.Contains(c.RenderHTML(), "#c62828") {
+	if !strings.Contains(c.RenderHTML(), "#ff8a80") {
 		t.Fatal("alert tone should use the red accent")
 	}
 	c.Tone = ToneSuccess
-	if !strings.Contains(c.RenderHTML(), "#1a7f37") {
+	if !strings.Contains(c.RenderHTML(), "#56d364") {
 		t.Fatal("success tone should use the green accent")
 	}
 }
@@ -142,5 +144,48 @@ func TestUntrustedValuesCannotAddLinesOrControlCharactersToTheMessage(t *testing
 	}
 	if !strings.Contains(text, "> line one\n> line two") {
 		t.Fatalf("the quote must keep its line breaks:\n%s", text)
+	}
+}
+
+func TestEmailIsDarkNavyAndGoldNotTheOldBlueAndWhite(t *testing.T) {
+	h := sample().RenderHTML()
+	for _, want := range []string{`content="dark"`, `bgcolor="#091c33"`, `bgcolor="#0f2744"`, `bgcolor="#e8b95e"`, "color:#132139"} { // dark-only page, navy backdrop, navy card, gold button with navy text
+		if !strings.Contains(h, want) {
+			t.Errorf("html missing %q", want)
+		}
+	}
+	for _, old := range []string{"#1f4fd8", "#f6f8fc", "#ffffff;border:1px", `content="light only"`} {
+		if strings.Contains(h, old) {
+			t.Errorf("the old light/blue styling %q is still in the email", old)
+		}
+	}
+}
+
+// EMAIL_PREVIEW_DIR=/some/dir go test ./internal/email -run Preview writes sample emails as .html files for a look in a browser.
+func TestWritePreviewFiles(t *testing.T) {
+	dir := os.Getenv("EMAIL_PREVIEW_DIR")
+	if dir == "" {
+		t.Skip("set EMAIL_PREVIEW_DIR to write preview files")
+	}
+	base := os.Getenv("EMAIL_PREVIEW_BASE") // where /email/hawkeye-logo.png is served from, so the logo shows
+	if base == "" {
+		base = "https://app.example.com"
+	}
+	verify := sample()
+	verify.AppBaseURL = base
+	outage := Content{Preheader: "Down", Heading: "Marketing site may be down", Tone: ToneAlert, AppBaseURL: base,
+		Paragraphs:  []string{"HawkEye confirmed an outage after repeated failed checks."},
+		Facts:       []Fact{{"Website", "https://example.com/"}, {"Detected", "2026-10-18 21:04 UTC"}, {"Cause", "Connection timed out"}},
+		ButtonLabel: "See what's down", ButtonURL: base + "/incidents", Note: "You get one alert when an outage is confirmed and one when it ends."}
+	recovered := Content{Preheader: "Up", Heading: "Marketing site is responding again", Tone: ToneSuccess, AppBaseURL: base,
+		Paragraphs: []string{"It was down for 12 minutes."}, Facts: []Fact{{"Website", "https://example.com/"}, {"Down for", "12 minutes"}},
+		ButtonLabel: "Open HawkEye", ButtonURL: base + "/dashboard"}
+	contact := Content{Preheader: "New message", Heading: "Charged twice", Tone: ToneAlert, AppBaseURL: base,
+		Paragraphs: []string{"New message from the HawkEye contact form."}, Facts: []Fact{{"Reference", "HK-7F3A2C"}, {"Priority", "High"}},
+		Quote: "I was charged twice this month.\nPlease check my invoice."}
+	for name, c := range map[string]Content{"verify": verify, "outage": outage, "recovered": recovered, "contact": contact} {
+		if err := os.WriteFile(filepath.Join(dir, name+".html"), []byte(c.RenderHTML()), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

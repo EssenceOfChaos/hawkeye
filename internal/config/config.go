@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hawkeye/internal/billing"
+	"hawkeye/internal/canary"
 	"hawkeye/internal/regions"
 	"hawkeye/internal/secrets"
 	"log/slog"
@@ -86,6 +87,10 @@ type Config struct {
 	RecoveryThreshold int
 	WorkerMetricsPort int
 	NotifyMaxAttempts int
+	// CanaryURLs: comma-separated https endpoints the worker probes to tell its own network trouble from a customer's site being down. Empty uses the
+	// built-in three (Cloudflare, Google, Apple); "off" disables the canary. CanaryInterval is how often it probes in the background.
+	CanaryURLs        string
+	CanaryInterval    time.Duration
 	RunRetention      bool
 	RetentionInterval time.Duration
 	RetentionBatch    int
@@ -111,6 +116,22 @@ func (c Config) IsProduction() bool { return c.AppEnv == EnvProduction }
 // SecretBox returns the cipher used to protect stored monitor credentials. Outside production a key is derived from SESSION_SECRET when none
 // is set, so a fresh checkout works; production refuses to start without a dedicated key (see validation).
 // Regions returns the configured regions (a single "primary" region when CHECK_REGIONS is empty).
+func (c Config) CanaryURLList() []string {
+	switch strings.ToLower(strings.TrimSpace(c.CanaryURLs)) {
+	case "":
+		return canary.DefaultURLs
+	case "off", "none", "false", "disabled":
+		return nil
+	}
+	var out []string
+	for _, u := range strings.Split(c.CanaryURLs, ",") {
+		if u = strings.TrimSpace(u); u != "" {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
 func (c Config) Regions() regions.Set {
 	set, _ := regions.Parse(c.CheckRegions) // validated by Load
 	return set
@@ -236,6 +257,8 @@ func load(get func(string) string) (Config, error) {
 		TrustForwardedFor:   boolean("TRUST_FORWARDED_FOR"),
 
 		CheckRegions:      str("CHECK_REGIONS", ""),
+		CanaryURLs:        str("CANARY_URLS", ""),
+		CanaryInterval:    duration("CANARY_INTERVAL", time.Minute),
 		WorkerRegion:      str("WORKER_REGION", ""),
 		WorkerConcurrency: integer("WORKER_CONCURRENCY", 10),
 		RunScheduler:      !boolean("DISABLE_SCHEDULER"),
@@ -352,6 +375,14 @@ func load(get func(string) string) (Config, error) {
 		errs = append(errs, fmt.Errorf("CHECK_REGIONS: %w", err))
 	} else if c.WorkerRegion != "" && !set.Has(c.WorkerRegion) {
 		errs = append(errs, errors.New("WORKER_REGION: must be one of the codes listed in CHECK_REGIONS"))
+	}
+	for _, u := range c.CanaryURLList() {
+		if p, err := url.Parse(u); err != nil || p.Scheme != "https" || p.Hostname() == "" {
+			errs = append(errs, fmt.Errorf("CANARY_URLS: %q is not an https URL", u))
+		}
+	}
+	if c.CanaryInterval < 10*time.Second {
+		errs = append(errs, errors.New("CANARY_INTERVAL: must be at least 10s"))
 	}
 	if c.WorkerMetricsPort < 1 || c.WorkerMetricsPort > 65535 {
 		errs = append(errs, errors.New("WORKER_METRICS_PORT: must be between 1 and 65535"))

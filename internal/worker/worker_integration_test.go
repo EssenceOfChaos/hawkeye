@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/canary"
 	"hawkeye/internal/checks"
 	"hawkeye/internal/email"
 	"hawkeye/internal/incidents"
@@ -465,5 +466,111 @@ func TestRegionalWorkersRunTheirOwnRegionsAndLabelResults(t *testing.T) {
 	rows.Close()
 	if strings.Join(got, ",") != "eu,us" || hits.Load() != 2 {
 		t.Fatalf("results from %v, %d requests", got, hits.Load())
+	}
+}
+
+// ---- canary: telling our own network trouble apart from a customer's site being down ----
+
+// endpointsUp / endpointsDown give a canary that sees a healthy or a dead internet.
+func canaryWith(t *testing.T, up int, total int) *canary.Canary {
+	t.Helper()
+	var urls []string
+	for i := range total {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) }))
+		urls = append(urls, srv.URL)
+		if i >= up {
+			srv.Close() // an endpoint that does not answer
+		} else {
+			t.Cleanup(srv.Close)
+		}
+	}
+	return canary.New(http.DefaultClient, urls).WithLogger(quiet)
+}
+
+func (e *env) counted(t *testing.T, result, category string) float64 {
+	t.Helper()
+	mfs, err := e.m.Registry.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mf := range mfs {
+		if mf.GetName() != "hawkeye_checks_total" {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			var r, c string
+			for _, l := range m.GetLabel() {
+				switch l.GetName() {
+				case "result":
+					r = l.GetValue()
+				case "category":
+					c = l.GetValue()
+				}
+			}
+			if r == result && c == category {
+				return m.GetCounter().GetValue()
+			}
+		}
+	}
+	return 0
+}
+
+func TestFailuresAreDroppedWhileOurOwnNetworkIsDownAndCountAgainOnceItRecovers(t *testing.T) {
+	e := newEnv(t)
+	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	dead.Close() // the customer's site: connection refused
+	id := e.monitor(t, dead.URL)
+
+	// Our network is down (none of the three canary endpoints answer): three rounds of "failures" must leave no trace.
+	w := e.worker(loopbackCfg()).WithCanary(canaryWith(t, 0, 3))
+	for range 3 {
+		e.round(t, w)
+	}
+	s := e.state(t, id)
+	if s.Status != "unknown" || s.Failures != 0 || e.results(t, id) != 0 {
+		t.Fatalf("a failure during our own network outage left a trace: %+v results=%d", s, e.results(t, id))
+	}
+	var open int
+	e.pool.QueryRow(t.Context(), `SELECT count(*) FROM incidents WHERE monitor_id = $1`, id).Scan(&open)
+	if open != 0 || e.counted(t, "inconclusive", "connect") < 3 {
+		t.Fatalf("incidents=%d inconclusive=%v", open, e.counted(t, "inconclusive", "connect"))
+	}
+	var jobs int
+	e.pool.QueryRow(t.Context(), `SELECT count(*) FROM check_jobs`).Scan(&jobs)
+	if jobs != 0 {
+		t.Fatalf("%d jobs left behind", jobs)
+	}
+
+	// The network is back (all endpoints answer): the very same failure is now real, and counts.
+	w = e.worker(loopbackCfg()).WithCanary(canaryWith(t, 3, 3))
+	e.round(t, w)
+	e.round(t, w)
+	s = e.state(t, id)
+	if s.Status != "down" || s.Failures != 2 || e.results(t, id) != 2 {
+		t.Fatalf("with a healthy canary the outage must be recorded: %+v results=%d", s, e.results(t, id))
+	}
+}
+
+func TestAnErrorFromTheSiteIsNeverSecondGuessedByTheCanary(t *testing.T) {
+	e := newEnv(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(503) }))
+	defer srv.Close()
+	id := e.monitor(t, srv.URL)
+	// Even with a canary that says "our network is down", an HTTP 503 proves we reached the site: it is recorded.
+	w := e.worker(loopbackCfg()).WithCanary(canaryWith(t, 0, 3))
+	e.round(t, w)
+	if s := e.state(t, id); s.Failures != 1 || e.results(t, id) != 1 {
+		t.Fatalf("a real HTTP failure must always be recorded: %+v results=%d", s, e.results(t, id))
+	}
+}
+
+func TestSuccessfulChecksAreNeverTouchedByTheCanary(t *testing.T) {
+	e := newEnv(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) }))
+	defer srv.Close()
+	id := e.monitor(t, srv.URL)
+	e.round(t, e.worker(loopbackCfg()).WithCanary(canaryWith(t, 0, 3)))
+	if s := e.state(t, id); s.Status != "up" || e.results(t, id) != 1 {
+		t.Fatalf("%+v", s)
 	}
 }

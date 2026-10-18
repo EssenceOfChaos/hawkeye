@@ -121,7 +121,7 @@ def main() -> None:
     on_square(badge_rgba, 32).save(PUBLIC / "favicon-32.png", optimize=True)
     on_square(badge_rgba, 192).save(PUBLIC / "icon-192.png", optimize=True)
     on_square(badge_rgba, 180, fill=(*navy, 255), scale=0.86).save(PUBLIC / "apple-touch-icon.png", optimize=True)  # iOS rounds it itself
-    fit_width(logo, 480).save(PUBLIC / "email/hawkeye-logo.png", optimize=True)  # email clients need a PNG
+    fit_width(logo_white, 480).save(PUBLIC / "email/hawkeye-logo.png", optimize=True)  # email clients need a PNG; the emails are navy, so the white-wordmark version
     print("logo", logo.size, "logo-white", logo_white.size, "emblem", emblem.size, "badge", badge_rgba.size, "navy", navy)
 
 

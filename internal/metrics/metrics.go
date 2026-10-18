@@ -12,7 +12,8 @@ import (
 type Metrics struct {
 	Registry *prometheus.Registry
 
-	ChecksTotal   *prometheus.CounterVec // result=success|failure, category
+	ChecksTotal   *prometheus.CounterVec // result=success|failure|inconclusive, category (inconclusive: dropped because the canary says our own network is down)
+	CanaryUp      prometheus.Gauge       // 1 while this worker can reach independent public sites, 0 while it cannot
 	CheckDuration prometheus.Histogram
 
 	Scheduled    prometheus.Counter // jobs enqueued
@@ -88,12 +89,14 @@ func newOn(r *prometheus.Registry) *Metrics {
 		BillingFailed:        prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_billing_events_failed", Help: "Billing events that gave up and need manual attention."}),
 		WorkerErrors: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_worker_errors_total",
 			Help: "Internal errors by stage."}, []string{"stage"}),
+		CanaryUp:     prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_canary_up", Help: "1 if this worker reaches independent public sites (the canary), 0 if its own network looks impaired."}),
 		LastPollUnix: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_worker_last_poll_timestamp_seconds", Help: "Unix time of the last queue poll."}),
 	}
 	for _, c := range []prometheus.Collector{m.ChecksTotal, m.CheckDuration, m.Scheduled, m.Skipped, m.Missed, m.Backpressure,
-		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed} {
+		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.CanaryUp, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed} {
 		f(c)
 	}
+	m.CanaryUp.Set(1) // no verdict yet counts as healthy
 	return m
 }
 

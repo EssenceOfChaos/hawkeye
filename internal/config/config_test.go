@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 )
 
 func env(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
@@ -261,6 +262,39 @@ func TestWorkerPoolConnsIsConcurrencyPlusHeadroomButNotBelowDBMaxConns(t *testin
 		got := Config{WorkerConcurrency: c.conc, DBMaxConns: c.max}.WorkerPoolConns()
 		if got != c.want {
 			t.Errorf("concurrency %d, max conns %d: got %d, want %d", c.conc, c.max, got, c.want)
+		}
+	}
+}
+
+func TestCanarySettings(t *testing.T) {
+	base := map[string]string{"DATABASE_URL": "postgres://x"}
+	with := func(kv ...string) map[string]string {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i]] = kv[i+1]
+		}
+		return m
+	}
+	c, err := load(env(base))
+	if err != nil || len(c.CanaryURLList()) != 3 || c.CanaryInterval != time.Minute {
+		t.Fatalf("defaults: %v %v %v", err, c.CanaryURLList(), c.CanaryInterval)
+	}
+	if c, err = load(env(with("CANARY_URLS", "off"))); err != nil || c.CanaryURLList() != nil {
+		t.Fatalf("off must disable the canary: %v %v", err, c.CanaryURLList())
+	}
+	if c, err = load(env(with("CANARY_URLS", " https://a.example/x , https://b.example/y "))); err != nil || len(c.CanaryURLList()) != 2 {
+		t.Fatalf("custom list: %v %v", err, c.CanaryURLList())
+	}
+	for name, kv := range map[string][]string{
+		"plain http": {"CANARY_URLS", "http://a.example/"},
+		"not a url":  {"CANARY_URLS", "nonsense"},
+		"too fast":   {"CANARY_INTERVAL", "2s"},
+	} {
+		if _, err := load(env(with(kv...))); err == nil || !strings.Contains(err.Error(), "CANARY") {
+			t.Errorf("%s: expected a CANARY_ error, got %v", name, err)
 		}
 	}
 }

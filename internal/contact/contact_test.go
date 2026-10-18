@@ -44,7 +44,7 @@ func TestSubmitSendsTriagedMessageToSupportWithReplyTo(t *testing.T) {
 			t.Errorf("text missing %q:\n%s", want, got.Text)
 		}
 	}
-	if !strings.Contains(got.HTML, "#c62828") {
+	if !strings.Contains(got.HTML, "#ff8a80") {
 		t.Error("high-priority messages should use the alert accent")
 	}
 }

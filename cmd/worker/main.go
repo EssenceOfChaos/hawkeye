@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"hawkeye/internal/billing"
+	"hawkeye/internal/canary"
 	"hawkeye/internal/checks"
 	"hawkeye/internal/config"
 	"hawkeye/internal/database"
@@ -80,12 +81,31 @@ func run() error {
 		worker.Config{Concurrency: cfg.WorkerConcurrency, Lease: cfg.JobLease, MaxAttempts: cfg.JobMaxAttempts, PollInterval: cfg.PollInterval},
 		m, log).WithReporter(reporter).WithSecrets(box).WithRegion(cfg.Region())
 
+	// The canary: independent public sites probed through the same SSRF-safe client the checks use. Without it, a network fault on this server
+	// would fail every monitor at once and email every customer a false outage.
+	var cn *canary.Canary
+	if urls := cfg.CanaryURLList(); len(urls) > 0 {
+		cn = canary.New(safehttp.New(safehttp.Config{}, 6*time.Second), urls).WithLogger(log).WithObserver(func(_, _ int, impaired bool) {
+			if impaired {
+				m.CanaryUp.Set(0)
+			} else {
+				m.CanaryUp.Set(1)
+			}
+		})
+		w = w.WithCanary(cn)
+	} else {
+		log.Warn("canary disabled (CANARY_URLS=off): a network fault on this server will be reported to customers as outages")
+	}
+
 	var wg sync.WaitGroup
 	spawn := func(fn func()) {
 		wg.Add(1)
 		go func() { defer wg.Done(); fn() }()
 	}
 	spawn(func() { w.Run(ctx) })
+	if cn != nil {
+		spawn(func() { cn.Run(ctx, cfg.CanaryInterval) })
+	}
 	if cfg.RunScheduler {
 		sched := scheduler.New(pool, scheduler.Config{Interval: cfg.SchedulerInterval, Batch: cfg.SchedulerBatch, MaxQueueDepth: cfg.QueueMaxDepth}, m, log).WithReporter(reporter).WithRegions(cfg.Regions())
 		spawn(func() { sched.Run(ctx) })

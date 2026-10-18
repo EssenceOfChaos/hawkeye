@@ -110,3 +110,12 @@ groups:
         expr: increase(hawkeye_billing_risk_events_total[1h]) > 0
         labels: {severity: page}
         annotations: {summary: "A dispute, refund or fraud warning needs human review in Stripe", runbook: "docs/billing.md"}
+      - alert: HawkEyeCanaryImpaired
+        expr: hawkeye_canary_up == 0
+        for: 3m
+        labels: {severity: page}
+        annotations: {summary: "A worker cannot reach independent public sites (its own network or DNS is down): check failures that look like network trouble are being discarded, so monitors are not being checked properly", runbook: "docs/operations.md#canary-our-own-network-is-down"}
+      - alert: HawkEyeChecksDiscardedByCanary
+        expr: sum(increase(hawkeye_checks_total{result="inconclusive"}[15m])) > 20
+        labels: {severity: ticket}
+        annotations: {summary: "Many check failures were discarded as inconclusive because the canary reported our network down", runbook: "docs/operations.md#canary-our-own-network-is-down"}
