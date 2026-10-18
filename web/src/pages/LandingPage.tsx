@@ -41,7 +41,7 @@ const FEATURES = [
     text: 'See when a problem began and when service recovered.',
   },
   {
-    icon: brand.icons.email,
+    icon: brand.icons.notifications,
     title: 'Alerts where you work',
     lead: 'The right signal. When it matters.',
     text: 'One alert when an outage is confirmed, one when it ends. Email, Slack or webhook.',
@@ -53,19 +53,19 @@ const FEATURES = [
     text: 'Share live status, uptime and incidents. You choose what appears.',
   },
   {
-    icon: brand.icons.history,
+    icon: brand.icons.maintenance,
     title: 'Maintenance windows',
     lead: 'Planned work shouldn’t page you.',
     text: 'Pause alerts during deploys. Included in Pro and Agency.',
   },
   {
-    icon: brand.icons.shield,
+    icon: brand.icons.ssl,
     title: 'SSL certificate alerts',
     lead: 'Never be surprised by an expired certificate.',
     text: 'A live countdown, plus warnings 30, 14, 7 and 1 days before expiry.',
   },
   {
-    icon: brand.icons.settings,
+    icon: brand.icons.dashboard,
     title: 'One dashboard, clear reports',
     lead: 'Every website. One clear picture.',
     text: 'Availability, response times, incidents and certificates in one place.',
@@ -186,7 +186,7 @@ export function LandingPage() {
   return (
     <div className="landing" data-theme="light" ref={rootRef}>
       <header className="landing-header">
-        <img className="landing-logo" src={brand.logo} alt="HawkEye" width={220} height={43} />
+        <img className="landing-logo" src={brand.logoWhite} alt="HawkEye" width={220} height={43} />
         <span className="spacer" />
         {signedIn ? (
           <Link className="button primary" to="/dashboard">Open dashboard</Link>
@@ -273,7 +273,7 @@ export function LandingPage() {
       </section>
 
       <section className="section split">
-        <img src={brand.websiteMagnifier} alt="" width={180} height={196} />
+        <img src={brand.icons.websites} alt="" width={170} height={170} />
         <div>
           <h2>Checks that tell the truth</h2>
           <p>
@@ -281,7 +281,7 @@ export function LandingPage() {
             consecutive successful ones. You get one alert when an outage is confirmed and one when it ends.
           </p>
         </div>
-        <img src={brand.alertBell} alt="" width={140} height={152} />
+        <img src={brand.icons.notifications} alt="" width={150} height={150} />
       </section>
 
       <section aria-labelledby="audience-h" className="section">
@@ -330,7 +330,7 @@ export function LandingPage() {
       </section>
 
       <section className="section split trust">
-        <img src={brand.cloudSecurity} alt="" width={232} height={192} />
+        <img src={brand.icons.shield} alt="" width={170} height={170} />
         <div>
           <h2>Built to be safe</h2>
           <p>
@@ -356,7 +356,7 @@ export function LandingPage() {
 
       <footer className="landing-footer d-footer">
         <aside>
-          <img src={brand.logo} alt="HawkEye" width={160} height={32} />
+          <img src={brand.logoWhite} alt="HawkEye" width={160} height={32} />
           <p>
             Your websites. Always in sight.
             <br />

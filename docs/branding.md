@@ -13,7 +13,13 @@ the edges (so white feathers survive), feathers the edge, clears the letter coun
 - `public/{favicon-32,icon-192,apple-touch-icon}.png` (badge; the apple-touch icon sits on a navy square) and `public/email/hawkeye-logo.png`.
 
 The art is glossy and shaded, so it is PNG only (it turns muddy if traced to SVG). The script refuses to run if the image sizes differ;
-if you regenerate the art at another size, update the size check and the crop rows at the top. The in-app wordmark is HTML text with a
+if you regenerate the art at another size, update the size check and the crop rows at the top. **Feature and page icons** (`icon-websites`, `-email`, `-analytics`, `-history`, `-settings`, `-shield`, `-notifications`, `-ssl`, `-dashboard`, `-maintenance`) are
+glossy gold-ringed navy badges from the ChatGPT icon sheet, hand-cropped (an automatic cut-out left a white halo outside the ring). The originals are in
+`web/src/assets/brand/source/icons/`; `python3 scripts/prepare_glossy_icons.py` (Pillow and numpy) centres each on a square canvas and writes the 256px PNGs.
+Each badge carries its own navy, so it works on any background. The old blue icons, `alert-bell.png`, `cloud-security.png` and `website-magnifier.png` were removed;
+`dashboard-laptop.png` (the landing hero illustration) is still the older artwork.
+
+The in-app wordmark is HTML text with a
 gold "Eye". The brand blue is still the UI accent colour; gold appears in the logo, the app wordmark and the Pro plan's aura.
 
 The rest of this file describes the earlier blue brand pack, whose icons (analytics, email, shield, etc.) are still used.

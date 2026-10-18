@@ -63,7 +63,7 @@ export function IncidentsPage() {
   return (
     <>
       <div className="row">
-        <PageIcon src={brand.alertBell} />
+        <PageIcon src={brand.icons.notifications} />
         <h1>Incidents</h1>
         <span className="spacer" />
         <label className="inline-label">

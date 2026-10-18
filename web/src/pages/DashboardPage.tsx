@@ -26,7 +26,7 @@ export function DashboardPage() {
   return (
     <>
       <div className="row">
-        <PageIcon src={brand.icons.analytics} />
+        <PageIcon src={brand.icons.dashboard} />
         <h1>Dashboard</h1>
       </div>
 

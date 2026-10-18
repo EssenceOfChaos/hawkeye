@@ -1,13 +1,10 @@
 import { brand } from '../brand'
 
-/** App icon plus a text wordmark, so it stays readable in light and dark themes. */
-export function BrandMark({ size = 32 }: { size?: number }) {
+/** The official HawkEye logo (hawk, white "Hawk", gold "Eye"). The app is always on the dark navy theme, so the white version is used throughout. */
+export function BrandMark({ size = 34 }: { size?: number }) {
   return (
     <span className="brandmark">
-      <img src={brand.appIcon} alt="" width={size} height={size} />
-      <span className="wordmark">
-        Hawk<span>Eye</span>
-      </span>
+      <img src={brand.logoWhite} alt="HawkEye" width={Math.round(size * 5.14)} height={size} />
     </span>
   )
 }

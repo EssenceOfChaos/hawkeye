@@ -71,7 +71,7 @@ export function ContactPage() {
   return (
     <div className="legal contact">
       <header className="legal-header">
-        <Link to="/" aria-label="HawkEye home"><img src={brand.logo} alt="HawkEye" width={160} height={32} /></Link>
+        <Link to="/" aria-label="HawkEye home"><img src={brand.logoWhite} alt="HawkEye" width={160} height={32} /></Link>
         <span className="spacer" />
         {user ? <Link to="/dashboard">Back to dashboard</Link> : <Link to="/login">Log in</Link>}
       </header>

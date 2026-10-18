@@ -37,7 +37,7 @@ function PublicOnly() {
   if (status === 'loading') return <p role="status" className="center">Loading…</p>
   if (status === 'authenticated') return <Navigate to="/dashboard" replace />
   return (
-    <main>
+    <main className="auth">
       <Outlet />
     </main>
   )
@@ -56,8 +56,8 @@ export function AppRoutes() {
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/status/:slug" element={<StatusPage />} />
-      <Route path="/reset-password" element={<main><ResetPasswordPage /></main>} />
-      <Route path="/confirm-alert-address" element={<main><ConfirmAlertAddressPage /></main>} />
+      <Route path="/reset-password" element={<main className="auth"><ResetPasswordPage /></main>} />
+      <Route path="/confirm-alert-address" element={<main className="auth"><ConfirmAlertAddressPage /></main>} />
       <Route element={<RequireAuth />}>
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/dashboard" element={<Lazy><DashboardPage /></Lazy>} />

@@ -104,7 +104,7 @@ export function MaintenancePage() {
   return (
     <>
       <div className="row">
-        <PageIcon src={brand.icons.settings} />
+        <PageIcon src={brand.icons.maintenance} />
         <h1>Maintenance windows</h1>
       </div>
       <p>
