@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { api, type Plan } from '../api'
+import { formatMoney } from '../format'
+import { planTagline } from '../planCopy'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { Reveal } from '../components/Reveal'
@@ -111,17 +113,14 @@ const FAQ = [
   { q: 'What happens if I downgrade?', a: 'Your existing monitors are never deleted automatically. You may not be able to add new ones until you are within the new plan’s limits, and history older than the new plan’s retention period is removed. Maintenance windows you already created keep working, but you cannot create new ones until you are on a paid plan.' },
 ]
 
-function price(cents: number) {
-  return cents === 0 ? '$0' : `$${(cents / 100).toFixed(0)}`
-}
-
 function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: Plan; featured: boolean; billingEnabled: boolean; signedIn: boolean }) {
   const mins = Math.round(plan.minimum_check_interval_seconds / 60)
   const card = (
     <div className={`plan${featured ? ' featured' : ''}`}>
       <h3>{plan.name}</h3>
+      {planTagline(plan.code) && <p className="plan-tagline">{planTagline(plan.code)}</p>}
       <p className="price">
-        <strong>{price(plan.monthly_price_cents)}</strong>
+        <strong>{formatMoney(plan.monthly_price_cents)}</strong>
         {plan.monthly_price_cents > 0 && <span> / month</span>}
       </p>
       <ul>
@@ -224,6 +223,7 @@ export function LandingPage() {
           <ul className="value-strip">
             <li className="d-badge d-badge-soft d-badge-success">Uptime tracking</li>
             <li className="d-badge d-badge-soft d-badge-error">Outage alerts</li>
+            <li className="d-badge d-badge-soft d-badge-neutral">Outages confirmed before alerts</li>
             <li className="d-badge d-badge-soft d-badge-warning">SSL expiry warnings</li>
             <li className="d-badge d-badge-soft d-badge-info">Performance history</li>
             <li className="d-badge d-badge-soft d-badge-accent">Public status page</li>
@@ -237,6 +237,54 @@ export function LandingPage() {
           width={566}
           height={463}
         />
+        </div>
+      </section>
+
+      <section aria-labelledby="demo-h" className="section">
+        <h2 id="demo-h">See it in action.</h2>
+        <p>Real screens from HawkEye, shown with sample data.</p>
+        <div className="shots">
+          <figure className="shot">
+            <img
+              src={brand.screens.dashboard}
+              alt="The HawkEye dashboard with sample data: 99.8% uptime over the last 24 hours, five monitors online, an SSL certificate expiring in 26 days, a response-time chart and a list of recent resolved incidents."
+              width={1700}
+              height={1554}
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption>
+              <strong>Your whole picture at a glance.</strong> Uptime, response times, certificate expiry and recent incidents in one place.
+            </figcaption>
+          </figure>
+          <div className="shots-side">
+            <figure className="shot">
+              <img
+                src={brand.screens.incidents}
+                alt="The HawkEye incidents list with sample data: four resolved incidents, each with the website, start time, duration and cause, such as a request that timed out."
+                width={1400}
+                height={481}
+                loading="lazy"
+                decoding="async"
+              />
+              <figcaption>
+                <strong>Every outage, accounted for.</strong> Confirmed by consecutive failed checks, with start, duration and cause.
+              </figcaption>
+            </figure>
+            <figure className="shot">
+              <img
+                src={brand.screens.alertEmail}
+                alt="A HawkEye alert email with sample data: “Checkout may be offline”, with the website address, when the failures were detected, the latest result and a View incidents button."
+                width={960}
+                height={975}
+                loading="lazy"
+                decoding="async"
+              />
+              <figcaption>
+                <strong>The alert you actually receive.</strong> One email when an outage is confirmed and one when it ends. Slack and webhooks too.
+              </figcaption>
+            </figure>
+          </div>
         </div>
       </section>
 
@@ -257,6 +305,23 @@ export function LandingPage() {
         </Reveal>
       </section>
 
+      <section className="section split" aria-labelledby="truth-h">
+        <img src={brand.icons.websites} alt="" width={170} height={170} />
+        <div>
+          <p className="eyebrow">Checks that tell the truth</p>
+          <h2 id="truth-h">A failed check is not an incident.</h2>
+          <p>
+            A site counts as offline only after consecutive failed checks, and as recovered only after consecutive successful ones. You get one alert when an
+            outage is confirmed and one when it ends.
+          </p>
+          <p>
+            HawkEye also checks its own connection. If it cannot reach other well-known websites either, the failure is set aside instead of being blamed on
+            yours.
+          </p>
+        </div>
+        <img src={brand.icons.notifications} alt="" width={150} height={150} />
+      </section>
+
       <section aria-labelledby="features-h" className="section">
         <h2 id="features-h">Everything you need to keep watch.</h2>
         <p>Know what’s working, see what isn’t, and understand what happened.</p>
@@ -272,17 +337,6 @@ export function LandingPage() {
         </Reveal>
       </section>
 
-      <section className="section split">
-        <img src={brand.icons.websites} alt="" width={170} height={170} />
-        <div>
-          <h2>Checks that tell the truth</h2>
-          <p>
-            A failed check is not an incident. A site counts as offline only after consecutive failed checks, and as recovered only after
-            consecutive successful ones. You get one alert when an outage is confirmed and one when it ends.
-          </p>
-        </div>
-        <img src={brand.icons.notifications} alt="" width={150} height={150} />
-      </section>
 
       <section aria-labelledby="audience-h" className="section">
         <h2 id="audience-h">Built for the people who keep the web running</h2>

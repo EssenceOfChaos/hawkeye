@@ -103,6 +103,23 @@ A *deleted* event is the one exception: if the subscription can no longer be ret
 Free limit, the dashboard explains how many to delete or that the owner can upgrade, and the retention job later trims history to the Free window (documented in `architecture.md`).
 Cancelling from the app (or the portal) sets *cancel at period end*: the owner keeps paid access until the period ends, then Stripe deletes the subscription and access ends.
 
+## Price check
+
+The site shows each plan's price from the `plans` table, while Stripe charges whatever the Stripe price says. Nothing ties the two together except this check: at API startup and
+then every hour, `Service.VerifyPrices` reads `STRIPE_PRICE_PRO_ID` and `STRIPE_PRICE_AGENCY_ID` from Stripe and compares each with its plan: the amount (cents) must equal
+`plans.monthly_price_cents`, the currency must be USD, the price must be recurring **monthly** (every 1 month) and **active**.
+
+- **On a mismatch** for a plan: checkout for **that plan** is refused (`503 PLAN_UNAVAILABLE`, so nobody is charged something other than what they were shown), the gauge
+  `hawkeye_billing_price_mismatch{plan}` is 1 (alert `HawkEyeBillingPriceMismatch`), an ERROR is logged with the reason ("the pro plan is advertised at $19.00 a month but Stripe
+  charges $29.00") and the error tracker is told once. The other plan stays open. It clears by itself at the next check after you fix it: either correct the Stripe price (create a new
+  recurring price with the right amount, then put its `price_...` id in `STRIPE_PRICE_*_ID` and restart the API and worker) or correct the plan row.
+- **If Stripe cannot be reached** the check proves nothing: it neither raises nor clears a problem, and checkout is not blocked by it.
+- **Not checked:** existing subscriptions keep the price they were sold at. Changing a plan's price is a business decision: create a new Stripe price, update `plans.monthly_price_cents`
+  and the env var together, and tell existing customers.
+- **Run it by hand** after creating or editing prices (read-only; works with live or test keys; needs a test database):
+  `STRIPE_LIVE_PRICE_CHECK=1 STRIPE_SECRET_KEY=... STRIPE_PRICE_PRO_ID=... STRIPE_PRICE_AGENCY_ID=... TEST_DATABASE_URL=... go test ./internal/billing -run LivePrices -v`
+- Stripe Tax is not enabled by this app (no `automatic_tax` on Checkout). If you turn it on, set a tax behavior on each price: the live prices currently have it "unspecified".
+
 ## Risk events: disputes, refunds, fraud warnings
 
 `charge.dispute.created`, `charge.refunded` and `radar.early_fraud_warning.created` are stored, logged at WARN with the Stripe object IDs, and counted in

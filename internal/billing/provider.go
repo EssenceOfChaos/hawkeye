@@ -16,6 +16,17 @@ type CheckoutParams struct {
 	CancelURL      string
 }
 
+// PriceInfo is what the provider charges for one price, as the provider reports it.
+type PriceInfo struct {
+	ID            string
+	UnitAmount    int64  // in the currency's smallest unit (cents)
+	Currency      string // lower case, e.g. "usd"
+	Recurring     bool   // false for a one-time price
+	Interval      string // "month", "year", ...
+	IntervalCount int64  // 1 for monthly
+	Active        bool   // false once archived: Checkout would refuse it
+}
+
 // Provider is the part of the payment provider this application calls. Everything else arrives by webhook.
 type Provider interface {
 	// CreateCustomer creates the provider customer for an organization. It must be idempotent per organization (a double click must not
@@ -28,6 +39,8 @@ type Provider interface {
 	CreateCheckoutSession(ctx context.Context, p CheckoutParams) (url string, err error)
 	// CreatePortalSession returns a customer-portal URL for managing payment method, plan and cancellation.
 	CreatePortalSession(ctx context.Context, customerID, returnURL string) (url string, err error)
+	// GetPrice fetches what a price really charges, so it can be compared with what the site advertises (Service.VerifyPrices).
+	GetPrice(ctx context.Context, priceID string) (PriceInfo, error)
 	// GetSubscription fetches the provider's current view (used to re-sync after missed webhooks).
 	GetSubscription(ctx context.Context, subscriptionID string) (SubscriptionState, error)
 	// CancelAtPeriodEnd schedules cancellation at the end of the paid period and returns the updated subscription.

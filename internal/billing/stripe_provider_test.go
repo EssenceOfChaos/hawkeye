@@ -52,6 +52,11 @@ func (f *fakeStripe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `{"id":"cs_test_1","object":"checkout.session","url":"https://checkout.stripe.test/c/pay/cs_test_1"}`)
 	case r.URL.Path == "/v1/billing_portal/sessions":
 		io.WriteString(w, `{"id":"bps_1","object":"billing_portal.session","url":"https://billing.stripe.test/p/session/x"}`)
+	case r.Method == http.MethodGet && r.URL.Path == "/v1/prices/price_monthly":
+		io.WriteString(w, `{"id":"price_monthly","object":"price","active":true,"currency":"usd","type":"recurring","unit_amount":1900,"livemode":false,
+			"recurring":{"interval":"month","interval_count":1,"usage_type":"licensed"}}`)
+	case r.Method == http.MethodGet && r.URL.Path == "/v1/prices/price_once":
+		io.WriteString(w, `{"id":"price_once","object":"price","active":false,"currency":"EUR","type":"one_time","unit_amount":500,"livemode":false}`)
 	case r.URL.Path == "/v1/subscriptions/sub_1":
 		cancel := r.Method == http.MethodPost && form.Get("cancel_at_period_end") == "true"
 		io.WriteString(w, `{"id":"sub_1","object":"subscription","customer":"cus_1","status":"active","cancel_at_period_end":`+map[bool]string{true: "true", false: "false"}[cancel]+`,
@@ -202,5 +207,23 @@ func TestStripeProviderDeleteCustomer(t *testing.T) {
 	fs.fail = true
 	if err := p.DeleteCustomer(t.Context(), "cus_123"); err == nil {
 		t.Fatal("other provider errors must be returned so deletion is aborted")
+	}
+}
+
+func TestStripeProviderReadsAPriceAsTheSDKReportsIt(t *testing.T) {
+	p, fs := newProvider(t)
+	got, err := p.GetPrice(t.Context(), "price_monthly")
+	if err != nil || got.UnitAmount != 1900 || got.Currency != "usd" || !got.Recurring || got.Interval != "month" || got.IntervalCount != 1 || !got.Active {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if r := fs.last(); r.Method != http.MethodGet || r.Path != "/v1/prices/price_monthly" {
+		t.Fatalf("a price lookup must be a plain GET: %+v", r)
+	}
+	once, err := p.GetPrice(t.Context(), "price_once")
+	if err != nil || once.Recurring || once.Active || once.Currency != "eur" { // currency is normalised to lower case
+		t.Fatalf("%+v %v", once, err)
+	}
+	if _, err := p.GetPrice(t.Context(), "price_missing"); err == nil {
+		t.Fatal("a price that does not exist must be an error")
 	}
 }

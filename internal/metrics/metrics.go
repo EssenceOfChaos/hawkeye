@@ -37,11 +37,12 @@ type Metrics struct {
 	RetentionLastSuccess prometheus.Gauge
 	RetentionDuration    prometheus.Gauge
 
-	BillingEvents  *prometheus.CounterVec // result=received|duplicate|invalid_signature|processed|ignored|retry|failed
-	BillingRisk    *prometheus.CounterVec // type=charge.dispute.created|charge.refunded|radar.early_fraud_warning.created
-	BillingPending prometheus.Gauge
-	BillingOldest  prometheus.Gauge
-	BillingFailed  prometheus.Gauge
+	BillingEvents        *prometheus.CounterVec // result=received|duplicate|invalid_signature|processed|ignored|retry|failed
+	BillingRisk          *prometheus.CounterVec // type=charge.dispute.created|charge.refunded|radar.early_fraud_warning.created
+	BillingPending       prometheus.Gauge
+	BillingOldest        prometheus.Gauge
+	BillingFailed        prometheus.Gauge
+	BillingPriceMismatch *prometheus.GaugeVec // plan: 1 while the Stripe price does not match the plan advertised on the site (checkout for it is refused)
 
 	WorkerErrors *prometheus.CounterVec // stage=claim|load|record|complete|sample|schedule|secrets
 	LastPollUnix prometheus.Gauge
@@ -86,6 +87,7 @@ func newOn(r *prometheus.Registry) *Metrics {
 		BillingRisk:          prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_billing_risk_events_total", Help: "Disputes, refunds and fraud warnings received; each needs human review."}, []string{"type"}),
 		BillingPending:       prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_billing_events_pending", Help: "Stored billing events awaiting processing."}),
 		BillingOldest:        prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_billing_oldest_pending_seconds", Help: "Age of the oldest unprocessed billing event."}),
+		BillingPriceMismatch: prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hawkeye_billing_price_mismatch", Help: "1 while the Stripe price for a plan does not match the advertised price, so its checkout is refused."}, []string{"plan"}),
 		BillingFailed:        prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_billing_events_failed", Help: "Billing events that gave up and need manual attention."}),
 		WorkerErrors: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_worker_errors_total",
 			Help: "Internal errors by stage."}, []string{"stage"}),
@@ -93,10 +95,13 @@ func newOn(r *prometheus.Registry) *Metrics {
 		LastPollUnix: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_worker_last_poll_timestamp_seconds", Help: "Unix time of the last queue poll."}),
 	}
 	for _, c := range []prometheus.Collector{m.ChecksTotal, m.CheckDuration, m.Scheduled, m.Skipped, m.Missed, m.Backpressure,
-		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.CanaryUp, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed} {
+		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.CanaryUp, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed, m.BillingPriceMismatch} {
 		f(c)
 	}
 	m.CanaryUp.Set(1) // no verdict yet counts as healthy
+	for _, plan := range []string{"pro", "agency"} {
+		m.BillingPriceMismatch.WithLabelValues(plan).Set(0) // a labelled gauge is not exported until it has a value; the alert rule needs it to exist
+	}
 	return m
 }
 

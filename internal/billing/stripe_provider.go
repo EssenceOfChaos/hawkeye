@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -91,6 +92,20 @@ func (p *StripeProvider) CreatePortalSession(ctx context.Context, customerID, re
 		return "", fmt.Errorf("create portal session: %w", err)
 	}
 	return s.URL, nil
+}
+
+func (p *StripeProvider) GetPrice(ctx context.Context, id string) (PriceInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, apiTimeout)
+	defer cancel()
+	pr, err := p.client.V1Prices.Retrieve(ctx, id, nil)
+	if err != nil {
+		return PriceInfo{}, fmt.Errorf("retrieve price: %w", err)
+	}
+	info := PriceInfo{ID: pr.ID, UnitAmount: pr.UnitAmount, Currency: strings.ToLower(string(pr.Currency)), Active: pr.Active}
+	if pr.Recurring != nil {
+		info.Recurring, info.Interval, info.IntervalCount = true, string(pr.Recurring.Interval), pr.Recurring.IntervalCount
+	}
+	return info, nil
 }
 
 func (p *StripeProvider) GetSubscription(ctx context.Context, id string) (SubscriptionState, error) {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, type Monitor, type Usage } from '../api'
+import { formatMoney } from '../format'
 import { Alert } from '../components/Alert'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
@@ -10,7 +11,7 @@ import { StatusBadge } from '../components/StatusBadge'
 const PAGE_SIZE = 25
 
 function money(cents: number) {
-  return cents === 0 ? 'Free' : `$${(cents / 100).toFixed(0)}/month`
+  return cents === 0 ? 'Free' : `${formatMoney(cents)}/month`
 }
 
 export function UsagePanel({ usage }: { usage: Usage }) {

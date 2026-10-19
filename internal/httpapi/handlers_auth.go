@@ -81,6 +81,8 @@ func mapError(err error) error {
 		return &APIError{Status: http.StatusBadRequest, Code: "INVALID_TOKEN", Message: "This link is invalid or has expired."}
 	case errors.Is(err, billing.ErrNotConfigured):
 		return &APIError{Status: http.StatusServiceUnavailable, Code: "BILLING_NOT_CONFIGURED", Message: "Billing is not available on this server yet."}
+	case errors.Is(err, billing.ErrPriceMismatch):
+		return &APIError{Status: http.StatusServiceUnavailable, Code: "PLAN_UNAVAILABLE", Message: "This plan can't be purchased right now. We've been notified and are fixing it; please try again later."}
 	case errors.Is(err, billing.ErrAlreadySubscribed):
 		return &APIError{Status: http.StatusConflict, Code: "ALREADY_SUBSCRIBED", Message: "This organization already has a paid plan. Use Manage billing to change it."}
 	case errors.Is(err, billing.ErrNoCustomer):

@@ -119,3 +119,7 @@ groups:
         expr: sum(increase(hawkeye_checks_total{result="inconclusive"}[15m])) > 20
         labels: {severity: ticket}
         annotations: {summary: "Many check failures were discarded as inconclusive because the canary reported our network down", runbook: "docs/operations.md#canary-our-own-network-is-down"}
+      - alert: HawkEyeBillingPriceMismatch
+        expr: hawkeye_billing_price_mismatch == 1
+        labels: {severity: page}
+        annotations: {summary: "A plan's Stripe price does not match the price shown on the site; checkout for that plan is refused until they agree", runbook: "docs/billing.md#price-check"}

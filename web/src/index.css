@@ -148,6 +148,14 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .plan-aura { display: flex; flex: 1; --d-aura-radius: .75rem; --d-aura-padding: .1875rem; }
 .plan-aura > .plan, .plan-aura > .plan.featured { flex: 1; border: 0; background: linear-gradient(180deg, #102a4b, #0b1f38); } /* opaque, so the aura ring does not bleed through the card */
 .plan h3 { margin: 0; }
+.shots { display: grid; grid-template-columns: 1.55fr 1fr; gap: 1.5rem; align-items: start; margin-top: 1.5rem; }
+.shots-side { display: grid; gap: 1.5rem; }
+.shot { margin: 0; }
+.shot img { display: block; width: 100%; height: auto; border-radius: .75rem; border: 1px solid var(--border); box-shadow: 0 28px 56px -30px #000c; }
+.shot figcaption { margin-top: .65rem; color: var(--muted); font-size: .95rem; line-height: 1.5; }
+.shot figcaption strong { color: var(--text); }
+@media (max-width: 52rem) { .shots { grid-template-columns: 1fr; } }
+.plan-tagline { margin: 0; color: var(--muted); font-size: .95rem; line-height: 1.45; min-height: 2.9em; }
 .plan .price strong { font-size: 2rem; }
 .plan ul { padding-left: 1.1rem; flex: 1; }
 .landing .hint { opacity: .8; }

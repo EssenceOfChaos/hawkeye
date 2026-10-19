@@ -17,6 +17,7 @@ type FakeProvider struct {
 	PortalCustomers  []string
 	CanceledSubs     []string
 	Subscriptions    map[string]SubscriptionState // returned by GetSubscription / updated by CancelAtPeriodEnd
+	Prices           map[string]PriceInfo         // returned by GetPrice; an ID that is not here is "no such price"
 	Err              error                        // returned by every call when set
 }
 
@@ -60,6 +61,19 @@ func (f *FakeProvider) CreatePortalSession(_ context.Context, customerID, return
 	}
 	f.PortalCustomers = append(f.PortalCustomers, customerID)
 	return "https://portal.example.test/" + customerID + "?return=" + returnURL, nil
+}
+
+func (f *FakeProvider) GetPrice(_ context.Context, id string) (PriceInfo, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return PriceInfo{}, f.Err
+	}
+	p, ok := f.Prices[id]
+	if !ok {
+		return PriceInfo{}, fmt.Errorf("retrieve price: no such price %q", id)
+	}
+	return p, nil
 }
 
 func (f *FakeProvider) GetSubscription(_ context.Context, id string) (SubscriptionState, error) {

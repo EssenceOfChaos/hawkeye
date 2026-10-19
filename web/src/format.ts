@@ -27,3 +27,12 @@ export function availableRanges(retentionDays: number): string[] {
 export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString()
 }
+
+/**
+ * A plan price in US dollars from cents, shown exactly: "$0", "$19", "$19.99". Whole-dollar prices drop the cents; anything else keeps both
+ * decimals, so a $19.99 plan is never displayed as $20.
+ */
+export function formatMoney(cents: number): string {
+  const whole = cents % 100 === 0
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 }).format(cents / 100)
+}

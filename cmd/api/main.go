@@ -108,7 +108,9 @@ func run() error {
 	} else {
 		log.Info("billing disabled: set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and the price IDs to enable it")
 	}
-	billingSvc := billing.NewService(pool, provider, cfg.Billing(), apiMetrics.App, log)
+	billingSvc := billing.NewService(pool, provider, cfg.Billing(), apiMetrics.App, log).WithReporter(reporter)
+	// Compare Stripe's prices with the advertised plan prices now and hourly; a mismatch refuses that plan's checkout (internal/billing/prices.go).
+	go billingSvc.WatchPrices(ctx, time.Hour)
 
 	e := httpapi.New(httpapi.Options{
 		Logger: log, DB: pool, RequestTimeout: cfg.RequestTimeout, BodyLimit: cfg.BodyLimit,

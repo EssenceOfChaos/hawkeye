@@ -1,6 +1,8 @@
 package notifications
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -63,5 +65,28 @@ func TestDefaultBackoffGrowsAndSaturates(t *testing.T) {
 	}
 	if DefaultBackoff(50) != DefaultBackoff(5) || DefaultBackoff(0) != DefaultBackoff(1) {
 		t.Fatal("out-of-range attempts must clamp")
+	}
+}
+
+// ALERT_PREVIEW_DIR=/some/dir go test ./internal/notifications -run TestWriteAlertPreview writes the real outage and recovery emails (as built by Render)
+// as .html files for a look in a browser, or for the landing page screenshot (scripts/screenshots). ALERT_PREVIEW_BASE is where /email/hawkeye-logo.png is served.
+func TestWriteAlertPreview(t *testing.T) {
+	dir := os.Getenv("ALERT_PREVIEW_DIR")
+	if dir == "" {
+		t.Skip("set ALERT_PREVIEW_DIR to write preview files")
+	}
+	base := os.Getenv("ALERT_PREVIEW_BASE")
+	if base == "" {
+		base = "https://app.example.com"
+	}
+	started := time.Date(2026, 10, 19, 14, 11, 0, 0, time.UTC)
+	resolved := started.Add(14 * time.Minute)
+	for name, a := range map[string]Alert{
+		"alert-outage":   {Event: EventOutage, MonitorName: "Checkout", MonitorURL: "https://shop.example.com/checkout", Cause: "Request timed out", StartedAt: started, AppBaseURL: base, From: "alerts@hawkeye.observer", To: "owner@example.com"},
+		"alert-recovery": {Event: EventRecovery, MonitorName: "Checkout", MonitorURL: "https://shop.example.com/checkout", StartedAt: started, ResolvedAt: &resolved, AppBaseURL: base, From: "alerts@hawkeye.observer", To: "owner@example.com"},
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name+".html"), []byte(Render(a).HTML), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

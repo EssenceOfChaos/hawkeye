@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { api, ApiError, type BillingSubscription, type Plan, type Usage } from '../api'
+import { formatMoney } from '../format'
+import { planTagline } from '../planCopy'
 import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
@@ -9,10 +11,6 @@ import { redirectTo } from '../navigation'
 
 const POLL_MS = 3000
 const POLL_MAX = 20 // about a minute
-
-function money(cents: number) {
-  return cents === 0 ? '$0' : `$${(cents / 100).toFixed(0)}`
-}
 
 function statusText(s: BillingSubscription): { icon: string; text: string; tone: 'ok' | 'warn' | 'bad' | 'muted' } {
   if (!s.paid_access && s.status === 'incomplete') return { icon: '⏳', text: 'Payment not completed yet', tone: 'warn' }
@@ -180,7 +178,8 @@ export function BillingPage() {
               return (
                 <li key={p.code} className={`plan${current ? ' featured' : ''}`}>
                   <h3>{p.name}{current && <span className="soon">Current plan</span>}</h3>
-                  <p className="price"><strong>{money(p.monthly_price_cents)}</strong>{p.monthly_price_cents > 0 && <span> / month</span>}</p>
+                  {planTagline(p.code) && <p className="plan-tagline">{planTagline(p.code)}</p>}
+                  <p className="price"><strong>{formatMoney(p.monthly_price_cents)}</strong>{p.monthly_price_cents > 0 && <span> / month</span>}</p>
                   <ul>
                     <li>{p.max_monitors} monitors</li>
                     <li>Checks every {Math.round(p.minimum_check_interval_seconds / 60)} min</li>

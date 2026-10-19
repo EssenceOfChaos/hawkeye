@@ -19,6 +19,17 @@ glossy gold-ringed navy badges from the ChatGPT icon sheet, hand-cropped (an aut
 Each badge carries its own navy, so it works on any background. The old blue icons, `alert-bell.png`, `cloud-security.png` and `website-magnifier.png` were removed;
 `dashboard-laptop.png` was replaced by `dashboard-laptop.webp`, the hero laptop on the landing page: `python3 scripts/prepare_hero_laptop.py` resizes the glossy mockup in `source/dashboard-laptop-mockup.png` to 1100px wide lossy WebP with alpha (145 KB). It is an illustration (alt text says so): its sidebar labels (Reports, Settings) and "Online" wording are not the app's exact ones.
 
+**Screenshots** (the landing page's "See it in action" section: `web/src/assets/brand/screens/{dashboard,incidents,alert-email}.webp`) are real captures of the app with
+**sample data**, so they stay honest. To regenerate after the UI or the emails change (all local, nothing near production):
+1. Start a throwaway Postgres, run the migrations, start the API (`go run ./cmd/api`) and the web dev server (`npm run dev`), **without the worker**.
+2. Register `owner@example.com` / `correct-horse-battery-sample` in the app, then seed it: `psql ... -v org=<that organization's id> -f scripts/screenshots/seed.sql`
+   (five fictional monitors on example.com, 24 hours of one-minute checks, one 14-minute outage that was confirmed and recovered, a few older incidents; it can be re-run).
+3. `node scripts/screenshots/capture.mjs <dir>` (needs `playwright-core` and Google Chrome) logs in through the real login page and captures the dashboard and the incidents list at 2x.
+4. The alert email comes from the real renderer: `ALERT_PREVIEW_DIR=<dir> ALERT_PREVIEW_BASE=https://hawkeye.observer go test ./internal/notifications -run TestWriteAlertPreview`,
+   then screenshot `alert-outage.html` at 640 px wide, 2x (serve `web/public/email/hawkeye-logo.png` for its logo so the image never depends on what is deployed).
+5. `python3 scripts/screenshots/process.py <dir>` crops and compresses them into the `screens/` folder (about 190 KB in total).
+Every image's alt text says "sample data"; keep that if you change them.
+
 The in-app wordmark is HTML text with a
 gold "Eye". The brand blue is still the UI accent colour; gold appears in the logo, the app wordmark and the Pro plan's aura.
 

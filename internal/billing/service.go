@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,6 +36,9 @@ type Service struct {
 	m        *metrics.Metrics
 	log      *slog.Logger
 	rep      errtrack.Reporter
+
+	priceMu       sync.RWMutex
+	priceProblems map[string]string // plan code -> why its Stripe price does not match the advertised one (see VerifyPrices)
 }
 
 func NewService(pool *pgxpool.Pool, provider Provider, cfg Config, m *metrics.Metrics, log *slog.Logger) *Service {
@@ -126,6 +130,9 @@ func (s *Service) CreateCheckout(ctx context.Context, orgID uuid.UUID, userEmail
 	var active bool
 	if err := s.pool.QueryRow(ctx, `SELECT active FROM plans WHERE code = $1`, planCode).Scan(&active); err != nil || !active {
 		return "", validation.New("plan", "must be pro or agency")
+	}
+	if s.priceProblem(planCode) != "" {
+		return "", ErrPriceMismatch // never charge something other than the price shown (the details were logged and reported when it was detected)
 	}
 	cur, err := plans.EffectivePlan(ctx, s.pool, orgID)
 	if err != nil {

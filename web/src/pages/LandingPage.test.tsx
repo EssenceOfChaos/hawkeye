@@ -115,4 +115,46 @@ describe('LandingPage', () => {
     expect(screen.getByText('Does HawkEye warn me before my SSL certificate expires?')).toBeInTheDocument()
     expect(screen.getByText(/Can I monitor an API\?/)).toBeInTheDocument()
   })
+
+  it('puts the no-false-alarms message above the feature list, and says the true thing about it', () => {
+    renderLanding(() => json(200, { plans: [] }))
+    const truth = screen.getByRole('heading', { name: 'A failed check is not an incident.' })
+    const features = screen.getByRole('heading', { name: 'Everything you need to keep watch.' })
+    expect(truth.compareDocumentPosition(features) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const section = truth.closest('section')!
+    expect(within(section).getByText(/only after consecutive failed checks/)).toBeInTheDocument()
+    expect(within(section).getByText(/checks its own connection/)).toBeInTheDocument()
+    expect(screen.getByText('Outages confirmed before alerts')).toBeInTheDocument()
+  })
+
+  it('gives each plan a one-line description that names no unbuilt feature', async () => {
+    const all = [
+      ...plans,
+      { code: 'agency', name: 'Agency', monthly_price_cents: 5900, max_monitors: 200, minimum_check_interval_seconds: 60, history_retention_days: 365 },
+    ]
+    const { container } = renderLanding((url) =>
+      url.includes('/plans') ? json(200, { plans: all, billing_enabled: true }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }),
+    )
+    expect(await screen.findByText(/Everything you need to watch a personal site/)).toBeInTheDocument()
+    expect(screen.getByText(/Faster checks and deeper history/)).toBeInTheDocument()
+    expect(screen.getByText(/Room for many client websites/)).toBeInTheDocument()
+    const taglines = [...container.querySelectorAll('.plan-tagline')].map((e) => e.textContent).join(' ')
+    expect(taglines).not.toMatch(/team|branded|priority|sms|csv|export/i)
+  })
+
+  it('shows real product screens, labelled as sample data, before the problem statement', () => {
+    const { container } = renderLanding(() => json(200, { plans: [] }))
+    const demo = screen.getByRole('heading', { name: 'See it in action.' })
+    const problem = screen.getByRole('heading', { name: /Your website doesn’t clock out/ })
+    expect(demo.compareDocumentPosition(problem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByText(/shown with sample data/)).toBeInTheDocument()
+    const shots = [...container.querySelectorAll('.shot img')]
+    expect(shots).toHaveLength(3)
+    shots.forEach((img) => {
+      expect(img.getAttribute('alt')).toMatch(/sample data/i)
+      expect(img).toHaveAttribute('width')
+      expect(img).toHaveAttribute('height') // reserved space, so the page does not jump while they load
+      expect(img).toHaveAttribute('loading', 'lazy')
+    })
+  })
 })
