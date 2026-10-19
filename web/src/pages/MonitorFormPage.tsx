@@ -252,7 +252,7 @@ export function MonitorFormPage() {
             <legend>Response checks</legend>
             <Field label="Expected status code (optional)" type="number" min={100} max={599} value={expected}
               onChange={(e) => setExpected(e.target.value)} error={f.expected_status_code}
-              hint="Leave empty to treat any response below 400 as up." />
+              hint="Leave empty to treat any response below 400 as online." />
             <div className="field">
               <span>Assertions</span>
               {!assertionsAllowed && <small className="hint">HEAD responses have no body. Use GET to check the content.</small>}
@@ -304,7 +304,7 @@ export function MonitorFormPage() {
                 </div>
               )}
               <small className="hint">
-                All assertions must pass for the check to count as up. JSON paths look like data.items[0].status.
+                All assertions must pass for the check to count as online. JSON paths look like data.items[0].status.
               </small>
             </div>
           </fieldset>
@@ -328,8 +328,8 @@ export function MonitorFormPage() {
               {f.regions && <small className="error">{f.regions}</small>}
               <small className="hint">
                 {maxRegions > 1
-                  ? `Your plan can check each monitor from up to ${maxRegions} locations. A monitor counts as down only when most of its locations agree, so a problem at one location never raises an alert.`
-                  : 'Checking from several locations is available on paid plans. A monitor counts as down only when most of its locations agree.'}
+                  ? `Your plan can check each monitor from up to ${maxRegions} locations. A monitor counts as offline only when most of its locations agree, so a problem at one location never raises an alert.`
+                  : 'Checking from several locations is available on paid plans. A monitor counts as offline only when most of its locations agree.'}
               </small>
             </fieldset>
           )}

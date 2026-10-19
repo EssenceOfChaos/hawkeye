@@ -15,7 +15,7 @@ func TestRenderOutage(t *testing.T) {
 			t.Errorf("body missing %q:\n%s", want, m.Text)
 		}
 	}
-	if m.Subject != "HawkEye alert: Client Site may be down" || m.To != "me@example.com" || m.From != "alerts@example.com" {
+	if m.Subject != "HawkEye alert: Client Site may be offline" || m.To != "me@example.com" || m.From != "alerts@example.com" {
 		t.Fatalf("%+v", m)
 	}
 }
@@ -24,7 +24,7 @@ func TestRenderRecoveryIncludesDuration(t *testing.T) {
 	start := time.Date(2026, 10, 12, 14, 30, 0, 0, time.UTC)
 	end := start.Add(2*time.Hour + 5*time.Minute)
 	m := Render(Alert{Event: EventRecovery, MonitorName: "Site", MonitorURL: "https://x.example.com", StartedAt: start, ResolvedAt: &end, AppBaseURL: "https://a"})
-	if m.Subject != "HawkEye recovery: Site is responding again" || !strings.Contains(m.Text, "2h 5m") {
+	if m.Subject != "HawkEye recovery: Site is back online" || !strings.Contains(m.Text, "2h 5m") {
 		t.Fatalf("%+v", m)
 	}
 }

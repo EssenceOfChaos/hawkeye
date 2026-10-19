@@ -173,12 +173,12 @@ func TestWritePreviewFiles(t *testing.T) {
 	}
 	verify := sample()
 	verify.AppBaseURL = base
-	outage := Content{Preheader: "Down", Heading: "Marketing site may be down", Tone: ToneAlert, AppBaseURL: base,
+	outage := Content{Preheader: "Offline", Heading: "Marketing site may be offline", Tone: ToneAlert, AppBaseURL: base,
 		Paragraphs:  []string{"HawkEye confirmed an outage after repeated failed checks."},
 		Facts:       []Fact{{"Website", "https://example.com/"}, {"Detected", "2026-10-18 21:04 UTC"}, {"Cause", "Connection timed out"}},
 		ButtonLabel: "See what's down", ButtonURL: base + "/incidents", Note: "You get one alert when an outage is confirmed and one when it ends."}
-	recovered := Content{Preheader: "Up", Heading: "Marketing site is responding again", Tone: ToneSuccess, AppBaseURL: base,
-		Paragraphs: []string{"It was down for 12 minutes."}, Facts: []Fact{{"Website", "https://example.com/"}, {"Down for", "12 minutes"}},
+	recovered := Content{Preheader: "Online", Heading: "Marketing site is back online", Tone: ToneSuccess, AppBaseURL: base,
+		Paragraphs: []string{"It was offline for 12 minutes."}, Facts: []Fact{{"Website", "https://example.com/"}, {"Offline for", "12 minutes"}},
 		ButtonLabel: "Open HawkEye", ButtonURL: base + "/dashboard"}
 	contact := Content{Preheader: "New message", Heading: "Charged twice", Tone: ToneAlert, AppBaseURL: base,
 		Paragraphs: []string{"New message from the HawkEye contact form."}, Facts: []Fact{{"Reference", "HK-7F3A2C"}, {"Priority", "High"}},

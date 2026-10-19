@@ -98,7 +98,7 @@ export function NotificationsPage() {
         <PageIcon src={brand.icons.email} />
         <h1>Alert recipients</h1>
       </div>
-      <p>Everything listed here is told when a monitor is confirmed down, when it recovers, and when a certificate is about to expire: by email, in Slack, or by a signed webhook to your own systems.</p>
+      <p>Everything listed here is told when a monitor is confirmed offline, when it recovers, and when a certificate is about to expire: by email, in Slack, or by a signed webhook to your own systems.</p>
 
       {!verified && (
         <Alert tone="warning" role="status">

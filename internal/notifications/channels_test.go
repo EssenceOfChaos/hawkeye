@@ -88,7 +88,7 @@ func TestSlackMessageEscapesMarkup(t *testing.T) {
 	if strings.Contains(text, "<!channel>") || !strings.Contains(text, "&lt;!channel&gt; &amp; co") || !strings.Contains(text, "<https://app/incidents|Open in HawkEye>") {
 		t.Fatalf("%s", text)
 	}
-	if !strings.Contains(m["text"].(string), "may be down") {
+	if !strings.Contains(m["text"].(string), "may be offline") {
 		t.Fatalf("fallback text: %v", m["text"])
 	}
 }

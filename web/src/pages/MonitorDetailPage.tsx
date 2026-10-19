@@ -109,7 +109,7 @@ export function MonitorDetailPage() {
           {several && locations.data && (
             <section aria-labelledby="loc-h" className="card">
               <h2 id="loc-h">Locations</h2>
-              <p className="hint">The monitor counts as down only when most locations agree.</p>
+              <p className="hint">The monitor counts as offline only when most locations agree.</p>
               <div className="table-wrap">
                 <table>
                   <caption className="sr-only">How each location currently sees this monitor</caption>
@@ -121,8 +121,8 @@ export function MonitorDetailPage() {
                       <tr key={r.region}>
                         <td>{r.name}</td>
                         <td>
-                          {r.status === 'up' && <span className="d-badge d-badge-soft d-badge-success"><span aria-hidden="true">✔</span> Up</span>}
-                          {r.status === 'down' && <span className="d-badge d-badge-soft d-badge-error"><span aria-hidden="true">✖</span> Down</span>}
+                          {r.status === 'up' && <span className="d-badge d-badge-soft d-badge-success"><span aria-hidden="true">✔</span> Online</span>}
+                          {r.status === 'down' && <span className="d-badge d-badge-soft d-badge-error"><span aria-hidden="true">✖</span> Offline</span>}
                           {r.status === 'unknown' && <span className="d-badge d-badge-soft d-badge-ghost">Waiting</span>}
                         </td>
                         <td>{r.last_checked_at ? formatDateTime(r.last_checked_at) : '—'}</td>

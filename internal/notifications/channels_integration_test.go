@@ -136,7 +136,7 @@ func TestSlackDeliverySendsASlackMessage(t *testing.T) {
 		t.Fatalf("%+v %+v", e.row(t, id), got)
 	}
 	var m map[string]any
-	if err := json.Unmarshal(got[0].Body, &m); err != nil || m["blocks"] == nil || !strings.Contains(m["text"].(string), "responding again") {
+	if err := json.Unmarshal(got[0].Body, &m); err != nil || m["blocks"] == nil || !strings.Contains(m["text"].(string), "back online") {
 		t.Fatalf("%s %v", got[0].Body, err)
 	}
 	if got[0].Header.Get("X-HawkEye-Signature") != "" {

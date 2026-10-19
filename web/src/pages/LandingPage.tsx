@@ -77,7 +77,7 @@ const LOCATION_FEATURE = {
   icon: brand.icons.shield,
   title: 'Checks from several locations',
   lead: 'One network hiccup is not an outage.',
-  text: 'On paid plans, a monitor is down only when most locations agree.',
+  text: 'On paid plans, a monitor is offline only when most locations agree.',
 }
 const LOCATION_FAQ = {
   q: 'Can HawkEye check from more than one location?',
@@ -85,7 +85,7 @@ const LOCATION_FAQ = {
 }
 
 const AUDIENCES = [
-  { title: 'Freelancers', lead: 'Spend less time checking. More time creating.', text: 'Know when a client site is down without refreshing every project.' },
+  { title: 'Freelancers', lead: 'Spend less time checking. More time creating.', text: 'Know when a client site is offline without refreshing every project.' },
   { title: 'Web agencies', lead: 'Keep an eye on every client website.', text: 'Monitor every client in one place and show the care you provide.' },
   { title: 'Independent business owners', lead: 'Your website is too important to leave unchecked.', text: 'Hear about downtime before your customers do.' },
   { title: 'Developers and small teams', lead: 'Make availability visible.', text: 'Check your APIs too: authenticated requests and JSON checks, no complex stack.' },
@@ -101,7 +101,7 @@ const STEPS = [
 const FAQ = [
   { q: 'How does website monitoring work?', a: 'You add a website URL. HawkEye periodically sends an HTTP request, records the result, and evaluates whether repeated failures indicate a potential outage.' },
   { q: 'Do I need a credit card?', a: 'No. The free plan does not ask for one. A payment method is only needed if you choose a paid plan.' },
-  { q: 'What happens when my website goes down?', a: 'When repeated failures meet the incident threshold, HawkEye creates an incident and sends an alert to your email, Slack or webhook destinations. It keeps checking, and tells you when the website recovers.' },
+  { q: 'What happens when my website goes offline?', a: 'When repeated failures meet the incident threshold, HawkEye creates an incident and sends an alert to your email, Slack or webhook destinations. It keeps checking, and tells you when the website recovers.' },
   { q: 'Will HawkEye guarantee that my website is always available?', a: 'No monitoring service can guarantee that a website will always be available or detect every possible problem. HawkEye provides periodic checks and recorded results to help you identify and investigate availability issues.' },
   { q: 'Does HawkEye warn me before my SSL certificate expires?', a: 'Yes, on every plan. For each HTTPS monitor, HawkEye reads the certificate your site presents during its checks, shows the expiry date and a countdown, and alerts your destinations 30, 14, 7 and 1 days before it expires and again if it does. Renew the certificate and HawkEye picks up the new date automatically. It reports the certificate it sees for the monitored address; it cannot tell you about other hostnames or certificates revoked early.' },
   { q: 'Where can HawkEye send alerts?', a: 'To email addresses, to a Slack channel through an incoming webhook, and to any HTTPS endpoint as a signed JSON webhook so your own systems can react. Every alert is queued and retried if delivery fails. Slack and webhook destinations are tested when you add them and available on every plan. SMS is not available yet.' },
@@ -212,7 +212,7 @@ export function LandingPage() {
             </span>
           </p>
           <p>
-            Know when your websites go down, spot changes in response times, and keep every monitor in view from one simple
+            Know when your websites go offline, spot changes in response times, and keep every monitor in view from one simple
             dashboard.
           </p>
           <div className="row">
@@ -277,7 +277,7 @@ export function LandingPage() {
         <div>
           <h2>Checks that tell the truth</h2>
           <p>
-            A failed check is not an incident. A site counts as down only after consecutive failed checks, and as recovered only after
+            A failed check is not an incident. A site counts as offline only after consecutive failed checks, and as recovered only after
             consecutive successful ones. You get one alert when an outage is confirmed and one when it ends.
           </p>
         </div>

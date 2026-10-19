@@ -94,7 +94,7 @@ export function StatusPageSettings() {
         <h1>Status page</h1>
       </div>
       <p>
-        Give your customers a public page showing whether your services are up, their daily uptime and recent incidents. Only the monitors you choose appear, under
+        Give your customers a public page showing whether your services are online, their daily uptime and recent incidents. Only the monitors you choose appear, under
         the names you choose — web addresses and error details are never shown.
       </p>
       {error && <Alert>{error}</Alert>}

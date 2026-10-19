@@ -69,10 +69,10 @@ func Render(a Alert) email.Message {
 	var subject string
 	switch a.Event {
 	case EventRecovery:
-		subject = "HawkEye recovery: " + name + " is responding again"
+		subject = "HawkEye recovery: " + name + " is back online"
 		c.Tone = email.ToneSuccess
-		c.Preheader = name + " is responding again."
-		c.Heading = name + " is responding again"
+		c.Preheader = name + " is back online."
+		c.Heading = name + " is back online"
 		c.Paragraphs = []string{"Good news. HawkEye has recorded enough successful checks to resolve the incident affecting " + name + "."}
 		c.Facts = []email.Fact{{Label: "Website", Value: url}, {Label: "Incident began", Value: started}}
 		if a.ResolvedAt != nil {
@@ -82,10 +82,10 @@ func Render(a Alert) email.Message {
 		}
 		c.Paragraphs = append(c.Paragraphs, "Review the incident timeline to see the recorded failures and recovery checks.")
 	default:
-		subject = "HawkEye alert: " + name + " may be down"
+		subject = "HawkEye alert: " + name + " may be offline"
 		c.Tone = email.ToneAlert
 		c.Preheader = "HawkEye detected repeated failures while checking " + name + "."
-		c.Heading = name + " may be down"
+		c.Heading = name + " may be offline"
 		c.Paragraphs = []string{
 			"HawkEye has detected repeated failures while checking " + name + ".",
 			"We recommend reviewing the website and its hosting environment. HawkEye will continue monitoring according to your configured check interval, and will email you once when the website recovers.",

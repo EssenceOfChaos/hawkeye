@@ -247,16 +247,16 @@ func TestMVPDefinitionOfDone(t *testing.T) {
 	// 4. A one-off blip does not alert; a confirmed outage sends exactly one email.
 	status.Store(503)
 	s.runChecks()
-	if s.mailsTo(owner, "may be down") != 0 {
+	if s.mailsTo(owner, "may be offline") != 0 {
 		t.Fatal("one failed check must not send an alert")
 	}
 	s.runChecks()
-	if n := s.mailsTo(owner, "may be down"); n != 1 {
+	if n := s.mailsTo(owner, "may be offline"); n != 1 {
 		t.Fatalf("confirmed outage must send exactly one email, sent %d", n)
 	}
 	s.runChecks()
 	s.runChecks()
-	if n := s.mailsTo(owner, "may be down"); n != 1 {
+	if n := s.mailsTo(owner, "may be offline"); n != 1 {
 		t.Fatalf("an ongoing outage must not send more email, sent %d", n)
 	}
 	sum = me.do("GET", "/api/v1/dashboard/summary", nil).obj("summary")
@@ -267,11 +267,11 @@ func TestMVPDefinitionOfDone(t *testing.T) {
 	// 5. Recovery closes the incident and notifies; history and uptime are available.
 	status.Store(200)
 	s.runChecks()
-	if s.mailsTo(owner, "is responding again") != 0 {
+	if s.mailsTo(owner, "is back online") != 0 {
 		t.Fatal("one success must not announce recovery")
 	}
 	s.runChecks()
-	if n := s.mailsTo(owner, "is responding again"); n != 1 {
+	if n := s.mailsTo(owner, "is back online"); n != 1 {
 		t.Fatalf("recovery emails: %d", n)
 	}
 	inc := me.do("GET", "/api/v1/monitors/"+siteID+"/incidents", nil).Body["incidents"].([]any)

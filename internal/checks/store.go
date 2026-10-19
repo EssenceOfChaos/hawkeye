@@ -102,7 +102,7 @@ func (s *Store) Record(ctx context.Context, monitorID uuid.UUID, r Result) (Outc
 				return err
 			}
 			if out.Transition == WentDown {
-				summary = truncate(fmt.Sprintf("%s (down from %d of %d locations)", summary, len(down), len(effective)), maxSummaryLen)
+				summary = truncate(fmt.Sprintf("%s (offline from %d of %d locations)", summary, len(down), len(effective)), maxSummaryLen)
 			}
 		}
 		_, err = tx.Exec(ctx, `UPDATE monitors SET current_status = $2, consecutive_failures = $3, consecutive_successes = $4,

@@ -37,7 +37,7 @@ describe('StatusBadge', () => {
         <StatusBadge monitor={{ enabled: false, current_status: 'up' }} />
       </MemoryRouter>,
     )
-    expect(screen.getByText(/Down/)).toBeInTheDocument()
+    expect(screen.getByText(/Offline/)).toBeInTheDocument()
     expect(screen.getByText(/Paused/)).toBeInTheDocument()
   })
 })

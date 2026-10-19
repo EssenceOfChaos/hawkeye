@@ -46,7 +46,7 @@ export function DashboardPage() {
           {s.open_incidents > 0 && (
             <Alert>
               <span aria-hidden="true">✖</span> {s.open_incidents} ongoing incident{s.open_incidents === 1 ? '' : 's'}.{' '}
-              <Link to="/incidents">See what’s down</Link>
+              <Link to="/incidents">See what’s offline</Link>
             </Alert>
           )}
 
@@ -59,8 +59,8 @@ export function DashboardPage() {
 
             <h2 className="sr-only">Right now</h2>
             <div className="stats">
-              <StatTile label="Up" value={<><span aria-hidden="true">✔</span> {s.monitors.up}</>} hint="monitors responding" />
-              <StatTile label="Down" value={<><span aria-hidden="true">✖</span> {s.monitors.down}</>} hint="confirmed outages" />
+              <StatTile label="Online" value={<><span aria-hidden="true">✔</span> {s.monitors.up}</>} hint="monitors responding" />
+              <StatTile label="Offline" value={<><span aria-hidden="true">✖</span> {s.monitors.down}</>} hint="confirmed outages" />
               <StatTile label="Waiting" value={<><span aria-hidden="true">○</span> {s.monitors.pending}</>} hint="no confirmed state yet" />
               <StatTile label="Paused" value={<><span aria-hidden="true">⏸</span> {s.monitors.paused}</>} hint="not being checked" />
               <AvgResponseTile uptime={s.uptime} />

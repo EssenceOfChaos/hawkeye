@@ -176,13 +176,13 @@ func slackMessage(a Alert, now time.Time) map[string]any {
 	var title, detail, link string
 	switch a.Event {
 	case EventTest:
-		title, detail = "✅ HawkEye test alert", "This destination is set up. You will get alerts here when a monitor goes down or recovers."
+		title, detail = "✅ HawkEye test alert", "This destination is set up. You will get alerts here when a monitor goes offline or recovers."
 		link = a.AppBaseURL + "/notifications"
 	case EventRecovery:
-		title = "✅ " + name + " is responding again"
+		title = "✅ " + name + " is back online"
 		detail = target
 		if a.ResolvedAt != nil {
-			detail += "\nDown for " + Duration(a.ResolvedAt.Sub(a.StartedAt))
+			detail += "\nOffline for " + Duration(a.ResolvedAt.Sub(a.StartedAt))
 		}
 		link = a.AppBaseURL + "/incidents"
 	case EventSSLExpiry:
@@ -194,7 +194,7 @@ func slackMessage(a Alert, now time.Time) map[string]any {
 		detail = target + "\nExpires " + a.SSLExpiresAt.UTC().Format("2006-01-02 15:04 UTC")
 		link = a.AppBaseURL + "/monitors/" + a.MonitorID
 	default:
-		title = "🔴 " + name + " may be down"
+		title = "🔴 " + name + " may be offline"
 		detail = target + "\nDetected " + a.StartedAt.UTC().Format("2006-01-02 15:04 UTC")
 		if a.Cause != "" {
 			detail += "\n" + slackEscape(clean(a.Cause))

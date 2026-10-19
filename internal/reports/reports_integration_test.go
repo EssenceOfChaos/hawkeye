@@ -36,14 +36,20 @@ func (e *env) monitor(t *testing.T, org uuid.UUID, name string) uuid.UUID {
 
 // seed inserts n results spaced `every` apart, the newest `ago` before now. failEvery>0 makes every
 // failEvery-th result a failure; successes have response time ms.
+//
+// "now" is the TEST PROCESS's clock, passed in as a parameter, not the database's now(). The reports are then asked about a window built from
+// time.Now() in this same process (rng below), so every seeded result is guaranteed to be at or before the window's end. Seeding from the
+// database's clock instead made the two clocks race: when the database's clock was even slightly ahead (Docker's VM clock drifts and re-syncs),
+// the newest result fell just past the end of the window and a count came up one short.
 func (e *env) seed(t *testing.T, monitor uuid.UUID, n int, every, ago time.Duration, failEvery int, ms int) {
 	t.Helper()
+	now := time.Now().UTC()
 	_, err := e.pool.Exec(t.Context(), `INSERT INTO check_results
 		(monitor_id, checked_at, finished_at, success, http_status_code, response_time_ms, error_category, error_summary)
 		SELECT $1, ts, ts, ok, CASE WHEN ok THEN 200 ELSE 503 END, CASE WHEN ok THEN $6::int END,
 			CASE WHEN ok THEN NULL ELSE 'http_status' END, CASE WHEN ok THEN NULL ELSE 'Received HTTP 503' END
-		FROM (SELECT now() - $3::interval - ($2::interval * g) AS ts, NOT ($4::int > 0 AND g % $4::int = 0) AS ok FROM generate_series(0, $5::int - 1) g) s`,
-		monitor, every, ago, failEvery, n, ms)
+		FROM (SELECT $7::timestamptz - $3::interval - ($2::interval * g) AS ts, NOT ($4::int > 0 AND g % $4::int = 0) AS ok FROM generate_series(0, $5::int - 1) g) s`,
+		monitor, every, ago, failEvery, n, ms, now)
 	if err != nil {
 		t.Fatal(err)
 	}

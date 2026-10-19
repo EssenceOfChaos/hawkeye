@@ -35,8 +35,8 @@ describe('DashboardPage', () => {
     mount(<DashboardPage />, '/dashboard', '/dashboard', handler({ total: 4, up: 2, down: 1, pending: 0, paused: 1 }, 1))
     expect(await screen.findByText('99.652%')).toBeInTheDocument()
     expect(screen.getByText(/1 ongoing incident\./)).toBeInTheDocument()
-    expect(screen.getByText('Up')).toBeInTheDocument()
-    expect(screen.getByText('Down')).toBeInTheDocument()
+    expect(screen.getByText('Online')).toBeInTheDocument()
+    expect(screen.getByText('Offline')).toBeInTheDocument()
     expect(await screen.findByText('Client Site')).toBeInTheDocument()
     expect(screen.getAllByText(/Check-based uptime/)).toHaveLength(1) // exactly one hero figure
   })

@@ -19,8 +19,8 @@ const BANNER: Record<PublicStatus['overall'], 'success' | 'error' | 'info'> = {
 
 // Full class names so the CSS generator can see them.
 const STATE: Record<PublicStatus['monitors'][number]['state'], { text: string; cls: string }> = {
-  up: { text: '✔ Operational', cls: 'd-badge d-badge-soft d-badge-success' },
-  down: { text: '✖ Down', cls: 'd-badge d-badge-soft d-badge-error' },
+  up: { text: '✔ Online', cls: 'd-badge d-badge-soft d-badge-success' },
+  down: { text: '✖ Offline', cls: 'd-badge d-badge-soft d-badge-error' },
   maintenance: { text: '🛠 Maintenance', cls: 'd-badge d-badge-soft d-badge-info' },
   unknown: { text: 'No recent data', cls: 'd-badge d-badge-soft d-badge-ghost' },
 }

@@ -48,7 +48,7 @@ describe('public StatusPage', () => {
       })),
     )
     expect(await screen.findByText(/Some systems are experiencing problems/)).toBeInTheDocument()
-    expect(screen.getByText(/✖ Down/)).toBeInTheDocument()
+    expect(screen.getByText(/✖ Offline/)).toBeInTheDocument()
     expect(screen.getByText(/ongoing/)).toBeInTheDocument()
   })
 
