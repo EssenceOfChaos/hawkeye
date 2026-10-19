@@ -84,15 +84,21 @@ func (h *handlers) createSetting(c echo.Context) error {
 	return c.JSON(http.StatusCreated, map[string]any{"notification_setting": s})
 }
 
-// testSetting re-sends the test message to a webhook or Slack destination.
+// testSetting sends a test to a recipient: a signed test request to a webhook or Slack URL, or a test alert email to a confirmed email address.
+// Emailing is capped per address, like every other action that emails a third party.
 func (h *handlers) testSetting(c echo.Context) error {
 	id, err := settingID(c)
 	if err != nil {
 		return err
 	}
-	if err := h.notifications.Test(c.Request().Context(), currentOrg(c), id); err != nil {
-		if errors.Is(err, notifications.ErrNotTestable) {
-			return mapError(validation.New("destination", err.Error()))
+	allow := func(address string) bool { return h.emailBudget(c, "alert-test", address) }
+	if err := h.notifications.Test(c.Request().Context(), currentOrg(c), id, currentUser(c).Email, allow); err != nil {
+		switch {
+		case errors.Is(err, notifications.ErrTestRateLimited):
+			c.Response().Header().Set("Retry-After", "3600")
+			return errRateLimited
+		case errors.Is(err, notifications.ErrNotVerified):
+			return &APIError{Status: http.StatusConflict, Code: "NOT_VERIFIED", Message: err.Error()}
 		}
 		return mapError(err)
 	}

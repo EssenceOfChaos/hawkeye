@@ -83,10 +83,44 @@ func TestWriteAlertPreview(t *testing.T) {
 	resolved := started.Add(14 * time.Minute)
 	for name, a := range map[string]Alert{
 		"alert-outage":   {Event: EventOutage, MonitorName: "Checkout", MonitorURL: "https://shop.example.com/checkout", Cause: "Request timed out", StartedAt: started, AppBaseURL: base, From: "alerts@hawkeye.observer", To: "owner@example.com"},
+		"alert-test":     {Event: EventTest, To: "owner@example.com", From: "alerts@hawkeye.observer", AppBaseURL: base, RequestedBy: "owner@example.com", SentAt: started},
 		"alert-recovery": {Event: EventRecovery, MonitorName: "Checkout", MonitorURL: "https://shop.example.com/checkout", StartedAt: started, ResolvedAt: &resolved, AppBaseURL: base, From: "alerts@hawkeye.observer", To: "owner@example.com"},
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name+".html"), []byte(Render(a).HTML), 0o644); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestTestAlertEmailIsUnmistakablyATest(t *testing.T) {
+	m := Render(Alert{Event: EventTest, To: "ops@example.com", From: "alerts@example.com", AppBaseURL: "https://app.example.com", RequestedBy: "owner@example.com",
+		SentAt: time.Date(2026, 10, 19, 15, 4, 0, 0, time.UTC)})
+	if m.Subject != "HawkEye test alert" || m.To != "ops@example.com" || m.From != "alerts@example.com" {
+		t.Fatalf("%+v", m)
+	}
+	for _, want := range []string{"Your alerts are working", "this is a test alert", "Nothing is wrong", "ops@example.com", "owner@example.com", "2026-10-19 15:04 UTC", "https://app.example.com/notifications"} {
+		if !strings.Contains(strings.ToLower(m.Text), strings.ToLower(want)) {
+			t.Errorf("text missing %q:\n%s", want, m.Text)
+		}
+	}
+	// Nothing that reads like a real outage. (The closing note describes real alerts, so "may be offline" may appear there; the subject, heading and facts must not.)
+	top := m.Text[:strings.Index(m.Text, "Sent to")]
+	for _, notWanted := range []string{"may be offline", "repeated failures", "Incident", "Detected at", "Website:"} {
+		if strings.Contains(top, notWanted) || strings.Contains(m.Subject, notWanted) {
+			t.Errorf("a test alert must not say %q up front", notWanted)
+		}
+	}
+	if strings.Contains(m.Text, "Website:") || strings.Contains(m.Text, "Incident status") {
+		t.Error("a test alert has no website or incident")
+	}
+	if strings.Contains(m.HTML, "#ff8a80") || strings.Contains(m.HTML, "#56d364") {
+		t.Error("a test alert uses the brand gold, never the outage red or recovery green")
+	}
+	if !strings.Contains(m.HTML, "#e8b95e") {
+		t.Error("a test alert should carry the gold accent")
+	}
+	// Who asked is optional; without it the line is simply absent.
+	if strings.Contains(Render(Alert{Event: EventTest, To: "a@example.com", AppBaseURL: "https://app.example.com"}).Text, "Requested by") {
+		t.Error("no requester, no line")
 	}
 }

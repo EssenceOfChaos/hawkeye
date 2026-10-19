@@ -29,8 +29,11 @@ var (
 	ErrDuplicate    = errors.New("destination already configured")
 	ErrTooMany      = errors.New("too many notification destinations")
 	ErrInvalidToken = errors.New("invalid or expired token")
-	// ErrNotTestable means the destination is an email address (those are verified by a link, not a test message).
-	ErrNotTestable = errors.New("only webhook and Slack destinations can be tested")
+	// ErrNotVerified means an email recipient has not confirmed its address yet, so it may not be sent a test: a test must never become a way to
+	// email an address that did not agree to receive anything from this account.
+	ErrNotVerified = errors.New("confirm this address first; it has not been verified yet")
+	// ErrTestRateLimited means a test was sent to this address too recently.
+	ErrTestRateLimited = errors.New("a test alert was sent to this address recently")
 )
 
 type Setting struct {
@@ -218,22 +221,36 @@ func (s *Service) CreateURL(ctx context.Context, orgID uuid.UUID, channel, rawUR
 	return st, signingSecret, nil
 }
 
-// Test sends a test message to an existing webhook or Slack destination.
-func (s *Service) Test(ctx context.Context, orgID, id uuid.UUID) error {
-	var channel, sealedURL string
+// Test sends a test message to an existing destination: a signed test request to a webhook or Slack URL, or the test alert email to an email
+// recipient. requestedBy (the signed-in user's address) is named in the email. allowEmail, when set, is asked before an email is sent (the
+// per-address rate limit lives in the HTTP layer); returning false gives ErrTestRateLimited.
+func (s *Service) Test(ctx context.Context, orgID, id uuid.UUID, requestedBy string, allowEmail func(address string) bool) error {
+	var channel, dest string
+	var verified bool
 	var sealedSecret *string
-	err := s.pool.QueryRow(ctx, `SELECT channel, destination, signing_secret FROM notification_settings
-		WHERE id = $1 AND organization_id = $2`, id, orgID).Scan(&channel, &sealedURL, &sealedSecret)
+	err := s.pool.QueryRow(ctx, `SELECT channel, destination, signing_secret, verified_at IS NOT NULL FROM notification_settings
+		WHERE id = $1 AND organization_id = $2`, id, orgID).Scan(&channel, &dest, &sealedSecret, &verified)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
 		return err
 	}
-	if channel == ChannelEmail {
-		return ErrNotTestable
+	if !verified {
+		return ErrNotVerified
 	}
-	target, err := s.box.Open(sealedURL, id.String())
+	if channel == ChannelEmail {
+		if allowEmail != nil && !allowEmail(dest) {
+			return ErrTestRateLimited
+		}
+		msg := Render(Alert{Event: EventTest, To: dest, From: s.from, AppBaseURL: s.appBaseURL, RequestedBy: requestedBy})
+		if err := s.mail.Send(ctx, msg); err != nil {
+			s.log.WarnContext(ctx, "test alert email was not sent", "error", err)
+			return validation.New("destination", "the test email could not be sent right now; try again in a few minutes")
+		}
+		return nil
+	}
+	target, err := s.box.Open(dest, id.String())
 	if err != nil {
 		return err
 	}

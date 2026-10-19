@@ -222,7 +222,7 @@ func TestCreateURLSealsTheURLSendsATestAndShowsTheSecretOnce(t *testing.T) {
 	if _, _, err := svc.CreateURL(t.Context(), e.org, "webhook", "https://hooks.example.com/in/token123"); !errors.Is(err, notifications.ErrDuplicate) {
 		t.Fatalf("duplicate: %v", err)
 	}
-	if err := svc.Test(t.Context(), e.org, st.ID); err != nil || len(rcv.requests()) != 3 { // create test, duplicate's test, this one
+	if err := svc.Test(t.Context(), e.org, st.ID, "owner@example.com", nil); err != nil || len(rcv.requests()) != 3 { // create test, duplicate's test, this one
 		t.Fatalf("%v %d", err, len(rcv.requests()))
 	}
 }
@@ -269,14 +269,84 @@ func TestCreateURLRespectsTheDestinationLimitAndNeedsAKey(t *testing.T) {
 	}
 }
 
-func TestTestIsNotAvailableForEmail(t *testing.T) {
+// svcWithMail is a notifications service whose emails land in the returned sender.
+func svcWithMail(t *testing.T, e *env) (*notifications.Service, *scriptedSender) {
+	t.Helper()
+	mail := &scriptedSender{}
+	return notifications.NewService(e.pool, mail, slog.New(slog.NewTextHandler(io.Discard, nil)), "https://app.example.com", "alerts@example.com",
+		notifications.WithSecretBox(testutil.SecretBox()), notifications.WithHTTPClient(newReceiver(t, 200).client())), mail
+}
+
+func TestAConfirmedEmailRecipientCanBeSentATestAlert(t *testing.T) {
 	e := newEnv(t, 5)
-	svc := newService(t, e, newReceiver(t, 200))
-	setting, _ := e.delivery(t, "a@example.com", "outage")
-	if err := svc.Test(t.Context(), e.org, setting); !errors.Is(err, notifications.ErrNotTestable) {
+	svc, mail := svcWithMail(t, e)
+	setting, _ := e.delivery(t, "ops@example.com", "outage") // a confirmed email recipient
+	if err := svc.Test(t.Context(), e.org, setting, "owner@example.com", nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(mail.sent) != 1 {
+		t.Fatalf("%d emails sent", len(mail.sent))
+	}
+	m := mail.sent[0]
+	if m.To != "ops@example.com" || m.From != "alerts@example.com" || m.Subject != "HawkEye test alert" {
+		t.Fatalf("%+v", m)
+	}
+	for _, want := range []string{"Your alerts are working", "Nothing is wrong", "ops@example.com", "owner@example.com", "https://app.example.com/notifications"} {
+		if !strings.Contains(m.Text, want) {
+			t.Errorf("test email missing %q:\n%s", want, m.Text)
+		}
+	}
+	if strings.Contains(m.HTML, "#ff8a80") {
+		t.Error("a test alert must never use the red outage colour")
+	}
+}
+
+func TestAnUnconfirmedAddressIsNeverSentATest(t *testing.T) {
+	e := newEnv(t, 5)
+	svc, mail := svcWithMail(t, e)
+	var id uuid.UUID
+	if err := e.pool.QueryRow(t.Context(), `INSERT INTO notification_settings (organization_id, channel, destination) VALUES ($1, 'email', 'stranger@example.com') RETURNING id`, e.org).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Test(t.Context(), e.org, id, "owner@example.com", nil); !errors.Is(err, notifications.ErrNotVerified) {
 		t.Fatalf("%v", err)
 	}
-	if err := svc.Test(t.Context(), e.org, uuid.New()); !errors.Is(err, notifications.ErrNotFound) {
+	if len(mail.sent) != 0 {
+		t.Fatal("an address that has not confirmed must never receive anything")
+	}
+}
+
+func TestTestAlertsAreRateLimitedPerAddressAndScopedToTheOrganization(t *testing.T) {
+	e := newEnv(t, 5)
+	svc, mail := svcWithMail(t, e)
+	setting, _ := e.delivery(t, "ops@example.com", "outage")
+	var asked string
+	deny := func(address string) bool { asked = address; return false }
+	if err := svc.Test(t.Context(), e.org, setting, "owner@example.com", deny); !errors.Is(err, notifications.ErrTestRateLimited) || asked != "ops@example.com" {
+		t.Fatalf("%v asked=%q", err, asked)
+	}
+	if len(mail.sent) != 0 {
+		t.Fatal("a rate-limited test must not send")
+	}
+	if err := svc.Test(t.Context(), e.org, uuid.New(), "owner@example.com", nil); !errors.Is(err, notifications.ErrNotFound) {
+		t.Fatalf("%v", err)
+	}
+	other := e.org
+	if err := e.pool.QueryRow(t.Context(), `INSERT INTO organizations (name) VALUES ('someone else') RETURNING id`).Scan(&other); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Test(t.Context(), other, setting, "x@example.com", nil); !errors.Is(err, notifications.ErrNotFound) {
+		t.Fatalf("another organization's recipient must look like it does not exist: %v", err)
+	}
+}
+
+func TestAFailedTestEmailIsReportedWithoutLeakingTheMailError(t *testing.T) {
+	e := newEnv(t, 5)
+	svc, mail := svcWithMail(t, e)
+	mail.errs = []error{errors.New("smtp: 550 secret-internal-relay-detail")}
+	setting, _ := e.delivery(t, "ops@example.com", "outage")
+	err := svc.Test(t.Context(), e.org, setting, "owner@example.com", nil)
+	if err == nil || strings.Contains(err.Error(), "secret-internal-relay-detail") {
 		t.Fatalf("%v", err)
 	}
 }

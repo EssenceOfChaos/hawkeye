@@ -21,6 +21,10 @@ type Alert struct {
 	From        string
 	To          string
 
+	// A test alert (EventTest, email only): who asked for it, and when it was sent (zero means now).
+	RequestedBy string
+	SentAt      time.Time
+
 	// Certificate warnings (EventSSLExpiry): when the certificate expires and which warning bucket (30, 14, 7, 1 days, 0 = expired) this is.
 	SSLExpiresAt time.Time
 	SSLBucket    int
@@ -61,6 +65,9 @@ func Render(a Alert) email.Message {
 	if a.Event == EventSSLExpiry {
 		return renderSSL(a, name, url)
 	}
+	if a.Event == EventTest {
+		return renderTest(a)
+	}
 	started := a.StartedAt.UTC().Format("2006-01-02 15:04 UTC")
 	c := email.Content{
 		ButtonLabel: "View incidents", ButtonURL: a.AppBaseURL + "/incidents", AppBaseURL: a.AppBaseURL,
@@ -97,6 +104,31 @@ func Render(a Alert) email.Message {
 		c.Facts = append(c.Facts, email.Fact{Label: "Incident status", Value: "Open"})
 	}
 	return c.Message(a.From, a.To, subject)
+}
+
+// renderTest is the email sent by "Send test" on the alert recipients page. It must be unmistakably a test, never something that looks like an outage:
+// no monitor, no red, and it says outright that nothing is wrong.
+func renderTest(a Alert) email.Message {
+	sent := a.SentAt
+	if sent.IsZero() {
+		sent = time.Now()
+	}
+	c := email.Content{
+		Preheader: "This is only a test. Nothing is wrong with your websites.",
+		Heading:   "Your alerts are working",
+		Paragraphs: []string{
+			"This is a test alert from HawkEye. If you can read this, real alerts will reach this address.",
+			"Nothing is wrong: no website is offline and nothing needs your attention.",
+		},
+		Facts:       []email.Fact{{Label: "Sent to", Value: clean(a.To)}},
+		ButtonLabel: "Manage alert recipients", ButtonURL: a.AppBaseURL + "/notifications", AppBaseURL: a.AppBaseURL,
+		Note: "A real alert looks like this too: red when a website may be offline, green when it is back online.",
+	}
+	if a.RequestedBy != "" {
+		c.Facts = append(c.Facts, email.Fact{Label: "Requested by", Value: clean(a.RequestedBy)})
+	}
+	c.Facts = append(c.Facts, email.Fact{Label: "Sent at", Value: sent.UTC().Format("2006-01-02 15:04 UTC")})
+	return c.Message(a.From, a.To, "HawkEye test alert")
 }
 
 // sslLeft describes the time until expiry in words ("12 days", "1 day", "less than a day").

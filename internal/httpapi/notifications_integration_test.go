@@ -296,8 +296,61 @@ func TestWebhookAndSlackDestinationsAreValidatedBeforeAnythingIsSent(t *testing.
 
 	list := c.call("GET", "/api/v1/notification-settings", nil).Body["notification_settings"].([]any)
 	id := list[0].(map[string]any)["id"].(string)
-	if r := c.call("POST", "/api/v1/notification-settings/"+id+"/test", nil); r.Status != 400 || errCode(r) != "VALIDATION_ERROR" {
-		t.Fatalf("an email destination has no test message: %d %v", r.Status, r.Body)
+	// The owner's own (confirmed) email address can be sent a test alert.
+	before := len(e.mail.Messages())
+	if r := c.call("POST", "/api/v1/notification-settings/"+id+"/test", nil); r.Status != 204 {
+		t.Fatalf("a test alert to a confirmed email recipient: %d %v", r.Status, r.Body)
+	}
+	if msgs := e.mail.Messages(); len(msgs) != before+1 || msgs[len(msgs)-1].To != "owner@example.com" || msgs[len(msgs)-1].Subject != "HawkEye test alert" {
+		t.Fatalf("expected one test alert email to the owner, got %+v", e.mail.Messages())
+	}
+}
+
+func TestTestAlertsNeverReachAnUnconfirmedAddressAndAreRateLimited(t *testing.T) {
+	e := newEnvOpts(t, 1000, envOpts{shared: true, emailPerH: 2}) // the real, database-backed per-address limiter: 2 emails per address per hour
+	c, _ := e.register(t, "owner@example.com")
+	e.verify(t, c, "owner@example.com")
+
+	// Adding another address emails it a confirmation link; until it confirms, a test must not be possible.
+	created := c.call("POST", "/api/v1/notification-settings", map[string]string{"channel": "email", "destination": "stranger@example.com"})
+	if created.Status != 201 {
+		t.Fatalf("%d %v", created.Status, created.Body)
+	}
+	strangerID := created.Body["notification_setting"].(map[string]any)["id"].(string)
+	sent := len(e.mail.Messages())
+	if r := c.call("POST", "/api/v1/notification-settings/"+strangerID+"/test", nil); r.Status != 409 || errCode(r) != "NOT_VERIFIED" {
+		t.Fatalf("a test to an unconfirmed address: %d %v", r.Status, r.Body)
+	}
+	if len(e.mail.Messages()) != sent {
+		t.Fatal("an unconfirmed address was emailed")
+	}
+
+	// The owner's own address: a few tests are fine, then the per-address limit stops it.
+	list := c.call("GET", "/api/v1/notification-settings", nil).Body["notification_settings"].([]any)
+	var ownID string
+	for _, it := range list {
+		if m := it.(map[string]any); m["destination"] == "owner@example.com" {
+			ownID = m["id"].(string)
+		}
+	}
+	limited := false
+	for range 6 {
+		if r := c.call("POST", "/api/v1/notification-settings/"+ownID+"/test", nil); r.Status == 429 {
+			limited = true
+			break
+		}
+	}
+	if !limited {
+		t.Fatal("repeated test alerts to one address were never rate limited")
+	}
+	tests := 0
+	for _, m := range e.mail.Messages() {
+		if m.Subject == "HawkEye test alert" {
+			tests++
+		}
+	}
+	if tests != 2 {
+		t.Fatalf("%d test alerts were sent; the per-address limit is 2 an hour", tests)
 	}
 }
 

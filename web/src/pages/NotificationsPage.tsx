@@ -30,6 +30,7 @@ export function NotificationsPage() {
   const [secret, setSecret] = useState<string | null>(null)
   const [fieldError, setFieldError] = useState<string | undefined>()
   const [busy, setBusy] = useState(false)
+  const [testing, setTesting] = useState<string | null>(null) // the recipient a test is being sent to right now
 
   const load = useCallback(async () => {
     try {
@@ -57,6 +58,19 @@ export function NotificationsPage() {
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'That did not work. Try again.')
     }
+  }
+
+  /** Sends a test alert to one recipient: a test email, or a signed test request to a Slack or webhook URL. */
+  async function sendTest(s: NotificationSetting) {
+    if (testing) return
+    setTesting(s.id)
+    const sent =
+      s.channel === 'email'
+        ? `A test alert was sent to ${s.destination}. It should arrive within a minute; if it doesn’t, check the spam folder.`
+        : 'Test message sent.'
+    const off = s.enabled ? '' : ' Alerts are turned off for this recipient, so real alerts will not be sent here until you turn them on.'
+    await run(() => api('POST', `/notification-settings/${s.id}/test`), sent + off)
+    setTesting(null)
   }
 
   async function add(e: FormEvent) {
@@ -132,9 +146,11 @@ export function NotificationsPage() {
                   <td><StatusLabel s={s} /></td>
                   {isOwner && (
                     <td className="actions">
-                      {s.verified && s.channel !== 'email' && (
-                        <span className="d-tooltip" data-tip="Deliver a test message to this destination now">
-                          <button onClick={() => void run(() => api('POST', `/notification-settings/${s.id}/test`), 'Test message sent.')}>Send test</button>
+                      {s.verified && (
+                        <span className="d-tooltip" data-tip={s.channel === 'email' ? 'Email a test alert to this address now' : 'Deliver a test message to this destination now'}>
+                          <button type="button" disabled={testing !== null} onClick={() => void sendTest(s)}>
+                            {testing === s.id ? 'Sending…' : 'Send test alert'}
+                          </button>
                         </span>
                       )}
                       {s.verified ? (

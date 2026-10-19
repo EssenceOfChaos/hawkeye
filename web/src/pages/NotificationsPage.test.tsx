@@ -97,7 +97,7 @@ describe('NotificationsPage', () => {
       onPost: () => json(201, { notification_setting: { ...mk('new', 'hooks.example.com/…'), channel: 'webhook' }, signing_secret: 'whsec_abc' }),
     })
     await screen.findByText('me@example.com')
-    expect(screen.getByRole('button', { name: 'Send test' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Send test alert' })).toHaveLength(2) // the confirmed email address and the webhook
     await userEvent.selectOptions(screen.getByLabelText('Channel'), 'webhook')
     await userEvent.type(screen.getByLabelText('Webhook URL'), 'https://example.com/hook')
     await userEvent.click(screen.getByRole('button', { name: 'Add destination' }))
@@ -111,5 +111,56 @@ describe('NotificationsPage', () => {
     await screen.findByText('me@example.com')
     await userEvent.selectOptions(screen.getByLabelText('Channel'), 'slack')
     expect(screen.getByLabelText('Slack incoming webhook URL')).toBeInTheDocument()
+  })
+
+  describe('sending a test alert', () => {
+    it('emails a confirmed recipient and says where to look', async () => {
+      const calls = setup({ items: [mk('1', 'me@example.com', { user_id: 'u' }), mk('2', 'ops@example.com')] })
+      await screen.findByText('ops@example.com')
+      const row = screen.getByText('ops@example.com').closest('tr')!
+      await userEvent.click(within(row).getByRole('button', { name: 'Send test alert' }))
+      expect(await screen.findByText(/A test alert was sent to ops@example.com/)).toBeInTheDocument()
+      expect(screen.getByText(/check the spam folder/)).toBeInTheDocument()
+      expect(calls.some((c) => c === 'POST /api/v1/notification-settings/2/test')).toBe(true)
+      expect(calls.filter((c) => c.endsWith('/test'))).toHaveLength(1) // only that recipient
+    })
+
+    it('does not offer a test to an address that has not confirmed yet', async () => {
+      setup({ items: [mk('1', 'me@example.com', { user_id: 'u' }), mk('2', 'client@example.com', { verified: false })] })
+      await screen.findByText('client@example.com')
+      const row = screen.getByText('client@example.com').closest('tr')!
+      expect(within(row).queryByRole('button', { name: /Send test alert/ })).not.toBeInTheDocument()
+      expect(within(row).getByRole('button', { name: 'Resend confirmation' })).toBeInTheDocument()
+    })
+
+    it('warns when the recipient is turned off, since real alerts would not reach it', async () => {
+      setup({ items: [mk('1', 'me@example.com', { user_id: 'u' }), mk('2', 'off@example.com', { enabled: false })] })
+      await screen.findByText('off@example.com')
+      const row = screen.getByText('off@example.com').closest('tr')!
+      await userEvent.click(within(row).getByRole('button', { name: 'Send test alert' }))
+      expect(await screen.findByText(/Alerts are turned off for this recipient/)).toBeInTheDocument()
+    })
+
+    it('shows the server’s message when too many tests were sent to one address', async () => {
+      setup({
+        items: [mk('1', 'me@example.com', { user_id: 'u' })],
+        onPost: () => json(429, { error: { code: 'RATE_LIMITED', message: 'Too many requests. Try again later.' } }),
+      })
+      await screen.findByText('me@example.com')
+      // the test POST goes to /test, which the shared mock does not special-case: simulate the limit on that route
+      vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+        if (url.includes('/auth/me')) return json(200, { user: { id: 'u', email: 'me@example.com', email_verified_at: '2026-01-01T00:00:00Z' }, organizations: [{ id: 'o', name: 'Org', role: 'owner' }] })
+        if (url.endsWith('/test') && init?.method === 'POST') return json(429, { error: { code: 'RATE_LIMITED', message: 'Too many requests. Try again later.' } })
+        return json(200, { notification_settings: [mk('1', 'me@example.com', { user_id: 'u' })], max: 10 })
+      }))
+      await userEvent.click(screen.getByRole('button', { name: 'Send test alert' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('Too many requests')
+    })
+
+    it('shows no test buttons to members, who may only view recipients', async () => {
+      setup({ role: 'member', items: [mk('1', 'me@example.com', { user_id: 'u' })] })
+      await screen.findByText('me@example.com')
+      expect(screen.queryByRole('button', { name: /Send test alert/ })).not.toBeInTheDocument()
+    })
   })
 })

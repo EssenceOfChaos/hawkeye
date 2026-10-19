@@ -73,3 +73,73 @@ export function inScope(root: HTMLElement, setup: (add: (cleanup: () => void) =>
     scope.revert()
   }
 }
+
+/**
+ * Tilts `frame` a few degrees toward the pointer while it hovers, and settles it back on leave. Mouse-like pointers only: on touch screens there is no hover,
+ * and a tilt that sticks after a tap would look broken. Returns its cleanup.
+ */
+export function tiltOnHover(frame: HTMLElement, maxDeg = 3): () => void {
+  if (typeof window.matchMedia !== 'function' || !window.matchMedia('(hover: hover) and (pointer: fine)').matches) return () => {}
+  let raf = 0
+  const onMove = (e: PointerEvent) => {
+    cancelAnimationFrame(raf)
+    raf = requestAnimationFrame(() => {
+      const r = frame.getBoundingClientRect()
+      const x = (e.clientX - r.left) / r.width - 0.5
+      const y = (e.clientY - r.top) / r.height - 0.5
+      animate(frame, { rotateY: x * maxDeg * 2, rotateX: -y * maxDeg * 2, translateY: -4, duration: 240, ease: 'outQuad' })
+    })
+  }
+  const onLeave = () => {
+    cancelAnimationFrame(raf)
+    animate(frame, { rotateX: 0, rotateY: 0, translateY: 0, duration: 600, ease: 'outElastic(1, .6)' })
+  }
+  frame.addEventListener('pointermove', onMove)
+  frame.addEventListener('pointerleave', onLeave)
+  return () => {
+    cancelAnimationFrame(raf)
+    frame.removeEventListener('pointermove', onMove)
+    frame.removeEventListener('pointerleave', onLeave)
+  }
+}
+
+/** A looping pulse (expanding rings) that only runs while `host` is on screen, so it costs nothing off-screen. Returns its cleanup. */
+export function pingWhileVisible(host: HTMLElement): () => void {
+  const rings = Array.from(host.querySelectorAll<HTMLElement>('.ring'))
+  if (rings.length === 0 || typeof IntersectionObserver === 'undefined') return () => {}
+  const pulse = animate(rings, {
+    scale: [1, 3],
+    opacity: [0.55, 0],
+    duration: 2000,
+    ease: 'outCubic',
+    delay: stagger(700),
+    loop: true,
+    autoplay: false,
+  })
+  const io = new IntersectionObserver((entries) => entries.forEach((e) => (e.isIntersecting ? pulse.play() : pulse.pause())), { threshold: 0.3 })
+  io.observe(host)
+  return () => {
+    io.disconnect()
+    pulse.revert()
+  }
+}
+
+/**
+ * The motion for the product screenshots, run inside a scope: each `[data-reveal]` figure fades up in a stagger as the group scrolls into view, a gold sheen
+ * sweeps once across every screenshot after it appears, screenshots tilt toward the pointer on hover, and the alert email's dot pings while visible.
+ */
+export function animateShots(group: HTMLElement, add: (cleanup: () => void) => void) {
+  revealOnScroll(group)
+  const sheens = Array.from(group.querySelectorAll<HTMLElement>('.shot-sheen'))
+  if (sheens.length > 0) {
+    animate(sheens, {
+      translateX: ['-130%', '260%'],
+      duration: 1600,
+      ease: 'inOutSine',
+      delay: stagger(280, { start: 900 }), // after the figures have faded in
+      autoplay: onScroll({ target: group, enter: 'bottom-=15% top', sync: 'play', repeat: false }),
+    })
+  }
+  group.querySelectorAll<HTMLElement>('.shot-frame').forEach((f) => add(tiltOnHover(f)))
+  group.querySelectorAll<HTMLElement>('.shot-ping').forEach((p) => add(pingWhileVisible(p)))
+}
