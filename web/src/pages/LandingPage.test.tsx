@@ -123,7 +123,7 @@ describe('LandingPage', () => {
     expect(truth.compareDocumentPosition(features) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const section = truth.closest('section')!
     expect(within(section).getByText(/only after consecutive failed checks/)).toBeInTheDocument()
-    expect(within(section).getByText(/checks its own connection/)).toBeInTheDocument()
+    expect(within(section).getByText(/verifies its own connection/)).toBeInTheDocument()
     expect(screen.getByText('Outages confirmed before alerts')).toBeInTheDocument()
   })
 
