@@ -60,7 +60,7 @@ export function MonitoringLandingPage() {
       <section className="mon-hero" aria-labelledby="mon-h1">
         <img className="mon-hero-bg" src={brand.art.hawkEye} alt="" width={1672} height={941} decoding="async" />
         <div className="mon-hero-inner">
-          <p className="eyebrow">Website monitoring, without the guesswork</p>
+          <p className="eyebrow"><span className="eyebrow-part">Website monitoring,</span> <span className="eyebrow-part">without the guesswork</span></p>
           <div className="mon-hero-copy">
             <h1 id="mon-h1">Know Before <span className="gold">Your <span className="nowrap">Customers Do.</span></span></h1>
             <p>
@@ -99,7 +99,7 @@ export function MonitoringLandingPage() {
         <img className="mon-earth-bg" src={brand.art.earth} alt="" width={1774} height={887} loading="lazy" decoding="async" />
         <div className="mon-earth-copy">
           <p className="eyebrow">Reduce false alarms</p>
-          <h2 id="mon-truth-h">A failed check is <span className="gold">not an incident.</span></h2>
+          <h2 id="mon-truth-h">A failed check is <span className="gold">not <span className="nowrap">an incident.</span></span></h2>
           <p>
             A site counts as offline only after consecutive failed checks, and as recovered only after consecutive successful ones. HawkEye also verifies its own
             connection before reporting an outage: if other trusted websites are unreachable too, it disregards the failed check to help prevent false alarms.
@@ -149,7 +149,10 @@ export function MonitoringLandingPage() {
       <section className="mon-final" aria-labelledby="mon-final-h">
         <img className="mon-hero-bg" src={brand.art.hawkEye} alt="" width={1672} height={941} loading="lazy" decoding="async" />
         <div className="mon-final-inner">
-          <h2 id="mon-final-h">Your website doesn’t clock out. <span className="gold">Neither should your monitoring.</span></h2>
+          <h2 id="mon-final-h">
+            <span className="line">Your website doesn’t <span className="nowrap">clock out.</span></span>
+            <span className="line gold">Neither should <span className="nowrap">your monitoring.</span></span>
+          </h2>
           <div className="row">
             <Link className="button primary large" to={ctaTo}>{cta}</Link>
           </div>

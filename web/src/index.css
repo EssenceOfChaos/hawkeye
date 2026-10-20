@@ -430,7 +430,7 @@ main.auth .card p a { font-weight: 600; }
 /* A dark wash from the text side keeps the copy readable over the artwork. */
 .mon-hero::after, .mon-earth::after, .mon-final::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; }
 .mon-hero::after { background: linear-gradient(90deg, #020b17f2 0%, #020b17cc 38%, #020b1700 75%); }
-.mon-earth::after { background: linear-gradient(90deg, #020b17f5 0%, #020b17d9 40%, #020b1722 80%); }
+.mon-earth::after { background: linear-gradient(90deg, #020b17f5 0%, #020b17e6 45%, #020b1740 80%, #020b1722 100%); }
 .mon-final::after { background: linear-gradient(90deg, #020b17f5 0%, #020b17b0 55%, #020b1760 100%); }
 .mon-hero-inner { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); grid-template-areas: 'eyebrow eyebrow' 'copy art'; gap: .5rem 1.5rem; align-items: center; padding: clamp(1.5rem, 4vw, 3.5rem); }
 .mon-hero h1 { font-size: clamp(1.5rem, 7.6vw, 2.6rem); line-height: 1.08; margin: .25rem 0 1rem; font-family: var(--font-display); text-wrap: balance; }
@@ -450,15 +450,23 @@ main.auth .card p a { font-weight: 600; }
 @media (max-width: 40rem) { .mon .mon-benefits, .mon .audiences { grid-template-columns: 1fr; } }
 @media (min-width: 40.01rem) and (max-width: 52rem) { .mon .audiences { grid-template-columns: 1fr; } }
 .mon-earth { padding: clamp(1.5rem, 4vw, 3.5rem); min-height: 22rem; display: flex; align-items: center; }
-.mon-earth-copy { max-width: 36rem; }
+.mon-earth-copy { max-width: none; }
+/* The heading may run out over the artwork; only the reading text keeps a narrow measure. */
+.mon-earth-copy p { max-width: 36rem; }
+.mon-earth-copy h2, .mon-earth-copy p { text-shadow: 0 1px 14px #020b17, 0 0 3px #020b17b0; }
+.mon h2 { text-wrap: balance; }
 .mon-earth h2 { font-size: clamp(1.8rem, 4vw, 2.6rem); line-height: 1.12; margin: .25rem 0 1rem; font-family: var(--font-display); }
 .mon-earth-note { padding: .75rem 1rem; border: 1px solid var(--border); border-radius: .6rem; background: #07162acc; font-size: .95rem; }
 .mon-final { padding: clamp(2rem, 6vw, 4.5rem) clamp(1.5rem, 4vw, 3.5rem); margin-bottom: 1rem; }
-.mon-final-inner { max-width: 34rem; }
+.mon-final-inner { max-width: 46rem; }
 .mon-final h2 { font-size: clamp(1.6rem, 3.6vw, 2.3rem); line-height: 1.15; margin: 0; font-family: var(--font-display); }
+/* Each sentence is its own line, and its last words stay together, so "monitoring." is never left alone. */
+.mon-final h2 .line { display: block; text-wrap: balance; }
 .mon-footer { max-width: 70rem; margin: 2rem auto 0; padding: 1.25rem 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; justify-content: space-between; font-size: .9rem; color: var(--muted); box-sizing: border-box; }
 .mon-footer nav { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; }
 .mon-footer a, .mon-footer .link-button { color: inherit; }
+/* Small screens: break the eyebrow after the comma ("Website monitoring," / "without the guesswork") and size it so each half fits on its own line. */
+@media (max-width: 40rem) { .mon-hero .eyebrow { font-size: clamp(.6rem, 3.1vw, .8rem); letter-spacing: .08em; } .mon-hero .eyebrow-part { display: block; white-space: nowrap; } }
 @media (max-width: 52rem) {
   .mon-hero-inner { grid-template-columns: 1fr; grid-template-areas: 'eyebrow' 'copy' 'art'; }
   .mon-hero::after { background: linear-gradient(180deg, #020b17f2 0%, #020b17cc 55%, #020b1788 100%); }
