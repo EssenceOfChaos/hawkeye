@@ -122,6 +122,9 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .landing-header { display: flex; align-items: center; gap: 1rem; padding-top: 1rem; padding-bottom: 1rem; }
 .landing-logo { height: auto; }
 @media (max-width: 480px) { .landing-logo { width: 150px; } .landing-header { gap: .6rem; } }
+.landing-header a { white-space: nowrap; }
+/* The smallest phones (320px): a smaller logo and button so "Log in" and "Start free" both fit on one line. */
+@media (max-width: 22.5rem) { .landing-logo { width: 120px; } .landing-header { gap: .5rem; } .landing-header .button { padding: .45rem .7rem; font-size: .9rem; } }
 .hero { display: grid; grid-template-columns: 1fr 1fr; grid-template-areas: 'title title' 'text art'; column-gap: 2rem; row-gap: 1rem; align-items: center; padding-top: 2rem; padding-bottom: 3rem; }
 .hero-title { grid-area: title; }
 .hero-text { grid-area: text; }
@@ -429,10 +432,15 @@ main.auth .card p a { font-weight: 600; }
 .mon-hero::after { background: linear-gradient(90deg, #020b17f2 0%, #020b17cc 38%, #020b1700 75%); }
 .mon-earth::after { background: linear-gradient(90deg, #020b17f5 0%, #020b17d9 40%, #020b1722 80%); }
 .mon-final::after { background: linear-gradient(90deg, #020b17f5 0%, #020b17b0 55%, #020b1760 100%); }
-.mon-hero-inner { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 1.5rem; align-items: center; padding: clamp(1.5rem, 4vw, 3.5rem); }
-.mon-hero h1 { font-size: clamp(2.2rem, 5.2vw, 3.6rem); line-height: 1.08; margin: .25rem 0 1rem; font-family: var(--font-display); }
+.mon-hero-inner { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); grid-template-areas: 'eyebrow eyebrow' 'copy art'; gap: .5rem 1.5rem; align-items: center; padding: clamp(1.5rem, 4vw, 3.5rem); }
+.mon-hero h1 { font-size: clamp(1.5rem, 7.6vw, 2.6rem); line-height: 1.08; margin: .25rem 0 1rem; font-family: var(--font-display); text-wrap: balance; }
+.mon .nowrap { white-space: nowrap; }
+/* Sized so "Know Before Your" always fits the text column: the only line breaks are then "Know Before Your / Customers Do." or one line, never a lone "Do." or "Your". */
+@media (min-width: 52.01rem) { .mon-hero h1 { font-size: clamp(2rem, 4.4vw, 3.2rem); } }
 .mon-hero p { font-size: 1.1rem; max-width: 34rem; }
-.mon-hero .eyebrow { max-width: none; }
+.mon-hero .eyebrow { grid-area: eyebrow; max-width: none; margin: 0; }
+.mon-hero-copy { grid-area: copy; }
+.mon-hero-laptop { grid-area: art; }
 .mon-hero-laptop { width: 100%; height: auto; filter: drop-shadow(0 30px 40px #000a); }
 .mon .row { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; margin: 1.25rem 0 .5rem; }
 .mon a.button:not(.primary) { text-decoration: none; background: #07162acc; color: var(--text); border: 1px solid var(--gold-lo); }
@@ -452,7 +460,7 @@ main.auth .card p a { font-weight: 600; }
 .mon-footer nav { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; }
 .mon-footer a, .mon-footer .link-button { color: inherit; }
 @media (max-width: 52rem) {
-  .mon-hero-inner { grid-template-columns: 1fr; }
+  .mon-hero-inner { grid-template-columns: 1fr; grid-template-areas: 'eyebrow' 'copy' 'art'; }
   .mon-hero::after { background: linear-gradient(180deg, #020b17f2 0%, #020b17cc 55%, #020b1788 100%); }
   .mon-earth::after { background: linear-gradient(180deg, #020b17f5 0%, #020b17d0 60%, #020b1790 100%); }
 }

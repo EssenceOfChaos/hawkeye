@@ -60,9 +60,9 @@ export function MonitoringLandingPage() {
       <section className="mon-hero" aria-labelledby="mon-h1">
         <img className="mon-hero-bg" src={brand.art.hawkEye} alt="" width={1672} height={941} decoding="async" />
         <div className="mon-hero-inner">
+          <p className="eyebrow">Website monitoring, without the guesswork</p>
           <div className="mon-hero-copy">
-            <p className="eyebrow">Website monitoring, without the guesswork</p>
-            <h1 id="mon-h1">Know Before <span className="gold">Your Customers Do.</span></h1>
+            <h1 id="mon-h1">Know Before <span className="gold">Your <span className="nowrap">Customers Do.</span></span></h1>
             <p>
               HawkEye monitors your websites and APIs, tracks response times, and alerts you when an outage is confirmed, so you can investigate problems before
               your customers have to tell you.
