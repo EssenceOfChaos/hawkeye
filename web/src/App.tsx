@@ -1,7 +1,9 @@
-import { Suspense } from 'react'
+import { Suspense, useEffect } from 'react'
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router'
+import { trackPageView } from './analytics'
 import { AuthProvider, useAuth } from './auth'
 import { lazyWithReload } from './chunkReload'
+import { CookieBanner } from './components/CookieBanner'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
 import { ConfirmAlertAddressPage, ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage, VerifyEmailPage } from './pages/AuthPages'
@@ -10,6 +12,7 @@ import { ContactPage } from './pages/ContactPage'
 import { BillingPage } from './pages/BillingPage'
 import { IncidentsPage } from './pages/IncidentsPage'
 import { LandingPage } from './pages/LandingPage'
+import { MonitoringLandingPage } from './pages/MonitoringLandingPage'
 import { MaintenancePage } from './pages/MaintenancePage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { MonitorFormPage } from './pages/MonitorFormPage'
@@ -54,6 +57,7 @@ export function AppRoutes() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       </Route>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/monitoring" element={<MonitoringLandingPage />} />
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
@@ -82,6 +86,7 @@ export function AppRoutes() {
 /** Routes inside an error boundary that resets when the page changes. */
 function GuardedRoutes() {
   const { pathname } = useLocation()
+  useEffect(() => trackPageView(pathname), [pathname])
   return (
     <ErrorBoundary resetKey={pathname}>
       <AppRoutes />
@@ -94,6 +99,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <GuardedRoutes />
+        <CookieBanner />
       </AuthProvider>
     </BrowserRouter>
   )

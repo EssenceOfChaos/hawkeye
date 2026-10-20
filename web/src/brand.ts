@@ -15,6 +15,8 @@ import emblem from './assets/brand/emblem.png'
 import screenAlertEmail from './assets/brand/screens/alert-email.webp'
 import screenDashboard from './assets/brand/screens/dashboard.webp'
 import screenIncidents from './assets/brand/screens/incidents.webp'
+import monitoringEarth from './assets/brand/monitoring-earth-network.webp'
+import monitoringHawkEye from './assets/brand/monitoring-hawk-eye.webp'
 import logo from './assets/brand/logo.png'
 import logoWhite from './assets/brand/logo-white.png'
 
@@ -28,6 +30,8 @@ export const brand = {
   /** Square app icon with its own navy background; safe on any theme. */
   appIcon,
   dashboardLaptop,
+  /** Background art for the /monitoring page (scripts/prepare_monitoring_art.py): a gold hawk's eye on navy, and the night Earth with connection arcs. No text in either. */
+  art: { hawkEye: monitoringHawkEye, earth: monitoringEarth },
   /** Real screens of the app with sample data (scripts/screenshots): the dashboard, the incidents list and the alert email. */
   screens: { dashboard: screenDashboard, incidents: screenIncidents, alertEmail: screenAlertEmail },
   /** Glossy gold-ringed round badges (scripts/prepare_glossy_icons.py); each carries its own navy, so they work on any background. */

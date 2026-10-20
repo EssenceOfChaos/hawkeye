@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, ApiError } from './api'
+import { api, ApiError, type Plan } from './api'
 
 interface State<T> {
   data: T | null
@@ -31,4 +31,24 @@ export function useApi<T>(path: string | null): State<T> {
   }, [path])
 
   return state
+}
+
+/** The public plan list (null while loading, [] if it could not be loaded) and whether paid checkout is switched on. Shared by the landing pages. */
+export function usePlans() {
+  const [plans, setPlans] = useState<Plan[] | null>(null)
+  const [billingEnabled, setBillingEnabled] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    api<{ plans: Plan[]; billing_enabled?: boolean }>('GET', '/plans')
+      .then((r) => {
+        if (cancelled) return
+        setPlans(r.plans)
+        setBillingEnabled(Boolean(r.billing_enabled))
+      })
+      .catch(() => !cancelled && setPlans([]))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  return { plans, billingEnabled }
 }

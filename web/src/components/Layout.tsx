@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
+import { CookieSettingsButton } from './CookieBanner'
 import { api } from '../api'
 import { Alert } from './Alert'
 import { useAuth } from '../auth'
@@ -71,7 +72,7 @@ export function Layout() {
         <Outlet />
       </main>
       <footer className="app-footer">
-        <Link to="/contact">Contact</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link>
+        <Link to="/contact">Contact</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link> · <CookieSettingsButton />
       </footer>
     </>
   )

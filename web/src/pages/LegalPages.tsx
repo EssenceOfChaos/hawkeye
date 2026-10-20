@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 import { brand } from '../brand'
+import { CookieSettingsButton } from '../components/CookieBanner'
 
 function Shell({ title, children, draft = true }: { title: string; children: React.ReactNode; draft?: boolean }) {
   return (
@@ -16,7 +17,7 @@ function Shell({ title, children, draft = true }: { title: string; children: Rea
         )}
         <h1>{title}</h1>
         {children}
-        <p className="hint"><Link to="/contact">Contact us</Link> · <Link to="/privacy">Privacy policy</Link> · <Link to="/terms">Terms of service</Link> · <Link to="/">Home</Link></p>
+        <p className="hint"><Link to="/contact">Contact us</Link> · <Link to="/privacy">Privacy policy</Link> · <Link to="/terms">Terms of service</Link> · <CookieSettingsButton /> · <Link to="/">Home</Link></p>
       </main>
     </div>
   )
@@ -97,7 +98,10 @@ export function PrivacyPage() {
         To limit abuse we keep short-lived rate-limit counters. They are keyed by a one-way hash of the IP address or email address involved and are deleted within 24 hours.
       </p>
       <p>
-        We do not currently use a third-party analytics, advertising, or error-tracking service. If that changes, we will update this Policy first.
+        We use <strong>Google Analytics</strong> (provided by Google LLC) to understand how people use our website, for example which pages are visited and from what kind of device. Google receives the
+        page address (without any query string or fragment, so one-time links and tokens are not shared; the one exception is campaign tags such as <code>utm_source</code> and advertising click identifiers, which tell us which of our ads or links brought you here and contain no personal information), the page title, whether you created an account (an event with no name or email attached), your IP address, browser and device information, and an identifier stored in a cookie, and it processes
+        them for us under its own terms. We turn off Google’s advertising features and ad personalization, and we do not send your name, email address, or monitoring data to Google. You can turn analytics off at any time (see Section E), and we also treat a Global Privacy Control signal from your browser as a choice to opt out. When analytics is off, no Google script is loaded and nothing is sent to Google. We do not use an advertising or
+        error-tracking service. If that changes, we will update this Policy first.
       </p>
 
       <h3>D. Subscription and payment information</h3>
@@ -113,19 +117,23 @@ export function PrivacyPage() {
       </p>
 
       <h3>E. Cookies and similar technologies</h3>
-      <p>HawkEye uses only the cookies it needs to work. We do not use advertising, tracking, or analytics cookies, pixels, or local storage, and we host our fonts ourselves so your browser does not contact a font provider.</p>
+      <p>HawkEye always uses the cookies it needs to work. Google Analytics cookies, which measure how the site is used, are set by default, and you can turn them off at any time (see below). We do not use advertising cookies or pixels, and we host our fonts ourselves so your browser does not contact a font provider.</p>
       <table>
         <thead><tr><th>Cookie</th><th>Purpose</th><th>Category</th><th>Lifetime</th></tr></thead>
         <tbody>
           <tr><td><code>hawkeye_session</code></td><td>Keeps you signed in. HTTP-only, SameSite=Lax, and Secure.</td><td>Strictly necessary</td><td>Up to 14 days, or until you sign out</td></tr>
           <tr><td><code>csrf_token</code></td><td>Protects your account against cross-site request forgery.</td><td>Strictly necessary</td><td>Up to 24 hours</td></tr>
+          <tr><td><code>hawkeye_analytics</code></td><td>Remembers your analytics choice (on or off) if you use “Cookie settings.”</td><td>Strictly necessary</td><td>1 year</td></tr>
+          <tr><td><code>_ga</code>, <code>_ga_ZNT8EMTFGY</code></td><td>Set by Google Analytics, unless you turn analytics off, to tell visitors and sessions apart and measure site usage.</td><td>Analytics (opt-out)</td><td>Up to 2 years</td></tr>
         </tbody>
       </table>
       <p>
-        Because these cookies are strictly necessary to provide the Service you ask for, we do not show a cookie consent banner. When you pay, Stripe’s hosted checkout page may set its own cookies; see Stripe’s
+        The sign-in, security, and cookie-choice cookies are strictly necessary to provide the Service you ask for. The Google Analytics cookies are not, so you are free to refuse them: use the “Cookie settings” link at the bottom
+        of our pages and choose “Turn off analytics,” which stops Google Analytics and deletes its cookies. If your browser sends a Global Privacy Control signal, we treat that as turning analytics off. You can also block or delete cookies in your browser settings, or install Google’s <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener noreferrer">Analytics opt-out browser add-on</a>; the Service works the same without them. Google’s handling of the data is described in its
+        <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">“How Google uses information from sites or apps that use our services”</a> page. When you pay, Stripe’s hosted checkout page may set its own cookies; see Stripe’s
         policies. Our emails do not contain tracking pixels and we do not track email opens or link clicks.
       </p>
-      <p>If we ever add non-essential cookies or analytics, we will update this Policy and, where the law requires, ask for your consent before using them.</p>
+      <p>If we add other non-essential cookies, we will update this Policy and, where the law requires, ask for your consent before using them.</p>
 
       <h2>3. How We Use Information</h2>
       <p>We use information to:</p>
@@ -143,7 +151,7 @@ export function PrivacyPage() {
       </ul>
       <p>
         Where applicable law requires a legal basis for processing, we rely on: performance of a contract (providing the Service you signed up for); our legitimate interests in operating,
-        securing, and improving the Service and preventing abuse, which are not overridden by your rights; compliance with legal obligations; and consent, where we ask for it. We do not use your
+        securing, and improving the Service and preventing abuse, which are not overridden by your rights; compliance with legal obligations; and consent, where we ask for it. Our legitimate interest in understanding how the website is used is the basis for Google Analytics, and you can opt out at any time. We do not use your
         information for advertising and we do not make decisions about you by automated means that have legal or similarly significant effects.
       </p>
 
@@ -158,6 +166,7 @@ export function PrivacyPage() {
         <li><strong>Resend</strong>: delivery of our emails, such as verification, password reset, and alert emails. Resend processes the recipient address and the content of those emails.</li>
         <li><strong>Cloudflare</strong>: domain name (DNS) services and the forwarding of messages sent to our support address.</li>
         <li><strong>Google (Gmail)</strong>: the mailbox where we read and answer support messages.</li>
+        <li><strong>Google (Analytics)</strong>: website usage analytics, unless you opt out, as described in Section 2.C and E. Google receives page addresses without query strings or fragments, your IP address, and browser and device information.</li>
       </ul>
 
       <h3>B. Payment processing</h3>

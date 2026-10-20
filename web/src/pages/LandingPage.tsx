@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { Link } from 'react-router'
-import { api, type Plan } from '../api'
+import { type Plan } from '../api'
 import { formatMoney } from '../format'
+import { usePlans } from '../hooks'
 import { planTagline } from '../planCopy'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
+import { CookieSettingsButton } from '../components/CookieBanner'
 import { ProductShots } from '../components/ProductShots'
 import { Reveal } from '../components/Reveal'
 import { inScope, parallax, prefersReducedMotion, rotateScramble } from '../motion'
@@ -114,7 +116,7 @@ const FAQ = [
   { q: 'What happens if I downgrade?', a: 'Your existing monitors are never deleted automatically. You may not be able to add new ones until you are within the new plan’s limits, and history older than the new plan’s retention period is removed. Maintenance windows you already created keep working, but you cannot create new ones until you are on a paid plan.' },
 ]
 
-function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: Plan; featured: boolean; billingEnabled: boolean; signedIn: boolean }) {
+export function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: Plan; featured: boolean; billingEnabled: boolean; signedIn: boolean }) {
   const mins = Math.round(plan.minimum_check_interval_seconds / 60)
   const card = (
     <div className={`plan${featured ? ' featured' : ''}`}>
@@ -150,23 +152,8 @@ function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: Plan; fe
 
 export function LandingPage() {
   const { status } = useAuth()
-  const [plans, setPlans] = useState<Plan[] | null>(null)
+  const { plans, billingEnabled } = usePlans()
   const multiLocation = plans?.some((p) => (p.max_regions ?? 1) > 1) ?? false
-  const [billingEnabled, setBillingEnabled] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    api<{ plans: Plan[]; billing_enabled?: boolean }>('GET', '/plans')
-      .then((r) => {
-        if (cancelled) return
-        setPlans(r.plans)
-        setBillingEnabled(Boolean(r.billing_enabled))
-      })
-      .catch(() => !cancelled && setPlans([]))
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const signedIn = status === 'authenticated'
 
@@ -389,6 +376,7 @@ export function LandingPage() {
           <Link className="d-link d-link-hover" to="/contact">Contact us</Link>
           <Link className="d-link d-link-hover" to="/privacy">Privacy policy</Link>
           <Link className="d-link d-link-hover" to="/terms">Terms of service</Link>
+          <CookieSettingsButton className="d-link d-link-hover" />
         </nav>
         <nav aria-label="Social media">
           <h6 className="d-footer-title">Follow</h6>

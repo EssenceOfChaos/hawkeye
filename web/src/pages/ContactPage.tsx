@@ -5,6 +5,7 @@ import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { Field } from '../components/Field'
 import { brand } from '../brand'
+import { CookieSettingsButton } from '../components/CookieBanner'
 
 interface Category {
   code: string
@@ -140,7 +141,7 @@ export function ContactPage() {
             )}
           </>
         )}
-        <p className="hint"><Link to="/privacy">Privacy policy</Link> · <Link to="/terms">Terms of service</Link> · <Link to="/">Home</Link></p>
+        <p className="hint"><Link to="/privacy">Privacy policy</Link> · <Link to="/terms">Terms of service</Link> · <CookieSettingsButton /> · <Link to="/">Home</Link></p>
       </main>
     </div>
   )

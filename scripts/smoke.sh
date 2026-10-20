@@ -34,6 +34,7 @@ check "readiness /readyz is 200 (database reachable)" '[ "$(status "$BASE/readyz
 check "readiness reports the database check"  '"${CURL[@]}" "$BASE/readyz" | grep -q "\"database\":\"ok\""'
 check "landing page is served"              '"${CURL[@]}" "$BASE/" | grep -qi "hawkeye"'
 check "SPA deep link falls back to the app (/login)" '[ "$(status "$BASE/login")" = 200 ]'
+check "the /monitoring campaign page is served as a page, not a 404" '[ "$(status "$BASE/monitoring")" = 200 ]'
 check "privacy, terms and contact pages exist" '[ "$(status "$BASE/privacy")" = 200 ] && [ "$(status "$BASE/terms")" = 200 ] && [ "$(status "$BASE/contact")" = 200 ]'
 check "the email logo is served as an image" '[ "$(status "$BASE/email/hawkeye-logo.png")" = 200 ] && "${CURL[@]}" -I "$BASE/email/hawkeye-logo.png" | grep -qi "^content-type: image/png"'
 check "contact topics are public"            '[ "$("${CURL[@]}" "$BASE/api/v1/contact/categories" | jq_ "len(d[\"categories\"])")" -ge 5 ]'
@@ -48,6 +49,9 @@ check "Stripe webhook rejects an unsigned request (400, or 503 if billing is off
 echo "== security headers"
 H="$(hdr "$BASE/")"
 check "Content-Security-Policy is set and forbids framing" 'echo "$H" | grep -qi "^content-security-policy:.*frame-ancestors .none"'
+check "CSP allows no inline scripts (script-src has no unsafe-inline)" '! echo "$H" | grep -i "^content-security-policy:" | grep -qE "script-src[^;]*unsafe-inline"'
+check "CSP allows the Google Analytics script and data endpoints" 'echo "$H" | grep -i "^content-security-policy:" | grep -q "script-src[^;]*googletagmanager.com" && echo "$H" | grep -i "^content-security-policy:" | grep -q "connect-src[^;]*google-analytics.com"'
+check "Google Analytics is not hard-coded in the page (the app loads it unless the visitor opted out)" '! "${CURL[@]}" "$BASE/" | grep -qi "googletagmanager"'
 check "X-Content-Type-Options: nosniff"      'echo "$H" | grep -qi "^x-content-type-options: nosniff"'
 check "X-Frame-Options: DENY"                'echo "$H" | grep -qi "^x-frame-options: DENY"'
 check "no Server header leaks the software"  '! echo "$H" | grep -qi "^server:"'
