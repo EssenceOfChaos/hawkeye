@@ -14,6 +14,7 @@ const (
 	LimitTeamMembers   = "team_members"
 	LimitMaintenance   = "maintenance_windows"
 	LimitRegions       = "regions"
+	LimitDomains       = "domains"
 )
 
 // LimitError is returned when an operation exceeds the organization's plan.
@@ -43,6 +44,8 @@ func (e *LimitError) Message() string {
 		return fmt.Sprintf("Your %s plan includes up to %d team members.", e.Plan.Name, e.Limit)
 	case LimitRegions:
 		return fmt.Sprintf("Your %s plan can check each monitor from up to %d location%s.", e.Plan.Name, e.Limit, map[bool]string{true: "", false: "s"}[e.Limit == 1])
+	case LimitDomains:
+		return fmt.Sprintf("Your %s plan includes up to %d tracked domains and all of them are in use.", e.Plan.Name, e.Limit)
 	case LimitMaintenance:
 		return fmt.Sprintf("Maintenance windows are not included in your %s plan. Upgrade to silence alerts during planned work.", e.Plan.Name)
 	}
@@ -110,6 +113,24 @@ func (s *Service) CheckRegions(ctx context.Context, db DB, orgID uuid.UUID, coun
 	}
 	if count > p.MaxRegions {
 		return s.limitError(ctx, db, LimitRegions, p.MaxRegions, count, p)
+	}
+	return nil
+}
+
+// CanAddDomain returns a *LimitError when the organization already tracks as many domains as its plan includes. It guards adding a domain by hand
+// only: domains that come from monitors are always recorded, and those beyond the limit are simply not looked up until the plan allows them.
+// To be safe under concurrency, call it in a transaction that holds the organization row lock.
+func (s *Service) CanAddDomain(ctx context.Context, db DB, orgID uuid.UUID) error {
+	p, err := EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	var used int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM domains WHERE organization_id = $1`, orgID).Scan(&used); err != nil {
+		return err
+	}
+	if used >= p.MaxDomains {
+		return s.limitError(ctx, db, LimitDomains, p.MaxDomains, used, p)
 	}
 	return nil
 }

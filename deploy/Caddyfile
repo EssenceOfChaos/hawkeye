@@ -56,7 +56,7 @@
 
 	# The app is a single-page app, so the server must know which addresses are real pages; anything else gets the same shell with HTTP 404
 	# (handle_errors below), and the app renders its 404 page. KEEP IN STEP WITH THE ROUTES IN web/src/App.tsx (web/src/routes.test.ts checks this).
-	@app path_regexp app (?i)^/(?:(?:login|register|forgot-password|contact|privacy|terms|reset-password|confirm-alert-address|verify-email|dashboard|billing|account|incidents|notifications|maintenance|status-page|monitoring|monitors(?:/new|/[^/]+(?:/edit)?)?|status/[^/]+))?/?$
+	@app path_regexp app (?i)^/(?:(?:login|register|forgot-password|contact|privacy|terms|reset-password|confirm-alert-address|verify-email|dashboard|billing|account|incidents|notifications|domains|maintenance|status-page|monitoring|monitors(?:/new|/[^/]+(?:/edit)?)?|status/[^/]+))?/?$
 	handle @app {
 		root * /srv
 		rewrite * /index.html

@@ -81,6 +81,11 @@ groups:
         for: 10m
         labels: {severity: ticket}
         annotations: {summary: "Data retention has not completed for 3 hours: the database will keep growing", runbook: "docs/operations.md#database-growing"}
+      - alert: HawkEyeDomainLookupsFailing
+        expr: sum(increase(hawkeye_domain_lookups_total{result="error"}[6h])) > 20 and sum(increase(hawkeye_domain_lookups_total{result="error"}[6h])) > sum(increase(hawkeye_domain_lookups_total{result=~"known|unavailable"}[6h]))
+        for: 30m
+        labels: {severity: ticket}
+        annotations: {summary: "Most domain expiry lookups are failing: a registry, IANA, or the worker's network (customers keep the last date HawkEye saw)", runbook: "docs/operations.md#domain-expiry-is-missing-or-wrong"}
 
   - name: hawkeye-notifications-and-billing
     rules:

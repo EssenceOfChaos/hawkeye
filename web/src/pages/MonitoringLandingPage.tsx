@@ -15,7 +15,7 @@ const BENEFITS = [
   { icon: brand.icons.websites, title: 'Uptime monitoring', text: 'Know when a website or API stops responding.' },
   { icon: brand.icons.analytics, title: 'Response-time tracking', text: 'Spot slowdowns early and review trends over time.' },
   { icon: brand.icons.notifications, title: 'Alerts where you work', text: 'One alert when an outage is confirmed, one when it ends. Email, Slack or webhook.' },
-  { icon: brand.icons.ssl, title: 'SSL expiry warnings', text: 'Get warned 30, 14, 7 and 1 days before a certificate expires.' },
+  { icon: brand.icons.ssl, title: 'SSL and domain expiry warnings', text: 'Get warned 30, 14, 7 and 1 days before a certificate or domain registration expires.' },
 ]
 
 const AUDIENCES = [

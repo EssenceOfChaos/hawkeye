@@ -126,7 +126,7 @@ the retention cutoff. Every response echoes the effective window: `range: {from,
 | `GET /monitors/:id/uptime` | `{range, uptime}` (see below) |
 | `GET /monitors/:id/response-times` | `{range, bucket_seconds, points: [{t, avg_ms, max_ms, checks, failed}]}`. At most 150 points: the bucket width (1 min up to 3 days) is chosen from the window. Buckets with no checks are **omitted**, so charts show gaps rather than zeros. `avg_ms`/`max_ms` cover successful checks only and are null for a bucket that only had failures |
 | `GET /monitors/:id/results` | check history, newest first: `{range, results: [{id, checked_at, success, http_status_code, response_time_ms, error_category, error_summary}], total, limit, offset}`; `limit` 1–200 (default 50) |
-| `GET /dashboard/summary` | `{range, summary: {monitors: {total, up, down, pending, paused}, open_incidents, uptime, certificates, certificates_tracked, generated_at}}`. `certificates` lists up to five enabled HTTPS monitors whose certificate expires within 30 days or already has (`{monitor_id, monitor_name, expires_at, days_remaining, status: expiring|expired}`, soonest first); `certificates_tracked` counts monitors with a known expiry. Counts and open incidents are *current*; `uptime` follows the range. Paused wins over status in the counts; deleted monitors are excluded |
+| `GET /dashboard/summary` | `{range, summary: {monitors: {total, up, down, pending, paused}, open_incidents, uptime, certificates, certificates_tracked, domains, domains_tracked, generated_at}}`. `certificates` lists up to five enabled HTTPS monitors whose certificate expires within 30 days or already has (`{monitor_id, monitor_name, expires_at, days_remaining, status: expiring|expired}`, soonest first); `certificates_tracked` counts monitors with a known expiry. `domains` is the same for tracked domains (`{domain_id, name, expires_at, days_remaining, status}`); `domains_tracked` counts those within the plan's limit that have a known expiry. Counts and open incidents are *current*; `uptime` follows the range. Paused wins over status in the counts; deleted monitors are excluded |
 | `GET /dashboard/recent-incidents` | `limit` 1–20 (default 5) |
 | `GET /dashboard/response-times` | same shape as the per-monitor series, averaged across all live monitors |
 
@@ -204,9 +204,9 @@ To change a window, delete it and create a new one.
 
 ### Webhook and Slack alerts
 
-Every enabled, verified destination receives outage, recovery and certificate-expiry alerts through the same durable queue as email (retries with backoff, at-least-once). A 2xx is success; 408, 429, 5xx and network errors are retried; any other 4xx (for example 404/410 for a revoked URL) fails the delivery permanently. Requests go through the SSRF-safe client, so private addresses are refused.
+Every enabled, verified destination receives outage, recovery, certificate-expiry and domain-expiry alerts through the same durable queue as email (retries with backoff, at-least-once). A 2xx is success; 408, 429, 5xx and network errors are retried; any other 4xx (for example 404/410 for a revoked URL) fails the delivery permanently. Requests go through the SSRF-safe client, so private addresses are refused.
 
-Webhook requests are `POST` with `Content-Type: application/json` and these headers: `X-HawkEye-Event` (`outage`, `recovery`, `ssl_expiry`, `test`), `X-HawkEye-Delivery` (stable across retries; use it to drop duplicates), `X-HawkEye-Timestamp` (Unix seconds) and `X-HawkEye-Signature` = `sha256=` + hex HMAC-SHA256 of `"<timestamp>.<raw body>"` keyed with the signing secret. Reject requests whose signature does not match or whose timestamp is old. Body:
+Webhook requests are `POST` with `Content-Type: application/json` and these headers: `X-HawkEye-Event` (`outage`, `recovery`, `ssl_expiry`, `domain_expiry`, `test`), `X-HawkEye-Delivery` (stable across retries; use it to drop duplicates), `X-HawkEye-Timestamp` (Unix seconds) and `X-HawkEye-Signature` = `sha256=` + hex HMAC-SHA256 of `"<timestamp>.<raw body>"` keyed with the signing secret. Reject requests whose signature does not match or whose timestamp is old. Body:
 
 ```json
 {"event": "outage", "sent_at": "2026-10-12T15:00:00Z", "url": "https://app.example.com/incidents",
@@ -214,7 +214,7 @@ Webhook requests are `POST` with `Content-Type: application/json` and these head
  "incident": {"started_at": "…", "resolved_at": null, "cause": "Received HTTP 503"}}
 ```
 
-`ssl_expiry` carries `certificate: {expires_at, warning_days}` instead of `incident` (`warning_days` 30, 14, 7, 1, or 0 once expired); `test` carries neither. Slack destinations receive an equivalent message in Slack's incoming-webhook format (unsigned).
+`ssl_expiry` carries `certificate: {expires_at, warning_days}` instead of `incident` (`warning_days` 30, 14, 7, 1, or 0 once expired); `domain_expiry` carries `domain: {name, expires_at, warning_days}` and no `monitor` (its `url` points at `/domains`); `test` carries none of them. Slack destinations receive an equivalent message in Slack's incoming-webhook format (unsigned).
 
 ## SSL certificate expiry
 
@@ -227,9 +227,29 @@ request is redirected to), and it is also recorded when the handshake failed *be
 when it has **expired** (bucket 0). They use the same delivery queue as outage alerts (`event_type = 'ssl_expiry'`, retries, idempotency). Each (monitor, recipient, certificate expiry date, bucket) is sent at most once;
 a renewed certificate (new expiry date) restarts the schedule. A recipient added after a bucket was handled does not receive a backlog. Paused and deleted monitors send nothing.
 
+## Domain expiry
+
+HawkEye watches when the *registration* of each domain expires, so a lapsed domain does not take a website and its email down unnoticed. A tracked domain is a **registrable domain** (`example.com`, `example.co.uk`), reduced from a host with the public suffix list. Names under suffixes that are not run by a registry (`*.vercel.app`, `*.github.io`) and IP addresses have no registration of the customer's to track and are ignored.
+
+Domains come from two places. **Derived:** every live monitor's host brings its domain; the domain goes when no monitor uses it any more. **Added by hand:** an owner can add one (for a domain they own but do not monitor); it stays until removed. Both appear in one list.
+
+| Method & path | Who | Notes |
+|---|---|---|
+| `GET /domains` | any member | `{domains: [Domain], limit}` by name. `limit` is the plan's `max_domains` |
+| `POST /domains` | owner | `{name}` → 201 `{domain}`. `name` may be a host or a URL (`https://www.example.com/shop` tracks `example.com`). Adding a domain that is already tracked only pins it, needing no free place. 400 `VALIDATION_ERROR` (not a registrable domain), 403 `PLAN_LIMIT_REACHED` (`limit_type: "domains"`) |
+| `DELETE /domains/:id` | owner | 204. Only domains added by hand can be removed; one that monitors also use stays in the list as derived. 409 `DOMAIN_IN_USE` for a purely derived domain |
+
+Domain: `{id, name, manual, monitor_count, tracked, status, expires_at, days_remaining, source, unavailable_reason, checked_at, lookup_error, created_at}`.
+`status` is `pending` (not looked up yet), `unavailable`, or for a known date `valid` (more than 30 days left), `expiring` (30 or fewer) or `expired`.
+`tracked` is false for domains beyond the plan's limit (the oldest `max_domains` are tracked): they are listed but never looked up and raise no warnings; upgrading brings them in. Only manual adds are refused at the limit, so a monitor is never blocked by it.
+
+**Where dates come from.** A daily job in the worker (`internal/domains`) asks the top-level domain's RDAP server (found through IANA's bootstrap file), and falls back to WHOIS on port 43 for registries without RDAP or whose RDAP record has no expiry date. Registries differ: some redact or never publish the date. Then `status` is `unavailable` and `unavailable_reason` says why (the UI shows "Expiry unavailable", and tells the customer that is not a statement the domain is safe). A lookup that merely *fails* (timeout, rate limit, registry outage) changes nothing the customer sees apart from `lookup_error`, and is retried after 1 h, 2 h, 4 h … up to a day. `source` is `rdap` or `whois`. Lookups use the SSRF-safe client; WHOIS server names (learned from IANA) are resolved and must be public addresses. Each name is looked up once per pass, however many organizations track it.
+
+**Warning emails** use the schedule and the delivery queue of certificate warnings (`event_type = 'domain_expiry'`): to the enabled, verified recipients when the registration first falls inside a bucket of **30, 14, 7 and 1 day(s)**, and once more when it has **expired**. Each (domain, recipient, expiry date, bucket) is sent at most once; a renewal (new expiry date) restarts the schedule; a recipient added after a bucket was handled gets no backlog. Available on every plan, within the plan's domain limit.
+
 ## Notification delivery
 
-One logical notification exists per (incident, recipient, event) — or, for certificate warnings, per (monitor, recipient, certificate expiry, bucket) — — a unique constraint — created in the same transaction as the incident,
+One logical notification exists per (incident, recipient, event) — or, for certificate warnings, per (monitor, recipient, certificate expiry, bucket), and for domain warnings per (domain, recipient, expiry, bucket) — — a unique constraint — created in the same transaction as the incident,
 so it cannot be lost or duplicated. The worker's dispatcher claims due deliveries with a visibility timeout and sends them; transient
 failures retry with backoff 1 m, 5 m, 15 m, 1 h, 3 h up to `NOTIFY_MAX_ATTEMPTS` (default 6), then the delivery is marked `failed`.
 Permanent errors (`email.ErrPermanent`) fail immediately. Delivery is at-least-once: a crash between sending and recording can cause one duplicate email.

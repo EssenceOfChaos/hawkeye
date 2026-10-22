@@ -92,6 +92,7 @@ func TestExportContainsOnlyTheCallersDataAndNoSecrets(t *testing.T) {
 			VALUES ('` + aliceOrg + `', 'slack', 'enc:v1:SEALEDBLOB', 'hooks.slack.com/…', 'f1', now())`,
 		`INSERT INTO maintenance_windows (organization_id, name, starts_at, duration_minutes, all_monitors) VALUES ('` + aliceOrg + `', 'Quarterly upgrade', now(), 30, true)`,
 		`INSERT INTO status_pages (organization_id, slug, title, published) VALUES ('` + aliceOrg + `', 'alice-status', 'Alice status', true)`,
+		`INSERT INTO domains (organization_id, name, manual, status, expires_at) VALUES ('` + aliceOrg + `', 'alice-registered.org', true, 'known', now() + interval '90 days')`,
 	} {
 		if _, err := e.pool.Exec(t.Context(), q); err != nil {
 			t.Fatal(err)
@@ -114,7 +115,7 @@ func TestExportContainsOnlyTheCallersDataAndNoSecrets(t *testing.T) {
 	if res.StatusCode != 200 || !strings.Contains(res.Header.Get("Content-Disposition"), "attachment") || res.Header.Get("Content-Type") != "application/json" {
 		t.Fatalf("%d %v", res.StatusCode, res.Header)
 	}
-	for _, want := range []string{"alice@example.com", "Alice Site", "client@example.net", "hooks.slack.com/…", "Quarterly upgrade", "alice-status", `"plan": "pro"`, `"check_results_retained_count": 12`, `"role": "owner"`} {
+	for _, want := range []string{"alice@example.com", "Alice Site", "client@example.net", "hooks.slack.com/…", "Quarterly upgrade", "alice-status", "alice-registered.org", `"added_manually": true`, `"plan": "pro"`, `"check_results_retained_count": 12`, `"role": "owner"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("export missing %q", want)
 		}

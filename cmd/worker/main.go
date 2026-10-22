@@ -19,6 +19,7 @@ import (
 	"hawkeye/internal/checks"
 	"hawkeye/internal/config"
 	"hawkeye/internal/database"
+	"hawkeye/internal/domains"
 	"hawkeye/internal/email"
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/healthcheck"
@@ -112,6 +113,12 @@ func run() error {
 	}
 	if cfg.RunRetention {
 		job := retention.New(pool, retention.Config{Interval: cfg.RetentionInterval, Batch: cfg.RetentionBatch, Pause: 50 * time.Millisecond}, m, log).WithReporter(reporter)
+		spawn(func() { job.Run(ctx) })
+	}
+	if cfg.RunDomainChecks {
+		// Registry servers are reached through the same SSRF-safe client the checks use; WHOIS dials only validated public addresses.
+		look := domains.Lookup{RDAP: domains.NewRDAP(safehttp.New(safehttp.Config{}, 20*time.Second)), WHOIS: domains.NewWHOIS()}
+		job := domains.NewJob(pool, look, domains.JobConfig{Interval: cfg.DomainCheckInterval, Recheck: cfg.DomainRecheckInterval, Pace: cfg.DomainLookupPace}, m, log).WithReporter(reporter)
 		spawn(func() { job.Run(ctx) })
 	}
 	// Billing webhook events accepted by the API but not yet applied (the API processes most inline).

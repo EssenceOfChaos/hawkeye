@@ -124,3 +124,46 @@ func TestTestAlertEmailIsUnmistakablyATest(t *testing.T) {
 		t.Error("no requester, no line")
 	}
 }
+
+func TestRenderDomainExpiry(t *testing.T) {
+	expires := time.Now().Add(20 * 24 * time.Hour)
+	a := Alert{Event: EventDomainExpiry, DomainName: "example.com", DomainExpiresAt: expires, DomainBucket: 30, AppBaseURL: "https://app.example.com", To: "me@example.com", From: "alerts@example.com"}
+	m := Render(a)
+	if !strings.HasPrefix(m.Subject, "HawkEye reminder: the domain example.com expires in 19 days") && !strings.HasPrefix(m.Subject, "HawkEye reminder: the domain example.com expires in 20 days") {
+		t.Fatalf("subject %q", m.Subject)
+	}
+	for _, want := range []string{"example.com", expires.UTC().Format("2006-01-02 15:04 UTC"), "https://app.example.com/domains", "remind you again"} {
+		if !strings.Contains(m.Text, want) {
+			t.Errorf("body missing %q:\n%s", want, m.Text)
+		}
+	}
+	if strings.Contains(m.HTML, "#ff8a80") {
+		t.Error("a 30-day warning is not urgent enough for the alert colour")
+	}
+
+	a.DomainBucket = 1
+	a.DomainExpiresAt = time.Now().Add(6 * time.Hour)
+	m = Render(a)
+	if m.Subject != "HawkEye reminder: the domain example.com expires within a day" || !strings.Contains(m.HTML, "#ff8a80") || strings.Contains(m.Text, "remind you again") {
+		t.Fatalf("%q\n%s", m.Subject, m.Text)
+	}
+
+	a.DomainBucket = 0
+	a.DomainExpiresAt = time.Now().Add(-time.Hour)
+	m = Render(a)
+	if m.Subject != "HawkEye alert: the domain example.com has expired" || !strings.Contains(m.Text, "Expired") {
+		t.Fatalf("%q\n%s", m.Subject, m.Text)
+	}
+}
+
+func TestRenderDomainExpiryCannotInjectLines(t *testing.T) {
+	m := Render(Alert{Event: EventDomainExpiry, DomainName: "x.com\r\nBcc: evil@example.com", DomainExpiresAt: time.Now().Add(time.Hour), DomainBucket: 1, AppBaseURL: "https://a"})
+	if strings.ContainsAny(m.Subject, "\r\n") {
+		t.Fatalf("subject contains a line break: %q", m.Subject)
+	}
+	for _, line := range strings.Split(m.Text, "\n") {
+		if strings.HasPrefix(line, "Bcc:") {
+			t.Fatalf("injected line in body: %q", line)
+		}
+	}
+}

@@ -64,6 +64,7 @@ type ExportOrg struct {
 	Incidents            []ExportIncident  `json:"incidents"`
 	AlertRecipients      []ExportRecipient `json:"alert_recipients"`
 	MaintenanceWindows   []ExportWindow    `json:"maintenance_windows"`
+	Domains              []ExportDomain    `json:"domains"`
 	StatusPage           *ExportStatusPage `json:"status_page"`
 	CheckResultsRetained int               `json:"check_results_retained_count"`
 }
@@ -118,6 +119,14 @@ type ExportWindow struct {
 	Repeat          string    `json:"repeat"`
 	AllMonitors     bool      `json:"all_monitors"`
 	MonitorIDs      []string  `json:"monitor_ids"`
+}
+
+// ExportDomain is a tracked domain with the registration expiry date a registry reported for it, if any.
+type ExportDomain struct {
+	Name          string     `json:"name"`
+	AddedManually bool       `json:"added_manually"`
+	ExpiresAt     *time.Time `json:"expires_at"`
+	CheckedAt     *time.Time `json:"checked_at"`
 }
 
 type ExportStatusPage struct {
@@ -242,6 +251,21 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 			return err
 		}
 		o.MaintenanceWindows = append(o.MaintenanceWindows, w)
+	}
+	rows.Close()
+
+	o.Domains = []ExportDomain{}
+	rows, err = s.pool.Query(ctx, `SELECT name, manual, expires_at, checked_at FROM domains WHERE organization_id = $1 ORDER BY name`, o.ID)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var d ExportDomain
+		if err := rows.Scan(&d.Name, &d.AddedManually, &d.ExpiresAt, &d.CheckedAt); err != nil {
+			rows.Close()
+			return err
+		}
+		o.Domains = append(o.Domains, d)
 	}
 	rows.Close()
 

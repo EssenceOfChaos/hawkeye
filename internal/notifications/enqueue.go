@@ -14,6 +14,8 @@ const (
 	EventOutage    = "outage"
 	EventRecovery  = "recovery"
 	EventSSLExpiry = "ssl_expiry"
+	// EventDomainExpiry warns that a domain's registration is about to expire.
+	EventDomainExpiry = "domain_expiry"
 )
 
 // Enqueue records one pending delivery per enabled, verified destination of the organization.
@@ -39,6 +41,20 @@ func EnqueueSSL(ctx context.Context, tx pgx.Tx, orgID, monitorID uuid.UUID, expi
 		WHERE s.organization_id = $1 AND s.enabled AND s.verified_at IS NOT NULL
 		ON CONFLICT (monitor_id, notification_setting_id, ssl_expires_at, ssl_bucket) WHERE event_type = 'ssl_expiry' DO NOTHING`,
 		orgID, monitorID, EventSSLExpiry, expiresAt, bucket)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// EnqueueDomain queues a domain-expiry warning for every enabled, verified recipient of the organization. It is idempotent per domain, recipient,
+// registration (its expiry date) and bucket, so a retry can never send the same warning twice.
+func EnqueueDomain(ctx context.Context, tx pgx.Tx, orgID, domainID uuid.UUID, expiresAt time.Time, bucket int) (int, error) {
+	tag, err := tx.Exec(ctx, `INSERT INTO notification_deliveries (domain_id, notification_setting_id, event_type, domain_expires_at, domain_bucket)
+		SELECT $2, s.id, $3, $4, $5 FROM notification_settings s
+		WHERE s.organization_id = $1 AND s.enabled AND s.verified_at IS NOT NULL
+		ON CONFLICT (domain_id, notification_setting_id, domain_expires_at, domain_bucket) WHERE event_type = 'domain_expiry' DO NOTHING`,
+		orgID, domainID, EventDomainExpiry, expiresAt, bucket)
 	if err != nil {
 		return 0, err
 	}

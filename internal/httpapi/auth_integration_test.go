@@ -21,6 +21,7 @@ import (
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/contact"
+	"hawkeye/internal/domains"
 	"hawkeye/internal/email"
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/httpapi"
@@ -72,9 +73,10 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 	opts := httpapi.Options{
 		Logger: log, DB: pool, RequestTimeout: 10 * time.Second, BodyLimit: "1M",
 		Auth: svc, Orgs: organizations.NewService(pool), AuthRateLimitPerMin: rateLimit,
-		Plans: planSvc, Monitors: monitors.NewService(pool, planSvc, monitors.WithSecretBox(testutil.SecretBox())), Pool: pool, PgPool: pool,
+		Plans: planSvc, Monitors: monitors.NewService(pool, planSvc, monitors.WithSecretBox(testutil.SecretBox()), monitors.WithDomainSync(domains.SyncTx)), Pool: pool, PgPool: pool,
 		Notifications: notifications.NewService(pool, mail, log, "http://app.test", "alerts@test"),
 		Maintenance:   maintenance.NewService(pool, planSvc),
+		Domains:       domains.NewService(pool, planSvc),
 		StatusPages:   statuspage.NewService(pool),
 		Billing:       billing.NewService(pool, o.provider, o.billingCfg, metrics.New(), log),
 		Account:       account.NewService(pool, svc, o.provider, mail, log, "https://app.example.com"),

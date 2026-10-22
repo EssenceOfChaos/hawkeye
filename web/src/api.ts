@@ -20,6 +20,8 @@ export interface Plan {
   maintenance_enabled?: boolean
   /** How many locations one monitor may be checked from on this plan (never more than the installation has). */
   max_regions?: number
+  /** How many domains HawkEye looks up the registration expiry of on this plan. */
+  max_domains?: number
 }
 
 export interface Usage {
@@ -115,6 +117,36 @@ export interface CertificateAlert {
   expires_at: string
   days_remaining: number
   status: 'expiring' | 'expired'
+}
+
+export interface DomainAlert {
+  domain_id: string
+  name: string
+  expires_at: string
+  days_remaining: number
+  status: 'expiring' | 'expired'
+}
+
+/** A domain whose registration expiry HawkEye tracks. */
+export interface TrackedDomain {
+  id: string
+  name: string
+  /** Added by hand; otherwise derived from the organization's monitors. */
+  manual: boolean
+  monitor_count: number
+  /** False for domains beyond the plan's limit: listed, but not looked up. */
+  tracked: boolean
+  /** pending: not looked up yet. unavailable: the registry gives no expiry date. */
+  status: 'pending' | 'unavailable' | 'valid' | 'expiring' | 'expired'
+  expires_at: string | null
+  /** Whole days left; negative once expired. */
+  days_remaining: number | null
+  source: 'rdap' | 'whois' | null
+  unavailable_reason: string | null
+  checked_at: string | null
+  /** Set while the latest lookups are failing; the last known date is still shown. */
+  lookup_error: string | null
+  created_at: string
 }
 
 export interface MaintenanceWindow {
@@ -246,6 +278,8 @@ export interface DashboardSummary {
   uptime: Uptime
   certificates: CertificateAlert[]
   certificates_tracked: number
+  domains?: DomainAlert[]
+  domains_tracked?: number
   generated_at: string
 }
 

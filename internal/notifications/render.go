@@ -28,6 +28,11 @@ type Alert struct {
 	// Certificate warnings (EventSSLExpiry): when the certificate expires and which warning bucket (30, 14, 7, 1 days, 0 = expired) this is.
 	SSLExpiresAt time.Time
 	SSLBucket    int
+
+	// Domain warnings (EventDomainExpiry): the domain, when its registration expires and which warning bucket this is (as for certificates).
+	DomainName      string
+	DomainExpiresAt time.Time
+	DomainBucket    int
 }
 
 // clean removes control characters (so values cannot inject email headers or fake lines) and bounds the length.
@@ -64,6 +69,9 @@ func Render(a Alert) email.Message {
 	name, url := clean(a.MonitorName), clean(a.MonitorURL)
 	if a.Event == EventSSLExpiry {
 		return renderSSL(a, name, url)
+	}
+	if a.Event == EventDomainExpiry {
+		return renderDomain(a)
 	}
 	if a.Event == EventTest {
 		return renderTest(a)
@@ -179,6 +187,49 @@ func renderSSL(a Alert, name, url string) email.Message {
 			"The SSL certificate for " + name + " is approaching its expiration date. Renew it before then so visitors do not see security warnings.",
 		}
 		if a.SSLBucket > 1 {
+			c.Paragraphs = append(c.Paragraphs, "HawkEye will remind you again as the date approaches.")
+		}
+		c.Facts = append(c.Facts, email.Fact{Label: "Time remaining", Value: left})
+	}
+	return c.Message(a.From, a.To, subject)
+}
+
+func renderDomain(a Alert) email.Message {
+	now := time.Now()
+	name := clean(a.DomainName)
+	expires := a.DomainExpiresAt.UTC().Format("2006-01-02 15:04 UTC")
+	c := email.Content{
+		ButtonLabel: "View domains", ButtonURL: a.AppBaseURL + "/domains", AppBaseURL: a.AppBaseURL,
+		Note:  "Manage who receives alerts: " + a.AppBaseURL + "/notifications",
+		Facts: []email.Fact{{Label: "Domain", Value: name}, {Label: "Registration expires", Value: expires}},
+	}
+	var subject string
+	if a.DomainBucket == 0 {
+		subject = "HawkEye alert: the domain " + name + " has expired"
+		c.Tone = email.ToneAlert
+		c.Preheader = "The registration of " + name + " has expired."
+		c.Heading = "Domain expired: " + name
+		c.Paragraphs = []string{
+			"The registration of " + name + " has expired. Until it is renewed the website and any email on this domain may stop working, and after a grace period the registrar may release the name to others.",
+			"Renew it with your registrar as soon as possible. Some registrars charge a redemption fee once the grace period has begun.",
+		}
+		c.Facts = append(c.Facts, email.Fact{Label: "Status", Value: "Expired"})
+	} else {
+		left := sslLeft(a.DomainExpiresAt, now)
+		subject = "HawkEye reminder: the domain " + name + " expires in " + left
+		if left == "less than a day" {
+			subject = "HawkEye reminder: the domain " + name + " expires within a day"
+		}
+		if a.DomainBucket <= 7 {
+			c.Tone = email.ToneAlert
+		}
+		c.Preheader = "The registration of " + name + " expires in " + left + "."
+		c.Heading = "Domain expiring soon: " + name
+		c.Paragraphs = []string{
+			"The registration of " + name + " is approaching its expiration date. Renew it with your registrar before then, or the website and any email on this domain may stop working.",
+			"If the domain renews automatically, check that the payment method on file is still valid.",
+		}
+		if a.DomainBucket > 1 {
 			c.Paragraphs = append(c.Paragraphs, "HawkEye will remind you again as the date approaches.")
 		}
 		c.Facts = append(c.Facts, email.Fact{Label: "Time remaining", Value: left})

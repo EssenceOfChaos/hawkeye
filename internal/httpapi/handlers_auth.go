@@ -13,6 +13,7 @@ import (
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/contact"
+	"hawkeye/internal/domains"
 	"hawkeye/internal/maintenance"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
@@ -32,6 +33,7 @@ type handlers struct {
 	db            *pgxpool.Pool
 	notifications *notifications.Service
 	maintenance   *maintenance.Service
+	domains       *domains.Service
 	statusPages   *statuspage.Service
 	regions       regions.Set
 	billing       *billing.Service
@@ -100,6 +102,11 @@ func mapError(err error) error {
 		return &APIError{Status: http.StatusForbidden, Code: "MAINTENANCE_WINDOWS_LIMIT",
 			Message: "You can have at most 50 maintenance windows. Delete one to add another.",
 			Details: map[string]any{"limit": maintenance.MaxWindowsPerOrganization}}
+	case errors.Is(err, domains.ErrNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Domain not found."}
+	case errors.Is(err, domains.ErrInUse):
+		return &APIError{Status: http.StatusConflict, Code: "DOMAIN_IN_USE",
+			Message: "Your monitors use this domain, so it is tracked automatically. It disappears when no monitor uses it any more."}
 	case errors.Is(err, notifications.ErrNotFound):
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Notification setting not found."}
 	case errors.Is(err, notifications.ErrDuplicate):

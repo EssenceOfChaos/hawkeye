@@ -5,6 +5,7 @@ import { Alert } from '../components/Alert'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { CertificatesPanel } from '../components/Certificate'
+import { DomainsPanel } from '../components/Domains'
 import { RangePicker } from '../components/RangePicker'
 import { ResponseChart } from '../components/ResponseChart'
 import { AvgResponseTile, StatTile, UptimeHero } from '../components/Uptime'
@@ -51,6 +52,7 @@ export function DashboardPage() {
           )}
 
           <CertificatesPanel certificates={s.certificates ?? []} tracked={s.certificates_tracked ?? 0} />
+          <DomainsPanel domains={s.domains ?? []} tracked={s.domains_tracked ?? 0} />
 
           <RangePicker value={range} options={options} onChange={setRange} />
 

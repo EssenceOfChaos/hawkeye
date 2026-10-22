@@ -77,6 +77,10 @@ func TestWebhookPayloadShapes(t *testing.T) {
 	if ssl.Certificate == nil || ssl.Certificate.Bucket != 7 || ssl.Incident != nil || ssl.URL != "https://app/monitors/m1" {
 		t.Fatalf("%+v", ssl)
 	}
+	dom := buildWebhook(Alert{Event: EventDomainExpiry, DomainName: "example.com", DomainExpiresAt: now.Add(48 * time.Hour), DomainBucket: 7, AppBaseURL: "https://app"}, now)
+	if dom.Domain == nil || dom.Domain.Name != "example.com" || dom.Domain.Bucket != 7 || dom.Monitor != nil || dom.Incident != nil || dom.Certificate != nil || dom.URL != "https://app/domains" {
+		t.Fatalf("%+v", dom)
+	}
 	if test := buildWebhook(Alert{Event: EventTest, AppBaseURL: "https://app"}, now); test.Monitor != nil || test.Event != "test" {
 		t.Fatalf("%+v", test)
 	}
@@ -116,5 +120,20 @@ func TestPostClassifiesResponsesAndHidesTheURL(t *testing.T) {
 	err := post(context.Background(), srv.Client(), srv.URL+"/secret/path", []byte(`{}`), nil)
 	if err == nil || errors.Is(err, errPermanent) || strings.Contains(err.Error(), "secret/path") || strings.Contains(err.Error(), "http://") {
 		t.Fatalf("a network failure must be retryable and must not echo the URL: %v", err)
+	}
+}
+
+func TestSlackMessageForDomainExpiry(t *testing.T) {
+	now := time.Date(2026, 10, 12, 15, 0, 0, 0, time.UTC)
+	m := slackMessage(Alert{Event: EventDomainExpiry, DomainName: "<b>x</b>.com", DomainExpiresAt: now.Add(10 * 24 * time.Hour), DomainBucket: 14, AppBaseURL: "https://app"}, now)
+	text := m["blocks"].([]any)[0].(map[string]any)["text"].(map[string]any)["text"].(string)
+	for _, want := range []string{"expires in 10 days", "&lt;b&gt;x&lt;/b&gt;.com", "<https://app/domains|Open in HawkEye>", "2026-10-22 15:00 UTC"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in %s", want, text)
+		}
+	}
+	expired := slackMessage(Alert{Event: EventDomainExpiry, DomainName: "example.com", DomainExpiresAt: now.Add(-time.Hour), DomainBucket: 0, AppBaseURL: "https://app"}, now)
+	if !strings.Contains(expired["text"].(string), "has expired") {
+		t.Fatalf("%v", expired["text"])
 	}
 }

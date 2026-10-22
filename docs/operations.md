@@ -33,6 +33,7 @@ only thing that can notice its own outage.
 | `hawkeye_notification_deliveries_total{event,result}` | `sent`, `retry`, `failed`, `skipped`. Alert on a sustained `failed` or `retry` rate: email provider trouble |
 | `hawkeye_notification_pending`, `hawkeye_notification_oldest_pending_seconds` | alerts waiting; the oldest due one should stay under a minute or two |
 
+| `hawkeye_domain_lookups_total{result}` | domain expiry lookups: `known`, `unavailable` (the registry gives no date: normal for some TLDs), `error` (transient). Alert if `error` dominates for hours: a registry, IANA or the worker's network is failing |
 | `hawkeye_retention_last_success_timestamp_seconds` | alert if older than ~3 × `RETENTION_INTERVAL`: retention is not completing and the database will grow |
 | `hawkeye_retention_deleted_rows_total{kind}`, `hawkeye_retention_runs_total{result}`, `hawkeye_retention_errors_total` | what is being removed; `skipped` means another worker held the lock (normal with several workers) |
 | `hawkeye_retention_last_duration_seconds` | a pass that takes much longer than usual may mean a backlog (e.g. a large downgrade) |
@@ -95,6 +96,14 @@ Warnings use the same queue as outage alerts, so first follow *Alerts are not ar
 `ssl_expires_at` null means no check has read a certificate (an `http://` URL, a failing TLS handshake that is not an expiry, or no check has run yet). `ssl_notified_bucket` is the smallest warning bucket already queued for that certificate;
 the delivery rows are `SELECT * FROM notification_deliveries WHERE event_type = 'ssl_expiry' AND monitor_id = '…';`. A bucket is handled even if nobody could be notified at the time (no verified, enabled recipient), and is never re-sent: to repeat a warning,
 `UPDATE monitors SET ssl_notified_bucket = NULL, ssl_notified_for = NULL WHERE id = '…';` and the next check queues it again for the current bucket.
+
+### Domain expiry is missing or wrong
+
+Warnings use the same queue as outage alerts, so first follow *Alerts are not arriving*. Then ask what HawkEye knows: `SELECT name, status, expires_at, source, unavailable_reason, checked_at, failure_count, last_error, next_check_at, notified_bucket FROM domains WHERE organization_id = '…';`.
+`status = 'pending'` with `next_check_at` in the future means it has not been looked up yet (workers run the job every `DOMAIN_CHECK_INTERVAL`, default 10 m; check `DISABLE_DOMAIN_CHECKS` and that a worker is up). A domain beyond the plan's `max_domains` (the oldest are tracked) is listed but never looked up.
+`status = 'unavailable'` is the registry's answer, not a fault: see `unavailable_reason`. To see what the registry says, `curl -s https://rdap.org/domain/example.com | jq '.events'` (RDAP) or `whois example.com | grep -i expir` (WHOIS, which the worker reads on port 43, so that must be reachable from the worker network). WHOIS output differs by registry; if a registry writes the date in a form `ParseWHOISExpiry` does not know, add the key or layout in `internal/domains/whois.go`.
+`failure_count > 0` with `last_error` means the lookups are failing (it keeps showing the last good date): a timeout or rate limit from the registry, or a blocked address (`destination not permitted`, which would mean the registry resolved to a private address). A bucket is handled even if nobody could be notified at the time and is never re-sent; to repeat a warning,
+`UPDATE domains SET notified_bucket = NULL, notified_for = NULL WHERE id = '…';` and the next lookup queues it again for the current bucket. To look a domain up now, `UPDATE domains SET next_check_at = now() WHERE id = '…';`.
 
 ### Stored credentials cannot be opened
 

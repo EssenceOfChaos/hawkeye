@@ -70,6 +70,7 @@ export function PrivacyPage() {
         <li>Incident and recovery records, alert settings, and records of the notifications we sent.</li>
         <li>Maintenance windows you schedule: their names, times, repeat settings, and the monitors they cover. Checks made during a window are recorded and marked as such.</li>
         <li>For HTTPS monitors, the expiry date of the SSL certificate your website presents, and when we last read it. We do not store the certificate itself or any other detail from it.</li>
+        <li>Domain names: the registered domain of each monitor’s web address (for example example.com for https://www.example.com) and any domain you add yourself, the registration expiry date a public domain registry reports for it, and when we last looked it up.</li>
         <li>Usage counts needed to enforce your plan’s limits.</li>
       </ul>
       <p>
@@ -168,6 +169,10 @@ export function PrivacyPage() {
         <li><strong>Google (Gmail)</strong>: the mailbox where we read and answer support messages.</li>
         <li><strong>Google (Analytics)</strong>: website usage analytics, unless you opt out, as described in Section 2.C and E. Google receives page addresses without query strings or fragments, your IP address, and browser and device information.</li>
       </ul>
+      <p>
+        To find when a domain’s registration expires, we ask the public registry that runs the domain’s top-level domain (and the Internet Assigned Numbers Authority, which tells us which registry to ask). Those requests contain the domain name
+        and our server’s address, but nothing about your account, and registries handle them under their own policies.
+      </p>
 
       <h3>B. Payment processing</h3>
       <p>
@@ -189,7 +194,7 @@ export function PrivacyPage() {
       <h3>F. Slack and webhook destinations</h3>
       <p>
         If you add a Slack or webhook destination, we send alert content to the address you provide: the monitor’s name and web address, the time of the event, a short description of the failure (or the certificate
-        expiry date), and a link back to HawkEye. That destination is operated by you or by a third party you chose (for example Slack), and its handling of the information is governed by its own terms and policies, not this
+        or domain expiry date), and a link back to HawkEye. That destination is operated by you or by a third party you chose (for example Slack), and its handling of the information is governed by its own terms and policies, not this
         Policy. Treat these addresses as secrets: anyone who has a Slack webhook address can post to your channel.
       </p>
 
@@ -375,6 +380,7 @@ export function TermsPage() {
         <li>Response-time measurements and monitoring history.</li>
         <li>On paid plans, checks of a monitor from more than one location, where the Service offers them, with the monitor treated as down only when most of its locations report a failure.</li>
         <li>SSL certificate expiry tracking for HTTPS monitors, with email warnings as the expiry date approaches (currently 30, 14, 7, and 1 days before, and when the certificate has expired).</li>
+        <li>Domain expiry tracking, with email warnings as a domain’s registration expiry date approaches (currently 30, 14, 7, and 1 days before, and when it has expired).</li>
         <li>Incident detection, incident records, and recovery status.</li>
         <li>Alert notifications by email, to a Slack channel, or to a webhook address you provide, as described in Section 9.</li>
         <li>An optional public status page showing the monitors you choose.</li>
@@ -513,6 +519,10 @@ export function TermsPage() {
         Certificate expiry information is read from the certificate the monitored address presented to HawkEye during a check. It can differ from what other visitors see (for example, if your site serves different certificates to different locations or hostnames), and HawkEye does not detect revoked or otherwise invalid certificates other than by failing the check. Certificate warnings are a courtesy reminder; you remain responsible for renewing your certificates.
       </p>
       <p>
+        Domain expiry dates are read from public domain registries, which differ in what they publish: some do not share expiry dates, some hide them for privacy, and a date can be out of date or wrong. Where HawkEye cannot find a date it says so,
+        and that is not a statement that the domain is safe. Domain warnings are a courtesy reminder; you remain responsible for renewing your domains with your registrar.
+      </p>
+      <p>
         Response checks evaluate the response body (up to its first 1 MB) at the time of the check. A successful check does not prove that a website is free from defects or security vulnerabilities. A failed check does not necessarily establish that a website is unavailable to all visitors.
       </p>
       <p>
@@ -528,7 +538,7 @@ export function TermsPage() {
 
       <h3>A. Alerts and notifications</h3>
       <p>
-        You may configure the Service to send notifications about incidents, recovery events, and approaching certificate expiry to email addresses, to a Slack channel through a Slack incoming-webhook address, and to a webhook
+        You may configure the Service to send notifications about incidents, recovery events, and approaching certificate and domain expiry to email addresses, to a Slack channel through a Slack incoming-webhook address, and to a webhook
         address of your choice. SMS is not currently available. You are responsible for providing valid destinations, confirming email addresses as the Service requires,
         keeping your notification settings current, and for the systems that receive webhooks, including verifying the signature we send and handling repeated deliveries.
       </p>

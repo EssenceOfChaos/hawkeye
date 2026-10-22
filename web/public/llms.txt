@@ -1,0 +1,24 @@
+# HawkEye
+
+> HawkEye is a website and API monitoring service. It checks your websites and APIs on a schedule, opens an incident only after consecutive failures, and alerts you by email, Slack or webhook. It also warns you before SSL certificates and domain registrations expire.
+
+HawkEye is for freelancers, web agencies, small businesses and small development teams. There is a free plan (not a trial) and paid plans; the home page shows current prices and limits.
+
+## What it does
+
+- Website and API monitoring: custom request methods, headers, bodies, Basic/bearer/API-key authentication, and checks of the status code and response content.
+- Response-time tracking, uptime reports and incident history.
+- Alerts by email, Slack incoming webhook, or signed JSON webhook.
+- Public status page for your customers.
+- Maintenance windows that pause alerts during planned work (paid plans).
+- SSL certificate expiry warnings 30, 14, 7 and 1 days before expiry, on every plan.
+- Domain registration expiry warnings on the same schedule, for a number of domains that depends on the plan. Some domain registries do not publish expiry dates; HawkEye says so rather than guessing.
+- Checks from several locations on paid plans, where offered.
+
+## Pages
+
+- [Home, features and pricing](https://hawkeye.observer/)
+- [Sign up](https://hawkeye.observer/register)
+- [Contact](https://hawkeye.observer/contact)
+- [Privacy Policy](https://hawkeye.observer/privacy)
+- [Terms and Conditions](https://hawkeye.observer/terms)

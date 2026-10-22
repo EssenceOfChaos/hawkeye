@@ -94,6 +94,12 @@ type Config struct {
 	RunRetention      bool
 	RetentionInterval time.Duration
 	RetentionBatch    int
+	// Domain expiry lookups (RDAP, WHOIS fallback). A pass looks for due domains every DomainCheckInterval; each domain is looked up again after
+	// DomainRecheckInterval, with DomainLookupPace between lookups so registries are not hammered.
+	RunDomainChecks       bool
+	DomainCheckInterval   time.Duration
+	DomainRecheckInterval time.Duration
+	DomainLookupPace      time.Duration
 
 	StripeSecretKey     string
 	StripeWebhookSecret string
@@ -276,6 +282,11 @@ func load(get func(string) string) (Config, error) {
 		RetentionInterval: duration("RETENTION_INTERVAL", time.Hour),
 		RetentionBatch:    integer("RETENTION_BATCH", 5000),
 
+		RunDomainChecks:       !boolean("DISABLE_DOMAIN_CHECKS"),
+		DomainCheckInterval:   duration("DOMAIN_CHECK_INTERVAL", 10*time.Minute),
+		DomainRecheckInterval: duration("DOMAIN_RECHECK_INTERVAL", 24*time.Hour),
+		DomainLookupPace:      duration("DOMAIN_LOOKUP_PACE", 500*time.Millisecond),
+
 		StripeSecretKey:     str("STRIPE_SECRET_KEY", ""),
 		StripeWebhookSecret: str("STRIPE_WEBHOOK_SECRET", ""),
 		StripePricePro:      str("STRIPE_PRICE_PRO_ID", ""),
@@ -380,6 +391,15 @@ func load(get func(string) string) (Config, error) {
 		if p, err := url.Parse(u); err != nil || p.Scheme != "https" || p.Hostname() == "" {
 			errs = append(errs, fmt.Errorf("CANARY_URLS: %q is not an https URL", u))
 		}
+	}
+	if c.DomainCheckInterval < time.Minute {
+		errs = append(errs, errors.New("DOMAIN_CHECK_INTERVAL: must be at least 1m"))
+	}
+	if c.DomainRecheckInterval < time.Hour {
+		errs = append(errs, errors.New("DOMAIN_RECHECK_INTERVAL: must be at least 1h (registries rate-limit lookups)"))
+	}
+	if c.DomainLookupPace < 0 {
+		errs = append(errs, errors.New("DOMAIN_LOOKUP_PACE: must not be negative"))
 	}
 	if c.CanaryInterval < 10*time.Second {
 		errs = append(errs, errors.New("CANARY_INTERVAL: must be at least 10s"))

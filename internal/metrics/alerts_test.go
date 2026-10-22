@@ -31,6 +31,7 @@ func TestEveryMetricInTheAlertRulesIsActuallyExported(t *testing.T) {
 	app.ChecksTotal.WithLabelValues("failure", "dns")
 	app.QueueDepth.WithLabelValues("queued")
 	app.NotificationsTotal.WithLabelValues("outage", "sent")
+	app.DomainLookups.WithLabelValues("error")
 	app.RetentionDeleted.WithLabelValues("check_results")
 	app.RetentionRuns.WithLabelValues("ok")
 	app.BillingEvents.WithLabelValues("received")

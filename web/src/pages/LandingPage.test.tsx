@@ -10,8 +10,8 @@ const json = (status: number, body: unknown) =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
 
 const plans = [
-  { code: 'free', name: 'Free', monthly_price_cents: 0, max_monitors: 5, minimum_check_interval_seconds: 300, history_retention_days: 7 },
-  { code: 'pro', name: 'Pro', monthly_price_cents: 1900, max_monitors: 50, minimum_check_interval_seconds: 60, history_retention_days: 90 },
+  { code: 'free', name: 'Free', monthly_price_cents: 0, max_monitors: 5, minimum_check_interval_seconds: 300, history_retention_days: 7, max_domains: 3 },
+  { code: 'pro', name: 'Pro', monthly_price_cents: 1900, max_monitors: 50, minimum_check_interval_seconds: 60, history_retention_days: 90, max_domains: 25 },
 ]
 
 function renderLanding(fetchImpl: (url: string) => Promise<Response>) {
@@ -114,6 +114,19 @@ describe('LandingPage', () => {
     expect(screen.getByText('Where can HawkEye send alerts?')).toBeInTheDocument()
     expect(screen.getByText('Does HawkEye warn me before my SSL certificate expires?')).toBeInTheDocument()
     expect(screen.getByText(/Can I monitor an API\?/)).toBeInTheDocument()
+  })
+
+  it('advertises domain expiry warnings, with each plan’s limit, and is honest that not every registry shares the date', async () => {
+    renderLanding((url) =>
+      url.includes('/plans') ? json(200, { plans }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }),
+    )
+    await screen.findByText('50 website monitors')
+    expect(screen.getByRole('heading', { name: 'Domain expiry alerts' })).toBeInTheDocument()
+    expect(screen.getByText('Domain expiry warnings for up to 3 domains')).toBeInTheDocument()
+    expect(screen.getByText('Domain expiry warnings for up to 25 domains')).toBeInTheDocument()
+    expect(screen.getByText('Does HawkEye warn me before my domain name expires?')).toBeInTheDocument()
+    expect(screen.getByText(/Not every registry shares this date/)).toBeInTheDocument()
+    expect(screen.getByText(/Every plan includes .*domain expiry warnings/)).toBeInTheDocument()
   })
 
   it('puts the no-false-alarms message above the feature list, and says the true thing about it', () => {

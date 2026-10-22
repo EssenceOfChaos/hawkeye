@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"hawkeye/internal/checks"
+	"hawkeye/internal/plans"
 	"math"
 	"time"
 
@@ -185,8 +186,21 @@ type Summary struct {
 	// Certificates lists up to five enabled HTTPS monitors whose certificate expires within 30 days (or already has), soonest first.
 	Certificates []CertificateAlert `json:"certificates"`
 	// CertificatesTracked is how many enabled monitors have a known certificate expiry (so the dashboard can say "all good").
-	CertificatesTracked int       `json:"certificates_tracked"`
-	GeneratedAt         time.Time `json:"generated_at"`
+	CertificatesTracked int `json:"certificates_tracked"`
+	// Domains lists up to five tracked domains whose registration expires within 30 days (or already has), soonest first.
+	Domains []DomainAlert `json:"domains"`
+	// DomainsTracked is how many domains have a known expiry date.
+	DomainsTracked int       `json:"domains_tracked"`
+	GeneratedAt    time.Time `json:"generated_at"`
+}
+
+// DomainAlert is one domain registration that needs attention soon.
+type DomainAlert struct {
+	DomainID      uuid.UUID `json:"domain_id"`
+	Name          string    `json:"name"`
+	ExpiresAt     time.Time `json:"expires_at"`
+	DaysRemaining int       `json:"days_remaining"`
+	Status        string    `json:"status"` // expiring or expired
 }
 
 // CertificateAlert is one certificate that needs attention soon.
@@ -238,6 +252,37 @@ func DashboardSummary(ctx context.Context, db DB, orgID uuid.UUID, r Range, now 
 		return s, err
 	}
 	rows.Close()
+	if err := summarizeDomains(ctx, db, orgID, now, &s); err != nil {
+		return s, err
+	}
 	s.Uptime, err = ComputeUptime(ctx, db, orgID, nil, r)
 	return s, err
+}
+
+// summarizeDomains fills in the domain part of the summary. Only domains within the plan's limit count: the rest are not looked up.
+func summarizeDomains(ctx context.Context, db DB, orgID uuid.UUID, now time.Time, s *Summary) error {
+	s.Domains = []DomainAlert{}
+	p, err := plans.EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	const tracked = `SELECT id, name, expires_at FROM (SELECT id, name, status, expires_at, row_number() OVER (ORDER BY created_at, id) AS rank
+		FROM domains WHERE organization_id = $1) d WHERE rank <= $2 AND status = 'known'`
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM (`+tracked+`) t`, orgID, p.MaxDomains).Scan(&s.DomainsTracked); err != nil {
+		return err
+	}
+	rows, err := db.Query(ctx, tracked+` AND expires_at <= $3::timestamptz + interval '30 days' ORDER BY expires_at, id LIMIT 5`, orgID, p.MaxDomains, now)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var d DomainAlert
+		if err := rows.Scan(&d.DomainID, &d.Name, &d.ExpiresAt); err != nil {
+			return err
+		}
+		d.DaysRemaining, d.Status = checks.SSLDaysRemaining(d.ExpiresAt, now), checks.SSLStatus(d.ExpiresAt, now)
+		s.Domains = append(s.Domains, d)
+	}
+	return rows.Err()
 }

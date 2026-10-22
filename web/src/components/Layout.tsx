@@ -47,6 +47,7 @@ export function Layout() {
             </span>
             {openIncidents > 0 && <span className="sr-only"> ({openIncidents} open)</span>}
           </NavLink>
+          <NavLink to="/domains">Domains</NavLink>
           <NavLink to="/notifications">Alerts</NavLink>
           <NavLink to="/maintenance">Maintenance</NavLink>
           <NavLink to="/status-page">Status page</NavLink>

@@ -117,14 +117,16 @@ func Sign(secret string, ts int64, body []byte) string {
 
 // WebhookPayload is the JSON body sent to a webhook destination.
 type WebhookPayload struct {
-	Event   string         `json:"event"` // outage, recovery, ssl_expiry or test
+	Event   string         `json:"event"` // outage, recovery, ssl_expiry, domain_expiry or test
 	SentAt  time.Time      `json:"sent_at"`
 	Monitor *PayloadTarget `json:"monitor,omitempty"`
 	// Incident is set for outage and recovery events.
 	Incident *PayloadIncident `json:"incident,omitempty"`
 	// Certificate is set for ssl_expiry events.
 	Certificate *PayloadCertificate `json:"certificate,omitempty"`
-	URL         string              `json:"url"` // where to look in HawkEye
+	// Domain is set for domain_expiry events.
+	Domain *PayloadDomain `json:"domain,omitempty"`
+	URL    string         `json:"url"` // where to look in HawkEye
 }
 
 type PayloadTarget struct {
@@ -144,10 +146,21 @@ type PayloadCertificate struct {
 	Bucket    int       `json:"warning_days"` // 30, 14, 7, 1, or 0 once expired
 }
 
+type PayloadDomain struct {
+	Name      string    `json:"name"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Bucket    int       `json:"warning_days"` // 30, 14, 7, 1, or 0 once expired
+}
+
 func buildWebhook(a Alert, now time.Time) WebhookPayload {
 	p := WebhookPayload{Event: a.Event, SentAt: now.UTC(), URL: a.AppBaseURL + "/incidents"}
 	if a.Event == EventTest {
 		p.URL = a.AppBaseURL + "/notifications"
+		return p
+	}
+	if a.Event == EventDomainExpiry {
+		p.URL = a.AppBaseURL + "/domains"
+		p.Domain = &PayloadDomain{Name: a.DomainName, ExpiresAt: a.DomainExpiresAt.UTC(), Bucket: a.DomainBucket}
 		return p
 	}
 	p.Monitor = &PayloadTarget{ID: a.MonitorID, Name: a.MonitorName, URL: a.MonitorURL}
@@ -172,6 +185,9 @@ func slackEscape(s string) string {
 
 // slackMessage renders an alert as a Slack incoming-webhook payload: a one-line fallback plus one block.
 func slackMessage(a Alert, now time.Time) map[string]any {
+	if a.Event == EventDomainExpiry {
+		return slackBlocks(domainSlackTitle(a, now), slackEscape(clean(a.DomainName))+"\nExpires "+a.DomainExpiresAt.UTC().Format("2006-01-02 15:04 UTC"), a.AppBaseURL+"/domains")
+	}
 	name, target := slackEscape(clean(a.MonitorName)), slackEscape(clean(a.MonitorURL))
 	var title, detail, link string
 	switch a.Event {
@@ -201,6 +217,19 @@ func slackMessage(a Alert, now time.Time) map[string]any {
 		}
 		link = a.AppBaseURL + "/incidents"
 	}
+	return slackBlocks(title, detail, link)
+}
+
+func domainSlackTitle(a Alert, now time.Time) string {
+	name := slackEscape(clean(a.DomainName))
+	if a.DomainBucket == 0 {
+		return "🔴 The domain " + name + " has expired"
+	}
+	return "🌐 The domain " + name + " expires in " + sslLeft(a.DomainExpiresAt, now)
+}
+
+// slackBlocks lays out a Slack message: a one-line fallback plus one block.
+func slackBlocks(title, detail, link string) map[string]any {
 	text := "*" + title + "*\n" + detail + "\n<" + link + "|Open in HawkEye>"
 	return map[string]any{
 		"text":   strings.ReplaceAll(title, "*", ""),

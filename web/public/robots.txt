@@ -1,0 +1,19 @@
+# HawkEye: public pages may be crawled; the signed-in app and the API are not for search engines.
+# /monitoring is deliberately NOT listed here: it is a campaign page that asks not to be indexed with a noindex tag, and a crawler
+# that is blocked here could never see that tag. /assets/ stays open because the pages need their scripts and styles to render.
+User-agent: *
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /monitors
+Disallow: /incidents
+Disallow: /notifications
+Disallow: /domains
+Disallow: /maintenance
+Disallow: /status-page
+Disallow: /billing
+Disallow: /account
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /confirm-alert-address
+
+Sitemap: https://hawkeye.observer/sitemap.xml

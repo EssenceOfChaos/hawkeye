@@ -182,6 +182,8 @@ type Service struct {
 	plans *plans.Service
 	box   *secrets.Box // encrypts stored credentials; without it, saving a credential fails rather than storing plain text
 	regs  regions.Set  // the regions a monitor may be checked from
+	// domainSync runs inside the transaction of every change that can alter which domains the organization's monitors use.
+	domainSync func(ctx context.Context, tx pgx.Tx, orgID uuid.UUID) error
 }
 
 // Option configures a Service.
@@ -192,6 +194,19 @@ func WithSecretBox(b *secrets.Box) Option { return func(s *Service) { s.box = b 
 
 // WithRegions sets the regions monitors may choose from (the default is a single "primary" region).
 func WithRegions(r regions.Set) Option { return func(s *Service) { s.regs = r } }
+
+// WithDomainSync registers the function that keeps the organization's tracked domains in step with its monitors (domains.SyncTx).
+func WithDomainSync(fn func(ctx context.Context, tx pgx.Tx, orgID uuid.UUID) error) Option {
+	return func(s *Service) { s.domainSync = fn }
+}
+
+// syncDomains runs the registered domain sync, if any.
+func (s *Service) syncDomains(ctx context.Context, tx pgx.Tx, orgID uuid.UUID) error {
+	if s.domainSync == nil {
+		return nil
+	}
+	return s.domainSync(ctx, tx, orgID)
+}
 
 func NewService(pool *pgxpool.Pool, p *plans.Service, opts ...Option) *Service {
 	s := &Service{pool: pool, plans: p, regs: regions.Default()}
@@ -563,7 +578,10 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16) RETURNING `+cols,
 			orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout,
 			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, sealed, f.assertions, id, f.regions), minInterval)
-		return err
+		if err != nil {
+			return err
+		}
+		return s.syncDomains(ctx, tx, orgID)
 	})
 	return out, err
 }
@@ -722,9 +740,14 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		}
 		// Streaks recorded by each region no longer describe the monitor after its request or its regions changed.
 		if reset || regionsChanged {
-			_, err = tx.Exec(ctx, `DELETE FROM monitor_region_state WHERE monitor_id = $1`, id)
+			if _, err = tx.Exec(ctx, `DELETE FROM monitor_region_state WHERE monitor_id = $1`, id); err != nil {
+				return err
+			}
 		}
-		return err
+		if f.url != cur.URL {
+			return s.lockedDomainSync(ctx, tx, orgID)
+		}
+		return nil
 	})
 	return out, err
 }
@@ -764,10 +787,23 @@ func (s *Service) Delete(ctx context.Context, orgID, id uuid.UUID) error {
 		if tag.RowsAffected() == 0 {
 			return ErrNotFound
 		}
-		_, err = tx.Exec(ctx, `UPDATE incidents SET status = 'resolved', resolved_at = GREATEST(started_at, now())
-			WHERE monitor_id = $1 AND status = 'open'`, id)
-		return err
+		if _, err = tx.Exec(ctx, `UPDATE incidents SET status = 'resolved', resolved_at = GREATEST(started_at, now())
+			WHERE monitor_id = $1 AND status = 'open'`, id); err != nil {
+			return err
+		}
+		return s.lockedDomainSync(ctx, tx, orgID)
 	})
+}
+
+// lockedDomainSync is syncDomains for changes that did not already hold the organization row lock.
+func (s *Service) lockedDomainSync(ctx context.Context, tx pgx.Tx, orgID uuid.UUID) error {
+	if s.domainSync == nil {
+		return nil
+	}
+	if err := lockOrg(ctx, tx, orgID); err != nil {
+		return err
+	}
+	return s.domainSync(ctx, tx, orgID)
 }
 
 // RegionStatus is how one of a monitor's regions currently sees it.

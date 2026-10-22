@@ -70,10 +70,16 @@ const FEATURES = [
     text: 'A live countdown, plus warnings 30, 14, 7 and 1 days before expiry.',
   },
   {
+    icon: brand.icons.shield,
+    title: 'Domain expiry alerts',
+    lead: 'Don’t lose your domain to a missed renewal.',
+    text: 'Warnings 30, 14, 7 and 1 days before a domain registration expires.',
+  },
+  {
     icon: brand.icons.dashboard,
     title: 'One dashboard, clear reports',
     lead: 'Every website. One clear picture.',
-    text: 'Availability, response times, incidents and certificates in one place.',
+    text: 'Availability, response times, incidents, certificates and domains in one place.',
   },
 ]
 
@@ -109,11 +115,12 @@ const FAQ = [
   { q: 'What happens when my website goes offline?', a: 'When repeated failures meet the incident threshold, HawkEye creates an incident and sends an alert to your email, Slack or webhook destinations. It keeps checking, and tells you when the website recovers.' },
   { q: 'Will HawkEye guarantee that my website is always available?', a: 'No monitoring service can guarantee that a website will always be available or detect every possible problem. HawkEye provides periodic checks and recorded results to help you identify and investigate availability issues.' },
   { q: 'Does HawkEye warn me before my SSL certificate expires?', a: 'Yes, on every plan. For each HTTPS monitor, HawkEye reads the certificate your site presents during its checks, shows the expiry date and a countdown, and alerts your destinations 30, 14, 7 and 1 days before it expires and again if it does. Renew the certificate and HawkEye picks up the new date automatically. It reports the certificate it sees for the monitored address; it cannot tell you about other hostnames or certificates revoked early.' },
+  { q: 'Does HawkEye warn me before my domain name expires?', a: 'Yes, on every plan, up to the number of domains your plan lists. HawkEye works out the registered domain of each website you monitor. It looks up the registration expiry date with the domain’s registry once a day and alerts your destinations 30, 14, 7 and 1 days before it expires. Not every registry shares this date, and some hide it for privacy. For those domains HawkEye shows “Expiry unavailable”. Warnings are a reminder; you remain responsible for renewing.' },
   { q: 'Where can HawkEye send alerts?', a: 'To email addresses, to a Slack channel through an incoming webhook, and to any HTTPS endpoint as a signed JSON webhook so your own systems can react. Every alert is queued and retried if delivery fails. Slack and webhook destinations are tested when you add them and available on every plan. SMS is not available yet.' },
   { q: 'Can I show my customers a status page?', a: 'Yes, on every plan. Choose an address, the monitors to show and the names to show them under, then publish. The page shows each service’s current state, daily uptime and recent incidents. It never shows your monitored web addresses or error details, and it stays private until you publish it. Daily history follows your plan: 7 days on Free, up to 90 on paid plans.' },
   { q: 'How do I avoid false alerts during planned maintenance?', a: 'Schedule a maintenance window on a Pro or Agency plan. For all or some of your monitors, once or repeating daily or weekly, HawkEye keeps checking but does not open incidents or send alerts, and leaves those checks out of uptime. An incident that is already open stays open until the monitor recovers.' },
   { q: 'Can I monitor an API?', a: 'Yes. Choose the request method, add custom headers and a request body, and authenticate with Basic, a bearer token or an API-key header. You can then check the status code, look for text in the response, or verify a value in a JSON response. Passwords, tokens and API keys are stored encrypted and are never shown again. Methods that change data (POST, PUT, PATCH and DELETE) are repeated on every check, so they require a verified email address and run at most every 5 minutes.' },
-  { q: 'What happens if I downgrade?', a: 'Your existing monitors are never deleted automatically. You may not be able to add new ones until you are within the new plan’s limits, and history older than the new plan’s retention period is removed. Maintenance windows you already created keep working, but you cannot create new ones until you are on a paid plan.' },
+  { q: 'What happens if I downgrade?', a: 'Your existing monitors are never deleted automatically. You may not be able to add new ones until you are within the new plan’s limits, and history older than the new plan’s retention period is removed. Maintenance windows you already created keep working, but you cannot create new ones until you are on a paid plan. Domains beyond the new plan’s limit stay in your list but are no longer looked up.' },
 ]
 
 export function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: Plan; featured: boolean; billingEnabled: boolean; signedIn: boolean }) {
@@ -133,6 +140,7 @@ export function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: P
         {(plan.max_regions ?? 1) > 1 && <li>Checks from up to {plan.max_regions} locations</li>}
         <li>Website and API monitoring</li>
         <li>SSL certificate expiry warnings</li>
+        {plan.max_domains !== undefined && <li>Domain expiry warnings for up to {plan.max_domains} domains</li>}
         <li>Email, Slack and webhook alerts</li>
         <li>Public status page</li>
         {plan.maintenance_enabled && <li>Maintenance windows</li>}
@@ -306,7 +314,7 @@ export function LandingPage() {
 
       <section aria-labelledby="pricing-h" className="section">
         <h2 id="pricing-h">Simple plans. Clear visibility.</h2>
-        <p className="hint">Start free. Upgrade when your monitoring needs grow. Every plan includes website and API monitoring, SSL certificate expiry warnings, incident tracking, email, Slack and webhook alerts, a public status page, and uptime reports. Paid plans add maintenance windows. Plans otherwise differ in how many monitors you can have, how often they are checked, and how long history is kept. The free plan is a real plan, not a trial, and monitors are never deleted if you move to a smaller plan.</p>
+        <p className="hint">Start free. Upgrade when your monitoring needs grow. Every plan includes website and API monitoring, SSL certificate expiry warnings, domain expiry warnings (up to a limit that grows with the plan), incident tracking, email, Slack and webhook alerts, a public status page, and uptime reports. Paid plans add maintenance windows. Plans otherwise differ in how many monitors and domains you can have, how often they are checked, and how long history is kept. The free plan is a real plan, not a trial, and monitors are never deleted if you move to a smaller plan.</p>
         {plans === null && (
           <div role="status" aria-label="Loading plans" className="plans-loading">
             <div className="d-skeleton h-56 w-full" />
