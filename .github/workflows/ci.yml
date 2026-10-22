@@ -47,7 +47,15 @@ jobs:
           node-version: 22
       - name: npm audit (production dependencies must have no known high/critical issues)
         working-directory: web
-        run: npm audit --omit=dev --audit-level=high
+        # npm falls back to a retired audit endpoint when a request to the current one fails, and that fallback always answers "400 Invalid package tree".
+        # So one flaky registry response shows up as a lockfile error. Retry; a real finding fails all three attempts and still fails the job.
+        run: |
+          for attempt in 1 2 3; do
+            npm audit --omit=dev --audit-level=high && exit 0
+            echo "npm audit failed (attempt $attempt of 3)"
+            sleep $((attempt * 20))
+          done
+          exit 1
 
   frontend:
     runs-on: ubuntu-latest

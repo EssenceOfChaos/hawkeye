@@ -197,3 +197,29 @@ func TestCancelledCheckIsNotARecordableResult(t *testing.T) {
 		t.Fatal("cancellation must be reported as an error, not as a failed check")
 	}
 }
+
+func TestCustomUserAgentAndFinalURL(t *testing.T) {
+	var ua atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			http.Redirect(w, r, "/landing/page?token=secret#frag", http.StatusFound)
+			return
+		}
+		ua.Store(r.Header.Get("User-Agent"))
+	}))
+	defer srv.Close()
+	r := check(t, loopbackCfg(), Target{URL: srv.URL + "/", UserAgent: "HawkEye-StatusChecker/1.0 (+https://example.test)"})
+	if ua.Load() != "HawkEye-StatusChecker/1.0 (+https://example.test)" {
+		t.Errorf("user agent = %v", ua.Load())
+	}
+	// Where the request ended, without the query (which can hold tokens) or fragment.
+	if r.FinalURL != srv.URL+"/landing/page" {
+		t.Errorf("FinalURL = %q", r.FinalURL)
+	}
+	if r2 := check(t, loopbackCfg(), Target{URL: srv.URL + "/landing/page"}); r2.FinalURL != srv.URL+"/landing/page" {
+		t.Errorf("a request with no redirect ends where it started: %q", r2.FinalURL)
+	}
+	if r3 := check(t, safehttp.Config{Resolver: nxResolver{}}, Target{URL: "https://nope.example/"}); r3.FinalURL != "" {
+		t.Errorf("no response, no final URL: %q", r3.FinalURL)
+	}
+}

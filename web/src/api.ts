@@ -316,6 +316,56 @@ export class ApiError extends Error {
   }
 }
 
+/** What the free SSL checker (POST /tools/ssl-check) reports about a host's certificate. */
+export interface SslReport {
+  host: string
+  checked_at: string
+  /** valid, expiring (30 days or fewer), expired, or invalid (not expired, but browsers would warn: wrong name, untrusted, not yet valid). */
+  status: 'valid' | 'expiring' | 'expired' | 'invalid'
+  /** Whole days left; negative once expired. */
+  days_remaining: number
+  trusted: boolean
+  hostname_match: boolean
+  tls_version: string
+  cipher_suite: string
+  problems: { code: string; severity: 'error' | 'warning'; message: string }[]
+  certificate: {
+    subject_name: string
+    subject_org?: string
+    issuer_name: string
+    issuer_org?: string
+    not_before: string
+    not_after: string
+    dns_names: string[]
+    dns_names_truncated?: boolean
+    serial_number: string
+    signature_algorithm: string
+    key_algorithm: string
+    key_bits?: number
+    sha256_fingerprint: string
+  }
+  chain: { subject_name: string; issuer_name: string; not_after: string }[]
+}
+
+/** What the free website status checker (POST /tools/site-check) reports about a site's home page. */
+export interface SiteReport {
+  host: string
+  /** The address that was requested (always the home page, whatever the visitor typed after the domain). */
+  url: string
+  checked_at: string
+  /** up: answered with a success or redirect. error_response: answered with a 4xx (reachable, but this request was refused or not found). down: no usable answer, or a 5xx. */
+  verdict: 'up' | 'error_response' | 'down'
+  reason: 'ok' | 'http_4xx' | 'http_5xx' | 'dns' | 'connect' | 'tls' | 'timeout' | 'redirect' | 'other'
+  status_code?: number
+  response_time_ms?: number
+  /** From Google's time-to-first-byte guidance: fast up to 0.8 s, slow above 1.8 s. Present when a response arrived. */
+  speed?: 'fast' | 'moderate' | 'slow'
+  /** Where redirects ended, when that is not the address requested. */
+  final_url?: string
+  /** Why https failed, when the visitor typed no scheme and the answer comes from plain http. */
+  https_error?: SiteReport['reason']
+}
+
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 function csrfCookie(): string | undefined {

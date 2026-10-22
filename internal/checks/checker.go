@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptrace"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +48,8 @@ type Target struct {
 	Body           string
 	Auth           Auth
 	Assertions     []Assertion
+	// UserAgent replaces the monitoring engine's default. The free website checker names itself so site owners can tell it apart.
+	UserAgent string
 }
 
 // Result is the outcome of one completed check. ResponseTimeMs is the time until response headers arrived.
@@ -63,6 +66,8 @@ type Result struct {
 	CertExpiresAt *time.Time
 	// Region is where the check ran; the worker sets it. Empty means the primary region.
 	Region string
+	// FinalURL is where the request ended up after redirects, when a response arrived. Credentials, query and fragment are not included.
+	FinalURL string
 }
 
 // Checker runs checks through the SSRF-safe HTTP client.
@@ -109,6 +114,9 @@ func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
 		req.Header.Set(h.Name, h.Value)
 	}
 	req.Header.Set("User-Agent", userAgent)
+	if t.UserAgent != "" {
+		req.Header.Set("User-Agent", t.UserAgent)
+	}
 
 	// Watch the TLS handshake with the monitored host (not hosts it redirects to) to learn when its certificate expires.
 	cert := &certWatch{host: req.URL.Hostname()}
@@ -149,6 +157,7 @@ func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
 
 	code := resp.StatusCode
 	res.StatusCode, res.ResponseTimeMs = &code, &elapsed
+	res.FinalURL = displayURL(resp.Request.URL)
 	// The body is only read when assertions need it, and then only up to MaxBodyBytes; it is never stored.
 	var respBody []byte
 	truncated := false
@@ -185,6 +194,14 @@ func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
 		res.Success, res.ErrorCategory, res.ErrorSummary = false, CatAssertion, truncate(msg, maxSummaryLen)
 	}
 	return finish()
+}
+
+// displayURL is u as it may be shown to a visitor: scheme, host and path only.
+func displayURL(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
 }
 
 // applyAuth adds credentials to req and returns the header that carries them, or "" for none.

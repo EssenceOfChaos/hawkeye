@@ -22,6 +22,12 @@ import { StatusPageSettings } from './pages/StatusPageSettings'
 import { PrivacyPage, TermsPage } from './pages/LegalPages'
 import { MonitorsPage } from './pages/MonitorsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { DowntimeCostCalculatorPage } from './pages/tools/DowntimeCostCalculatorPage'
+import { SslCheckerPage } from './pages/tools/SslCheckerPage'
+import { ToolsIndexPage } from './pages/tools/ToolsIndexPage'
+import { UptimeSlaCalculatorPage } from './pages/tools/UptimeSlaCalculatorPage'
+import { WebsiteStatusPage } from './pages/tools/WebsiteStatusPage'
+import { findPage, usePageMeta } from './usePageMeta'
 
 // The chart pages pull in the charting library; load them only when visited so the landing and auth pages stay light.
 const DashboardPage = lazyWithReload(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
@@ -59,6 +65,11 @@ export function AppRoutes() {
       </Route>
       <Route path="/" element={<LandingPage />} />
       <Route path="/monitoring" element={<MonitoringLandingPage />} />
+      <Route path="/tools" element={<ToolsIndexPage />} />
+      <Route path="/tools/is-website-down" element={<WebsiteStatusPage />} />
+      <Route path="/tools/ssl-certificate-checker" element={<SslCheckerPage />} />
+      <Route path="/tools/uptime-sla-calculator" element={<UptimeSlaCalculatorPage />} />
+      <Route path="/tools/downtime-cost-calculator" element={<DowntimeCostCalculatorPage />} />
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
@@ -88,6 +99,7 @@ export function AppRoutes() {
 /** Routes inside an error boundary that resets when the page changes. */
 function GuardedRoutes() {
   const { pathname } = useLocation()
+  usePageMeta(findPage(pathname)) // before the page view below, which reads the title
   useEffect(() => trackPageView(pathname), [pathname])
   return (
     <ErrorBoundary resetKey={pathname}>

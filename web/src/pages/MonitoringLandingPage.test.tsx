@@ -36,10 +36,9 @@ describe('MonitoringLandingPage', () => {
     expect(screen.getByRole('link', { name: 'View Pricing' })).toHaveAttribute('href', '#pricing-h')
   })
 
-  it('has no site navigation to wander off to, and keeps itself out of search results', () => {
+  it('has no site navigation to wander off to', () => {
     renderPage(anonymous)
     expect(screen.queryByRole('navigation', { name: /product|company/i })).not.toBeInTheDocument()
-    expect(document.head.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex')
   })
 
   it('shows live plan prices and the multi-location note only when plans offer several locations', async () => {

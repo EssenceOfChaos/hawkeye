@@ -2,11 +2,12 @@
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import { prerender } from './build/prerender-plugin.ts'
 
 const apiTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8080'
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), prerender()],
   build: {
     // Never inline fonts as data: URLs (small subsets otherwise are): the production CSP only allows fonts from our own origin.
     assetsInlineLimit: (file) => (/\.woff2?$/.test(file) ? false : undefined),

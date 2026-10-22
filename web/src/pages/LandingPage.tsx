@@ -370,6 +370,7 @@ export function LandingPage() {
           <h6 className="d-footer-title">Product</h6>
           <a className="d-link d-link-hover" href="#features-h">Features</a>
           <a className="d-link d-link-hover" href="#pricing-h">Pricing</a>
+          <Link className="d-link d-link-hover" to="/tools">Free tools</Link>
           {signedIn ? (
             <Link className="d-link d-link-hover" to="/dashboard">Dashboard</Link>
           ) : (

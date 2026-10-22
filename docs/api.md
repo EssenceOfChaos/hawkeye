@@ -262,6 +262,13 @@ Settings disabled or removed after queuing are skipped.
 | `GET /contact/categories` | – | the triage topics: `{categories: [{code, label, hint, priority}]}` |
 | `POST /contact` | – (session optional) | `{category, name, email, subject, message, url?}` → 202 `{reference}`. Emails the support inbox with Reply-To = `email`; a signed-in sender's account id and plan are added by the server. 400 `VALIDATION_ERROR` with `details.fields`; 429 when rate-limited; 503 `CONTACT_UNAVAILABLE` if delivery failed. A non-empty `company` field (spam trap) is answered 202 and silently dropped. |
 
+## Free tools
+
+| Method & path | Auth | Notes |
+|---|---|---|
+| `POST /tools/ssl-check` | – | `{host}` (a domain name; a pasted URL is reduced to its host) → 200 with the certificate report: `{host, checked_at, status (valid, expiring, expired, invalid), days_remaining, trusted, hostname_match, tls_version, cipher_suite, problems: [{code, severity, message}], certificate: {subject_name, issuer_name, not_before, not_after, dns_names, key_algorithm, key_bits, signature_algorithm, sha256_fingerprint, serial_number, …}, chain: [...]}`. Needs the CSRF header like every POST. Errors: 400 `INVALID_HOST` (IP address, other port, private-network name, credentials, malformed); 422 `HOST_NOT_FOUND`, `HOST_NOT_ALLOWED` (resolves to a non-public address), `CONNECT_FAILED`, `NO_TLS`; 504 `HOST_TIMEOUT`; 429 `RATE_LIMITED` (per IP) or `HOST_RATE_LIMITED` (that host was checked 5 times in 10 minutes by anyone); 503 `BUSY` (8 checks already running) or `TOOL_UNAVAILABLE`. 429/503 carry `Retry-After`. Results are cached for 60 s per host. Only port 443 is ever contacted and nothing is sent after the handshake. |
+| `POST /tools/site-check` | – | `{host}` (a domain; any path or query is ignored, the request is always `GET /`) → 200 `{host, url, checked_at, verdict (up, error_response, down), reason (ok, http_4xx, http_5xx, dns, connect, tls, timeout, redirect, other), status_code?, response_time_ms?, speed? (fast ≤ 800 ms, moderate, slow > 1800 ms), final_url?, https_error?}`. A site that does not answer is a 200 with `verdict: down`; errors are as for `/tools/ssl-check` (400 `INVALID_HOST`, 422 `HOST_NOT_ALLOWED`, 429 `RATE_LIMITED`/`HOST_RATE_LIMITED`, 503 `BUSY`/`TOOL_UNAVAILABLE`, 504 `HOST_TIMEOUT`). Results are cached for 30 s per host. |
+
 ## Plan limits
 
 `403 PLAN_LIMIT_REACHED` with details:
@@ -280,5 +287,4 @@ after a downgrade, existing monitors are untouched, creation is refused, the mes
 ## Known trade-offs
 
 - `EMAIL_TAKEN` reveals that an address is registered (better UX than a silent no-op). Registration is rate-limited; revisit if enumeration matters.
-- Rate limits are in-memory and per API process; with several replicas the effective limit multiplies. A shared store is a Phase 8 item.
-- Results, uptime and incident endpoints arrive with the checker (Phases 4–6).
+- Per-IP rate limits live in PostgreSQL and hold across API replicas (`internal/ratelimit`). The free checkers' per-host limit, concurrency cap and result cache (`internal/toolguard`) are per API process.

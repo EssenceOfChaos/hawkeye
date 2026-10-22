@@ -50,6 +50,9 @@ type Config struct {
 	SessionTTL          time.Duration
 	AuthRateLimitPerMin int
 	TrustForwardedFor   bool
+	// FreeToolsEnabled turns the public SSL and website checkers on (the default). DISABLE_FREE_TOOLS=true makes their endpoints answer 503: the
+	// switch to reach for if they are being abused.
+	FreeToolsEnabled bool
 
 	EmailProvider    string
 	EmailFromAddress string
@@ -261,6 +264,7 @@ func load(get func(string) string) (Config, error) {
 		SessionTTL:          duration("SESSION_TTL", 14*24*time.Hour),
 		AuthRateLimitPerMin: integer("AUTH_RATE_LIMIT_PER_MIN", 10),
 		TrustForwardedFor:   boolean("TRUST_FORWARDED_FOR"),
+		FreeToolsEnabled:    !boolean("DISABLE_FREE_TOOLS"),
 
 		CheckRegions:      str("CHECK_REGIONS", ""),
 		CanaryURLs:        str("CANARY_URLS", ""),

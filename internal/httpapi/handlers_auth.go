@@ -20,6 +20,8 @@ import (
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/regions"
+	"hawkeye/internal/sitecheck"
+	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
 	"hawkeye/internal/validation"
 )
@@ -39,6 +41,8 @@ type handlers struct {
 	billing       *billing.Service
 	account       *account.Service
 	contact       *contact.Service
+	sslcheck      *sslcheck.Service
+	sitecheck     *sitecheck.Service
 	log           *slog.Logger
 	limits        limiterDeps
 	emailPerHour  int

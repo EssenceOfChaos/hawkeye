@@ -32,6 +32,9 @@ import (
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/ratelimit"
+	"hawkeye/internal/safehttp"
+	"hawkeye/internal/sitecheck"
+	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
 )
 
@@ -114,11 +117,14 @@ func run() error {
 	// Compare Stripe's prices with the advertised plan prices now and hourly; a mismatch refuses that plan's checkout (internal/billing/prices.go).
 	go billingSvc.WatchPrices(ctx, time.Hour)
 
+	freeTools := newFreeTools(cfg.FreeToolsEnabled, log)
 	e := httpapi.New(httpapi.Options{
 		Logger: log, DB: pool, RequestTimeout: cfg.RequestTimeout, BodyLimit: cfg.BodyLimit,
 		Auth: authSvc, Orgs: organizations.NewService(pool), Plans: planSvc, Monitors: monitorSvc, Pool: pool, PgPool: pool,
 		Billing:       billingSvc,
 		Account:       account.NewService(pool, authSvc, provider, mailer, log, cfg.AppBaseURL),
+		SSLCheck:      freeTools.ssl,
+		SiteCheck:     freeTools.site,
 		Contact:       contact.NewService(mailer, log, cfg.SupportAddress, cfg.EmailFromAddress, cfg.AppBaseURL),
 		Maintenance:   maintenance.NewService(pool, planSvc),
 		Domains:       domains.NewService(pool, planSvc),
@@ -199,4 +205,19 @@ func sentryTest() int {
 	}
 	fmt.Printf("delivered (event %s). It appears under Issues in Sentry within a minute, tagged component=sentry-test.\n", rep.EventID)
 	return 0
+}
+
+// freeToolSet holds the public checkers. Both stay nil when DISABLE_FREE_TOOLS is set, and their endpoints then answer 503.
+type freeToolSet struct {
+	ssl  *sslcheck.Service
+	site *sitecheck.Service
+}
+
+func newFreeTools(enabled bool, log *slog.Logger) freeToolSet {
+	if !enabled {
+		log.Info("free tools disabled (DISABLE_FREE_TOOLS): the SSL and website checkers answer 503")
+		return freeToolSet{}
+	}
+	// The zero safehttp.Config is the strict production destination policy: public addresses only, ports 80 and 443.
+	return freeToolSet{ssl: sslcheck.New(safehttp.Config{}), site: sitecheck.New(safehttp.Config{})}
 }

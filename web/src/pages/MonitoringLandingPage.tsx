@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { Link } from 'react-router'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
@@ -9,7 +8,7 @@ import { usePlans } from '../hooks'
 import { PlanCard } from './LandingPage'
 
 // The campaign landing page (/monitoring) for paid ads: one message, one call to action, no site navigation. The copy follows the claims on the home page
-// and may only say what the product does today. It is kept out of search results (it repeats the home page) and sets its own title for the ad click.
+// and may only say what the product does today. It is kept out of search results (it repeats the home page); its title and noindex tag come from the page map in src/seo.ts.
 
 const BENEFITS = [
   { icon: brand.icons.websites, title: 'Uptime monitoring', text: 'Know when a website or API stops responding.' },
@@ -24,23 +23,7 @@ const AUDIENCES = [
   { title: 'Business owners', text: 'Hear about downtime before your customers do.' },
 ]
 
-function useCampaignPage() {
-  useEffect(() => {
-    const meta = document.createElement('meta')
-    meta.name = 'robots'
-    meta.content = 'noindex'
-    document.head.appendChild(meta)
-    const title = document.title
-    document.title = 'HawkEye: Know Before Your Customers Do'
-    return () => {
-      meta.remove()
-      document.title = title
-    }
-  }, [])
-}
-
 export function MonitoringLandingPage() {
-  useCampaignPage()
   const { status } = useAuth()
   const { plans, billingEnabled } = usePlans()
   const signedIn = status === 'authenticated'

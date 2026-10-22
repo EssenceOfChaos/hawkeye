@@ -19,6 +19,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 
 - [Home, features and pricing](https://hawkeye.observer/)
 - [Sign up](https://hawkeye.observer/register)
+- [Free tools](https://hawkeye.observer/tools): [Is My Website Down?](https://hawkeye.observer/tools/is-website-down) (whether a public site answers, its status code and response time), [SSL Certificate Checker](https://hawkeye.observer/tools/ssl-certificate-checker) (certificate expiry, issuer and trust for any public domain), [Uptime SLA Calculator](https://hawkeye.observer/tools/uptime-sla-calculator) (allowed downtime for an uptime percentage) and [Downtime Cost Calculator](https://hawkeye.observer/tools/downtime-cost-calculator) (revenue at risk from an outage)
 - [Contact](https://hawkeye.observer/contact)
 - [Privacy Policy](https://hawkeye.observer/privacy)
 - [Terms and Conditions](https://hawkeye.observer/terms)

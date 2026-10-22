@@ -207,6 +207,7 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .d-alert a { color: inherit; font-weight: 600; }
 .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .75rem; margin: 1rem 0; }
 .explain { margin-top: .5rem; max-width: 42rem; }
+.explain p { font-size: smaller; }
 .explain summary, .table-view summary { cursor: pointer; color: var(--accent); }
 .chart { margin: 1.5rem 0; padding: 0; transition: opacity .15s; }
 .chart figcaption { margin-bottom: .5rem; }
@@ -244,6 +245,44 @@ td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 .legal { max-width: 46rem; margin: 0 auto; padding: 1rem; }
 .legal-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
 .placeholder-banner { padding: .75rem 1rem; border: 2px solid var(--down); border-radius: .5rem; background: color-mix(in srgb, var(--down) 10%, transparent); font-weight: 600; }
+
+/* Free tools (/tools): a calculator form, its results, and the table of common targets. */
+.tool { width: 100%; box-sizing: border-box; max-width: 52rem; } /* width: a block with auto side margins in the page's flex column would size to its widest content (the nowrap table) instead of the screen */
+.tool-intro { font-size: 1.05rem; color: var(--muted); }
+.tool h2 { font-size: 1.25rem; margin-top: 2rem; }
+.tool .card h2 { margin-top: 0; font-size: 1.1rem; }
+.tool .card h2 + .tool-grid, .tool-grid + h2 { margin-top: 1rem; }
+.tool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0 1rem; }
+.tool-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: .75rem; margin: 1rem 0 0; }
+.tool-results div { border: 1px solid var(--border); border-radius: .5rem; padding: .6rem .8rem; background: #08172b99; }
+.tool-results dt { font-size: .85rem; color: var(--muted); }
+.tool-results dd { margin: .15rem 0 0; font-size: 1.05rem; }
+.tool-figure { font-size: clamp(1.8rem, 5vw, 2.6rem); margin: .25rem 0 .5rem; color: var(--gold-hi); }
+.tool-table th, .tool-table td { text-align: left; padding: .45rem .7rem; border-bottom: 1px solid var(--border); white-space: nowrap; font-weight: 400; }
+.tool-table thead th, .tool-table tbody th { font-weight: 600; }
+.tool-pass { color: var(--up); white-space: nowrap; }
+.tool-fail { color: var(--down); white-space: nowrap; }
+.tool-status { display: flex; align-items: center; gap: .9rem; }
+.tool-status > span { font-size: 2rem; line-height: 1; }
+.tool-status h2 { margin: 0; font-size: 1.3rem; }
+.tool-status p { margin: .1rem 0 0; }
+.ssl-valid > span, .ssl-valid h2 { color: var(--up); }
+.ssl-expiring > span, .ssl-expiring h2 { color: var(--warn); }
+.ssl-expired > span, .ssl-expired h2, .ssl-invalid > span, .ssl-invalid h2 { color: var(--down); }
+.site-up > span, .site-up h2 { color: var(--up); }
+.site-warn > span, .site-warn h2 { color: var(--warn); }
+.site-down > span, .site-down h2 { color: var(--down); }
+.speed-fast { color: var(--up); } .speed-moderate { color: var(--warn); } .speed-slow { color: var(--down); }
+.ssl-problems { margin: 1rem 0 0; padding-left: 1.2rem; }
+.tool-warn { color: var(--warn); }
+.tool-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: .6rem 1.5rem; margin: 1.2rem 0 0; }
+.tool-details dt { font-size: .85rem; color: var(--muted); }
+.tool-details dd { margin: 0; overflow-wrap: anywhere; }
+.ssl-fp { font-size: .8rem; }
+.ssl-chain { margin: .5rem 0 0; padding-left: 1.2rem; }
+.tool-cta { margin-top: 2rem; border-color: var(--gold-lo); }
+.tool-list { list-style: none; padding: 0; }
+.tool-list h2 { margin: 0 0 .25rem; font-size: 1.2rem; }
 
 /* Type roles: Sora for headlines and brand moments, Inter for reading and UI, JetBrains Mono for data (URLs, figures, timestamps). */
 h1, h2, h3, .price strong, .step-no, .eyebrow { font-family: var(--font-display); }

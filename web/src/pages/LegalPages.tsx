@@ -17,7 +17,7 @@ function Shell({ title, children, draft = true }: { title: string; children: Rea
         )}
         <h1>{title}</h1>
         {children}
-        <p className="hint"><Link to="/contact">Contact us</Link> · <Link to="/privacy">Privacy policy</Link> · <Link to="/terms">Terms of service</Link> · <CookieSettingsButton /> · <Link to="/">Home</Link></p>
+        <p className="hint"><Link to="/tools">Free tools</Link> · <Link to="/contact">Contact us</Link> · <Link to="/privacy">Privacy policy</Link> · <Link to="/terms">Terms of service</Link> · <CookieSettingsButton /> · <Link to="/">Home</Link></p>
       </main>
     </div>
   )

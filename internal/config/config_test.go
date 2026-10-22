@@ -73,7 +73,7 @@ func TestEngineDefaultsAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.WorkerConcurrency != 10 || c.FailureThreshold != 2 || c.RecoveryThreshold != 2 || !c.RunScheduler || c.JobLease.Minutes() != 2 {
+	if c.WorkerConcurrency != 10 || c.FailureThreshold != 2 || c.RecoveryThreshold != 2 || !c.RunScheduler || !c.FreeToolsEnabled || c.JobLease.Minutes() != 2 {
 		t.Fatalf("%+v", c)
 	}
 	_, err = load(env(map[string]string{"DATABASE_URL": "postgres://x", "WORKER_CONCURRENCY": "0", "JOB_LEASE": "10s", "FAILURE_THRESHOLD": "0"}))
@@ -296,5 +296,16 @@ func TestCanarySettings(t *testing.T) {
 		if _, err := load(env(with(kv...))); err == nil || !strings.Contains(err.Error(), "CANARY") {
 			t.Errorf("%s: expected a CANARY_ error, got %v", name, err)
 		}
+	}
+}
+
+func TestFreeToolsCanBeSwitchedOff(t *testing.T) {
+	on, err := load(env(map[string]string{"DATABASE_URL": "postgres://x"}))
+	if err != nil || !on.FreeToolsEnabled {
+		t.Fatalf("free tools must be on by default: %v %+v", err, on.FreeToolsEnabled)
+	}
+	off, err := load(env(map[string]string{"DATABASE_URL": "postgres://x", "DISABLE_FREE_TOOLS": "true"}))
+	if err != nil || off.FreeToolsEnabled {
+		t.Fatalf("DISABLE_FREE_TOOLS=true must turn them off: %v %+v", err, off.FreeToolsEnabled)
 	}
 }

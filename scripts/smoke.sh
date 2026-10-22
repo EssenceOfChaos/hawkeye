@@ -36,6 +36,12 @@ check "landing page is served"              '"${CURL[@]}" "$BASE/" | grep -qi "h
 check "SPA deep link falls back to the app (/login)" '[ "$(status "$BASE/login")" = 200 ]'
 check "the /monitoring campaign page is served as a page, not a 404" '[ "$(status "$BASE/monitoring")" = 200 ]'
 check "privacy, terms and contact pages exist" '[ "$(status "$BASE/privacy")" = 200 ] && [ "$(status "$BASE/terms")" = 200 ] && [ "$(status "$BASE/contact")" = 200 ]'
+check "each page has its own title and canonical link in the HTML (no JavaScript needed)" '"${CURL[@]}" "$BASE/contact" | grep -q "<title>Contact HawkEye</title>" && "${CURL[@]}" "$BASE/contact" | grep -q "rel=\"canonical\" href=\"https://hawkeye.observer/contact\""'
+check "the free tool pages are served as pages with their own titles" '"${CURL[@]}" "$BASE/tools/uptime-sla-calculator" | grep -q "<title>Uptime SLA Calculator" && "${CURL[@]}" "$BASE/tools/downtime-cost-calculator" | grep -q "<title>Downtime Cost Calculator" && [ "$(status "$BASE/tools")" = 200 ]'
+check "the SSL checker page is served and its endpoint needs the CSRF token (403 without it)" '"${CURL[@]}" "$BASE/tools/ssl-certificate-checker" | grep -q "<title>Free SSL Certificate Checker" && [ "$(status -X POST -H "Content-Type: application/json" -d "{\"host\":\"example.com\"}" "$BASE/api/v1/tools/ssl-check")" = 403 ]'
+check "the website status checker page is served and its endpoint needs the CSRF token (403 without it)" '"${CURL[@]}" "$BASE/tools/is-website-down" | grep -q "<title>Is My Website Down" && [ "$(status -X POST -H "Content-Type: application/json" -d "{\"host\":\"example.com\"}" "$BASE/api/v1/tools/site-check")" = 403 ]'
+check "the /monitoring campaign page asks not to be indexed, in the HTML" '"${CURL[@]}" "$BASE/monitoring" | grep -q "name=\"robots\" content=\"noindex\""'
+check "sitemap.xml lists the public pages and no signed-in pages" 's=$("${CURL[@]}" "$BASE/sitemap.xml"); echo "$s" | grep -q "<loc>https://hawkeye.observer/contact</loc>" && ! echo "$s" | grep -qE "dashboard|login|register|monitoring"'
 check "the email logo is served as an image" '[ "$(status "$BASE/email/hawkeye-logo.png")" = 200 ] && "${CURL[@]}" -I "$BASE/email/hawkeye-logo.png" | grep -qi "^content-type: image/png"'
 check "contact topics are public"            '[ "$("${CURL[@]}" "$BASE/api/v1/contact/categories" | jq_ "len(d[\"categories\"])")" -ge 5 ]'
 

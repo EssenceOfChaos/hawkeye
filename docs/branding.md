@@ -52,6 +52,10 @@ for the name "HawkEye" before launch. **Both are still open items.**
 Not used: `10_speedometer_icon.png` (its artwork is cropped flat at the bottom), `05_hawkeye_logo_compact.png` and `hawkeye.png`
 (duplicates of the emblem in the full logo), `04_app_icon_round.png` (kept in the repo for later use).
 
+## Link-preview images
+
+`web/public/share/<name>.jpg` (1200x630) are what link previews (Slack, X, LinkedIn, iMessage) show for the public pages. `python3 scripts/prepare_share_images.py` makes them from `web/src/assets/brand/source/share-background.png` (the earth, hawk's eye and laptop artwork, 1774x887, no text): it typesets each image's text in headless Chrome with the site's own fonts (Sora and Inter from `web/node_modules`) over a left-hand shade, adds the white logo, and saves JPEGs. To add or reword one, edit `IMAGES` in the script, run it, and name the image in the page's entry in `web/src/seo.ts`. The laptop screen in the background is generic artwork (it is not a screenshot of HawkEye), like the landing hero.
+
 ## Cleanup
 
 Four crops contained fragments of neighbouring artwork (a blue circle beside the laptop, a laptop corner under the cloud server,

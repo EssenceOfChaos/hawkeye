@@ -122,6 +122,16 @@ func New(cfg Config, timeout time.Duration) *http.Client {
 	}
 }
 
+// NewDialer returns a DialFunc that applies the same destination policy as New to a plain TCP connection: the port must be allowed, the host
+// is resolved here, every answer must be public, and the validated IP is the one dialed. It is for callers that need the raw connection
+// (reading a TLS certificate) rather than an HTTP exchange; they must dial through it, never with net.Dial.
+func NewDialer(cfg Config) DialFunc {
+	cfg = cfg.withDefaults()
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return dialContext(ctx, cfg, network, addr)
+	}
+}
+
 func dialContext(ctx context.Context, cfg Config, network, addr string) (net.Conn, error) {
 	host, portStr, err := net.SplitHostPort(addr)
 	if err != nil {

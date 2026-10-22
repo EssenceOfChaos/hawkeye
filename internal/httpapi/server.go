@@ -26,6 +26,8 @@ import (
 	"hawkeye/internal/plans"
 	"hawkeye/internal/ratelimit"
 	"hawkeye/internal/regions"
+	"hawkeye/internal/sitecheck"
+	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
 )
 
@@ -53,6 +55,8 @@ type Options struct {
 	Billing       *billing.Service
 	Account       *account.Service
 	Contact       *contact.Service
+	SSLCheck      *sslcheck.Service  // free SSL checker; nil turns the endpoint off
+	SiteCheck     *sitecheck.Service // free website status checker; nil turns the endpoint off
 	PgPool        *pgxpool.Pool
 	Pool          plans.DB
 
@@ -159,7 +163,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, billing: o.Billing, account: o.Account, contact: o.Contact, log: o.Logger, secureCookies: o.SecureCookies}
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, billing: o.Billing, account: o.Account, contact: o.Contact, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		TokenLookup:    "header:X-CSRF-Token",
@@ -246,6 +250,17 @@ func registerAPI(e *echo.Echo, o Options) {
 	if h.limits.l != nil {
 		contactLimits = append(contactLimits, h.limits.byIP("contact:hour", 5, time.Hour))
 	}
+	// Free tools. They connect to a host the visitor names, so they have the tightest per-IP budgets of any public endpoint: a short burst
+	// allowance and an hourly cap each, on top of the per-host limit and concurrency cap inside the checkers (internal/toolguard).
+	toolLimits := func(scope string) []echo.MiddlewareFunc {
+		ms := []echo.MiddlewareFunc{limit(scope)}
+		if h.limits.l != nil {
+			ms = append(ms, h.limits.byIP(scope+":hour", 40, time.Hour))
+		}
+		return ms
+	}
+	v1.POST("/tools/ssl-check", h.sslCheck, toolLimits("ssl-check")...)
+	v1.POST("/tools/site-check", h.siteCheck, toolLimits("site-check")...)
 	v1.GET("/contact/categories", h.contactCategories)
 	v1.POST("/contact", h.submitContact, contactLimits...)
 	// Called from the confirmation email by a recipient who may not have an account.

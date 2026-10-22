@@ -26,7 +26,20 @@ internal/statuspage public status page (`/status/<slug>`; migration `000014`; 30
 internal/reports       range resolution (plan-clamped), check-based uptime, bucketed series, check history, dashboard summary
 internal/retention     batched per-plan data retention + credential housekeeping (runs inside cmd/worker)
 internal/billing       Stripe: provider interface (+ SDK implementation and fake), checkout/portal/cancel/resync, signed webhook intake, event processing
-internal/email         Sender interface + console and in-memory senders
+internal/email         Sender interface (console, in-memory and SMTP senders)
+internal/account       data export, account deletion, change password
+internal/contact       the public contact form (triage topics, support email, acknowledgement)
+internal/domains       domain registration expiry: RDAP + WHOIS lookup, warnings, per-plan limits (see Domain expiry below)
+internal/regions       the configured check locations (CHECK_REGIONS)
+internal/ratelimit     shared PostgreSQL fixed-window rate limiter
+internal/canary        tells our own network trouble apart from a customer's site being down
+internal/errtrack      optional Sentry error tracking (scrubbed)
+internal/healthcheck   container health probes
+internal/secrets       AES-256-GCM sealing of stored credentials and webhook URLs
+internal/publichost    reads a visitor's input for the free tools into a public host name (no IPs, credentials or odd ports)
+internal/toolguard     abuse limits shared by the free checkers: result cache, concurrency cap, per-host budget, deadline
+internal/sslcheck      the SSL certificate checker: reads and verifies the certificate a host presents on port 443
+internal/sitecheck     the website status checker: one GET / of a public host, with status, timing and verdict
 internal/validation    field-level validation error
 internal/testutil      per-test isolated, migrated PostgreSQL databases
 internal/config    env loading + validation (fails fast, no production fallbacks)
@@ -34,7 +47,7 @@ internal/logging   slog (JSON in production, text otherwise)
 internal/database  pgx pool + golang-migrate
 internal/httpapi   Echo wiring: request ID, logging, recover, body limit, timeout, error envelope, /healthz, /readyz
 migrations/    versioned SQL, embedded via go:embed
-web/           React + TypeScript (Vite, Vitest): auth pages, monitor list with usage meter, monitor form
+web/           React + TypeScript (Vite, Vitest): the public site (landing, /monitoring campaign page, free tools, legal pages, status pages), sign-in, and the app (dashboard, monitors, incidents, alerts, domains, maintenance, billing, account)
 ```
 
 - `/healthz` is liveness only. `/readyz` pings PostgreSQL (2s timeout) and returns 503 without internal details on failure.
@@ -145,3 +158,28 @@ Warnings reuse `notification_deliveries` (`event_type = 'domain_expiry'`, `domai
 ## Phase 8 additions
 
 Production Dockerfiles and Compose (`deploy/`, `docs/deployment.md`); SMTP sender; shared PostgreSQL rate limiter; API metrics on a private port (`:9091`) and alert rules; optional Sentry error tracking; account export/deletion/change-password; legal placeholder pages; backup/restore scripts (`docs/backup-restore.md`); egress firewall; smoke test (`scripts/smoke.sh`); security review (`docs/security-review.md`).
+
+## Page titles, prerendering and the sitemap
+
+`web/src/seo.ts` is the page map: every route's title, description and whether search engines may index it. Three things read it:
+
+- **In the browser**, `usePageMeta` (called once in `GuardedRoutes`) sets the title, description and canonical link, or a robots `noindex`, on every navigation. Status pages and the 404 page are not in the map; they set their own title.
+- **At build time**, `web/build/prerender-plugin.ts` writes one copy of the built `index.html` per page with a fixed address to `dist/pages/<name>.html` (home is `pages/home.html`), with that page's tags in the HTML, so crawlers and link previews that do not run JavaScript see them. It also writes `dist/sitemap.xml` from the pages marked `index: true`.
+- **The web server** (`deploy/Caddyfile`) serves `/pages<path>.html` when it exists and the plain `index.html` otherwise (monitor pages with an id, status pages, 404s). `index.html` stays neutral (no canonical or robots tag) because it is that fallback.
+
+To add a page: add the route in `App.tsx`, the path to the `@app` pattern in the Caddyfile, and an entry in `seo.ts`. `seo.test.ts` and `routes.test.ts` fail if one is missing. To make it appear in search results and the sitemap, set `index: true` (and make sure `robots.txt` does not block it). The tags are written at build time, so the page body is still rendered in the browser.
+
+**Link-preview images** (`web/public/share/*.jpg`, 1200x630) come from `scripts/prepare_share_images.py` (background: `web/src/assets/brand/source/share-background.png`; text typeset in headless Chrome with the site's fonts). A page names its image in `seo.ts` (`image`); pages without one use `/share/home.jpg`. `seo.test.ts` fails if a named image is missing.
+
+## Free tools (`/tools`)
+
+Public pages that rank in search and lead to sign-up; each ends with a call to action (`ToolShell`) and records `tool_use`, `tool_result` (the outcome only, never the domain) and `tool_cta_click`.
+
+| Page | What it does | Where the work happens |
+|---|---|---|
+| `/tools/uptime-sla-calculator` | allowed downtime for an uptime percentage; uptime delivered for a downtime | browser (`web/src/tools/sla.ts`) |
+| `/tools/downtime-cost-calculator` | revenue at risk from an outage | browser (`web/src/tools/downtimeCost.ts`) |
+| `/tools/ssl-certificate-checker` | certificate expiry, issuer, trust, problems | `POST /api/v1/tools/ssl-check`, `internal/sslcheck` |
+| `/tools/is-website-down` | does a site answer: verdict, status code, response time, final address | `POST /api/v1/tools/site-check`, `internal/sitecheck` |
+
+The two checkers are the only public endpoints that connect to a host a visitor names. They share the destination policy of the monitoring engine (`internal/safehttp`), input parsing (`internal/publichost`) and abuse limits (`internal/toolguard`); the endpoints sit behind per-IP limits and CSRF like every POST. The API container makes these connections (see `docs/security-review.md`, item 12, for what that does and does not protect). `DISABLE_FREE_TOOLS=true` switches both off (503); `docs/operations.md#free-tools-abuse` is the runbook. Live checks against real hosts: `SSLCHECK_LIVE=1` and `SITECHECK_LIVE=1` (run on Linux).

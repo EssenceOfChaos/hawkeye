@@ -22,6 +22,24 @@ groups:
         expr: increase(hawkeye_rate_limiter_errors_total[10m]) > 0
         labels: {severity: ticket}
         annotations: {summary: "The shared rate limiter's database is failing: limits are being skipped (fail-open)"}
+      # The free checkers (SSL certificate checker, website status checker: POST /api/v1/tools/{ssl,site}-check) are public and connect out to hosts
+      # visitors name. Ordinary use is a trickle; these fire on sustained volume, on people being turned away, and on bots running into the per-IP
+      # limits. If they fire: look at the `ssl check` / `site check` log lines, and consider a bot challenge (docs/operations.md#free-tools-abuse and docs/security-review.md, item 12).
+      - alert: HawkEyeFreeCheckersHeavyUse
+        expr: sum(rate(hawkeye_http_requests_total{route=~"/api/v1/tools/(ssl|site)-check"}[10m])) > 0.5
+        for: 15m
+        labels: {severity: ticket}
+        annotations: {summary: "The free checkers are averaging more than one request every 2 seconds: a traffic spike or abuse", runbook: "docs/operations.md#free-tools-abuse"}
+      - alert: HawkEyeFreeCheckersTurningPeopleAway
+        expr: sum(rate(hawkeye_http_requests_total{route=~"/api/v1/tools/(ssl|site)-check",code=~"503|429"}[10m])) > 0.1
+        for: 15m
+        labels: {severity: ticket}
+        annotations: {summary: "The free checkers are refusing a steady share of requests (busy, or clients hitting their limits)", runbook: "docs/operations.md#free-tools-abuse"}
+      - alert: HawkEyeFreeCheckersClientsThrottled
+        expr: sum(rate(hawkeye_rate_limited_total{scope=~"route:(ssl|site)-check|(ssl|site)-check:hour"}[10m])) > 0.05
+        for: 15m
+        labels: {severity: ticket}
+        annotations: {summary: "Clients keep hitting the free checkers' per-IP limits: probably a script", runbook: "docs/operations.md#free-tools-abuse"}
       - alert: HawkEyeDbPoolSaturated
         expr: hawkeye_db_pool_acquired_connections >= hawkeye_db_pool_max_connections
         for: 5m

@@ -81,6 +81,14 @@ describe('LandingPage', () => {
     }
   })
 
+  it('footer links to the free tools, in the Product column, for everyone', async () => {
+    renderLanding((url) =>
+      url.includes('/plans') ? json(200, { plans: [] }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }),
+    )
+    const product = within(screen.getByRole('contentinfo')).getByRole('navigation', { name: 'Product' })
+    expect(within(product).getByRole('link', { name: 'Free tools' })).toHaveAttribute('href', '/tools')
+  })
+
   it('footer offers sign up and log in only to visitors who are not signed in', async () => {
     renderLanding((url) =>
       url.includes('/plans') ? json(200, { plans: [] }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }),

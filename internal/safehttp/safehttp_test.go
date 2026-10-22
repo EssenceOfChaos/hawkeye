@@ -396,3 +396,24 @@ func TestDefaultDialerControlBlocksEvenIfResolutionLogicIsBypassed(t *testing.T)
 		t.Fatal("connection reached the listener")
 	}
 }
+
+func TestNewDialerAppliesTheSamePolicyAsTheClient(t *testing.T) {
+	rd := &recordingDial{target: "127.0.0.1:1"}
+	res := &fakeResolver{answers: map[string][][]netip.Addr{
+		"public.example": {addrs("8.8.8.8")}, "private.example": {addrs("10.0.0.5")}, "mixed.example": {addrs("8.8.8.8", "10.0.0.5")},
+	}}
+	dial := NewDialer(Config{Resolver: res, Dial: rd.dial})
+	for _, addr := range []string{"private.example:443", "mixed.example:443", "public.example:22", "public.example:8443", "127.0.0.1:443", "[::1]:443", "169.254.169.254:80"} {
+		if _, err := dial(context.Background(), "tcp", addr); !errors.Is(err, ErrBlocked) {
+			t.Errorf("%s: err = %v, want ErrBlocked", addr, err)
+		}
+	}
+	if got := rd.addresses(); len(got) != 0 {
+		t.Fatalf("a blocked destination was dialed: %v", got)
+	}
+	// An allowed destination is dialed by its validated IP, not by name.
+	_, _ = dial(context.Background(), "tcp", "public.example:443")
+	if got := rd.addresses(); len(got) != 1 || got[0] != "8.8.8.8:443" {
+		t.Errorf("dialed %v, want [8.8.8.8:443]", got)
+	}
+}

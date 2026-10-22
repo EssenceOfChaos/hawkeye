@@ -15,6 +15,7 @@ internet ─443/80─▶ web (Caddy: TLS, HSTS, CSP, static SPA, proxies /api /h
                   customers' websites
 ```
 
+- The API also makes outbound connections for the free SSL and website checkers (`/tools`); those go through the same public-address-only policy as monitor checks but are not covered by `deploy/egress-filter.sh` (`docs/security-review.md`, item 12). `DISABLE_FREE_TOOLS=true` turns them off.
 - Only `web` publishes ports. The metrics ports and PostgreSQL are never published.
 - Containers are read-only, run non-root with all capabilities dropped and `no-new-privileges`. API and worker are distroless.
 - PostgreSQL is **external by default** (managed database recommended). `docker-compose.local-db.yml` adds a single-node Postgres for small installs and the smoke stack.
@@ -31,7 +32,7 @@ internet ─443/80─▶ web (Caddy: TLS, HSTS, CSP, static SPA, proxies /api /h
 1. `cp deploy/.env.production.example .env.production` and fill every `CHANGE_ME`. Generate `SESSION_SECRET` with `openssl rand -base64 48`. Keep the file `chmod 600`, out of git.
 2. Run migrations once: `docker compose --env-file .env.production -f deploy/docker-compose.prod.yml run --rm migrate` (or `make migrate` against the target `DATABASE_URL`). Migrations are embedded in the binary and forward-only.
 3. Build and start: `docker compose --env-file .env.production -f deploy/docker-compose.prod.yml up -d --build`. Caddy obtains the certificate on first request; watch `docker compose logs -f web`.
-4. Verify: `scripts/smoke.sh https://your-domain` (36 checks: health, redirect to HTTPS, HSTS and CSP headers, security-sensitive routes, auth flow; `--full` also drives the registration and account-deletion lifecycle and needs a mail API).
+4. Verify: `scripts/smoke.sh https://your-domain` (42 checks: health, redirect to HTTPS, HSTS and CSP headers, security-sensitive routes, auth flow; `--full` also drives the registration and account-deletion lifecycle and needs a mail API).
 5. Apply the egress firewall on the host and prove it: `sudo ALLOW_TCP=... ALLOW_DNS=... deploy/egress-filter.sh apply`, then `scripts/verify-egress.sh`. **This script has not been tested on Linux by the author; do not skip the verifier.**
 6. Add the Stripe webhook endpoint `https://your-domain/api/v1/webhooks/stripe`, put its signing secret in `STRIPE_WEBHOOK_SECRET`, restart `api` and `worker`.
 7. Load `deploy/prometheus-alerts.yml`, add an external uptime check on `/readyz`, schedule backups (`docs/backup-restore.md`).
@@ -109,7 +110,7 @@ The script sets `APP_VERSION` in `.env.production` to the commit sha so logs and
 The web app is a single-page app, so Caddy has to know which addresses are real pages. `@app` in `deploy/Caddyfile` lists them: those get the app shell with
 HTTP 200; real files (hashed assets, icons, email images) are served as files; everything else gets the same shell with **HTTP 404**, and the app renders its
 404 page (`web/src/pages/NotFoundPage.tsx`). A missing `/assets/*` file is a plain empty 404, and `/api/*` keeps the API's JSON 404.
-**When you add a page in `web/src/App.tsx`, add it to the `@app` pattern too.** `web/src/routes.test.ts` fails if you forget. To try it locally:
+**When you add a page in `web/src/App.tsx`, add it to the `@app` pattern too, and give it an entry in `web/src/seo.ts`** (its title, description, preview image and whether search engines may index it); `web/src/routes.test.ts` and `web/src/seo.test.ts` fail if you forget. Pages with a fixed address are served from a prerendered copy of the shell (`/pages/<name>.html`, written by `npm run build`, with that page's tags in the HTML) and the plain `index.html` otherwise; `sitemap.xml` is generated in the same step from the pages marked indexable (there is no hand-edited sitemap file). To try it locally:
 `docker run --rm -p 8089:80 -v $PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro -v $PWD/web/dist:/srv:ro -e ACME_EMAIL=a@example.com -e SITE_ADDRESS=:80 caddy:2.11.7-alpine`
 (API routes answer 503 there because no API container is running), then `curl -i http://localhost:8089/nope`.
 

@@ -60,9 +60,9 @@ The API serves its metrics on a **separate port that is never published or proxi
 
 ## Alerting and external monitoring
 
-`deploy/prometheus-alerts.yml` contains 21 alert rules covering API errors and latency, panics, the shared limiter, database pool pressure, workers not polling, scheduler lag,
-queue backlog/backpressure, missed checks, dropped jobs, mass check failures (a sign of **our** network problem), stale retention, alert-email backlog/failures, and billing
-failures/risk events. They are validated with `promtool check rules`, and a unit test fails if a rule names a metric the code does not export.
+`deploy/prometheus-alerts.yml` contains 29 alert rules covering API errors and latency, panics, the shared limiter, database pool pressure, workers not polling, scheduler lag,
+queue backlog/backpressure, missed checks, dropped jobs, mass check failures (a sign of **our** network problem), stale retention, alert-email backlog/failures, billing
+failures/risk events, and the free checkers (heavy use, people turned away, clients hitting their limits). They are validated with `promtool check rules`, and a unit test fails if a rule names a metric the code does not export.
 Load the file into your Prometheus (or Grafana/Alertmanager) and route `severity: page` alerts to a pager.
 
 Also run an **external** uptime check on `https://<domain>/readyz` from a different provider/region (several free tiers exist), alerting a channel that does not depend on this
@@ -78,6 +78,16 @@ Each section is linked from an alert in `deploy/prometheus-alerts.yml`.
 2. 5xx on one route only → look at that route's handler/logs. 5xx everywhere → check `/readyz` (database) and `hawkeye_db_pool_*` (pool exhausted? raise `DB_MAX_CONNS`, check for slow queries with `SELECT * FROM pg_stat_activity WHERE state <> 'idle' ORDER BY query_start`).
 3. Latency up with CPU low → database. Latency up with CPU high on the API container → scale `api` replicas (they are stateless; sessions and rate limits are in PostgreSQL).
 4. A burst of 429s: see `hawkeye_rate_limited_total` by scope; legitimate NAT'd offices can hit the per-IP limits (raise `AUTH_RATE_LIMIT_PER_MIN` / `GLOBAL_RATE_LIMIT_PER_MIN`).
+
+### Free tools abuse
+
+Symptoms: `HawkEyeFreeCheckersHeavyUse`, `HawkEyeFreeCheckersTurningPeopleAway` or `HawkEyeFreeCheckersClientsThrottled`. The SSL and website checkers (`POST /api/v1/tools/ssl-check` and `/tools/site-check`) are public and connect to hosts visitors name.
+
+1. Look at the API log: one `ssl check` or `site check` line per request with the outcome (`up/ok`, `HOST_RATE_LIMITED`, `BUSY`, ...) and duration. Hosts are logged only at debug level (`LOG_LEVEL=debug`), which also shows which hosts are being asked about; client addresses are in the request log.
+2. A spike of ordinary outcomes from many addresses is probably a link going around (or a crawler): nothing to do. Mostly `BUSY` or `RATE_LIMITED` from a few addresses is a script. The per-IP limits (10/minute, 40/hour) and per-host limit (5 fresh checks per 10 minutes) already contain it; a determined distributed abuser can still keep the 8 check slots busy, which affects only these two tools.
+3. To stop it at once: set `DISABLE_FREE_TOOLS=true` and restart the API; both endpoints then answer 503 and the pages say the tool is unavailable. Monitoring is unaffected.
+4. To block an address, do it at the host firewall (`ufw deny from <ip>`) or in Caddy. If it keeps recurring, add a bot challenge to the two forms (for example Cloudflare Turnstile; the CSP in `deploy/Caddyfile` needs the script and frame origin) and verify the token in `handlers_tools.go` before calling the checker (`docs/security-review.md`, item 12).
+5. A site owner who complains about requests from us: the requests are `GET /` with `User-Agent: HawkEye-StatusChecker/1.0 (+https://hawkeye.observer/tools/is-website-down)`, at most 5 per host per 10 minutes. Tell them they can block that user agent.
 
 ### Email delivery failing
 

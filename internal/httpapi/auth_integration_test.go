@@ -32,6 +32,8 @@ import (
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/ratelimit"
+	"hawkeye/internal/sitecheck"
+	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
 	"hawkeye/internal/testutil"
 )
@@ -55,6 +57,8 @@ type envOpts struct {
 	reporter  errtrack.Reporter
 	emailPerH int
 	global    int
+	ssl       *sslcheck.Service
+	site      *sitecheck.Service
 }
 
 func newEnv(t *testing.T, rateLimit int) *env { return newEnvOpts(t, rateLimit, envOpts{}) }
@@ -81,6 +85,8 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 		Billing:       billing.NewService(pool, o.provider, o.billingCfg, metrics.New(), log),
 		Account:       account.NewService(pool, svc, o.provider, mail, log, "https://app.example.com"),
 		Contact:       contact.NewService(mail, log, "support@test.example", "alerts@test.example", "https://app.example.com"),
+		SSLCheck:      o.ssl,
+		SiteCheck:     o.site,
 		HSTS:          o.hsts, Metrics: o.metrics, Errors: o.reporter, EmailActionLimitPerHour: o.emailPerH, GlobalRateLimitPerMin: o.global,
 	}
 	if o.shared {
