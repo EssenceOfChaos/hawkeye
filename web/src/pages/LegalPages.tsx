@@ -167,6 +167,7 @@ export function PrivacyPage() {
         <li><strong>Resend</strong>: delivery of our emails, such as verification, password reset, and alert emails. Resend processes the recipient address and the content of those emails.</li>
         <li><strong>Cloudflare</strong>: domain name (DNS) services and the forwarding of messages sent to our support address.</li>
         <li><strong>Google (Gmail)</strong>: the mailbox where we read and answer support messages.</li>
+        <li><strong>Sentry</strong>: error tracking. When something unexpected goes wrong in our software, a technical error report is sent from our servers to Sentry so we can find and fix the problem. A report contains the error message, the software version and the part of the service that failed, and may include technical identifiers or a web address that appeared in the error. We remove email addresses, passwords, tokens and keys from it before it leaves our servers, and we do not send request contents, cookies, or the names of the people using the Service.</li>
         <li><strong>Google (Analytics)</strong>: website usage analytics, unless you opt out, as described in Section 2.C and E. Google receives page addresses without query strings or fragments, your IP address, and browser and device information.</li>
       </ul>
       <p>

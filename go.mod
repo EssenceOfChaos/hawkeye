@@ -1,6 +1,6 @@
 module hawkeye
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/golang-migrate/migrate/v4 v4.20.1

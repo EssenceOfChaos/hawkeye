@@ -70,6 +70,7 @@ func run() error {
 		return err
 	}
 	defer flushErrors()
+	errtrack.LogStatus(log, cfg.SentryDSN, cfg.AppEnv, cfg.AppVersion)
 	box, err := cfg.SecretBox()
 	if err != nil {
 		return fmt.Errorf("secrets key: %w", err)

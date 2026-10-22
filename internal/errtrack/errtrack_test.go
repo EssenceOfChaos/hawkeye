@@ -3,6 +3,7 @@ package errtrack_test
 import (
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -102,5 +103,84 @@ func TestSentryReporterSendsScrubbedTaggedEvents(t *testing.T) {
 		if !strings.Contains(all, want) {
 			t.Errorf("event missing %q", want)
 		}
+	}
+}
+
+func TestDescribeNamesTheProjectButNeverTheKey(t *testing.T) {
+	host, project, ok := errtrack.Describe("https://0123456789abcdef@o4500.ingest.us.sentry.io/4509999")
+	if !ok || host != "o4500.ingest.us.sentry.io" || project != "4509999" {
+		t.Fatalf("%q %q %v", host, project, ok)
+	}
+	for _, bad := range []string{"", "not a dsn", "https://"} {
+		if _, _, ok := errtrack.Describe(bad); ok {
+			t.Errorf("%q must not be accepted", bad)
+		}
+	}
+}
+
+func TestLogStatusSaysWhetherAndWhereButNotTheKey(t *testing.T) {
+	var buf strings.Builder
+	log := slog.New(slog.NewTextHandler(&buf, nil))
+	errtrack.LogStatus(log, "", "production", "abc")
+	errtrack.LogStatus(log, "https://0123456789abcdef@o4500.ingest.us.sentry.io/4509999", "production", "abc123")
+	errtrack.LogStatus(log, "garbage", "production", "abc")
+	out := buf.String()
+	for _, want := range []string{"error tracking disabled", "error tracking enabled", "sentry_project=4509999", "sentry_host=o4500.ingest.us.sentry.io", "environment=production", "release=abc123", "does not look like a DSN"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "0123456789abcdef") {
+		t.Errorf("the DSN key was logged:\n%s", out)
+	}
+}
+
+func TestSendTestReportsDeliveryAndRefusal(t *testing.T) {
+	var mu sync.Mutex
+	var bodies []string
+	status := http.StatusOK
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		bodies = append(bodies, string(b))
+		code := status
+		mu.Unlock()
+		w.WriteHeader(code)
+		_, _ = w.Write([]byte(`{"id":"x"}`))
+	}))
+	defer srv.Close()
+	dsn := "http://secretkey123@" + strings.TrimPrefix(srv.URL, "http://") + "/1"
+
+	rep, err := errtrack.SendTest(errtrack.Config{DSN: dsn, Environment: "production", Release: "r1"}, "test event for someone@example.com", 5*time.Second)
+	if err != nil || !rep.Delivered || rep.EventID == "" || len(rep.Problems) != 0 {
+		t.Fatalf("%+v, %v", rep, err)
+	}
+	mu.Lock()
+	sent := strings.Join(bodies, "\n")
+	bodies = nil
+	status = http.StatusForbidden
+	mu.Unlock()
+	if !strings.Contains(sent, "test event for [email]") || strings.Contains(sent, "someone@example.com") || !strings.Contains(sent, "sentry-test") || !strings.Contains(sent, `"production"`) {
+		t.Fatalf("what went over the wire:\n%s", sent)
+	}
+
+	// A refusal (wrong key, deleted project) must not be reported as delivered, and the key must not appear in what is shown.
+	rep, err = errtrack.SendTest(errtrack.Config{DSN: dsn}, "test", 5*time.Second)
+	if err != nil || rep.Delivered || len(rep.Problems) == 0 {
+		t.Fatalf("a refused event reported as delivered: %+v, %v", rep, err)
+	}
+	if strings.Contains(strings.Join(rep.Problems, "\n"), "secretkey123") {
+		t.Fatalf("the DSN key leaked into the report: %v", rep.Problems)
+	}
+
+	// Nothing listening at all.
+	dead := "http://secretkey123@127.0.0.1:1/1"
+	rep, err = errtrack.SendTest(errtrack.Config{DSN: dead}, "test", 3*time.Second)
+	if err != nil || rep.Delivered || len(rep.Problems) == 0 {
+		t.Fatalf("an unreachable Sentry reported as delivered: %+v, %v", rep, err)
+	}
+
+	if _, err := errtrack.SendTest(errtrack.Config{}, "test", time.Second); err == nil {
+		t.Fatal("no DSN must be an error")
 	}
 }

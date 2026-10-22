@@ -66,7 +66,7 @@ failures/risk events. They are validated with `promtool check rules`, and a unit
 Load the file into your Prometheus (or Grafana/Alertmanager) and route `severity: page` alerts to a pager.
 
 Also run an **external** uptime check on `https://<domain>/readyz` from a different provider/region (several free tiers exist), alerting a channel that does not depend on this
-system. A monitoring product must never be the only thing able to notice its own outage. Optional: set `SENTRY_DSN` for error tracking (events are scrubbed of emails, tokens and keys before leaving the process).
+system. A monitoring product must never be the only thing able to notice its own outage. Optional: set `SENTRY_DSN` for error tracking (events are scrubbed of emails, tokens and keys before leaving the process). See *Sentry shows nothing* below to check it.
 
 ## Runbooks
 
@@ -104,6 +104,15 @@ Warnings use the same queue as outage alerts, so first follow *Alerts are not ar
 `status = 'unavailable'` is the registry's answer, not a fault: see `unavailable_reason`. To see what the registry says, `curl -s https://rdap.org/domain/example.com | jq '.events'` (RDAP) or `whois example.com | grep -i expir` (WHOIS, which the worker reads on port 43, so that must be reachable from the worker network). WHOIS output differs by registry; if a registry writes the date in a form `ParseWHOISExpiry` does not know, add the key or layout in `internal/domains/whois.go`.
 `failure_count > 0` with `last_error` means the lookups are failing (it keeps showing the last good date): a timeout or rate limit from the registry, or a blocked address (`destination not permitted`, which would mean the registry resolved to a private address). A bucket is handled even if nobody could be notified at the time and is never re-sent; to repeat a warning,
 `UPDATE domains SET notified_bucket = NULL, notified_for = NULL WHERE id = '…';` and the next lookup queues it again for the current bucket. To look a domain up now, `UPDATE domains SET next_check_at = now() WHERE id = '…';`.
+
+### Sentry shows nothing
+
+Sentry receives only unexpected *errors* (uncaught API errors and panics, worker/scheduler/retention/domain-job failures, permanently failed alert deliveries, billing webhook failures). It gets no logs, no performance data and nothing from the browser, and an ordinary customer-site outage, a 4xx or a failed login is not an error, so an empty Issues list on a healthy system is normal.
+To check the setup, with the compose command used by `scripts/deploy.sh`:
+
+1. `... logs api worker | grep "error tracking"`: `error tracking enabled sentry_host=… sentry_project=…` shows where events go (the project number must be the one you are looking at in sentry.io); `error tracking disabled` means `SENTRY_DSN` is empty in `.env.production`; `does not look like a DSN` means it is mangled. The key part of the DSN is never logged.
+2. `... exec api /usr/local/bin/api sentry-test` sends one labelled test event and says whether Sentry accepted it. It exits 0 only when it was delivered, and prints the SDK's complaint otherwise (a wrong key or a deleted project gives a refusal, a blocked network a timeout). The event appears under Issues, tagged `component=sentry-test`, within a minute.
+3. If the test is delivered but real errors never appear, that is usually good news. Also check the environment filter in Sentry (events are tagged with `APP_ENV`, normally `production`).
 
 ### Stored credentials cannot be opened
 

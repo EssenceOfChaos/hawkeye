@@ -7,7 +7,7 @@ This is a self-review by the developer of the system, not an independent penetra
 
 | Finding | Fix |
 |---|---|
-| Go stdlib/x-net vulnerabilities in 1.25.x | moved to Go 1.26.9; `govulncheck` reports 0 affecting |
+| Go stdlib/x-net vulnerabilities in 1.25.x | moved to Go 1.26.10; `govulncheck` reports 0 affecting |
 | Tokens (password reset/verify) could leak via Caddy logs and Referer | log redaction, `no-referrer`, SPA strips token from URL |
 | Sentry scrubber left the token in `Authorization: Bearer ...` | header pattern added + test |
 | A panic was reported twice (recover and error handler) | marker error; test asserts exact count |

@@ -43,6 +43,9 @@ func main() {
 		}
 		healthcheck.Run(port, "/readyz")
 	}
+	if len(os.Args) == 2 && os.Args[1] == "sentry-test" { // docker compose exec api /usr/local/bin/api sentry-test
+		os.Exit(sentryTest())
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "fatal:", err)
 		os.Exit(1)
@@ -71,9 +74,7 @@ func run() error {
 		return err
 	}
 	defer flushErrors()
-	if cfg.SentryDSN == "" {
-		log.Info("error tracking disabled (set SENTRY_DSN to enable it)")
-	}
+	errtrack.LogStatus(log, cfg.SentryDSN, cfg.AppEnv, cfg.AppVersion)
 	apiMetrics := metrics.NewAPI()
 	metrics.RegisterPool(apiMetrics.Registry, pool)
 
@@ -166,4 +167,36 @@ func run() error {
 		return srv.Shutdown(shutdownCtx)
 	}
 	return nil
+}
+
+// sentryTest sends one test event to the configured Sentry project and says whether it was accepted. It exits 0 only when it was.
+func sentryTest() int {
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid configuration:\n%v\n", err)
+		return 1
+	}
+	if cfg.SentryDSN == "" {
+		fmt.Fprintln(os.Stderr, "SENTRY_DSN is not set in this container's environment, so error tracking is off. Set it in .env.production and redeploy.")
+		return 1
+	}
+	if host, project, ok := errtrack.Describe(cfg.SentryDSN); ok {
+		fmt.Printf("sending a test event to project %s at %s (environment %q, release %q)\n", project, host, cfg.AppEnv, cfg.AppVersion)
+	}
+	rep, err := errtrack.SendTest(errtrack.Config{DSN: cfg.SentryDSN, Environment: cfg.AppEnv, Release: cfg.AppVersion},
+		"HawkEye test event: sent on purpose by `api sentry-test`. Nothing is wrong.", 15*time.Second)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "sentry-test:", err)
+		return 1
+	}
+	if !rep.Delivered {
+		fmt.Fprintln(os.Stderr, "the test event was NOT delivered:")
+		for _, p := range rep.Problems {
+			fmt.Fprintln(os.Stderr, "  -", p)
+		}
+		fmt.Fprintln(os.Stderr, "check that SENTRY_DSN is the DSN of a Go project (Project Settings > Client Keys) and that this server can reach it.")
+		return 1
+	}
+	fmt.Printf("delivered (event %s). It appears under Issues in Sentry within a minute, tagged component=sentry-test.\n", rep.EventID)
+	return 0
 }
