@@ -27,6 +27,7 @@ import { SslCheckerPage } from './pages/tools/SslCheckerPage'
 import { ToolsIndexPage } from './pages/tools/ToolsIndexPage'
 import { UptimeSlaCalculatorPage } from './pages/tools/UptimeSlaCalculatorPage'
 import { WebsiteStatusPage } from './pages/tools/WebsiteStatusPage'
+import { useScrollToTopOnNavigation } from './scroll'
 import { findPage, usePageMeta } from './usePageMeta'
 
 // The chart pages pull in the charting library; load them only when visited so the landing and auth pages stay light.
@@ -100,6 +101,7 @@ export function AppRoutes() {
 function GuardedRoutes() {
   const { pathname } = useLocation()
   usePageMeta(findPage(pathname)) // before the page view below, which reads the title
+  useScrollToTopOnNavigation()
   useEffect(() => trackPageView(pathname), [pathname])
   return (
     <ErrorBoundary resetKey={pathname}>
