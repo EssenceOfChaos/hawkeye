@@ -74,11 +74,22 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  # The scripts that deploy and that turn the secret manager into the server's settings. They run for real against a fake Infisical, a throwaway
+  # git repository and stubs for docker, so a mistake in them fails here and not during a release.
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: for f in scripts/*.sh; do bash -n "$f"; done
+      - name: Tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+
   # Builds the production images, starts the production-like stack (real TLS via Caddy's internal CA, real SMTP STARTTLS, PostgreSQL)
   # and runs the post-deploy smoke test, including a full register -> verify -> monitor -> delete-account lifecycle.
   smoke:
     runs-on: ubuntu-latest
-    needs: [backend, frontend]
+    needs: [backend, frontend, scripts]
     steps:
       - uses: actions/checkout@v4
       - name: Start the stack

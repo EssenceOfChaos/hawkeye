@@ -8,6 +8,11 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      secrets_only:
+        description: "Only apply changed settings from the secret manager: no new code, no rebuild"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -26,9 +31,11 @@ jobs:
     environment: production   # add "required reviewers" to this environment in GitHub if you want an approval click before each deploy
     timeout-minutes: 25
     steps:
-      - name: Work out the commit to deploy
+      - name: Work out what to deploy
         id: sha
         run: |
+          # What is sent to the server is either a full commit sha or the word secrets-only; scripts/deploy.sh accepts nothing else.
+          if [ "${{ inputs.secrets_only }}" = "true" ]; then echo "sha=secrets-only" >> "$GITHUB_OUTPUT"; exit 0; fi
           sha="${{ github.event.workflow_run.head_sha || github.sha }}"
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "bad sha $sha"; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"

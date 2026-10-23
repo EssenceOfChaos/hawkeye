@@ -80,7 +80,7 @@ Why not Resend's dashboard templates? They can only be used through Resend's HTT
 
 ## Configuration
 
-`deploy/.env.production.example` lists every variable with comments; `internal/config/config.go` is the authoritative parser and validator. In production (`APP_ENV=production`) the process **refuses to start** if: `SESSION_SECRET` is short or a placeholder, base URLs are not https, `EMAIL_PROVIDER` is not smtp, `SMTP_TLS=none`, the sender is an example domain, or the database URL does not use TLS, or `SECRETS_ENCRYPTION_KEY` is missing or not 32 bytes of base64.
+**Where the settings live:** in the secret manager (Infisical), not in files you edit: `scripts/sync-secrets.sh` writes `.env.production` from it at every deploy, and `docs/secrets.md` explains setup, day-to-day use and recovery. `deploy/.env.production.example` documents every variable and `deploy/env.manifest` says which are required; `internal/config/config.go` is the authoritative parser and validator. In production (`APP_ENV=production`) the process **refuses to start** if: `SESSION_SECRET` is short or a placeholder, base URLs are not https, `EMAIL_PROVIDER` is not smtp, `SMTP_TLS=none`, the sender is an example domain, or the database URL does not use TLS, or `SECRETS_ENCRYPTION_KEY` is missing or not 32 bytes of base64.
 
 **`SECRETS_ENCRYPTION_KEY`** (generate with `openssl rand -base64 32`) encrypts the API keys, tokens and passwords customers save for API monitors (AES-256-GCM, each value bound to its monitor). It must be identical for `api` and `worker`. **Back it up off the server, separately from database dumps** (a dump plus the key restores everything; neither alone exposes credentials), and never change it casually: credentials saved under another key cannot be opened (`docs/operations.md#stored-credentials-cannot-be-opened`). When upgrading from a version that stored credentials in plain text, the API encrypts them once at startup.
 ## Automated deploys (GitHub Actions)
@@ -88,7 +88,7 @@ Why not Resend's dashboard templates? They can only be used through Resend's HTT
 After CI passes on a push to `main`, `.github/workflows/deploy.yml` SSHes to the VM and runs `scripts/deploy.sh <sha>`. The script takes an off-host backup
 (if `~/.hawkeye-backup.env` exists), checks out that exact commit, builds, migrates, restarts, and runs `scripts/smoke.sh` against the public URL. If the smoke
 test fails it rolls back to the previous commit and exits non-zero, so the Actions run turns red. A lock stops two deploys overlapping. You can also run it by
-hand on the VM (`scripts/deploy.sh`, defaults to the tip of `origin/main`) or from the Actions tab (Run workflow).
+hand on the VM (`scripts/deploy.sh`, defaults to the tip of `origin/main`) or from the Actions tab (Run workflow). Ticking **Only apply changed settings** there (or `scripts/deploy.sh secrets-only`) applies changes made in the secret manager without a new release.
 
 **One-time setup**
 
@@ -103,7 +103,7 @@ hand on the VM (`scripts/deploy.sh`, defaults to the tip of `origin/main`) or fr
 5. Test: Actions → Deploy → Run workflow. Then delete the private key from your computer or keep it in a password manager.
 
 Rollback only restores the **code**; migrations are forward-only (see Upgrades and Rollback below), which is why every schema change must be expand/contract.
-The script sets `APP_VERSION` in `.env.production` to the commit sha so logs and Sentry releases name the exact version.
+The script sets `APP_VERSION` in `.env.production` to the commit sha so logs and Sentry releases name the exact version. A release first refreshes the settings from the secret manager (carrying on with the ones already on the server if it cannot be reached, and putting the previous settings back together with the previous code if the release fails); without credentials for the secret manager it uses the existing `.env.production`.
 
 ## Unknown pages (404)
 

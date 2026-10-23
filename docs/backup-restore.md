@@ -25,10 +25,10 @@ AGE_RECIPIENT=age1... scripts/backup.sh ...                                  # e
 ### Nightly off-host job (Vultr Object Storage)
 
 `scripts/backup-offsite.sh` takes a dump from the Docker Postgres, encrypts it with `age` (public key in `AGE_RECIPIENT`), uploads it with `rclone` to
-`<bucket>/db/`, checks the uploaded size, keeps 30 days there and 3 days locally. Settings live in `~/.hawkeye-backup.env` (mode 600): `AGE_RECIPIENT`,
+`<bucket>/db/`, checks the uploaded size, keeps 30 days there and 3 days locally. Settings come from `~/.hawkeye-host.env`, which `scripts/sync-secrets.sh` writes from the secret manager at every deploy (`docs/secrets.md`); the older `~/.hawkeye-backup.env` (mode 600) still works. They are `AGE_RECIPIENT`,
 `BACKUP_ENDPOINT` (e.g. `ewr1.vultrobjects.com`), `BACKUP_BUCKET`, `BACKUP_ACCESS_KEY`, `BACKUP_SECRET_KEY`. Cron runs it nightly and logs to
 `~/backups/backup.log`. The age **private** key must live only in a password manager: to restore, download the `.dump.age` and its `.sha256`,
-`age -d -i key.txt file.dump.age > file.dump`, then use `scripts/restore.sh` as below.
+`age -d -i key.txt file.dump.age > file.dump`, then use `scripts/restore.sh` as below. The same job also uploads an encrypted copy of all the server's settings to `<bucket>/secrets/` (how to read it: `docs/secrets.md`, *Recovery*).
 
 ## Restoring
 

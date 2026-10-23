@@ -9,6 +9,10 @@
 #   scripts/rebuild.sh cutover                        THE switch: freeze the old server, final backup, restore, move DNS, start, verify
 #   scripts/rebuild.sh rollback                       point DNS back at the old server and restart it
 #   scripts/rebuild.sh destroy --workspace NAME       delete a rehearsal server (never the production one)
+#   scripts/rebuild.sh credentials --host IP          give an EXISTING server the secret manager credentials (one time; new servers get them in `create`)
+#
+# Settings come from the secret manager (Infisical) when ~/.hawkeye-secrets/.hawkeye-infisical.env exists (docs/secrets.md): that one small file is
+# all a new server is given, and it fetches the rest itself. Without it this script falls back to the older files in ~/.hawkeye-secrets.
 #
 # Options: --workspace NAME (default "default" = production; use a name like "drill" to rehearse), --dry-run (print what would change), --yes (skip the
 # "type this to continue" prompts; never skips the cutover prompt).
@@ -22,12 +26,13 @@ AGE_KEY="${AGE_KEY_FILE:-$HOME/hawkeye-backup-key.txt}"
 DEPLOY_PUB="${DEPLOY_PUBKEY_FILE:-$HOME/hawkeye-deploy-key.pub}"
 
 CMD="${1:-}"; [ $# -gt 0 ] && shift
-WS="default"; DRY=0; YES=0
+WS="default"; DRY=0; YES=0; HOST_ARG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --workspace) WS="${2:?--workspace needs a name}"; shift ;;
     --dry-run) DRY=1 ;;
     --yes) YES=1 ;;
+    --host) HOST_ARG="${2:?--host needs an address}"; shift ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac; shift
 done
@@ -49,10 +54,15 @@ confirm() { # confirm PHRASE: the user must type it exactly
 export CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-${CF_DNS_API_TOKEN:-}}"
 export TF_VAR_cloudflare_zone_id="${TF_VAR_cloudflare_zone_id:-${CF_ZONE_ID:-}}"
 ZONE="$TF_VAR_cloudflare_zone_id"
-ENVFILE="$SECRETS/.env.production"
-site_value() { sed -n "s/^$1=\([^ #]*\).*/\1/p" "$ENVFILE" | head -1; }
-SITE="$(site_value SITE_ADDRESS 2>/dev/null || true)"
-PGU="$(site_value POSTGRES_USER 2>/dev/null || true)"; PGU="${PGU:-hawkeye}"; PGDB="$(site_value POSTGRES_DB 2>/dev/null || true)"; PGDB="${PGDB:-monitoring}"
+ENVFILE="$SECRETS/.env.production"                        # the older way: files kept here and copied to the server
+SMFILE="$SECRETS/.hawkeye-infisical.env"                   # the new way: credentials for the secret manager (docs/secrets.md)
+USE_SM=0; [ -f "$SMFILE" ] && USE_SM=1
+sm() { HAWKEYE_INFISICAL_ENV="$SMFILE" python3 "$ROOT/scripts/fetch-secrets.py" "$@"; }
+site_value() { # NAME: one setting, from the secret manager or the older file
+  if [ "$USE_SM" = 1 ]; then sm get "$1" 2>/dev/null | head -1; else sed -n "s/^$1=\([^ #]*\).*/\1/p" "$ENVFILE" 2>/dev/null | head -1; fi
+}
+SITE="$(site_value SITE_ADDRESS || true)"
+PGU="$(site_value POSTGRES_USER || true)"; PGU="${PGU:-hawkeye}"; PGDB="$(site_value POSTGRES_DB || true)"; PGDB="${PGDB:-monitoring}"
 COMPOSE='docker compose --env-file .env.production -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local-db.yml'
 KH="$INFRA/.known_hosts_$WS"
 LIVE="$INFRA/live.auto.tfvars"
@@ -69,13 +79,31 @@ new_ip()    { tf output -raw public_ip 2>/dev/null; }
 stage_host() { tf output -raw stage_host 2>/dev/null; }
 live_get()  { sed -n "s/^$1 *= *\"\{0,1\}\([^\"]*\)\"\{0,1\}$/\1/p" "$LIVE" 2>/dev/null | head -1; }
 
+# The backup bucket's settings (BACKUP_*, AGE_RECIPIENT) into this shell, and rclone configured from them. Never printed or kept: from the secret
+# manager they pass through a private temporary file that is deleted at once.
+load_backup_settings() {
+  local f="$WORK/backup.env"
+  if [ "$USE_SM" = 1 ]; then (umask 077; sm host-env > "$f") || die "could not read the backup settings from the secret manager"
+  else f="$SECRETS/.hawkeye-backup.env"; fi
+  # shellcheck disable=SC1090
+  set -a; . "$f"; set +a
+  [ "$USE_SM" = 1 ] && rm -f "$f"
+  export RCLONE_CONFIG_OFFSITE_TYPE=s3 RCLONE_CONFIG_OFFSITE_PROVIDER=Other RCLONE_CONFIG_OFFSITE_ENDPOINT="https://$BACKUP_ENDPOINT"
+  export RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID="$BACKUP_ACCESS_KEY" RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY="$BACKUP_SECRET_KEY"
+}
+
+# Give the server the one file it needs to fetch everything else. It is the only secret this script ever copies to a server.
+deliver_credentials() { # IP
+  [ "$USE_SM" = 1 ] || return 0
+  run rscp "$KH" "$SMFILE" "deploy@$1:.hawkeye-infisical.env"
+  run rssh "$1" "$KH" 'chmod 600 ~/.hawkeye-infisical.env'
+  [ "$DRY" = 1 ] || ok "secret manager credentials delivered to $1"
+}
+
 # The newest encrypted dump in the bucket, downloaded, checked and decrypted into $1 as $1/restore.dump. Your age key never leaves this machine.
 fetch_latest_dump() {
   local dir="$1" newer_than="${2:-}"
-  # shellcheck disable=SC1090
-  set -a; . "$SECRETS/.hawkeye-backup.env"; set +a
-  export RCLONE_CONFIG_OFFSITE_TYPE=s3 RCLONE_CONFIG_OFFSITE_PROVIDER=Other RCLONE_CONFIG_OFFSITE_ENDPOINT="https://$BACKUP_ENDPOINT"
-  export RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID="$BACKUP_ACCESS_KEY" RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY="$BACKUP_SECRET_KEY"
+  load_backup_settings
   local dest="offsite:$BACKUP_BUCKET/db" latest
   latest="$(rclone lsf "$dest/" --include 'hawkeye-*.dump.age' | sort | tail -1)"
   [ -n "$latest" ] || die "no backups found in $BACKUP_BUCKET/db/"
@@ -141,25 +169,28 @@ cmd_preflight() {
   say "Preflight (read-only)"
   local t; for t in tofu rclone age gh jq ssh scp curl shasum; do command -v "$t" >/dev/null && ok "$t installed" || die "$t is not installed"; done
   local v; for v in VULTR_API_KEY CLOUDFLARE_API_TOKEN TF_VAR_cloudflare_zone_id; do [ -n "${!v:-}" ] && ok "$v is set" || die "$v is not set (Cloudflare: CF_DNS_API_TOKEN and CF_ZONE_ID are mapped automatically)"; done
-  for v in .env.production .hawkeye-backup.env; do [ -f "$SECRETS/$v" ] && ok "$SECRETS/$v exists" || die "missing $SECRETS/$v (docs/rebuild.md, step 'secrets')"; done
+  if [ "$USE_SM" = 1 ]; then
+    sm check > "$WORK/sm-check" 2>&1 && ok "secret manager reachable; $(head -1 "$WORK/sm-check")" || { cat "$WORK/sm-check" >&2; die "the secret manager's settings are not usable (above)"; }
+  else
+    for v in .env.production .hawkeye-backup.env; do [ -f "$SECRETS/$v" ] && ok "$SECRETS/$v exists" || die "missing $SECRETS/$v (docs/secrets.md: set up the secret manager, or docs/rebuild.md for the older files)"; done
+    ! grep -q CHANGE_ME "$ENVFILE" && ok ".env.production has no placeholders" || die ".env.production still contains CHANGE_ME"
+    warn "settings are copied from files on this machine; the secret manager removes that step and the drift between copies (docs/secrets.md)"
+  fi
   [ -f "$AGE_KEY" ] && ok "age key found" || die "age private key not found at $AGE_KEY"
   [ -f "$DEPLOY_PUB" ] && ok "deploy public key found" || die "deploy public key not found at $DEPLOY_PUB"
-  ! grep -q CHANGE_ME "$ENVFILE" && ok ".env.production has no placeholders" || die ".env.production still contains CHANGE_ME"
-  [ -n "$SITE" ] && ok "site address: $SITE" || die "SITE_ADDRESS missing from $ENVFILE"
+  [ -n "$SITE" ] && ok "site address: $SITE" || die "SITE_ADDRESS is not available (secret manager or $ENVFILE)"
   [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $VULTR_API_KEY" https://api.vultr.com/v2/account)" = 200 ] && ok "Vultr API reachable with your key" || die "Vultr API rejected the key (is this machine's IP allowed under Account > API?)"
   [ "$(cf "zones/$ZONE" | jq -r '.success')" = true ] && ok "Cloudflare zone readable" || die "Cloudflare rejected the token or zone id"
   [ "$(cf "zones/$ZONE" | jq -r '.result.name')" = "$SITE" ] || die "the Cloudflare zone is not $SITE"
   git fetch -q origin main 2>/dev/null || true
   [ -z "$(git rev-list origin/main..HEAD 2>/dev/null)" ] && ok "everything is pushed (the new server clones main)" || die "local commits are not pushed: the server clones main from GitHub, so push first"
   git ls-tree -r origin/main --name-only | grep -q '^scripts/deploy.sh$' && ok "origin/main has the deploy scripts" || die "origin/main does not contain scripts/deploy.sh"
+  [ "$USE_SM" = 0 ] || { git ls-tree -r origin/main --name-only | grep -q '^scripts/sync-secrets.sh$' && ok "origin/main has scripts/sync-secrets.sh" || die "origin/main does not contain scripts/sync-secrets.sh: push it first, the new server clones main"; }
   [ -z "$(git status --porcelain -- scripts deploy docker-compose* 2>/dev/null)" ] && ok "scripts/ and deploy/ are committed" || warn "uncommitted changes in scripts/ or deploy/: the new server clones main from GitHub, so it will not have them until they are committed and pushed"
   tf init -input=false >/dev/null && tf validate >/dev/null && ok "infra/ validates"
   local tmp="$WORK/preflight"; mkdir -p "$tmp"
-  # shellcheck disable=SC1090
-  ( set -a; . "$SECRETS/.hawkeye-backup.env"; set +a
-    export RCLONE_CONFIG_OFFSITE_TYPE=s3 RCLONE_CONFIG_OFFSITE_PROVIDER=Other RCLONE_CONFIG_OFFSITE_ENDPOINT="https://$BACKUP_ENDPOINT"
-    export RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID="$BACKUP_ACCESS_KEY" RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY="$BACKUP_SECRET_KEY"
-    n="$(rclone lsf "offsite:$BACKUP_BUCKET/db/" --include 'hawkeye-*.dump.age' | wc -l | tr -d ' ')"; echo "$n" > "$tmp/n" ) 2>/dev/null || die "cannot read the backup bucket (check ~/.hawkeye-secrets/.hawkeye-backup.env)"
+  ( load_backup_settings
+    n="$(rclone lsf "offsite:$BACKUP_BUCKET/db/" --include 'hawkeye-*.dump.age' | wc -l | tr -d ' ')"; echo "$n" > "$tmp/n" ) 2>/dev/null || die "cannot read the backup bucket (check the BACKUP_* settings in the secret manager, or ~/.hawkeye-secrets/.hawkeye-backup.env)"
   [ "$(cat "$tmp/n")" -gt 0 ] && ok "$(cat "$tmp/n") backup(s) in the bucket" || die "the bucket has no backups yet; run scripts/backup-offsite.sh on the live server first"
   echo; echo "Preflight passed."
 }
@@ -202,6 +233,7 @@ cmd_create() {
   rm -f "$KH"
   local ip; ip="$(new_ip)"; ok "server IP: $ip"
   wait_for_server "$ip"
+  deliver_credentials "$ip"
   echo; echo "Next: scripts/rebuild.sh stage$([ "$WS" = default ] || echo " --workspace $WS")"
 }
 
@@ -211,9 +243,15 @@ cmd_stage() {
   say "Stage $host ($ip): restore the newest backup and start it WITHOUT the worker"
   wait_for_server "$ip"
   tmp="$WORK/stage"; mkdir -p "$tmp"
-  sed -e "s|^SITE_ADDRESS=.*|SITE_ADDRESS=$host|" -e "s|^APP_BASE_URL=.*|APP_BASE_URL=https://$host|" -e "s|^API_BASE_URL=.*|API_BASE_URL=https://$host|" -e '/^WWW_ADDRESS=/d' "$ENVFILE" > "$tmp/env"
-  run rscp "$KH" "$tmp/env" "deploy@$ip:hawkeye/.env.production"
-  run rssh "$ip" "$KH" 'chmod 600 ~/hawkeye/.env.production'
+  if [ "$USE_SM" = 1 ]; then
+    # The server fetches the production settings itself, with the stage's own address in place of the real one.
+    deliver_credentials "$ip"
+    run rssh "$ip" "$KH" "cd ~/hawkeye && scripts/sync-secrets.sh --override SITE_ADDRESS=$host --override APP_BASE_URL=https://$host --override API_BASE_URL=https://$host --drop WWW_ADDRESS"
+  else
+    sed -e "s|^SITE_ADDRESS=.*|SITE_ADDRESS=$host|" -e "s|^APP_BASE_URL=.*|APP_BASE_URL=https://$host|" -e "s|^API_BASE_URL=.*|API_BASE_URL=https://$host|" -e '/^WWW_ADDRESS=/d' "$ENVFILE" > "$tmp/env"
+    run rscp "$KH" "$tmp/env" "deploy@$ip:hawkeye/.env.production"
+    run rssh "$ip" "$KH" 'chmod 600 ~/hawkeye/.env.production'
+  fi
   fetch_latest_dump "$tmp"
   restore_on_server "$ip" "$tmp" keep
   # No worker here: a copy of production must never run checks or send alerts to your customers.
@@ -254,10 +292,15 @@ EOF
     run rssh "$ip" "$KH" "cd ~/hawkeye && $COMPOSE stop web api migrate >/dev/null 2>&1 || true"
     restore_on_server "$ip" "$tmp" reset
   }
-  run rscp "$KH" "$ENVFILE" "deploy@$ip:hawkeye/.env.production"
-  run rscp "$KH" "$SECRETS/.hawkeye-backup.env" "deploy@$ip:.hawkeye-backup.env"
-  [ -f "$SECRETS/.hawkeye-heartbeat.env" ] && run rscp "$KH" "$SECRETS/.hawkeye-heartbeat.env" "deploy@$ip:.hawkeye-heartbeat.env"
-  run rssh "$ip" "$KH" 'chmod 600 ~/hawkeye/.env.production ~/.hawkeye-backup.env ~/.hawkeye-heartbeat.env 2>/dev/null || true'
+  if [ "$USE_SM" = 1 ]; then
+    # The real settings (the stage's own address is replaced by the production one), fetched by the server itself.
+    run rssh "$ip" "$KH" "cd ~/hawkeye && scripts/sync-secrets.sh"
+  else
+    run rscp "$KH" "$ENVFILE" "deploy@$ip:hawkeye/.env.production"
+    run rscp "$KH" "$SECRETS/.hawkeye-backup.env" "deploy@$ip:.hawkeye-backup.env"
+    [ -f "$SECRETS/.hawkeye-heartbeat.env" ] && run rscp "$KH" "$SECRETS/.hawkeye-heartbeat.env" "deploy@$ip:.hawkeye-heartbeat.env"
+    run rssh "$ip" "$KH" 'chmod 600 ~/hawkeye/.env.production ~/.hawkeye-backup.env ~/.hawkeye-heartbeat.env 2>/dev/null || true'
+  fi
   say "3/4 Move DNS and start everything"
   if [ "$DRY" = 1 ]; then echo "  [dry-run] would set cutover = true in infra/live.auto.tfvars and apply"; else
     sed -i.bak 's/^cutover *=.*/cutover = true/' "$LIVE" && rm -f "$LIVE.bak"
@@ -298,6 +341,18 @@ EOF
   warn "GitHub's DEPLOY_HOST still points at the new server; set it back to $old if deploys should go to the old one"
 }
 
+cmd_credentials() { # give an existing server the secret manager credentials, and check that it can use them
+  [ "$USE_SM" = 1 ] || die "no credentials file at $SMFILE (docs/secrets.md, step 'one-time setup')"
+  [ -n "$HOST_ARG" ] || die "which server? scripts/rebuild.sh credentials --host <ip>"
+  KH="$INFRA/.known_hosts_old"
+  say "Check the credentials from this machine first"
+  sm check || die "the credentials do not work from here either: fix them before giving them to a server"
+  say "Give $HOST_ARG the credentials and check what it would fetch"
+  deliver_credentials "$HOST_ARG"
+  run rssh "$HOST_ARG" "$KH" 'cd ~/hawkeye && test -x scripts/sync-secrets.sh || { echo "this server does not have scripts/sync-secrets.sh yet: deploy the new code first (the next release brings it)"; exit 1; }; scripts/sync-secrets.sh --check'
+  echo; echo "Done. Nothing was changed on the server's settings. The next release (or: scripts/deploy.sh secrets-only) will use the secret manager."
+}
+
 cmd_destroy() {
   [ "$WS" != default ] || die "refusing to destroy production. Rehearsal workspaces only; for production use OpenTofu directly, by hand, on purpose."
   ws_select; say "Destroy rehearsal workspace '$WS'"; tf state list 2>/dev/null | head -20
@@ -314,5 +369,6 @@ case "$CMD" in
   cutover)   cmd_cutover ;;
   rollback)  cmd_rollback ;;
   destroy)   cmd_destroy ;;
+  credentials) cmd_credentials ;;
   *) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

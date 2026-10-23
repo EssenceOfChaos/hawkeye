@@ -89,6 +89,14 @@ Symptoms: `HawkEyeFreeCheckersHeavyUse`, `HawkEyeFreeCheckersTurningPeopleAway` 
 4. To block an address, do it at the host firewall (`ufw deny from <ip>`) or in Caddy. If it keeps recurring, add a bot challenge to the two forms (for example Cloudflare Turnstile; the CSP in `deploy/Caddyfile` needs the script and frame origin) and verify the token in `handlers_tools.go` before calling the checker (`docs/security-review.md`, item 12).
 5. A site owner who complains about requests from us: the requests are `GET /` with `User-Agent: HawkEye-StatusChecker/1.0 (+https://hawkeye.observer/tools/is-website-down)`, at most 5 per host per 10 minutes. Tell them they can block that user agent.
 
+### Settings were not refreshed (secret manager)
+
+Symptoms: the deploy log says `the secret manager is unreachable`, `rejected our credentials`, or `the secrets are not acceptable`; or a change made in Infisical did not reach the server.
+Run `scripts/sync-secrets.sh --check` on the VM: it fetches and validates without writing anything and says which. `unreachable` → Infisical or the network is down; releases carry on with the
+settings already on the server, so nothing is urgent. `rejected our credentials` → the machine identity's client secret was revoked or rotated (or its role no longer reads `prod`): put a valid
+one in `~/.hawkeye-secrets/.hawkeye-infisical.env` and run `scripts/rebuild.sh credentials --host <ip>`. `not acceptable` → it names the settings (never the values): fix them in Infisical.
+To apply a change now: `ssh deploy@<ip> 'cd hawkeye && scripts/deploy.sh secrets-only'` (or the Deploy workflow with "Only apply changed settings"). Details: `docs/secrets.md`.
+
 ### Email delivery failing
 
 Symptoms: `HawkEyeAlertEmailBacklog`/`HawkEyeAlertEmailFailing`. Delivery errors are in `notification_deliveries.last_error` (sanitised) and the worker log.

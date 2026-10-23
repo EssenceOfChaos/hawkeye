@@ -9,16 +9,19 @@ egress firewall as a systemd unit, and installs the nightly backup and the heart
 
 ## What you keep on your laptop (not in git)
 
+The settings themselves (the live Stripe keys, `SECRETS_ENCRYPTION_KEY`, the backup bucket keys, the heartbeat URL) live in the secret manager, Infisical, and are not
+files on your laptop: see `docs/secrets.md`. What you keep:
+
 | What | Where | Why |
 |---|---|---|
-| `.env.production` | `~/.hawkeye-secrets/` | copied onto new servers (it holds the live Stripe keys and `SECRETS_ENCRYPTION_KEY`) |
-| `.hawkeye-backup.env` | `~/.hawkeye-secrets/` | bucket keys and the age public key for the nightly dumps |
-| `.hawkeye-heartbeat.env` (optional) | `~/.hawkeye-secrets/` | one line, `HEALTHCHECK_URL=https://hc-ping.com/<uuid>` from healthchecks.io |
+| `.hawkeye-infisical.env` | `~/.hawkeye-secrets/` | the credentials of a read-only machine identity. `create` copies it to each new server, which then fetches every setting itself. Keep a copy in the password manager. |
 | `hawkeye-backup-key.txt` | `~/` (or set `AGE_KEY_FILE`) | the age **private** key: the only way to read a backup |
 | `hawkeye-deploy-key.pub` | `~/` | the GitHub Actions deploy key's public half |
 | tokens | shell environment | `VULTR_API_KEY`, `CF_DNS_API_TOKEN` (Zone > DNS > Edit, this zone only), `CF_ZONE_ID`, `CF_ACC_ID` |
 
-Keep copies of the first four in a password manager: they are the recovery kit if the laptop dies. Terraform **state** (`infra/terraform.tfstate`) holds the server's generated root
+Keep copies of the first three in a password manager: they are the recovery kit if the laptop dies. **Before the secret manager is set up** (or if you prefer not to use it),
+`rebuild.sh` still works from the older files: `.env.production`, `.hawkeye-backup.env` and (optional) `.hawkeye-heartbeat.env` in `~/.hawkeye-secrets/`, which it copies onto
+new servers. When `.hawkeye-infisical.env` exists it is used instead and `preflight` says so. Terraform **state** (`infra/terraform.tfstate`) holds the server's generated root
 password; it is git-ignored, keep it private and backed up.
 
 ## The steps
@@ -37,20 +40,28 @@ scripts/rebuild.sh rollback                  # if it goes wrong: DNS back to the
 ```
 Add `--dry-run` to any command to print what it would do. `preflight` and `plan` never change anything.
 
+```
+scripts/rebuild.sh credentials --host <ip>   # an EXISTING server (not one made by `create`): give it the credentials file once, and check it can fetch
+```
+
 **What `cutover` does** (and why it asks first): it stops the old server's web, api and worker (the outage starts), takes a final backup there, restores it onto the new server, moves
 the apex A record (TTL 60 s) to the new reserved IP, starts the full stack (Caddy gets its certificate on the first request), smoke-tests `https://<domain>`, and updates the
 GitHub secrets `DEPLOY_HOST` / `DEPLOY_KNOWN_HOSTS`. Expect roughly 5 to 15 minutes of downtime; checks pause and catch up afterwards. The old server is left **stopped, not deleted**.
-Customers' alerts and sessions survive: the database and the session secret move with the backup and `.env.production`.
+Customers' alerts and sessions survive: the database moves with the backup, and the new server fetches the same settings (including the session secret) from the secret manager.
+
+**How a new server gets its settings:** `create` copies `.hawkeye-infisical.env` to it. `stage` runs `scripts/sync-secrets.sh` on the server with the stage's own address in place of
+the real one; `cutover` runs it again for the real values. Nothing secret is typed or copied by hand, and nothing secret is in the infrastructure code or in cloud-init.
 
 **Why a staged copy never sends alerts:** a stage or rehearsal runs `db`, `migrate`, `api` and `web` only. The worker (scheduler, checks, alert delivery) starts only at the cutover,
 so a copy of production cannot run checks or email your customers.
 
 ## Heartbeat (healthchecks.io)
 
-`scripts/heartbeat.sh` runs every minute from cron (installed by first boot; silent until `~/.hawkeye-heartbeat.env` exists). It requests the site's own public `/readyz` and pings
+`scripts/heartbeat.sh` runs every minute from cron (installed by first boot; silent until a `HEALTHCHECK_URL` is set). It requests the site's own public `/readyz` and pings
 healthchecks.io on success or `/fail` on failure. If the whole server dies, the pings stop and healthchecks.io alerts you after the grace period. In healthchecks.io: period 1 minute,
-grace 3 to 5 minutes, and an email (or Telegram/Slack) integration. Put the check's ping URL in `~/.hawkeye-secrets/.hawkeye-heartbeat.env`; the cutover copies it to the new server.
-To switch it on for the current server before the cutover: copy the file to the server and add `* * * * * deploy /home/deploy/hawkeye/scripts/heartbeat.sh` to `/etc/cron.d/hawkeye-heartbeat`.
+grace 3 to 5 minutes, and an email (or Telegram/Slack) integration. Add the check's ping URL as `HEALTHCHECK_URL` in the secret manager (`docs/secrets.md`); it reaches the server's
+`~/.hawkeye-host.env` at the next deploy or settings refresh, and new servers get it automatically. (The older `~/.hawkeye-heartbeat.env` still works.)
+To switch it on for a server made before the cron entry existed: add `* * * * * deploy /home/deploy/hawkeye/scripts/heartbeat.sh >> /home/deploy/backups/heartbeat.log 2>&1` to `/etc/cron.d/hawkeye-heartbeat`.
 
 ## Day to day
 
