@@ -58,11 +58,14 @@ ENVFILE="$SECRETS/.env.production"                        # the older way: files
 SMFILE="$SECRETS/.hawkeye-infisical.env"                   # the new way: credentials for the secret manager (docs/secrets.md)
 USE_SM=0; [ -f "$SMFILE" ] && USE_SM=1
 sm() { HAWKEYE_INFISICAL_ENV="$SMFILE" python3 "$ROOT/scripts/fetch-secrets.py" "$@"; }
-site_value() { # NAME: one setting, from the secret manager or the older file
-  if [ "$USE_SM" = 1 ]; then sm get "$1" 2>/dev/null | head -1; else sed -n "s/^$1=\([^ #]*\).*/\1/p" "$ENVFILE" 2>/dev/null | head -1; fi
-}
-SITE="$(site_value SITE_ADDRESS || true)"
-PGU="$(site_value POSTGRES_USER || true)"; PGU="${PGU:-hawkeye}"; PGDB="$(site_value POSTGRES_DB || true)"; PGDB="${PGDB:-monitoring}"
+# The few settings this script needs itself (the site, the database user and name). They are read from a private file that exists only for the
+# moment it takes to read them: no value is ever printed.
+APPVALS="$WORK/app.env"
+if [ "$USE_SM" = 1 ]; then (umask 077; sm write --app-out "$APPVALS" >/dev/null 2>&1) || rm -f "$APPVALS"; else APPVALS="$ENVFILE"; fi
+site_value() { [ -f "$APPVALS" ] && sed -n "s/^$1=\([^ #]*\).*/\1/p" "$APPVALS" | head -1 || true; }
+SITE="$(site_value SITE_ADDRESS)"
+PGU="$(site_value POSTGRES_USER)"; PGU="${PGU:-hawkeye}"; PGDB="$(site_value POSTGRES_DB)"; PGDB="${PGDB:-monitoring}"
+[ "$USE_SM" = 1 ] && rm -f "$APPVALS"
 COMPOSE='docker compose --env-file .env.production -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local-db.yml'
 KH="$INFRA/.known_hosts_$WS"
 LIVE="$INFRA/live.auto.tfvars"
@@ -83,7 +86,7 @@ live_get()  { sed -n "s/^$1 *= *\"\{0,1\}\([^\"]*\)\"\{0,1\}$/\1/p" "$LIVE" 2>/d
 # manager they pass through a private temporary file that is deleted at once.
 load_backup_settings() {
   local f="$WORK/backup.env"
-  if [ "$USE_SM" = 1 ]; then (umask 077; sm host-env > "$f") || die "could not read the backup settings from the secret manager"
+  if [ "$USE_SM" = 1 ]; then (umask 077; sm host-env --out "$f" >/dev/null) || die "could not read the backup settings from the secret manager"
   else f="$SECRETS/.hawkeye-backup.env"; fi
   # shellcheck disable=SC1090
   set -a; . "$f"; set +a

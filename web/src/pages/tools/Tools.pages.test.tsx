@@ -197,6 +197,18 @@ describe('SslCheckerPage', () => {
     expect(trackEvent).toHaveBeenCalledWith('tool_result', { tool: 'ssl-certificate-checker', status: 'valid' }) // never the domain itself
   })
 
+  it('shows no connection details for a certificate that did not verify', async () => {
+    const user = userEvent.setup()
+    const { tls_version: _v, cipher_suite: _c, ...unverified } = report
+    stubChecker(ok({ ...unverified, status: 'invalid', trusted: false, problems: [{ code: 'self_signed', severity: 'error', message: 'The certificate is self-signed.' }] }))
+    renderPage(<SslCheckerPage />)
+    await user.type(screen.getByLabelText('Domain name'), 'example.com')
+    await user.click(screen.getByRole('button', { name: 'Check certificate' }))
+    expect(await screen.findByRole('heading', { name: 'Certificate has a problem' })).toBeInTheDocument()
+    expect(screen.queryByText('Connection')).not.toBeInTheDocument()
+    expect(screen.getByText('Issued to')).toBeInTheDocument()
+  })
+
   it('lists what is wrong, errors before warnings, for an expired certificate', async () => {
     const user = userEvent.setup()
     stubChecker(ok({

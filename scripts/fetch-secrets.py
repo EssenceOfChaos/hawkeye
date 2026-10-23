@@ -3,9 +3,8 @@
 
     scripts/fetch-secrets.py write --app-out .env.production --host-out ~/.hawkeye-host.env
     scripts/fetch-secrets.py check                      # fetch and validate, write nothing
-    scripts/fetch-secrets.py get SITE_ADDRESS           # print one value
-    scripts/fetch-secrets.py host-env                   # the host-only values as a .env file on stdout (for scripts on a laptop)
-    scripts/fetch-secrets.py dump                       # everything as JSON on stdout (the nightly encrypted copy pipes it through age)
+    scripts/fetch-secrets.py host-env --out FILE        # only the host-only values, as a mode-600 .env file (for scripts on a laptop)
+    scripts/fetch-secrets.py dump --encrypt-to AGE_PUBLIC_KEY --out FILE.age   # everything, as JSON encrypted with age (the nightly copy)
     scripts/fetch-secrets.py prepare-import FILE...     # one-time: merge the old .env files into one file to paste into Infisical
     scripts/fetch-secrets.py compare FILE...            # one-time: after importing, show which names differ from the old files (names only)
 
@@ -26,7 +25,8 @@ Exit codes (scripts/sync-secrets.sh acts on them):  0 ok | 2 bad usage or settin
 (deploys may carry on with the last files) | 11 it rejected our credentials | 12 project or environment not found | 13 the values are not
 acceptable (a required one is missing, a placeholder, or cannot be written safely).
 
-Standard library only, so it runs on a fresh Ubuntu server and a laptop without installing anything.
+No value is ever written to the terminal: it goes to files (mode 600), or, for the nightly copy, straight into age. Only names and counts are printed.
+Standard library only (plus the age program for `dump`), so it runs on a fresh Ubuntu server and a laptop without installing anything.
 """
 import argparse
 import json
@@ -34,6 +34,7 @@ import os
 import re
 import socket
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -260,7 +261,9 @@ def split(values, manifest, overrides=None, drops=()):
     app.update(overrides or {})
     warnings = []
     if unknown:
-        warnings.append("not listed in deploy/env.manifest (written to .env.production): " + ", ".join(sorted(unknown)))
+        # Counted, not named: only names from the manifest are ever printed. The unlisted ones are visible in the secret manager itself.
+        warnings.append(f"{len(unknown)} setting(s) in the secret manager are not listed in deploy/env.manifest; they went to .env.production as "
+                        "optional. Add them to the manifest (and deploy/.env.production.example) so they are checked")
     return app, host, warnings
 
 
@@ -359,22 +362,26 @@ def cmd_check(args):
         print("optional and not set: " + ", ".join(absent))
 
 
-def cmd_get(args):
-    values = fetch_secrets(load_settings(args.creds))
-    if not values.get(args.name):
-        raise Failure(INVALID, f"{args.name} is not set in the secret manager")
-    sys.stdout.write(values[args.name] + "\n")
-
-
 def cmd_host_env(args):
     _, host, _, _ = prepared(args)
-    sys.stdout.write(render(host, "HawkEye host-only settings"))
+    write_private(args.out, render(host, "HawkEye host-only settings"))
+    print(f"host-only settings written: {len(host)} values")
 
 
 def cmd_dump(args):
+    """Every setting, as JSON, encrypted with age straight into a file: the plaintext exists only in the pipe to age."""
     values = fetch_secrets(load_settings(args.creds))
-    json.dump(values, sys.stdout, indent=1, sort_keys=True)
-    sys.stdout.write("\n")
+    payload = (json.dumps(values, indent=1, sort_keys=True) + "\n").encode("utf-8")
+    out = Path(args.out).expanduser()
+    try:
+        subprocess.run(["age", "-r", args.encrypt_to, "-o", str(out)], input=payload, check=True)
+    except FileNotFoundError:
+        raise Failure(USAGE, "the age program is not installed (sudo apt install age)")
+    except subprocess.CalledProcessError:
+        out.unlink(missing_ok=True)
+        raise Failure(USAGE, "age could not encrypt the settings (is --encrypt-to a public key starting with age1?)")
+    os.chmod(out, 0o600)
+    print(f"encrypted copy of {len(values)} settings written")
 
 
 def legacy_values(paths):
@@ -405,14 +412,22 @@ def cmd_prepare_import(args):
 def cmd_compare(args):
     legacy = legacy_values(args.files)
     remote = fetch_secrets(load_settings(args.creds))
-    missing = sorted(n for n in legacy if n not in remote)
-    different = sorted(n for n in legacy if n in remote and remote[n] != legacy[n])
-    extra = sorted(n for n in remote if n not in legacy)
+    manifest = load_manifest()
+    # Names are printed only when the manifest knows them; anything else is counted.
+    missing = sorted(n for n in manifest if n in legacy and n not in remote)
+    different = sorted(n for n in manifest if n in legacy and n in remote and remote[n] != legacy[n])
+    extra = sorted(n for n in manifest if n in remote and n not in legacy)
+    unlisted_wrong = sum(1 for n in legacy if n not in manifest and remote.get(n) != legacy[n])
+    unlisted_extra = sum(1 for n in remote if n not in manifest and n not in legacy)
     print(f"{len(legacy)} values in the old files, {len(remote)} in the secret manager")
     for label, names in (("missing from the secret manager", missing), ("different value in the secret manager", different), ("only in the secret manager", extra)):
         if names:
             print(f"  {label}: {', '.join(names)}")
-    if missing or different:
+    if unlisted_wrong:
+        print(f"  {unlisted_wrong} setting(s) not listed in deploy/env.manifest are missing or different in the secret manager")
+    if unlisted_extra:
+        print(f"  {unlisted_extra} setting(s) not listed in deploy/env.manifest are only in the secret manager")
+    if missing or different or unlisted_wrong:
         raise Failure(INVALID, "the secret manager does not match the old files yet")
     print("identical: every old value is in the secret manager unchanged")
 
@@ -428,11 +443,13 @@ def main(argv=None):
     w.add_argument("--drop", action="append", metavar="NAME", help="leave an app value out")
     w.set_defaults(run=cmd_write)
     sub.add_parser("check", help="fetch and validate; write nothing").set_defaults(run=cmd_check)
-    g = sub.add_parser("get", help="print one value")
-    g.add_argument("name")
-    g.set_defaults(run=cmd_get)
-    sub.add_parser("host-env", help="print the host-only values as a .env file").set_defaults(run=cmd_host_env)
-    sub.add_parser("dump", help="print every value as JSON").set_defaults(run=cmd_dump)
+    h = sub.add_parser("host-env", help="write the host-only values to a file")
+    h.add_argument("--out", required=True)
+    h.set_defaults(run=cmd_host_env)
+    d = sub.add_parser("dump", help="write every value as JSON, encrypted with age")
+    d.add_argument("--encrypt-to", required=True, metavar="AGE_PUBLIC_KEY")
+    d.add_argument("--out", required=True)
+    d.set_defaults(run=cmd_dump)
     i = sub.add_parser("prepare-import", help="merge old .env files into one file to import")
     i.add_argument("files", nargs="+")
     i.add_argument("--out", default="~/.hawkeye-secrets/infisical-import.env")

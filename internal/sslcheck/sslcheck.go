@@ -93,8 +93,8 @@ type Report struct {
 	DaysRemaining int         `json:"days_remaining"`
 	Trusted       bool        `json:"trusted"`
 	HostnameMatch bool        `json:"hostname_match"`
-	TLSVersion    string      `json:"tls_version"`
-	CipherSuite   string      `json:"cipher_suite"`
+	TLSVersion    string      `json:"tls_version,omitempty"`  // empty when the certificate did not verify (the handshake did not complete)
+	CipherSuite   string      `json:"cipher_suite,omitempty"` // likewise
 	Problems      []Problem   `json:"problems"`
 	Certificate   Certificate `json:"certificate"`
 	Chain         []ChainLink `json:"chain"`
@@ -137,37 +137,51 @@ func (s *Service) Inspect(ctx context.Context, input string) (Report, error) {
 		return Report{}, err
 	}
 	return s.guard.Do(ctx, host, func(ctx context.Context) (Report, error) {
-		state, err := s.handshake(ctx, host)
+		c, err := s.handshake(ctx, host)
 		if err != nil {
 			return Report{}, err
 		}
-		return s.report(host, state), nil
+		return s.report(host, c), nil
 	})
 }
 
-func (s *Service) handshake(ctx context.Context, host string) (tls.ConnectionState, error) {
+// connection is what the handshake showed: the certificates the server presented, and the protocol it settled on (zero when the handshake did
+// not complete, which is the case for a certificate that does not verify).
+type connection struct {
+	certs   []*x509.Certificate
+	version uint16
+	cipher  uint16
+}
+
+// handshake connects and negotiates TLS 1.2 or newer with the certificate checked as a browser would (the system trust store, the name asked
+// about). Nothing is sent over the connection. A certificate that does not verify (expired, self-signed, for another name, from an unknown
+// authority) fails the handshake, and that is exactly what a visitor wants to hear about: the chain the server presented comes with the error,
+// and report() explains it. Verification is never turned off and the connection is never used.
+func (s *Service) handshake(ctx context.Context, host string) (connection, error) {
 	conn, err := s.dial(ctx, "tcp", net.JoinHostPort(host, "443"))
 	if err != nil {
-		return tls.ConnectionState{}, classifyDial(ctx, err)
+		return connection{}, classifyDial(ctx, err)
 	}
 	defer conn.Close()
 	if dl, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(dl)
 	}
-	// The certificate is read, not trusted: verification is skipped so that an expired, self-signed or mismatched certificate can still be
-	// shown to the visitor. It is then verified by hand in report(). Nothing is sent over this connection.
-	tc := tls.Client(conn, &tls.Config{ServerName: host, InsecureSkipVerify: true, MinVersion: tls.VersionTLS10}) //nolint:gosec
+	tc := tls.Client(conn, &tls.Config{ServerName: host, RootCAs: s.roots, MinVersion: tls.VersionTLS12, Time: s.now})
 	if err := tc.HandshakeContext(ctx); err != nil {
-		if ctx.Err() != nil || isTimeout(err) {
-			return tls.ConnectionState{}, ErrTimeout
+		var verify *tls.CertificateVerificationError
+		if errors.As(err, &verify) && len(verify.UnverifiedCertificates) > 0 {
+			return connection{certs: verify.UnverifiedCertificates}, nil
 		}
-		return tls.ConnectionState{}, ErrNoTLS
+		if ctx.Err() != nil || isTimeout(err) {
+			return connection{}, ErrTimeout
+		}
+		return connection{}, ErrNoTLS
 	}
 	state := tc.ConnectionState()
 	if len(state.PeerCertificates) == 0 {
-		return tls.ConnectionState{}, ErrNoTLS
+		return connection{}, ErrNoTLS
 	}
-	return state, nil
+	return connection{certs: state.PeerCertificates, version: state.Version, cipher: state.CipherSuite}, nil
 }
 
 func classifyDial(ctx context.Context, err error) error {
@@ -192,20 +206,22 @@ func isTimeout(err error) bool {
 
 // report reads the certificate chain and verifies it by hand: whether the chain leads to a trusted root, whether the name matches and
 // whether the dates hold are separate questions, and the visitor should hear about each one that fails.
-func (s *Service) report(host string, state tls.ConnectionState) Report {
+func (s *Service) report(host string, c connection) Report {
 	now := s.now()
-	leaf := state.PeerCertificates[0]
+	leaf := c.certs[0]
 	r := Report{
 		Host: host, CheckedAt: now.UTC(),
 		DaysRemaining: checks.SSLDaysRemaining(leaf.NotAfter, now),
-		TLSVersion:    tls.VersionName(state.Version), CipherSuite: tls.CipherSuiteName(state.CipherSuite),
-		Problems: []Problem{}, Certificate: describe(leaf),
+		Problems:      []Problem{}, Certificate: describe(leaf),
 	}
-	for i, c := range state.PeerCertificates {
+	if c.version != 0 {
+		r.TLSVersion, r.CipherSuite = tls.VersionName(c.version), tls.CipherSuiteName(c.cipher)
+	}
+	for i, cert := range c.certs {
 		if i == maxChain {
 			break
 		}
-		r.Chain = append(r.Chain, ChainLink{SubjectName: name(c.Subject), IssuerName: name(c.Issuer), NotAfter: c.NotAfter.UTC()})
+		r.Chain = append(r.Chain, ChainLink{SubjectName: name(cert.Subject), IssuerName: name(cert.Issuer), NotAfter: cert.NotAfter.UTC()})
 	}
 	add := func(code, severity, format string, args ...any) {
 		r.Problems = append(r.Problems, Problem{Code: code, Severity: severity, Message: fmt.Sprintf(format, args...)})
@@ -225,7 +241,7 @@ func (s *Service) report(host string, state tls.ConnectionState) Report {
 		add("hostname_mismatch", SeverityError, "The certificate is not valid for %s. It is issued for %s.", host, namesSummary(leaf))
 	}
 
-	r.Trusted = s.verifyChain(leaf, state.PeerCertificates[1:], now, add)
+	r.Trusted = s.verifyChain(leaf, c.certs[1:], now, add)
 
 	switch {
 	case leaf.SignatureAlgorithm == x509.SHA1WithRSA || leaf.SignatureAlgorithm == x509.ECDSAWithSHA1 || leaf.SignatureAlgorithm == x509.MD5WithRSA:
@@ -233,9 +249,6 @@ func (s *Service) report(host string, state tls.ConnectionState) Report {
 	}
 	if r.Certificate.KeyAlgorithm == "RSA" && r.Certificate.KeyBits < 2048 {
 		add("weak_key", SeverityWarning, "The certificate uses a %d-bit RSA key. 2048 bits is the minimum considered secure.", r.Certificate.KeyBits)
-	}
-	if state.Version < tls.VersionTLS12 {
-		add("old_tls", SeverityWarning, "The server negotiated %s. Browsers have dropped support for versions below TLS 1.2.", r.TLSVersion)
 	}
 
 	r.Status = checks.SSLStatus(leaf.NotAfter, now)

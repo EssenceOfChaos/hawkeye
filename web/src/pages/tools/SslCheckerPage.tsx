@@ -67,7 +67,7 @@ function Report({ r }: { r: SslReport }) {
         </Row>
         <Row label="Public key">{c.key_algorithm}{c.key_bits ? ` ${c.key_bits}-bit` : ''}</Row>
         <Row label="Signature">{c.signature_algorithm}</Row>
-        <Row label="Connection">{r.tls_version}, {r.cipher_suite}</Row>
+        {r.tls_version && <Row label="Connection">{r.tls_version}, {r.cipher_suite}</Row>}
         <Row label="SHA-256 fingerprint"><span className="mono ssl-fp">{c.sha256_fingerprint.match(/.{2}/g)?.join(':')}</span></Row>
         <Row label="Serial number"><span className="mono ssl-fp">{c.serial_number}</span></Row>
       </dl>

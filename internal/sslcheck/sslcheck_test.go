@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"net"
 	"net/netip"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -248,15 +249,39 @@ func TestErrorsComeFirstAndExpiredLeafIsNotAlsoUntrusted(t *testing.T) {
 	}
 }
 
-func TestOldTLSIsAWarning(t *testing.T) {
+func TestAServerThatOnlySpeaksOldTLSCannotBeChecked(t *testing.T) {
 	ca := newAuthority(t)
 	s := serve(t, ca, ca.issue(t, good("example.com")), tls.VersionTLS11)
-	r, err := s.Inspect(context.Background(), "example.com")
-	if err != nil {
-		t.Skipf("this Go build will not negotiate TLS 1.1: %v", err)
+	if _, err := s.Inspect(context.Background(), "example.com"); !errors.Is(err, ErrNoTLS) {
+		t.Errorf("err = %v, want ErrNoTLS: TLS 1.2 is the oldest version this checker negotiates", err)
 	}
-	if codes(r)["old_tls"] != "warning" || r.Status != "valid" {
-		t.Errorf("%s %v", r.TLSVersion, r.Problems)
+}
+
+func TestAVerifiedConnectionReportsItsProtocolAndAnUnverifiedOneDoesNot(t *testing.T) {
+	ca := newAuthority(t)
+	r, err := serve(t, ca, ca.issue(t, good("example.com")), 0).Inspect(context.Background(), "example.com")
+	if err != nil || r.TLSVersion == "" || r.CipherSuite == "" {
+		t.Fatalf("%v %+v", err, r)
+	}
+	r, err = serve(t, ca, ca.issue(t, good("other.example.org")), 0).Inspect(context.Background(), "example.com")
+	if err != nil || r.TLSVersion != "" || r.CipherSuite != "" || r.Status != "invalid" {
+		t.Errorf("a certificate that does not verify fails the handshake, so there is no protocol to report: %v %+v", err, r)
+	}
+}
+
+// The checker looks at certificates that are wrong; it must never get there by turning verification off or by accepting old protocols.
+func TestTheHandshakeKeepsCertificateVerificationAndModernTLSOn(t *testing.T) {
+	src, err := os.ReadFile("sslcheck.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, banned := range []string{"InsecureSkipVerify", "VersionTLS10", "VersionTLS11", "VersionSSL30"} {
+		if strings.Contains(string(src), banned) {
+			t.Errorf("sslcheck.go mentions %s", banned)
+		}
+	}
+	if !strings.Contains(string(src), "MinVersion: tls.VersionTLS12") {
+		t.Error("the handshake must set MinVersion to TLS 1.2")
 	}
 }
 

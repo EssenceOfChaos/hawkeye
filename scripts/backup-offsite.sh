@@ -46,11 +46,11 @@ REMOTE_SIZE="$(rclone size "$DEST/$(basename "$FILE")" --json | sed -n 's/.*"byt
 rclone delete "$DEST/" --min-age "${RETENTION}d" --include 'hawkeye-*'
 echo "offsite backup ok: $(basename "$FILE") -> $BACKUP_BUCKET/db/ (${REMOTE_SIZE} bytes), kept ${RETENTION} days"
 
-# The settings, encrypted, beside the dump. The plaintext exists only in the pipe between the two programs.
+# The settings, encrypted, beside the dump. fetch-secrets.py hands them straight to age: the plaintext is never written anywhere.
 INFISICAL_ENV="${HAWKEYE_INFISICAL_ENV:-$HOME/.hawkeye-infisical.env}"
 if [ -f "$INFISICAL_ENV" ]; then
   SECRETS_FILE="$OUT/hawkeye-secrets-$(date -u +%Y%m%dT%H%M%SZ).json.age"
-  if ( set -o pipefail; HAWKEYE_INFISICAL_ENV="$INFISICAL_ENV" python3 "$HERE/fetch-secrets.py" dump | age -r "$AGE_RECIPIENT" -o "$SECRETS_FILE" ) \
+  if HAWKEYE_INFISICAL_ENV="$INFISICAL_ENV" python3 "$HERE/fetch-secrets.py" dump --encrypt-to "$AGE_RECIPIENT" --out "$SECRETS_FILE" >/dev/null \
      && rclone copy "$SECRETS_FILE" "offsite:$BACKUP_BUCKET/secrets/" --checksum \
      && rclone delete "offsite:$BACKUP_BUCKET/secrets/" --min-age "${RETENTION}d" --include 'hawkeye-secrets-*'; then
     echo "offsite settings copy ok: $(basename "$SECRETS_FILE") -> $BACKUP_BUCKET/secrets/"

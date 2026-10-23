@@ -204,7 +204,9 @@ class WritingTests(unittest.TestCase):
         app, host, warnings = fs.split({"A": "1", "H": "2", "W": "3", "NEW": "4"}, manifest, {"A": "override"}, ["W"])
         self.assertEqual(app, {"A": "override", "NEW": "4"})
         self.assertEqual(host, {"H": "2"})
-        self.assertTrue(any("NEW" in w for w in warnings))
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("1 setting(s)", warnings[0])
+        self.assertNotIn("NEW", warnings[0])
 
 
 class CommandTests(Base):
@@ -359,18 +361,55 @@ class CommandTests(Base):
         self.run_cli("check")
         self.assertEqual(self.api.requests[1][2]["environment"], ["prod"])
 
-    def test_get_host_env_and_dump(self):
-        code, out, _ = self.run_cli("get", "SITE_ADDRESS")
-        self.assertEqual((code, out), (0, "hawkeye.test\n"))
-        self.assertEqual(self.run_cli("get", "NOPE")[0], fs.INVALID)
-        code, out, _ = self.run_cli("host-env")
-        self.assertEqual(code, 0)
-        self.assertIn("BACKUP_BUCKET=", out)
-        self.assertNotIn("SESSION_SECRET", out)
-        code, out, _ = self.run_cli("dump")
-        dumped = json.loads(out)
+    def test_host_env_writes_only_the_host_values_to_a_private_file(self):
+        out = self.tmp / "host.env"
+        code, text, err = self.run_cli("host-env", "--out", str(out))
+        self.assertEqual(code, 0, err)
+        values = fs.parse_env_text(out.read_text())
+        self.assertIn("BACKUP_BUCKET", values)
+        self.assertNotIn("SESSION_SECRET", values)
+        self.assertEqual(stat.S_IMODE(out.stat().st_mode), 0o600)
+        self.assertNotIn("value-of", text + err, "no value may be printed")
+
+    def test_there_is_no_command_that_prints_a_value(self):
+        with self.assertRaises(SystemExit):
+            with redirect_stderr(StringIO()):
+                fs.main(["--creds", str(self.creds), "get", "SITE_ADDRESS"])
+        for cmd in (("check",), ("write", "--app-out", str(self.tmp / "a.env")), ("host-env", "--out", str(self.tmp / "h.env"))):
+            _, out, err = self.run_cli(*cmd)
+            for v in REQUIRED.values():
+                self.assertNotIn(v, out + err)
+
+    def test_dump_is_encrypted_by_age_and_never_printed(self):
+        stub = self.tmp / "bin"
+        stub.mkdir()
+        saved = self.tmp / "plain.json"
+        (stub / "age").write_text(f'#!/bin/sh\nwhile [ $# -gt 0 ]; do [ "$1" = -o ] && O="$2"; shift; done\ncat > "{saved}"; echo ENCRYPTED > "$O"\n')
+        (stub / "age").chmod(0o755)
+        out = self.tmp / "settings.json.age"
+        old_path = os.environ["PATH"]
+        os.environ["PATH"] = f"{stub}:{old_path}"
+        try:
+            code, text, err = self.run_cli("dump", "--encrypt-to", "age1abc", "--out", str(out))
+        finally:
+            os.environ["PATH"] = old_path
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out.read_text(), "ENCRYPTED\n")
+        self.assertEqual(stat.S_IMODE(out.stat().st_mode), 0o600)
+        dumped = json.loads(saved.read_text())  # what age was given
         self.assertEqual(dumped["SESSION_SECRET"], REQUIRED["SESSION_SECRET"])
         self.assertIn("BACKUP_BUCKET", dumped)
+        self.assertNotIn("value-of", text + err)
+
+    def test_dump_fails_cleanly_without_age_or_with_a_bad_key(self):
+        old_path = os.environ["PATH"]
+        os.environ["PATH"] = str(self.tmp)  # no age here
+        try:
+            code, _, err = self.run_cli("dump", "--encrypt-to", "age1abc", "--out", str(self.tmp / "x.age"))
+        finally:
+            os.environ["PATH"] = old_path
+        self.assertEqual(code, fs.USAGE)
+        self.assertIn("age program is not installed", err)
 
     def test_check_reports_optional_values_that_are_not_set(self):
         code, out, _ = self.run_cli("check")
@@ -383,7 +422,8 @@ class CommandTests(Base):
         app = self.tmp / "app.env"
         code, _, err = self.run_cli("write", "--app-out", str(app))
         self.assertEqual(code, 0)
-        self.assertIn("SOMETHING_NEW", err)
+        self.assertIn("1 setting(s) in the secret manager are not listed", err)
+        self.assertNotIn("SOMETHING_NEW", err, "only names the manifest knows are ever printed")
         self.assertIn("SOMETHING_NEW", fs.parse_env_text(app.read_text()))
 
 
@@ -424,13 +464,17 @@ class MigrationTests(Base):
         self.assertIn("identical", out)
         del self.api.secrets["SMTP_HOST"]
         self.api.secrets["SESSION_SECRET"] = "changed"
-        self.api.secrets["EXTRA"] = "x"
+        self.api.secrets["STRIPE_SECRET_KEY"] = "only-remote"   # listed in the manifest, absent from the old files
+        self.api.secrets["EXTRA"] = "x"                           # not listed anywhere: counted, not named
         code, out, err = self.run_cli("compare", str(app), str(host))
         self.assertEqual(code, fs.INVALID)
         self.assertIn("missing from the secret manager: SMTP_HOST", out)
         self.assertIn("different value in the secret manager: SESSION_SECRET", out)
-        self.assertIn("only in the secret manager: EXTRA", out)
+        self.assertIn("only in the secret manager: STRIPE_SECRET_KEY", out)
+        self.assertIn("1 setting(s) not listed in deploy/env.manifest are only in the secret manager", out)
+        self.assertNotIn("EXTRA", out + err)
         self.assertNotIn("changed", out + err)
+        self.assertNotIn("only-remote", out + err)
 
 
 class SyncScriptTests(Base):

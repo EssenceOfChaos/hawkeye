@@ -46,7 +46,7 @@ describe('page map', () => {
   })
 
   it('keeps the shell index.html in step with the home entry, and neutral (no canonical or robots tag that other routes would inherit)', () => {
-    expect(indexHtml).toContain(`<title>${HOME_TITLE.replace('&', '&amp;')}</title>`)
+    expect(indexHtml).toContain(`<title>${HOME_TITLE.replaceAll('&', '&amp;')}</title>`)
     expect(indexHtml).toContain(`content="${HOME_DESCRIPTION}"`)
     expect(indexHtml).not.toMatch(/rel="canonical"|name="robots"/)
   })

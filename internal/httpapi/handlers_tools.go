@@ -72,7 +72,7 @@ func toolError(c echo.Context, err error) error {
 	case errors.Is(err, sslcheck.ErrConnect):
 		return &APIError{Status: http.StatusUnprocessableEntity, Code: "CONNECT_FAILED", Message: "We could not connect to that domain on port 443. The server may be down, or it may not offer HTTPS."}
 	case errors.Is(err, sslcheck.ErrNoTLS):
-		return &APIError{Status: http.StatusUnprocessableEntity, Code: "NO_TLS", Message: "The server answered on port 443 but did not complete a secure (TLS) connection."}
+		return &APIError{Status: http.StatusUnprocessableEntity, Code: "NO_TLS", Message: "The server answered on port 443 but did not complete a secure (TLS) connection. Servers that only support TLS 1.1 or older cannot be checked."}
 	case errors.Is(err, sslcheck.ErrTimeout), errors.Is(err, context.DeadlineExceeded):
 		return &APIError{Status: http.StatusGatewayTimeout, Code: "HOST_TIMEOUT", Message: "The server did not answer in time."}
 	case errors.Is(err, context.Canceled):

@@ -326,8 +326,9 @@ export interface SslReport {
   days_remaining: number
   trusted: boolean
   hostname_match: boolean
-  tls_version: string
-  cipher_suite: string
+  /** The protocol and cipher, when the handshake completed; absent for a certificate that does not verify. */
+  tls_version?: string
+  cipher_suite?: string
   problems: { code: string; severity: 'error' | 'warning'; message: string }[]
   certificate: {
     subject_name: string
