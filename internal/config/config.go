@@ -9,6 +9,7 @@ import (
 	"hawkeye/internal/regions"
 	"hawkeye/internal/secrets"
 	"log/slog"
+	"math"
 	"net/mail"
 	"net/url"
 	"os"
@@ -160,14 +161,12 @@ const MaxWorkerConcurrency = 1000
 // WorkerPoolConns is the database pool size for the worker: one connection per concurrent check, the scheduler, the sampler and some
 // headroom, but never fewer than DB_MAX_CONNS. The range is checked here, next to the conversion, not only at load time.
 func (c Config) WorkerPoolConns() int32 {
-	n := c.WorkerConcurrency
-	if n < 1 { // load() rejects values outside 1..MaxWorkerConcurrency; clamping here only keeps the conversion below provably in range
-		n = 1
+	n := min(max(c.WorkerConcurrency, 1), MaxWorkerConcurrency) // load() rejects values outside 1..MaxWorkerConcurrency; this keeps the sum below small
+	want := int64(n) + 4
+	if want > math.MaxInt32 { // cannot happen while MaxWorkerConcurrency is small; stated here so the narrowing below is checked where it happens
+		return math.MaxInt32
 	}
-	if n > MaxWorkerConcurrency {
-		n = MaxWorkerConcurrency
-	}
-	return max(c.DBMaxConns, int32(n)+4)
+	return max(c.DBMaxConns, int32(want))
 }
 
 func (c Config) SecretBox() (*secrets.Box, error) {
