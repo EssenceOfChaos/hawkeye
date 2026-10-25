@@ -24,6 +24,31 @@ export function availableRanges(retentionDays: number): string[] {
   return Object.keys(RANGE_DAYS).filter((k) => RANGE_DAYS[k] <= retentionDays)
 }
 
+export interface ReportMonth {
+  /** "2026-09", as the API takes it. */
+  value: string
+  label: string
+  /** The month is not over yet, so its report covers the month so far. */
+  partial: boolean
+}
+
+/**
+ * The calendar months (UTC, newest first) a monthly report can be made for: the current month so far, then every earlier month that lies wholly inside the
+ * history the plan keeps. A month whose results were partly deleted is left out, because its report would understate the checks.
+ */
+export function reportMonths(retentionDays: number, now: Date = new Date()): ReportMonth[] {
+  const cutoff = now.getTime() - retentionDays * 24 * 60 * 60 * 1000
+  const out: ReportMonth[] = []
+  for (let i = 0; i < 14; i++) {
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))
+    if (i > 0 && start.getTime() < cutoff) break
+    const value = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}`
+    const label = start.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    out.push({ value, label: i === 0 ? `${label} (so far)` : label, partial: i === 0 })
+  }
+  return out
+}
+
 export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString()
 }

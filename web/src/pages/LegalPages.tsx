@@ -54,6 +54,7 @@ export function PrivacyPage() {
         <li>Whether your email address has been verified, and the name of the workspace (organization) created for your account.</li>
         <li>Your subscription plan, account status, and related service records.</li>
         <li>Alert destinations you add: email addresses you ask us to notify and their confirmation status, and Slack or webhook URLs. We store those URLs and any webhook signing secret encrypted, and show you only the host name afterwards.</li>
+        <li>If you use PDF reports on the Agency plan: the name and logo image you add to put on them. We check the image and store a cleaned copy, and print it on your reports.</li>
         <li>Communications you send to us. If you use our contact form we receive the name, email address, subject, message, and optional website address you enter and, if you are signed in, your account identifier and plan.</li>
       </ul>
       <p>
@@ -145,6 +146,7 @@ export function PrivacyPage() {
         <li>Create, manage, renew, and administer subscriptions, and handle billing questions through Stripe.</li>
         <li>Send account and security emails, such as email verification, password reset, and alerts.</li>
         <li>If you have not added a website yet, send up to three short getting-started emails during your first ten days. Each one has an unsubscribe link, and unsubscribing does not affect alerts or account and security emails.</li>
+        <li>Produce monthly uptime reports from your monitoring results and, if you turn that on, email them as PDF files to the owners of your workspace.</li>
         <li>Respond to support requests.</li>
         <li>Maintain, troubleshoot, and improve the reliability and performance of the Service.</li>
         <li>Detect fraud, abuse, unauthorized access, and security incidents.</li>
@@ -221,6 +223,7 @@ export function PrivacyPage() {
         <li><strong>Sessions and one-time links</strong> (sign-in sessions, password-reset and verification links) expire automatically, within 14 days, 1 hour, and 48 hours respectively, and are then removed.</li>
         <li><strong>Copies of Stripe event notifications</strong> are deleted after 90 days (180 days if processing failed).</li>
         <li><strong>Rate-limit counters</strong> are deleted within 24 hours.</li>
+        <li><strong>Report name and logo</strong> are deleted when you remove them or close your account. Reports themselves are generated when you ask for them or on the 1st of the month, are not stored by us, and, once emailed, are in your mailbox.</li>
         <li><strong>Support messages</strong> are kept in our support mailbox for as long as needed to help you and to keep a record of the request.</li>
         <li><strong>Backups:</strong> we keep routine backups for disaster recovery for up to about 60 days. Data you delete from the live Service can remain in backups until they expire, and is not used for any other purpose. Stored monitor credentials remain encrypted in backups, and the encryption key is kept separately from them.</li>
         <li><strong>Billing records:</strong> Stripe keeps the transaction records it is legally required to keep. We keep only the identifiers and subscription state described in Section 2D, and delete them when you delete your account.</li>
@@ -439,6 +442,12 @@ export function TermsPage() {
       <p>
         Paid plans may check each monitor from several locations, up to the limit shown at checkout. Every plan includes email, Slack, and webhook alerts and one public status page. Maintenance windows are included in the Pro and Agency plans. If you move to a plan that does not include maintenance windows, windows you
         already created keep working, but you cannot create new ones.
+      </p>
+      <p>
+        Monthly PDF uptime reports for each website are included in the Pro and Agency plans, and the Agency plan lets you put your own name and logo on them. A report is produced from the same check results as your
+        dashboard, covers a calendar month in UTC, and is provided for your information: it describes what HawkEye observed and is not a guarantee, warranty, or certification of any website’s availability.
+        Reports are emailed only to the owners of your workspace. You decide whether and to whom to forward them, and you are responsible for what you share. You may add only a logo you have the right to use. If you
+        move to a plan without branding, your stored logo is kept but not printed.
       </p>
       <p>
         We enforce plan limits through the application. If your account exceeds the limits of a plan (for example, after a downgrade), your existing monitors are kept, but we may prevent you from adding monitors or

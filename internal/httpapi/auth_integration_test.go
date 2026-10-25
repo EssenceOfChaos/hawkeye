@@ -20,6 +20,7 @@ import (
 	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
+	"hawkeye/internal/branding"
 	"hawkeye/internal/contact"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/email"
@@ -87,6 +88,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 		Account:       account.NewService(pool, svc, o.provider, mail, log, "https://app.example.com"),
 		Contact:       contact.NewService(mail, log, "support@test.example", "alerts@test.example", "https://app.example.com"),
 		Lifecycle:     lifecycle.NewService(pool),
+		Branding:      branding.NewService(pool),
 		SSLCheck:      o.ssl,
 		SiteCheck:     o.site,
 		HSTS:          o.hsts, Metrics: o.metrics, Errors: o.reporter, EmailActionLimitPerHour: o.emailPerH, GlobalRateLimitPerMin: o.global,

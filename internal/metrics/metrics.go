@@ -33,6 +33,7 @@ type Metrics struct {
 
 	DomainLookups        *prometheus.CounterVec // result=known|unavailable|error
 	LifecycleEmails      *prometheus.CounterVec // kind=no_monitor_*, result=sent|refused|failed
+	MonthlyReportEmails  *prometheus.CounterVec // result=sent|refused|failed
 	RetentionDeleted     *prometheus.CounterVec // kind=check_results|incidents|monitors|sessions|tokens
 	RetentionRuns        *prometheus.CounterVec // result=ok|error|skipped
 	RetentionErrors      prometheus.Counter
@@ -82,6 +83,7 @@ func newOn(r *prometheus.Registry) *Metrics {
 		NotificationsOldest:  prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_notification_oldest_pending_seconds", Help: "Age of the oldest due alert delivery."}),
 		DomainLookups: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_domain_lookups_total",
 			Help: "Domain expiry lookups by result (known, unavailable, error)."}, []string{"result"}),
+		MonthlyReportEmails:  prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_monthly_report_emails_total", Help: "Monthly report emails by result."}, []string{"result"}),
 		LifecycleEmails:      prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_lifecycle_emails_total", Help: "Onboarding emails by kind and result."}, []string{"kind", "result"}),
 		RetentionDeleted:     prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_retention_deleted_rows_total", Help: "Rows removed by retention, by kind."}, []string{"kind"}),
 		RetentionRuns:        prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_retention_runs_total", Help: "Retention passes by result."}, []string{"result"}),
@@ -100,7 +102,7 @@ func newOn(r *prometheus.Registry) *Metrics {
 		LastPollUnix: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_worker_last_poll_timestamp_seconds", Help: "Unix time of the last queue poll."}),
 	}
 	for _, c := range []prometheus.Collector{m.ChecksTotal, m.CheckDuration, m.Scheduled, m.Skipped, m.Missed, m.Backpressure,
-		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.CanaryUp, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.DomainLookups, m.LifecycleEmails, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed, m.BillingPriceMismatch} {
+		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.CanaryUp, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.DomainLookups, m.LifecycleEmails, m.MonthlyReportEmails, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed, m.BillingPriceMismatch} {
 		f(c)
 	}
 	m.CanaryUp.Set(1) // no verdict yet counts as healthy

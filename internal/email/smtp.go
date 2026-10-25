@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -110,7 +111,7 @@ func (s *SMTP) Send(ctx context.Context, m Message) error {
 			return fmt.Errorf("%w: invalid reply-to", ErrPermanent)
 		}
 	}
-	body, err := buildMessage(fromAddr, toAddr, replyTo, m.Subject, m.Text, m.HTML, m.Unsubscribe)
+	body, err := buildMessage(fromAddr, toAddr, replyTo, m)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrPermanent, err)
 	}
@@ -204,15 +205,19 @@ func parseOne(s string) (*mail.Address, error) {
 	return mail.ParseAddress(s)
 }
 
-// buildMessage renders an RFC 5322 message: plain text, or multipart/alternative (text first, HTML preferred) when html is set. Header
-// values are validated (no CR/LF) so a monitor name or recipient can never inject headers, the subject is MIME-encoded when needed,
-// and bodies are quoted-printable UTF-8.
-func buildMessage(from, to, replyTo *mail.Address, subject, text, html, unsubscribe string) ([]byte, error) {
+// buildMessage renders an RFC 5322 message: plain text, or multipart/alternative (text first, HTML preferred) when HTML is set, and wrapped in
+// multipart/mixed when there are attachments. Header values are validated (no CR/LF) so a monitor name or recipient can never inject headers, the
+// subject is MIME-encoded when needed, and bodies are quoted-printable UTF-8.
+func buildMessage(from, to, replyTo *mail.Address, m Message) ([]byte, error) {
+	subject, text, html, unsubscribe := m.Subject, m.Text, m.HTML, m.Unsubscribe
 	if strings.ContainsAny(subject, "\r\n") {
 		return nil, errors.New("line break in subject")
 	}
 	if unsubscribe != "" && (strings.ContainsAny(unsubscribe, " <>\r\n\t") || !(strings.HasPrefix(unsubscribe, "https://") || strings.HasPrefix(unsubscribe, "http://"))) {
 		return nil, errors.New("invalid unsubscribe URL")
+	}
+	if err := ValidateAttachments(m.Attachments); err != nil {
+		return nil, err
 	}
 	var id [12]byte
 	_, _ = rand.Read(id[:])
@@ -238,36 +243,77 @@ func buildMessage(from, to, replyTo *mail.Address, subject, text, html, unsubscr
 		h("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
 	}
 
-	part := func(w *bytes.Buffer, body string) error {
+	bodyType, body, err := renderBody(text, html)
+	if err != nil {
+		return nil, err
+	}
+	if len(m.Attachments) == 0 {
+		h("Content-Type", bodyType)
+		if html == "" {
+			h("Content-Transfer-Encoding", "quoted-printable")
+		}
+		b.WriteString("\r\n")
+		b.Write(body)
+		return b.Bytes(), nil
+	}
+
+	boundary := newBoundary()
+	h("Content-Type", `multipart/mixed; boundary="`+boundary+`"`)
+	b.WriteString("\r\n--" + boundary + "\r\n")
+	b.WriteString("Content-Type: " + bodyType + "\r\n")
+	if html == "" {
+		b.WriteString("Content-Transfer-Encoding: quoted-printable\r\n")
+	}
+	b.WriteString("\r\n")
+	b.Write(body)
+	b.WriteString("\r\n")
+	for _, a := range m.Attachments {
+		b.WriteString("--" + boundary + "\r\n")
+		b.WriteString("Content-Type: " + a.ContentType + `; name="` + a.Filename + "\"\r\n")
+		b.WriteString("Content-Disposition: attachment; filename=\"" + a.Filename + "\"\r\n")
+		b.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
+		enc := base64.StdEncoding.EncodeToString(a.Data)
+		for len(enc) > 76 {
+			b.WriteString(enc[:76] + "\r\n")
+			enc = enc[76:]
+		}
+		b.WriteString(enc + "\r\n")
+	}
+	b.WriteString("--" + boundary + "--\r\n")
+	return b.Bytes(), nil
+}
+
+func newBoundary() string {
+	var bid [12]byte
+	_, _ = rand.Read(bid[:])
+	return "hawkeye-" + hex.EncodeToString(bid[:])
+}
+
+// renderBody returns the body's Content-Type and its encoded bytes: quoted-printable text, or a multipart/alternative of text and HTML.
+func renderBody(text, html string) (contentType string, body []byte, err error) {
+	part := func(w *bytes.Buffer, s string) error {
 		qp := quotedprintable.NewWriter(w)
-		if _, err := qp.Write([]byte(strings.ReplaceAll(body, "\r\n", "\n"))); err != nil {
+		if _, err := qp.Write([]byte(strings.ReplaceAll(s, "\r\n", "\n"))); err != nil {
 			return err
 		}
 		return qp.Close()
 	}
+	var b bytes.Buffer
 	if html == "" {
-		h("Content-Type", `text/plain; charset="utf-8"`)
-		h("Content-Transfer-Encoding", "quoted-printable")
-		b.WriteString("\r\n")
 		if err := part(&b, text); err != nil {
-			return nil, err
+			return "", nil, err
 		}
-		return b.Bytes(), nil
+		return `text/plain; charset="utf-8"`, b.Bytes(), nil
 	}
-
-	var bid [12]byte
-	_, _ = rand.Read(bid[:])
-	boundary := "hawkeye-" + hex.EncodeToString(bid[:])
-	h("Content-Type", `multipart/alternative; boundary="`+boundary+`"`)
-	b.WriteString("\r\n")
+	boundary := newBoundary()
 	for _, p := range []struct{ ctype, body string }{{"text/plain", text}, {"text/html", html}} {
 		b.WriteString("--" + boundary + "\r\n")
 		b.WriteString("Content-Type: " + p.ctype + "; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n")
 		if err := part(&b, p.body); err != nil {
-			return nil, err
+			return "", nil, err
 		}
 		b.WriteString("\r\n")
 	}
 	b.WriteString("--" + boundary + "--\r\n")
-	return b.Bytes(), nil
+	return `multipart/alternative; boundary="` + boundary + `"`, b.Bytes(), nil
 }

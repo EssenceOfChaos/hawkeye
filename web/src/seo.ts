@@ -91,6 +91,7 @@ export const PAGES: readonly PageMeta[] = [
   { path: '/notifications', title: 'Notifications | HawkEye', description: 'Your HawkEye alert channels.', index: false },
   { path: '/domains', title: 'Domains | HawkEye', description: 'Your HawkEye domain expiry monitoring.', index: false },
   { path: '/maintenance', title: 'Maintenance windows | HawkEye', description: 'Your HawkEye maintenance windows.', index: false },
+  { path: '/reports', title: 'Reports | HawkEye', description: 'Your HawkEye monthly PDF reports.', index: false },
   { path: '/status-page', title: 'Status page | HawkEye', description: 'Your HawkEye public status page settings.', index: false },
   { path: '/billing', title: 'Billing | HawkEye', description: 'Your HawkEye plan and billing.', index: false },
   { path: '/account', title: 'Account | HawkEye', description: 'Your HawkEye account.', index: false },

@@ -113,6 +113,10 @@ type Config struct {
 	LifecycleReplyTo       string // defaults to the From address
 	LifecyclePostalAddress string // optional, shown in the footer of these emails
 
+	// Monthly PDF report emails to organizations that turned them on (internal/monthlyreport). They come from the normal sender, so nothing to set up.
+	RunMonthlyReports     bool
+	MonthlyReportInterval time.Duration
+
 	StripeSecretKey     string
 	StripeWebhookSecret string
 	StripePricePro      string
@@ -304,6 +308,9 @@ func load(get func(string) string) (Config, error) {
 		LifecycleReplyTo:       str("LIFECYCLE_REPLY_TO", ""),
 		LifecyclePostalAddress: str("LIFECYCLE_POSTAL_ADDRESS", ""),
 
+		RunMonthlyReports:     !boolean("DISABLE_MONTHLY_REPORTS"),
+		MonthlyReportInterval: duration("MONTHLY_REPORT_INTERVAL", time.Hour),
+
 		StripeSecretKey:     str("STRIPE_SECRET_KEY", ""),
 		StripeWebhookSecret: str("STRIPE_WEBHOOK_SECRET", ""),
 		StripePricePro:      str("STRIPE_PRICE_PRO_ID", ""),
@@ -417,6 +424,9 @@ func load(get func(string) string) (Config, error) {
 	}
 	if c.DomainLookupPace < 0 {
 		errs = append(errs, errors.New("DOMAIN_LOOKUP_PACE: must not be negative"))
+	}
+	if c.MonthlyReportInterval < time.Minute {
+		errs = append(errs, errors.New("MONTHLY_REPORT_INTERVAL: must be at least 1m"))
 	}
 	if c.LifecycleInterval < time.Minute {
 		errs = append(errs, errors.New("LIFECYCLE_INTERVAL: must be at least 1m"))

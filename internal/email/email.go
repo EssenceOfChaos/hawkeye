@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"regexp"
 	"sync"
 )
 
@@ -19,6 +20,45 @@ type Message struct {
 	// Unsubscribe is set on mail the recipient can opt out of (onboarding nudges, not alerts or security mail). It must be an http(s) URL that
 	// unsubscribes with a bare POST; the sender adds List-Unsubscribe and List-Unsubscribe-Post (RFC 8058), which mail clients show as an "Unsubscribe" button.
 	Unsubscribe string
+
+	// Attachments are sent as files with the message (monthly PDF reports). Senders refuse names and types outside a small safe set (see ValidAttachment)
+	// and bodies over MaxAttachmentBytes in total.
+	Attachments []Attachment
+}
+
+// Attachment is one file sent with a message.
+type Attachment struct {
+	Filename    string // letters, digits, dot, dash and underscore only
+	ContentType string // e.g. application/pdf
+	Data        []byte
+}
+
+// MaxAttachmentBytes is the most attachment data one message may carry. Providers accept about 40 MB per message; this leaves a wide margin and
+// stops a bug from building an enormous email.
+const MaxAttachmentBytes = 20 << 20
+
+var (
+	attachmentName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
+	attachmentType = regexp.MustCompile(`^[a-z]+/[a-z0-9.+-]+$`)
+)
+
+// ValidateAttachments says why a message's attachments cannot be sent, or returns nil. The checks keep a filename or type from adding headers or
+// tricking a mail client.
+func ValidateAttachments(as []Attachment) error {
+	total := 0
+	for _, a := range as {
+		if !attachmentName.MatchString(a.Filename) {
+			return errors.New("invalid attachment filename")
+		}
+		if !attachmentType.MatchString(a.ContentType) {
+			return errors.New("invalid attachment content type")
+		}
+		total += len(a.Data)
+	}
+	if total > MaxAttachmentBytes {
+		return errors.New("attachments are too large")
+	}
+	return nil
 }
 
 // ErrPermanent marks a delivery failure that will never succeed on retry (invalid address, rejected

@@ -58,6 +58,12 @@ const FEATURES = [
     text: 'Share live status, uptime and incidents. You choose what appears.',
   },
   {
+    icon: brand.icons.analytics,
+    title: 'Monthly PDF reports',
+    lead: 'Show clients how their site performed.',
+    text: 'A clear uptime report for each website: downtime, incidents and a day-by-day chart. Pro and Agency. Agency adds your own name and logo.',
+  },
+  {
     icon: brand.icons.maintenance,
     title: 'Maintenance windows',
     lead: 'Planned work shouldn’t page you.',
@@ -144,6 +150,8 @@ export function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: P
         <li>Email, Slack and webhook alerts</li>
         <li>Public status page</li>
         {plan.maintenance_enabled && <li>Maintenance windows</li>}
+        {plan.reports_enabled && <li>Monthly PDF uptime reports</li>}
+        {plan.branded_reports_enabled && <li>Your own name and logo on reports</li>}
       </ul>
       {plan.monthly_price_cents === 0 ? (
         <Link className="button primary" to="/register">Start free</Link>

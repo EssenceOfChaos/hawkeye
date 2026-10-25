@@ -16,6 +16,7 @@ import (
 	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
+	"hawkeye/internal/branding"
 	"hawkeye/internal/config"
 	"hawkeye/internal/contact"
 	"hawkeye/internal/database"
@@ -127,6 +128,7 @@ func run() error {
 		SSLCheck:      freeTools.ssl,
 		SiteCheck:     freeTools.site,
 		Lifecycle:     lifecycle.NewService(pool),
+		Branding:      branding.NewService(pool),
 		Contact:       contact.NewService(mailer, log, cfg.SupportAddress, cfg.EmailFromAddress, cfg.AppBaseURL),
 		Maintenance:   maintenance.NewService(pool, planSvc),
 		Domains:       domains.NewService(pool, planSvc),

@@ -26,6 +26,18 @@ function renderLanding(fetchImpl: (url: string) => Promise<Response>) {
 }
 
 describe('LandingPage', () => {
+  it('lists reports on a plan only when that plan includes them', async () => {
+    const withReports = [
+      plans[0],
+      { ...plans[1], reports_enabled: true },
+      { code: 'agency', name: 'Agency', monthly_price_cents: 5900, max_monitors: 200, minimum_check_interval_seconds: 60, history_retention_days: 365, max_domains: 100, reports_enabled: true, branded_reports_enabled: true },
+    ]
+    renderLanding((url) => (url.includes('/plans') ? json(200, { plans: withReports }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } })))
+    await screen.findByText('200 website monitors')
+    expect(screen.getAllByText('Monthly PDF uptime reports')).toHaveLength(2)
+    expect(screen.getAllByText('Your own name and logo on reports')).toHaveLength(1)
+  })
+
   it('shows the brand, pricing from the API and honest availability labels', async () => {
     renderLanding((url) =>
       url.includes('/plans') ? json(200, { plans }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }),
@@ -36,8 +48,8 @@ describe('LandingPage', () => {
     // Paid checkout is not built yet, so the page must not pretend it is.
     expect(screen.getByRole('button', { name: /open soon/i })).toBeDisabled()
     expect(screen.getAllByRole('link', { name: /start monitoring free/i }).length).toBeGreaterThan(0)
-    // Features that are not built (exports, branded reports, priority support, team seats, SMS) must not be advertised.
-    expect(screen.queryByText(/branded|priority support|team members|csv export/i)).not.toBeInTheDocument()
+    // Features that are not built (CSV exports, priority support, team seats, SMS) must not be advertised.
+    expect(screen.queryByText(/priority support|team members|csv export/i)).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /Always in sight/ })).toBeInTheDocument()
   })
 

@@ -328,3 +328,17 @@ func TestLifecycleEmailsAreOffUntilASenderIsSet(t *testing.T) {
 		}
 	}
 }
+
+func TestMonthlyReportsAreOnByDefaultAndConfigurable(t *testing.T) {
+	c, err := load(env(map[string]string{"DATABASE_URL": "postgres://x"}))
+	if err != nil || !c.RunMonthlyReports || c.MonthlyReportInterval != time.Hour {
+		t.Fatalf("defaults: %v %+v", err, c)
+	}
+	c, err = load(env(map[string]string{"DATABASE_URL": "postgres://x", "DISABLE_MONTHLY_REPORTS": "true", "MONTHLY_REPORT_INTERVAL": "30m"}))
+	if err != nil || c.RunMonthlyReports || c.MonthlyReportInterval != 30*time.Minute {
+		t.Fatalf("read from the environment: %v %+v", err, c)
+	}
+	if _, err := load(env(map[string]string{"DATABASE_URL": "postgres://x", "MONTHLY_REPORT_INTERVAL": "10s"})); err == nil || !strings.Contains(err.Error(), "MONTHLY_REPORT_INTERVAL") {
+		t.Fatalf("a too-short interval should be refused: %v", err)
+	}
+}

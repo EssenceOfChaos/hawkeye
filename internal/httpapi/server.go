@@ -15,6 +15,7 @@ import (
 	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
+	"hawkeye/internal/branding"
 	"hawkeye/internal/contact"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/errtrack"
@@ -57,6 +58,7 @@ type Options struct {
 	Account       *account.Service
 	Contact       *contact.Service
 	Lifecycle     *lifecycle.Service // unsubscribe from onboarding emails; nil turns the endpoint off
+	Branding      *branding.Service  // report branding and PDF reports; nil turns those endpoints off
 	SSLCheck      *sslcheck.Service  // free SSL checker; nil turns the endpoint off
 	SiteCheck     *sitecheck.Service // free website status checker; nil turns the endpoint off
 	PgPool        *pgxpool.Pool
@@ -165,7 +167,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, billing: o.Billing, account: o.Account, contact: o.Contact, lifecycle: o.Lifecycle, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies}
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, billing: o.Billing, account: o.Account, contact: o.Contact, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
@@ -300,6 +302,15 @@ func registerAPI(e *echo.Echo, o Options) {
 	scoped.POST("/billing/portal-session", h.billingPortal, requireOwner, requireVerifiedEmail)
 	scoped.POST("/billing/cancel-subscription", h.billingCancel, requireOwner, requireVerifiedEmail)
 	scoped.POST("/billing/sync", h.billingSync, requireOwner)
+	if h.branding != nil {
+		// PDF reports and their branding (Pro and Agency; the plan is checked in each handler).
+		scoped.GET("/branding", h.brandingView)
+		scoped.PUT("/branding", h.putBranding, requireOwner)
+		scoped.GET("/branding/logo", h.getLogo)
+		scoped.PUT("/branding/logo", h.putLogo, requireOwner, limit("branding"))
+		scoped.DELETE("/branding/logo", h.deleteLogo, requireOwner)
+		scoped.GET("/monitors/:monitorID/report.pdf", h.monitorReportPDF, limit("report"))
+	}
 	scoped.GET("/monitors/:monitorID/results", h.monitorResults)
 	scoped.GET("/monitors/:monitorID/uptime", h.monitorUptime)
 	scoped.GET("/monitors/:monitorID/response-times", h.monitorResponseTimes)

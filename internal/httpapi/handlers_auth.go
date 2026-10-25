@@ -12,6 +12,7 @@ import (
 	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
+	"hawkeye/internal/branding"
 	"hawkeye/internal/contact"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/lifecycle"
@@ -43,6 +44,7 @@ type handlers struct {
 	account       *account.Service
 	contact       *contact.Service
 	lifecycle     *lifecycle.Service
+	branding      *branding.Service
 	sslcheck      *sslcheck.Service
 	sitecheck     *sitecheck.Service
 	log           *slog.Logger

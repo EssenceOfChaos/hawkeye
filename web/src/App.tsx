@@ -10,6 +10,7 @@ import { afterLoginPath } from './navigation'
 import { ConfirmAlertAddressPage, ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage, UnsubscribePage, VerifyEmailPage } from './pages/AuthPages'
 import { AccountPage } from './pages/AccountPage'
 import { ContactPage } from './pages/ContactPage'
+import { ReportsPage } from './pages/ReportsPage'
 import { BillingPage } from './pages/BillingPage'
 import { IncidentsPage } from './pages/IncidentsPage'
 import { LandingPage } from './pages/LandingPage'
@@ -91,6 +92,7 @@ export function AppRoutes() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/domains" element={<DomainsPage />} />
         <Route path="/maintenance" element={<MaintenancePage />} />
+        <Route path="/reports" element={<ReportsPage />} />
         <Route path="/status-page" element={<StatusPageSettings />} />
         <Route path="/monitors" element={<MonitorsPage />} />
         <Route path="/monitors/new" element={<MonitorFormPage />} />

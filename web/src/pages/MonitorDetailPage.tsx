@@ -1,17 +1,38 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import type { CheckResult, Incident, Monitor, RangeInfo, RegionStatus, SeriesPoint, Uptime, Usage } from '../api'
+import type { CheckResult, Incident, Monitor, Plan, RangeInfo, RegionStatus, SeriesPoint, Uptime, Usage } from '../api'
 import { Alert } from '../components/Alert'
 import { CertificateCard } from '../components/Certificate'
 import { RangePicker } from '../components/RangePicker'
 import { ResponseChart } from '../components/ResponseChart'
 import { StatusBadge } from '../components/StatusBadge'
 import { AvgResponseTile, StatTile, UptimeHero } from '../components/Uptime'
-import { availableRanges, formatDateTime, formatMs, RANGE_LABELS } from '../format'
+import { availableRanges, formatDateTime, formatMs, RANGE_LABELS, reportMonths } from '../format'
 import { useApi } from '../hooks'
 import { formatDuration, IncidentStatus } from './IncidentsPage'
 
 const PAGE = 25
+
+/** One website's monthly PDF report: a month to pick and a download, or a note about which plans include it. */
+function ReportDownload({ monitorID, plan }: { monitorID: string; plan: Plan | undefined }) {
+  const months = reportMonths(plan?.history_retention_days ?? 7)
+  const [month, setMonth] = useState<string | null>(null)
+  if (!plan) return null
+  if (!plan.reports_enabled) {
+    return <p className="hint">A monthly PDF report for this website is included in the Pro and Agency plans. <Link to="/billing">See plans</Link></p>
+  }
+  const chosen = month ?? months[1]?.value ?? months[0].value
+  return (
+    <div className="row">
+      <label htmlFor="report-month">Monthly report</label>
+      <select id="report-month" value={chosen} onChange={(e) => setMonth(e.target.value)}>
+        {months.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}
+      </select>
+      <a className="button" href={`/api/v1/monitors/${monitorID}/report.pdf?month=${chosen}`} rel="noreferrer">Download PDF</a>
+      <Link to="/reports">All reports</Link>
+    </div>
+  )
+}
 
 export function MonitorDetailPage() {
   const { monitorID = '' } = useParams()
@@ -62,6 +83,8 @@ export function MonitorDetailPage() {
           </p>
 
           <CertificateCard monitor={m} />
+
+          <ReportDownload monitorID={m.id} plan={usage.data?.usage.plan} />
 
           <RangePicker value={range} options={options} onChange={changeRange} />
 

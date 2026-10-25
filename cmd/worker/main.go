@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"hawkeye/internal/billing"
+	"hawkeye/internal/branding"
 	"hawkeye/internal/canary"
 	"hawkeye/internal/checks"
 	"hawkeye/internal/config"
@@ -27,6 +28,7 @@ import (
 	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/logging"
 	"hawkeye/internal/metrics"
+	"hawkeye/internal/monthlyreport"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/retention"
 	"hawkeye/internal/safehttp"
@@ -162,6 +164,12 @@ func run() error {
 	default:
 		job := lifecycle.NewJob(pool, mailer, lifecycle.Config{Interval: cfg.LifecycleInterval, From: cfg.LifecycleFromAddress, ReplyTo: cfg.LifecycleReplyTo,
 			AppBaseURL: cfg.AppBaseURL, Address: cfg.LifecyclePostalAddress, Pace: time.Second}, m, log).WithReporter(reporter)
+		spawn(func() { job.Run(ctx) })
+	}
+	// Monthly PDF reports, emailed on the first day of the month to organizations that turned that on.
+	if cfg.RunMonthlyReports {
+		job := monthlyreport.NewJob(pool, mailer, branding.NewService(pool), monthlyreport.Config{Interval: cfg.MonthlyReportInterval,
+			AppBaseURL: cfg.AppBaseURL, Pace: time.Second}, m, log).WithReporter(reporter)
 		spawn(func() { job.Run(ctx) })
 	}
 	spawn(func() {

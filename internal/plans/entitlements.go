@@ -9,12 +9,14 @@ import (
 
 // Limit kinds reported in LimitError.
 const (
-	LimitMonitors      = "monitors"
-	LimitCheckInterval = "check_interval"
-	LimitTeamMembers   = "team_members"
-	LimitMaintenance   = "maintenance_windows"
-	LimitRegions       = "regions"
-	LimitDomains       = "domains"
+	LimitMonitors       = "monitors"
+	LimitCheckInterval  = "check_interval"
+	LimitTeamMembers    = "team_members"
+	LimitMaintenance    = "maintenance_windows"
+	LimitRegions        = "regions"
+	LimitDomains        = "domains"
+	LimitReports        = "reports"
+	LimitBrandedReports = "branded_reports"
 )
 
 // LimitError is returned when an operation exceeds the organization's plan.
@@ -48,6 +50,10 @@ func (e *LimitError) Message() string {
 		return fmt.Sprintf("Your %s plan includes up to %d tracked domains and all of them are in use.", e.Plan.Name, e.Limit)
 	case LimitMaintenance:
 		return fmt.Sprintf("Maintenance windows are not included in your %s plan. Upgrade to silence alerts during planned work.", e.Plan.Name)
+	case LimitReports:
+		return fmt.Sprintf("PDF reports are not included in your %s plan. Upgrade to download a monthly uptime report for each website.", e.Plan.Name)
+	case LimitBrandedReports:
+		return fmt.Sprintf("Putting your own name and logo on reports is not included in your %s plan. Upgrade to send clients reports with your branding.", e.Plan.Name)
 	}
 	return "Your plan limit has been reached."
 }
@@ -101,6 +107,32 @@ func (s *Service) CanUseMaintenance(ctx context.Context, db DB, orgID uuid.UUID)
 	}
 	if !p.MaintenanceEnabled {
 		return s.limitError(ctx, db, LimitMaintenance, 0, 0, p)
+	}
+	return nil
+}
+
+// CanGenerateReports returns a *LimitError when the plan does not include PDF reports. It guards downloading a report and turning on the monthly email;
+// the monthly job also stops sending for an organization that has since been downgraded.
+func (s *Service) CanGenerateReports(ctx context.Context, db DB, orgID uuid.UUID) error {
+	p, err := EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	if !p.ReportsEnabled {
+		return s.limitError(ctx, db, LimitReports, 0, 0, p)
+	}
+	return nil
+}
+
+// CanUseBrandedReports returns a *LimitError when the plan does not let reports carry the organization's own name and logo. It guards changing the
+// branding; a stored logo is kept after a downgrade but no longer printed, so reports simply go back to the HawkEye look.
+func (s *Service) CanUseBrandedReports(ctx context.Context, db DB, orgID uuid.UUID) error {
+	p, err := EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	if !p.BrandedReportsEnabled {
+		return s.limitError(ctx, db, LimitBrandedReports, 0, 0, p)
 	}
 	return nil
 }

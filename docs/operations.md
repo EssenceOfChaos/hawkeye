@@ -124,6 +124,16 @@ FROM users u WHERE u.email_verified_at IS NOT NULL GROUP BY 1 ORDER BY 1 DESC;
 
 And who added a monitor after each email: join `lifecycle_emails` (`user_id`, `kind`, `sent_at`) to the first `monitors.created_at` of the user's organizations. Links in the emails carry `utm_campaign=<kind>`, so the analytics landing report shows the same split.
 
+### Monthly PDF reports
+
+Pro and Agency can download a PDF uptime report for any website (Reports page, or the monitor's page): uptime, confirmed downtime, a day-by-day chart and the incident list for a calendar month in UTC. The PDF is drawn in Go (`internal/reportpdf`, the `go-pdf/fpdf` library), so there is no browser or other program to run, and a report is generated when asked for and never stored. A month is refused if it is older than the plan's history (its results would be partly deleted and the report wrong), and the month in progress is a "so far" report. Agency can add a name and a logo (`organization_branding`); the logo is validated and re-encoded on upload (PNG or JPEG only, 512 KB, 2000 x 2000 pixels, never SVG), and is printed only while the plan includes branding: after a downgrade it is kept but the reports go back to the HawkEye look.
+
+**Monthly email.** An organization that turns it on (Reports page) gets, on the first pass after the month ends (an hour after midnight UTC, then hourly until sent), one email per owner with one PDF per website that had checks that month, 20 PDFs per email (larger accounts get "part 1 of 3" and so on). It is sent by the worker through the normal sender (`EMAIL_FROM_ADDRESS`) and only to verified owners; the owner forwards each PDF to the client. Nothing is ever sent to the agency's clients. Switch off with `DISABLE_MONTHLY_REPORTS=true`; `MONTHLY_REPORT_INTERVAL` (default 1h) is how often a pass runs. Metric: `hawkeye_monthly_report_emails_total{result}` (`sent|refused|failed`).
+
+**Safe to repeat.** `monthly_report_emails` records each owner's email before it is sent (so nobody gets one twice, even with several workers or after a crash), and `monthly_report_runs` marks a month finished. A temporary mail failure releases the record and the next pass retries; a refused address is recorded and not retried. An organization whose plan no longer includes reports is skipped without being marked, so upgrading later in the month still sends that month's reports.
+
+**Known limits.** Text is printed in the Western European character set of the standard PDF fonts: a site named in Cyrillic or Chinese prints with replacement marks (its PDF still works). Reports use UTC months, not the client's time zone. Re-sending a month already sent means deleting its `monthly_report_runs` and `monthly_report_emails` rows.
+
 ## Troubleshooting
 
 More specific runbooks:

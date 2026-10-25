@@ -13,8 +13,10 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"mime"
+	"mime/multipart"
 	"net"
 	"net/mail"
 	"os"
@@ -414,7 +416,7 @@ func TestOneClickUnsubscribeHeadersAreAddedOnlyWhenAsked(t *testing.T) {
 	from, _ := mail.ParseAddress("HawkEye <hi@hawkeye.test>")
 	to, _ := mail.ParseAddress("u@example.com")
 	read := func(unsub string) *mail.Message {
-		raw, err := buildMessage(from, to, nil, "Hi", "body", "<p>body</p>", unsub)
+		raw, err := buildMessage(from, to, nil, Message{Subject: "Hi", Text: "body", HTML: "<p>body</p>", Unsubscribe: unsub})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -433,8 +435,76 @@ func TestOneClickUnsubscribeHeadersAreAddedOnlyWhenAsked(t *testing.T) {
 		t.Fatalf("alerts and account mail must not carry unsubscribe headers: %v", h)
 	}
 	for _, bad := range []string{"mailto:x@y.z", "ftp://x", "https://x/\r\nBcc: evil@example.com", "https://x/ y", "https://x/>"} {
-		if _, err := buildMessage(from, to, nil, "Hi", "body", "", bad); err == nil {
+		if _, err := buildMessage(from, to, nil, Message{Subject: "Hi", Text: "body", Unsubscribe: bad}); err == nil {
 			t.Errorf("accepted unsubscribe URL %q", bad)
+		}
+	}
+}
+
+func TestAttachmentsAreSentAsBase64PartsAfterTheBody(t *testing.T) {
+	from, _ := mail.ParseAddress("HawkEye <hi@hawkeye.test>")
+	to, _ := mail.ParseAddress("u@example.com")
+	pdf := bytes.Repeat([]byte("%PDF-1.4 binary \x00\xff\x10 data "), 400) // longer than one base64 line, with bytes that are not text
+	raw, err := buildMessage(from, to, nil, Message{Subject: "Reports", Text: "plain", HTML: "<p>html</p>",
+		Attachments: []Attachment{{Filename: "report-2026-09.pdf", ContentType: "application/pdf", Data: pdf}, {Filename: "b.pdf", ContentType: "application/pdf", Data: []byte("two")}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg, err := mail.ReadMessage(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mt, params, err := mime.ParseMediaType(msg.Header.Get("Content-Type"))
+	if err != nil || mt != "multipart/mixed" {
+		t.Fatalf("content type = %q %v", mt, err)
+	}
+	mr := multipart.NewReader(msg.Body, params["boundary"])
+	body, err := mr.NextPart()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bt, _, _ := mime.ParseMediaType(body.Header.Get("Content-Type")); bt != "multipart/alternative" {
+		t.Fatalf("first part = %q, want the text/HTML body", bt)
+	}
+	var got [][]byte
+	for {
+		p, err := mr.NextPart()
+		if err != nil {
+			break
+		}
+		if !strings.HasPrefix(p.Header.Get("Content-Disposition"), "attachment;") || p.Header.Get("Content-Transfer-Encoding") != "base64" {
+			t.Fatalf("attachment headers: %v", p.Header)
+		}
+		dec, err := io.ReadAll(base64.NewDecoder(base64.StdEncoding, p))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, dec)
+	}
+	if len(got) != 2 || !bytes.Equal(got[0], pdf) || string(got[1]) != "two" {
+		t.Fatalf("attachments did not survive: %d parts", len(got))
+	}
+	for _, line := range strings.Split(string(raw), "\r\n") {
+		if len(line) > 998 {
+			t.Fatalf("a line is %d bytes; mail servers reject lines over 998", len(line))
+		}
+	}
+}
+
+func TestAttachmentNamesAndTypesCannotInjectHeaders(t *testing.T) {
+	from, _ := mail.ParseAddress("hi@hawkeye.test")
+	to, _ := mail.ParseAddress("u@example.com")
+	for _, a := range []Attachment{
+		{Filename: "a.pdf\r\nBcc: evil@example.com", ContentType: "application/pdf"},
+		{Filename: `a".pdf`, ContentType: "application/pdf"},
+		{Filename: "../a.pdf", ContentType: "application/pdf"},
+		{Filename: "", ContentType: "application/pdf"},
+		{Filename: "a.pdf", ContentType: "application/pdf\r\nX: y"},
+		{Filename: "a.pdf", ContentType: "pdf"},
+		{Filename: "a.pdf", ContentType: "application/pdf", Data: make([]byte, MaxAttachmentBytes+1)},
+	} {
+		if _, err := buildMessage(from, to, nil, Message{Subject: "x", Text: "y", Attachments: []Attachment{a}}); err == nil {
+			t.Errorf("accepted %q / %q (%d bytes)", a.Filename, a.ContentType, len(a.Data))
 		}
 	}
 }

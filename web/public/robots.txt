@@ -9,6 +9,7 @@ Disallow: /incidents
 Disallow: /notifications
 Disallow: /domains
 Disallow: /maintenance
+Disallow: /reports
 Disallow: /status-page
 Disallow: /billing
 Disallow: /account

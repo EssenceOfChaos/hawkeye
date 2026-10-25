@@ -22,6 +22,27 @@ export interface Plan {
   max_regions?: number
   /** How many domains HawkEye looks up the registration expiry of on this plan. */
   max_domains?: number
+  /** Monthly PDF uptime reports (Pro and Agency). */
+  reports_enabled?: boolean
+  /** The organization's own name and logo on those reports (Agency). */
+  branded_reports_enabled?: boolean
+}
+
+/** What the Reports page edits: the name and logo printed on PDF reports, and the monthly email switch. */
+export interface Branding {
+  display_name: string
+  has_logo: boolean
+  logo_width: number
+  logo_height: number
+  monthly_report_email: boolean
+}
+
+export interface BrandingView {
+  branding: Branding
+  /** The plan includes PDF reports. */
+  can_report: boolean
+  /** The plan lets reports carry the organization's own name and logo. */
+  can_brand: boolean
 }
 
 export interface Usage {
@@ -376,21 +397,15 @@ function csrfCookie(): string | undefined {
     ?.slice('csrf_token='.length)
 }
 
-/** Calls the JSON API. Unsafe methods echo the CSRF cookie in a header, fetching one first if needed. */
-export async function api<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(method: string, path: string, body: BodyInit | undefined, contentType?: string): Promise<T> {
   const headers: Record<string, string> = {}
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  if (contentType) headers['Content-Type'] = contentType
   if (UNSAFE.has(method)) {
     if (!csrfCookie()) await fetch('/api/v1/auth/me', { credentials: 'same-origin' })
     const token = csrfCookie()
     if (token) headers['X-CSRF-Token'] = decodeURIComponent(token)
   }
-  const res = await fetch(`/api/v1${path}`, {
-    method,
-    headers,
-    credentials: 'same-origin',
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  const res = await fetch(`/api/v1${path}`, { method, headers, credentials: 'same-origin', body })
   if (res.status === 204) return undefined as T
   let data: any = null
   try {
@@ -403,6 +418,16 @@ export async function api<T = unknown>(method: string, path: string, body?: unkn
     throw new ApiError(res.status, e?.code ?? 'UNKNOWN', e?.message ?? 'Something went wrong.', e?.details)
   }
   return data as T
+}
+
+/** Calls the JSON API. Unsafe methods echo the CSRF cookie in a header, fetching one first if needed. */
+export function api<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+  return request<T>(method, path, body === undefined ? undefined : JSON.stringify(body), body === undefined ? undefined : 'application/json')
+}
+
+/** Sends a chosen file as the request body itself (the logo upload), with the same CSRF handling and error format as `api`. */
+export function apiUpload<T = unknown>(method: string, path: string, file: Blob): Promise<T> {
+  return request<T>(method, path, file, file.type || 'application/octet-stream')
 }
 
 /** Asks the backend whether it and its dependencies are ready. Never throws. */
