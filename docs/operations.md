@@ -104,6 +104,26 @@ Symptoms: `HawkEyeAlertEmailBacklog`/`HawkEyeAlertEmailFailing`. Delivery errors
 `550/553` → bad recipient (marked failed, no retry). Deliveries retry for hours, so fixing the credential lets queued alerts go out; to push them now:
 `UPDATE notification_deliveries SET next_attempt_at = now() WHERE status = 'pending';`. Account emails (verification, reset) are sent by the API process; their failures are logged as `send ... email failed`.
 
+### Onboarding (lifecycle) emails
+
+New accounts that verify their address but never add a monitor get up to three emails, 1, 3 and 7 days after verifying (`internal/lifecycle`). They are decided from the data at send time (no stage column, nothing scheduled), so someone who adds a monitor simply stops matching. Anyone who unsubscribed, has a disabled account, or verified more than 10 days ago is never mailed, so switching this on does not message old accounts.
+
+**Turning it on.** It is off until `LIFECYCLE_FROM_ADDRESS` is set on the worker (for example `HawkEye <customer_support@hawkeye.observer>`). Before that: verify the sender's domain with the email provider (Resend: add the domain, create its DNS records, wait for _Verified_), and make sure `LIFECYCLE_REPLY_TO` (default: the From address) is a mailbox someone reads, because the 7-day email asks people to reply. To keep alert deliverability separate from engagement-driven mail, use a different domain or subdomain than `EMAIL_FROM_ADDRESS`. `LIFECYCLE_POSTAL_ADDRESS` adds a postal address to the footer if you decide you need one. Turn it off again with `DISABLE_LIFECYCLE_EMAILS=true` or by emptying `LIFECYCLE_FROM_ADDRESS`; nothing already sent is affected.
+
+**Sending behaviour.** Passes run every `LIFECYCLE_INTERVAL` (10m), at most 20 people per email per pass, one send per second (so a batch cannot use the provider's rate limit that alerts need), and never two of these emails within 48 hours to the same person. A temporary send failure ends the pass and is retried next pass; a permanent refusal (bad address) is recorded and not retried. Metric: `hawkeye_lifecycle_emails_total{kind,result}` (`sent|refused|failed`). Every email carries `List-Unsubscribe` / `List-Unsubscribe-Post` headers (one-click, `POST /api/v1/lifecycle/unsubscribe?token=...`, no session or CSRF token) and a footer link to `/unsubscribe`. Unsubscribing sets `users.lifecycle_opt_out_at` and affects only these emails.
+
+**Measuring it.** Judge by what people do, not opens. Share of each signup week that added a first monitor within 7 days of verifying:
+
+```sql
+SELECT date_trunc('week', u.email_verified_at) AS week,
+       count(*) AS verified,
+       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM organization_members om JOIN monitors m ON m.organization_id = om.organization_id
+                                      WHERE om.user_id = u.id AND m.created_at < u.email_verified_at + interval '7 days')) AS activated
+FROM users u WHERE u.email_verified_at IS NOT NULL GROUP BY 1 ORDER BY 1 DESC;
+```
+
+And who added a monitor after each email: join `lifecycle_emails` (`user_id`, `kind`, `sent_at`) to the first `monitors.created_at` of the user's organizations. Links in the emails carry `utm_campaign=<kind>`, so the analytics landing report shows the same split.
+
 ## Troubleshooting
 
 More specific runbooks:

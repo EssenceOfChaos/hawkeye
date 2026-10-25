@@ -15,5 +15,6 @@ Disallow: /account
 Disallow: /reset-password
 Disallow: /verify-email
 Disallow: /confirm-alert-address
+Disallow: /unsubscribe
 
 Sitemap: https://hawkeye.observer/sitemap.xml

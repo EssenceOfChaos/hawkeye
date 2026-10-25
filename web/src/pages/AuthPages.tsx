@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { api, ApiError } from '../api'
+import { afterLoginPath } from '../navigation'
 import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { BrandMark } from '../components/Brand'
@@ -46,6 +47,7 @@ function FormError({ error }: { error: ApiError | null }) {
 export function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const { error, busy, run } = useSubmit()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -54,7 +56,7 @@ export function LoginPage() {
     e.preventDefault()
     void run(async () => {
       await login(email, password)
-      navigate('/dashboard')
+      navigate(afterLoginPath(location.state))
     })
   }
   return (
@@ -217,6 +219,40 @@ export function ConfirmAlertAddressPage() {
       {state === 'working' && <p role="status">Confirming…</p>}
       {state === 'ok' && <p role="status">Thanks — this address will now receive HawkEye alerts. You can close this page.</p>}
       {state === 'failed' && <Alert>This link is invalid or has expired. Ask the person who added you to send a new confirmation.</Alert>}
+    </section>
+  )
+}
+
+/**
+ * Opened from the footer of an onboarding email; the visitor need not be signed in. It asks before it acts: some mail systems open every link in a
+ * message to scan it, and that must never unsubscribe anyone. (A mail client's own "Unsubscribe" button uses the API directly.)
+ */
+export function UnsubscribePage() {
+  const token = useTokenFromUrl()
+  const [state, setState] = useState<'ask' | 'working' | 'ok' | 'failed'>(token ? 'ask' : 'failed')
+
+  async function unsubscribe() {
+    setState('working')
+    try {
+      await api('POST', `/lifecycle/unsubscribe?token=${encodeURIComponent(token)}`)
+      setState('ok')
+    } catch {
+      setState('failed')
+    }
+  }
+
+  return (
+    <section className="card narrow">
+      <BrandMark />
+      <h1>Stop these emails?</h1>
+      {(state === 'ask' || state === 'working') && (
+        <>
+          <p>You will stop receiving getting-started emails from HawkEye. Alerts about your monitors, and account and security emails, are not affected.</p>
+          <button type="button" onClick={() => void unsubscribe()} disabled={state === 'working'}>Stop these emails</button>
+        </>
+      )}
+      {state === 'ok' && <p role="status">Done. We won't send you any more getting-started emails.</p>}
+      {state === 'failed' && <Alert>This link is not valid. Please <Link to="/contact">contact us</Link> and we will stop them for you.</Alert>}
     </section>
   )
 }

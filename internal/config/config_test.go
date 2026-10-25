@@ -309,3 +309,22 @@ func TestFreeToolsCanBeSwitchedOff(t *testing.T) {
 		t.Fatalf("DISABLE_FREE_TOOLS=true must turn them off: %v %+v", err, off.FreeToolsEnabled)
 	}
 }
+
+func TestLifecycleEmailsAreOffUntilASenderIsSet(t *testing.T) {
+	c, err := load(env(map[string]string{"DATABASE_URL": "postgres://x"}))
+	if err != nil || c.LifecycleFromAddress != "" || !c.RunLifecycle || c.LifecycleInterval != 10*time.Minute {
+		t.Fatalf("defaults: %v %+v", err, c)
+	}
+	c, err = load(env(map[string]string{"DATABASE_URL": "postgres://x", "LIFECYCLE_FROM_ADDRESS": "HawkEye <customer_support@hawkeye.test>",
+		"LIFECYCLE_REPLY_TO": "help@hawkeye.test", "LIFECYCLE_POSTAL_ADDRESS": "1 Main St", "LIFECYCLE_INTERVAL": "5m", "DISABLE_LIFECYCLE_EMAILS": "true"}))
+	if err != nil || c.LifecycleFromAddress != "HawkEye <customer_support@hawkeye.test>" || c.LifecycleReplyTo != "help@hawkeye.test" ||
+		c.LifecyclePostalAddress != "1 Main St" || c.LifecycleInterval != 5*time.Minute || c.RunLifecycle {
+		t.Fatalf("read from the environment: %v %+v", err, c)
+	}
+	for _, bad := range []map[string]string{{"LIFECYCLE_FROM_ADDRESS": "nope"}, {"LIFECYCLE_REPLY_TO": "nope"}, {"LIFECYCLE_INTERVAL": "10s"}} {
+		bad["DATABASE_URL"] = "postgres://x"
+		if _, err := load(env(bad)); err == nil || !strings.Contains(err.Error(), "LIFECYCLE_") {
+			t.Fatalf("%v should be refused: %v", bad, err)
+		}
+	}
+}

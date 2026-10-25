@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { redirectTo } from './navigation'
+import { afterLoginPath, redirectTo } from './navigation'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -14,4 +14,17 @@ describe('redirectTo', () => {
     }
     expect(assign).toHaveBeenCalledOnce()
   })
+})
+
+describe('afterLoginPath', () => {
+  it('returns to the page the visitor was sent away from', () => {
+    expect(afterLoginPath({ from: '/monitors/new' })).toBe('/monitors/new')
+  })
+
+  it.each([undefined, null, {}, { from: 42 }, { from: '' }, { from: 'https://evil.example' }, { from: '//evil.example' }, { from: '/\\evil.example' }, { from: '/login' }])(
+    'falls back to the dashboard for %j',
+    (state) => {
+      expect(afterLoginPath(state)).toBe('/dashboard')
+    },
+  )
 })

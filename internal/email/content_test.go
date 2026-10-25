@@ -71,7 +71,7 @@ func TestBuildMessageMultipartAndReplyTo(t *testing.T) {
 	to, _ := mail.ParseAddress("user@example.org")
 	rt, _ := mail.ParseAddress("Visitor <visitor@example.net>")
 	c := sample()
-	raw, err := buildMessage(from, to, rt, "Hello ünïcode", c.RenderText(), c.RenderHTML())
+	raw, err := buildMessage(from, to, rt, "Hello ünïcode", c.RenderText(), c.RenderHTML(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestBuildMessageMultipartAndReplyTo(t *testing.T) {
 func TestBuildMessagePlainTextWhenNoHTML(t *testing.T) {
 	from, _ := mail.ParseAddress("a@example.com")
 	to, _ := mail.ParseAddress("b@example.org")
-	raw, err := buildMessage(from, to, nil, "Hi", "body", "")
+	raw, err := buildMessage(from, to, nil, "Hi", "body", "", "")
 	if err != nil || !strings.Contains(string(raw), "text/plain") || strings.Contains(string(raw), "multipart") || strings.Contains(string(raw), "Reply-To") {
 		t.Fatalf("%v\n%s", err, raw)
 	}

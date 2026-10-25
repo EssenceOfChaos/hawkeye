@@ -6,7 +6,8 @@ import { lazyWithReload } from './chunkReload'
 import { CookieBanner } from './components/CookieBanner'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
-import { ConfirmAlertAddressPage, ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage, VerifyEmailPage } from './pages/AuthPages'
+import { afterLoginPath } from './navigation'
+import { ConfirmAlertAddressPage, ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage, UnsubscribePage, VerifyEmailPage } from './pages/AuthPages'
 import { AccountPage } from './pages/AccountPage'
 import { ContactPage } from './pages/ContactPage'
 import { BillingPage } from './pages/BillingPage'
@@ -36,8 +37,10 @@ const MonitorDetailPage = lazyWithReload(() => import('./pages/MonitorDetailPage
 
 function RequireAuth() {
   const { status } = useAuth()
+  const location = useLocation()
   if (status === 'loading') return <p role="status" className="center">Loading…</p>
-  if (status === 'anonymous') return <Navigate to="/login" replace />
+  // Remember where they were going (an emailed "add your first website" link, say) so signing in brings them back to it.
+  if (status === 'anonymous') return <Navigate to="/login" replace state={{ from: location.pathname }} />
   return <Layout />
 }
 
@@ -47,8 +50,9 @@ function Lazy({ children }: { children: React.ReactNode }) {
 
 function PublicOnly() {
   const { status } = useAuth()
+  const location = useLocation()
   if (status === 'loading') return <p role="status" className="center">Loading…</p>
-  if (status === 'authenticated') return <Navigate to="/dashboard" replace />
+  if (status === 'authenticated') return <Navigate to={afterLoginPath(location.state)} replace />
   return (
     <main className="auth">
       <Outlet />
@@ -77,6 +81,7 @@ export function AppRoutes() {
       <Route path="/status/:slug" element={<StatusPage />} />
       <Route path="/reset-password" element={<main className="auth"><ResetPasswordPage /></main>} />
       <Route path="/confirm-alert-address" element={<main className="auth"><ConfirmAlertAddressPage /></main>} />
+      <Route path="/unsubscribe" element={<main className="auth"><UnsubscribePage /></main>} />
       <Route element={<RequireAuth />}>
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/dashboard" element={<Lazy><DashboardPage /></Lazy>} />

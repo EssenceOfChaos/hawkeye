@@ -24,6 +24,7 @@ import (
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/healthcheck"
 	"hawkeye/internal/incidents"
+	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/logging"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/notifications"
@@ -152,6 +153,17 @@ func run() error {
 	dispatcher := notifications.NewDispatcher(pool, mailer,
 		notifications.DispatcherConfig{MaxAttempts: cfg.NotifyMaxAttempts, AppBaseURL: cfg.AppBaseURL, From: cfg.EmailFromAddress}, m, log).WithReporter(reporter).WithSecrets(box)
 	spawn(func() { dispatcher.Run(ctx) })
+	// Onboarding emails to new accounts with no monitor. They are sent from their own address, so their engagement never affects the alerts' reputation.
+	switch {
+	case !cfg.RunLifecycle:
+		log.Info("lifecycle emails disabled on this worker (DISABLE_LIFECYCLE_EMAILS)")
+	case cfg.LifecycleFromAddress == "":
+		log.Info("lifecycle emails off (set LIFECYCLE_FROM_ADDRESS to enable them)")
+	default:
+		job := lifecycle.NewJob(pool, mailer, lifecycle.Config{Interval: cfg.LifecycleInterval, From: cfg.LifecycleFromAddress, ReplyTo: cfg.LifecycleReplyTo,
+			AppBaseURL: cfg.AppBaseURL, Address: cfg.LifecyclePostalAddress, Pace: time.Second}, m, log).WithReporter(reporter)
+		spawn(func() { job.Run(ctx) })
+	}
 	spawn(func() {
 		t := time.NewTicker(15 * time.Second)
 		defer t.Stop()

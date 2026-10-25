@@ -18,6 +18,7 @@ import (
 	"hawkeye/internal/contact"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/errtrack"
+	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/maintenance"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/monitors"
@@ -55,6 +56,7 @@ type Options struct {
 	Billing       *billing.Service
 	Account       *account.Service
 	Contact       *contact.Service
+	Lifecycle     *lifecycle.Service // unsubscribe from onboarding emails; nil turns the endpoint off
 	SSLCheck      *sslcheck.Service  // free SSL checker; nil turns the endpoint off
 	SiteCheck     *sitecheck.Service // free website status checker; nil turns the endpoint off
 	PgPool        *pgxpool.Pool
@@ -163,9 +165,12 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, billing: o.Billing, account: o.Account, contact: o.Contact, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies}
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, billing: o.Billing, account: o.Account, contact: o.Contact, lifecycle: o.Lifecycle, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
+		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
+		// session, and the unguessable token in the URL is the only thing that authorises it (and all it can do is unsubscribe).
+		Skipper:        func(c echo.Context) bool { return c.Path() == "/api/v1/lifecycle/unsubscribe" },
 		TokenLookup:    "header:X-CSRF-Token",
 		CookieName:     "csrf_token",
 		CookiePath:     "/",
@@ -265,6 +270,10 @@ func registerAPI(e *echo.Echo, o Options) {
 	v1.POST("/contact", h.submitContact, contactLimits...)
 	// Called from the confirmation email by a recipient who may not have an account.
 	v1.POST("/notification-settings/confirm", h.confirmSetting, limit("confirm-alert"))
+	// Called from the footer of an onboarding email, or by a mail client's own "Unsubscribe" button; the person need not be signed in.
+	if h.lifecycle != nil {
+		v1.POST("/lifecycle/unsubscribe", h.unsubscribeLifecycle, limit("unsubscribe"))
+	}
 
 	// Tenant-scoped resources act on the organization named by X-Organization-ID (membership is
 	// verified) or, by default, the caller's oldest organization.

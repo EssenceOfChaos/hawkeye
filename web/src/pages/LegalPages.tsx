@@ -144,6 +144,7 @@ export function PrivacyPage() {
         <li>Display monitoring history and enforce plan-specific limits.</li>
         <li>Create, manage, renew, and administer subscriptions, and handle billing questions through Stripe.</li>
         <li>Send account and security emails, such as email verification, password reset, and alerts.</li>
+        <li>If you have not added a website yet, send up to three short getting-started emails during your first ten days. Each one has an unsubscribe link, and unsubscribing does not affect alerts or account and security emails.</li>
         <li>Respond to support requests.</li>
         <li>Maintain, troubleshoot, and improve the reliability and performance of the Service.</li>
         <li>Detect fraud, abuse, unauthorized access, and security incidents.</li>
@@ -152,7 +153,7 @@ export function PrivacyPage() {
       </ul>
       <p>
         Where applicable law requires a legal basis for processing, we rely on: performance of a contract (providing the Service you signed up for); our legitimate interests in operating,
-        securing, and improving the Service and preventing abuse, which are not overridden by your rights; compliance with legal obligations; and consent, where we ask for it. Our legitimate interest in understanding how the website is used is the basis for Google Analytics, and you can opt out at any time. We do not use your
+        securing, and improving the Service, helping new customers get started with it, and preventing abuse, which are not overridden by your rights; compliance with legal obligations; and consent, where we ask for it. Our legitimate interest in understanding how the website is used is the basis for Google Analytics, and you can opt out at any time. We do not use your
         information for advertising and we do not make decisions about you by automated means that have legal or similarly significant effects.
       </p>
 

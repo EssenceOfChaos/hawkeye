@@ -31,11 +31,17 @@ type Content struct {
 	Note        string // small print under the button
 	Tone        Tone
 	AppBaseURL  string // used for the logo and footer links
+
+	// UnsubscribeURL marks the email as one the recipient can opt out of (leave both empty for alerts and account mail). It is the page linked in the
+	// footer; UnsubscribePostURL is the endpoint mail clients POST to for their own "Unsubscribe" button (RFC 8058), sent in the headers.
+	UnsubscribeURL     string
+	UnsubscribePostURL string
+	Address            string // optional postal address for the footer of such mail
 }
 
 // Message renders the content into a ready-to-send Message.
 func (c Content) Message(from, to, subject string) Message {
-	return Message{From: from, To: to, Subject: subject, Text: c.RenderText(), HTML: c.RenderHTML()}
+	return Message{From: from, To: to, Subject: subject, Text: c.RenderText(), HTML: c.RenderHTML(), Unsubscribe: noSpace(c.UnsubscribePostURL)}
 }
 
 // oneLine turns any value into a single printable line: control characters (including line breaks and tabs) are dropped or become spaces, and
@@ -80,7 +86,8 @@ func noSpace(s string) string {
 // field meant to hold the visitor's multi-line text. The renderers call it themselves, so no caller can forget.
 func (c Content) clean() Content {
 	c.Preheader, c.Heading, c.ButtonLabel, c.Note = oneLine(c.Preheader), oneLine(c.Heading), oneLine(c.ButtonLabel), oneLine(c.Note)
-	c.ButtonURL, c.AppBaseURL = noSpace(c.ButtonURL), noSpace(c.AppBaseURL)
+	c.ButtonURL, c.AppBaseURL, c.Address = noSpace(c.ButtonURL), noSpace(c.AppBaseURL), oneLine(c.Address)
+	c.UnsubscribeURL, c.UnsubscribePostURL = noSpace(c.UnsubscribeURL), noSpace(c.UnsubscribePostURL)
 	c.Quote = multiLine(c.Quote)
 	ps := make([]string, len(c.Paragraphs))
 	for i, p := range c.Paragraphs {
@@ -124,6 +131,12 @@ func (c Content) RenderText() string {
 		b.WriteString(c.Note + "\n\n")
 	}
 	b.WriteString("-- \nHawkEye. Your websites. Always in sight.\n")
+	if c.Address != "" {
+		b.WriteString(c.Address + "\n")
+	}
+	if c.UnsubscribeURL != "" {
+		b.WriteString("Stop these emails: " + c.UnsubscribeURL + "\n")
+	}
 	if c.AppBaseURL != "" {
 		b.WriteString("Privacy: " + c.AppBaseURL + "/privacy  Terms: " + c.AppBaseURL + "/terms  Contact: " + c.AppBaseURL + "/contact\n")
 	}
@@ -202,6 +215,8 @@ var layout = template.Must(template.New("email").Parse(`<!doctype html>
     <tr><td style="padding:18px 4px 0 4px;font:12px/1.7 Arial,Helvetica,sans-serif;color:{{.Muted}};">
       <strong style="color:{{.Text}};">Hawk<span style="color:{{.Gold}};">Eye</span></strong> &middot; Your websites. Always in sight.<br>
       {{if .AppBaseURL}}<a href="{{.AppBaseURL}}/privacy" style="color:{{.Muted}};">Privacy</a> &middot; <a href="{{.AppBaseURL}}/terms" style="color:{{.Muted}};">Terms</a> &middot; <a href="{{.AppBaseURL}}/contact" style="color:{{.Muted}};">Contact us</a>{{end}}
+      {{if .Address}}<br>{{.Address}}{{end}}
+      {{if .UnsubscribeURL}}<br><a href="{{.UnsubscribeURL}}" style="color:{{.Muted}};">Stop these emails</a>{{end}}
     </td></tr>
   </table>
 </td></tr>

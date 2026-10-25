@@ -15,6 +15,10 @@ type Message struct {
 	Text    string // always required: the plain-text body (and the alternative when HTML is set)
 	HTML    string // optional branded body; sent as multipart/alternative
 	ReplyTo string // optional address replies should go to (e.g. the person who filled in the contact form)
+
+	// Unsubscribe is set on mail the recipient can opt out of (onboarding nudges, not alerts or security mail). It must be an http(s) URL that
+	// unsubscribes with a bare POST; the sender adds List-Unsubscribe and List-Unsubscribe-Post (RFC 8058), which mail clients show as an "Unsubscribe" button.
+	Unsubscribe string
 }
 
 // ErrPermanent marks a delivery failure that will never succeed on retry (invalid address, rejected

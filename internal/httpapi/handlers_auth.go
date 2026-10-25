@@ -14,6 +14,7 @@ import (
 	"hawkeye/internal/billing"
 	"hawkeye/internal/contact"
 	"hawkeye/internal/domains"
+	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/maintenance"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
@@ -41,6 +42,7 @@ type handlers struct {
 	billing       *billing.Service
 	account       *account.Service
 	contact       *contact.Service
+	lifecycle     *lifecycle.Service
 	sslcheck      *sslcheck.Service
 	sitecheck     *sitecheck.Service
 	log           *slog.Logger
@@ -83,7 +85,7 @@ func mapError(err error) error {
 		return &APIError{Status: http.StatusUnauthorized, Code: "INVALID_CREDENTIALS", Message: "Invalid email or password."}
 	case errors.Is(err, auth.ErrEmailTaken):
 		return &APIError{Status: http.StatusConflict, Code: "EMAIL_TAKEN", Message: "An account with this email already exists."}
-	case errors.Is(err, auth.ErrInvalidToken):
+	case errors.Is(err, auth.ErrInvalidToken), errors.Is(err, lifecycle.ErrInvalidToken):
 		return &APIError{Status: http.StatusBadRequest, Code: "INVALID_TOKEN", Message: "This link is invalid or has expired."}
 	case errors.Is(err, billing.ErrNotConfigured):
 		return &APIError{Status: http.StatusServiceUnavailable, Code: "BILLING_NOT_CONFIGURED", Message: "Billing is not available on this server yet."}

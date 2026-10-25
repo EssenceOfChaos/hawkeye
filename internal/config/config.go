@@ -105,6 +105,14 @@ type Config struct {
 	DomainRecheckInterval time.Duration
 	DomainLookupPace      time.Duration
 
+	// Onboarding emails to new accounts that have not added a monitor (internal/lifecycle). Off until LifecycleFromAddress is set, so deploying the
+	// code sends nothing before the sender is verified with the email provider and its replies reach a mailbox someone reads.
+	RunLifecycle           bool
+	LifecycleInterval      time.Duration
+	LifecycleFromAddress   string // "HawkEye <customer_support@hawkeye.observer>"; empty turns the emails off
+	LifecycleReplyTo       string // defaults to the From address
+	LifecyclePostalAddress string // optional, shown in the footer of these emails
+
 	StripeSecretKey     string
 	StripeWebhookSecret string
 	StripePricePro      string
@@ -290,6 +298,12 @@ func load(get func(string) string) (Config, error) {
 		DomainRecheckInterval: duration("DOMAIN_RECHECK_INTERVAL", 24*time.Hour),
 		DomainLookupPace:      duration("DOMAIN_LOOKUP_PACE", 500*time.Millisecond),
 
+		RunLifecycle:           !boolean("DISABLE_LIFECYCLE_EMAILS"),
+		LifecycleInterval:      duration("LIFECYCLE_INTERVAL", 10*time.Minute),
+		LifecycleFromAddress:   str("LIFECYCLE_FROM_ADDRESS", ""),
+		LifecycleReplyTo:       str("LIFECYCLE_REPLY_TO", ""),
+		LifecyclePostalAddress: str("LIFECYCLE_POSTAL_ADDRESS", ""),
+
 		StripeSecretKey:     str("STRIPE_SECRET_KEY", ""),
 		StripeWebhookSecret: str("STRIPE_WEBHOOK_SECRET", ""),
 		StripePricePro:      str("STRIPE_PRICE_PRO_ID", ""),
@@ -403,6 +417,17 @@ func load(get func(string) string) (Config, error) {
 	}
 	if c.DomainLookupPace < 0 {
 		errs = append(errs, errors.New("DOMAIN_LOOKUP_PACE: must not be negative"))
+	}
+	if c.LifecycleInterval < time.Minute {
+		errs = append(errs, errors.New("LIFECYCLE_INTERVAL: must be at least 1m"))
+	}
+	for key, v := range map[string]string{"LIFECYCLE_FROM_ADDRESS": c.LifecycleFromAddress, "LIFECYCLE_REPLY_TO": c.LifecycleReplyTo} {
+		if v == "" {
+			continue
+		}
+		if _, err := mail.ParseAddress(v); err != nil {
+			errs = append(errs, fmt.Errorf("%s: must be a valid email address", key))
+		}
 	}
 	if c.CanaryInterval < 10*time.Second {
 		errs = append(errs, errors.New("CANARY_INTERVAL: must be at least 10s"))

@@ -78,6 +78,7 @@ export const PAGES: readonly PageMeta[] = [
   { path: '/forgot-password', title: 'Reset your password | HawkEye', description: 'Request a link to reset your HawkEye password.', index: false },
   { path: '/reset-password', title: 'Choose a new password | HawkEye', description: 'Choose a new password for your HawkEye account.', index: false },
   { path: '/confirm-alert-address', title: 'Confirm alert address | HawkEye', description: 'Confirm an email address for HawkEye alerts.', index: false },
+  { path: '/unsubscribe', title: 'Stop these emails | HawkEye', description: 'Stop getting-started emails from HawkEye.', index: false },
 
   // Signed-in app.
   { path: '/verify-email', title: 'Verify your email | HawkEye', description: 'Verify your email address for your HawkEye account.', index: false },

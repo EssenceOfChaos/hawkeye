@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../auth'
-import { ConfirmAlertAddressPage, ResetPasswordPage, VerifyEmailPage } from './AuthPages'
+import { ConfirmAlertAddressPage, ResetPasswordPage, UnsubscribePage, VerifyEmailPage } from './AuthPages'
 
 afterEach(() => vi.unstubAllGlobals())
 beforeEach(() => {
@@ -36,6 +36,7 @@ function mount(path: string) {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/confirm-alert-address" element={<ConfirmAlertAddressPage />} />
+          <Route path="/unsubscribe" element={<UnsubscribePage />} />
           <Route path="*" element={<p>elsewhere</p>} />
         </Routes>
       </AuthProvider>
@@ -66,5 +67,43 @@ describe('one-time tokens in links', () => {
     expect(await screen.findByText(/will now receive HawkEye alerts/)).toBeInTheDocument()
     expect(screen.getByTestId('where')).not.toHaveTextContent('ALERT789')
     expect(posts[0].body).toEqual({ token: 'ALERT789' })
+  })
+})
+
+describe('unsubscribing from onboarding emails', () => {
+  it('asks first, so a link scanner opening the page unsubscribes nobody, then uses the token without leaving it in the address bar', async () => {
+    const posts = mount('/unsubscribe?token=UNSUB-1')
+    expect(await screen.findByRole('heading', { name: 'Stop these emails?' })).toBeInTheDocument()
+    expect(posts).toHaveLength(0)
+    expect(screen.getByTestId('where')).not.toHaveTextContent('UNSUB-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Stop these emails' }))
+    expect(await screen.findByText(/won't send you any more getting-started emails/)).toBeInTheDocument()
+    expect(posts).toEqual([{ url: '/api/v1/lifecycle/unsubscribe?token=UNSUB-1', body: undefined }])
+  })
+
+  it('says so when the link is not valid', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/auth/me')) return json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } })
+      if (init?.method === 'POST') return json(400, { error: { code: 'INVALID_TOKEN', message: 'This link is invalid or has expired.' } })
+      return json(404, {})
+    }))
+    render(
+      <MemoryRouter initialEntries={['/unsubscribe?token=WRONG']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/unsubscribe" element={<UnsubscribePage />} />
+            <Route path="*" element={<p>elsewhere</p>} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Stop these emails' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/This link is not valid/)
+  })
+
+  it('does not offer to unsubscribe when the link has no token', async () => {
+    mount('/unsubscribe')
+    expect(await screen.findByRole('alert')).toHaveTextContent(/This link is not valid/)
+    expect(screen.queryByRole('button', { name: 'Stop these emails' })).not.toBeInTheDocument()
   })
 })

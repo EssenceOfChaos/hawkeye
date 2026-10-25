@@ -1,4 +1,5 @@
 [![CI](https://github.com/EssenceOfChaos/hawkeye/actions/workflows/ci.yml/badge.svg)](https://github.com/EssenceOfChaos/hawkeye/actions/workflows/ci.yml)
+[![hawkeye.observer](https://badge.uptimerobot.com/psp/c075af28d2d8303a2b5165d7611d020a.svg?style=logo&theme=dark)](https://stats.uptimerobot.com/Z1yTVHS1iU?utm_source=status_badge&utm_medium=referral)
 
 # Hawkeye
 

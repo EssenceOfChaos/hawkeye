@@ -110,7 +110,7 @@ func (s *SMTP) Send(ctx context.Context, m Message) error {
 			return fmt.Errorf("%w: invalid reply-to", ErrPermanent)
 		}
 	}
-	body, err := buildMessage(fromAddr, toAddr, replyTo, m.Subject, m.Text, m.HTML)
+	body, err := buildMessage(fromAddr, toAddr, replyTo, m.Subject, m.Text, m.HTML, m.Unsubscribe)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrPermanent, err)
 	}
@@ -207,9 +207,12 @@ func parseOne(s string) (*mail.Address, error) {
 // buildMessage renders an RFC 5322 message: plain text, or multipart/alternative (text first, HTML preferred) when html is set. Header
 // values are validated (no CR/LF) so a monitor name or recipient can never inject headers, the subject is MIME-encoded when needed,
 // and bodies are quoted-printable UTF-8.
-func buildMessage(from, to, replyTo *mail.Address, subject, text, html string) ([]byte, error) {
+func buildMessage(from, to, replyTo *mail.Address, subject, text, html, unsubscribe string) ([]byte, error) {
 	if strings.ContainsAny(subject, "\r\n") {
 		return nil, errors.New("line break in subject")
+	}
+	if unsubscribe != "" && (strings.ContainsAny(unsubscribe, " <>\r\n\t") || !(strings.HasPrefix(unsubscribe, "https://") || strings.HasPrefix(unsubscribe, "http://"))) {
+		return nil, errors.New("invalid unsubscribe URL")
 	}
 	var id [12]byte
 	_, _ = rand.Read(id[:])
@@ -230,6 +233,10 @@ func buildMessage(from, to, replyTo *mail.Address, subject, text, html string) (
 	h("Message-ID", "<"+hex.EncodeToString(id[:])+"@"+domain+">")
 	h("MIME-Version", "1.0")
 	h("Auto-Submitted", "auto-generated") // transactional, so auto-responders stay quiet
+	if unsubscribe != "" {
+		h("List-Unsubscribe", "<"+unsubscribe+">")
+		h("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
+	}
 
 	part := func(w *bytes.Buffer, body string) error {
 		qp := quotedprintable.NewWriter(w)

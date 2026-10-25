@@ -2,6 +2,7 @@ package email
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -407,4 +408,33 @@ func TestSMTPTrustsAnAdditionalCAFile(t *testing.T) {
 
 func pemEncodeCert(der []byte) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+}
+
+func TestOneClickUnsubscribeHeadersAreAddedOnlyWhenAsked(t *testing.T) {
+	from, _ := mail.ParseAddress("HawkEye <hi@hawkeye.test>")
+	to, _ := mail.ParseAddress("u@example.com")
+	read := func(unsub string) *mail.Message {
+		raw, err := buildMessage(from, to, nil, "Hi", "body", "<p>body</p>", unsub)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, err := mail.ReadMessage(bytes.NewReader(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	h := read("https://app.hawkeye.test/api/v1/lifecycle/unsubscribe?token=abc").Header
+	if h.Get("List-Unsubscribe") != "<https://app.hawkeye.test/api/v1/lifecycle/unsubscribe?token=abc>" || h.Get("List-Unsubscribe-Post") != "List-Unsubscribe=One-Click" {
+		t.Fatalf("headers: %v", h)
+	}
+	h = read("").Header
+	if h.Get("List-Unsubscribe") != "" || h.Get("List-Unsubscribe-Post") != "" {
+		t.Fatalf("alerts and account mail must not carry unsubscribe headers: %v", h)
+	}
+	for _, bad := range []string{"mailto:x@y.z", "ftp://x", "https://x/\r\nBcc: evil@example.com", "https://x/ y", "https://x/>"} {
+		if _, err := buildMessage(from, to, nil, "Hi", "body", "", bad); err == nil {
+			t.Errorf("accepted unsubscribe URL %q", bad)
+		}
+	}
 }
