@@ -151,7 +151,7 @@ export function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: P
         <li>Public status page</li>
         {plan.maintenance_enabled && <li>Maintenance windows</li>}
         {plan.reports_enabled && <li>Monthly PDF uptime reports</li>}
-        {plan.branded_reports_enabled && <li>Your own name and logo on reports</li>}
+        {plan.branded_reports_enabled && <li>Branded Reports with name and logo</li>}
       </ul>
       {plan.monthly_price_cents === 0 ? (
         <Link className="button primary" to="/register">Start free</Link>

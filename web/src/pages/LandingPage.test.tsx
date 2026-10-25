@@ -35,7 +35,7 @@ describe('LandingPage', () => {
     renderLanding((url) => (url.includes('/plans') ? json(200, { plans: withReports }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } })))
     await screen.findByText('200 website monitors')
     expect(screen.getAllByText('Monthly PDF uptime reports')).toHaveLength(2)
-    expect(screen.getAllByText('Your own name and logo on reports')).toHaveLength(1)
+    expect(screen.getAllByText('Branded Reports with name and logo')).toHaveLength(1)
   })
 
   it('shows the brand, pricing from the API and honest availability labels', async () => {
