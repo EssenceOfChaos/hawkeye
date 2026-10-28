@@ -256,3 +256,86 @@ export function UnsubscribePage() {
     </section>
   )
 }
+
+/**
+ * Opened from the link in an invitation email. It says which team the invitation is for before anything happens, then joins it once the visitor is
+ * signed in with the invited address. A visitor who is not signed in is sent to log in or create an account and brought back here; the link's token
+ * rides along in the router's history state (never the address bar, where it would linger), and is read from the address again on the way back.
+ */
+export function AcceptInvitePage() {
+  const token = useTokenFromUrl()
+  const { status, user, logout, refresh } = useAuth()
+  const navigate = useNavigate()
+  const [invite, setInvite] = useState<{ organization_name: string; email: string } | null>(null)
+  const [loaded, setLoaded] = useState(!token)
+  const [error, setError] = useState<ApiError | string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!token) return
+    let live = true
+    api<{ invitation: { organization_name: string; email: string } }>('POST', '/invitations/preview', { token })
+      .then((r) => live && setInvite(r.invitation))
+      .catch(() => undefined)
+      .finally(() => live && setLoaded(true))
+    return () => {
+      live = false
+    }
+  }, [token])
+
+  async function accept() {
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await api<{ organization: { id: string } }>('POST', '/invitations/accept', { token })
+      await refresh(r.organization.id)
+      navigate('/dashboard', { replace: true })
+    } catch (e) {
+      setError(e instanceof ApiError ? e : 'That did not work. Try again.')
+      setBusy(false)
+    }
+  }
+
+  const back = { from: `/accept-invite?token=${encodeURIComponent(token)}` }
+  const wrongAccount = invite && user && user.email.toLowerCase() !== invite.email.toLowerCase()
+
+  return (
+    <section className="card narrow">
+      <BrandMark />
+      <h1>Join a team on HawkEye</h1>
+      {!loaded || status === 'loading' ? (
+        <p role="status">Loading…</p>
+      ) : !invite ? (
+        <Alert>This invitation link is not valid, or it has expired. Ask the person who invited you to send a new one.</Alert>
+      ) : (
+        <>
+          <p>
+            You have been invited to join <strong>{invite.organization_name}</strong> as <strong>{invite.email}</strong>.
+          </p>
+          {error && <Alert>{typeof error === 'string' ? error : error.message}</Alert>}
+          {status === 'anonymous' ? (
+            <>
+              <p>Log in, or create a free account, using <strong>{invite.email}</strong> to accept.</p>
+              <p className="row">
+                <Link className="button primary" to="/login" state={back}>Log in</Link>
+                <Link className="button" to="/register" state={back}>Create account</Link>
+              </p>
+            </>
+          ) : wrongAccount ? (
+            <>
+              <Alert tone="warning">You are signed in as {user.email}, but this invitation is for {invite.email}.</Alert>
+              <button type="button" onClick={() => void logout()}>Log out and use {invite.email}</button>
+            </>
+          ) : (
+            <>
+              {user && !user.email_verified_at && (
+                <Alert tone="warning">Confirm your email address first, using the link we emailed you. Then come back to this page and accept.</Alert>
+              )}
+              <button type="button" onClick={() => void accept()} disabled={busy}>{busy ? 'Joining…' : 'Accept invitation'}</button>
+            </>
+          )}
+        </>
+      )}
+    </section>
+  )
+}

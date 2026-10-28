@@ -27,8 +27,8 @@ function Expiry({ d }: { d: TrackedDomain }) {
 }
 
 export function DomainsPage() {
-  const { organizations } = useAuth()
-  const isOwner = organizations[0]?.role === 'owner'
+  const { organization } = useAuth()
+  const isOwner = organization?.role === 'owner'
 
   const [items, setItems] = useState<TrackedDomain[] | null>(null)
   const [limit, setLimit] = useState(0)

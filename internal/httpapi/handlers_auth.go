@@ -15,6 +15,7 @@ import (
 	"hawkeye/internal/branding"
 	"hawkeye/internal/contact"
 	"hawkeye/internal/domains"
+	"hawkeye/internal/invitations"
 	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/maintenance"
 	"hawkeye/internal/monitors"
@@ -43,6 +44,7 @@ type handlers struct {
 	billing       *billing.Service
 	account       *account.Service
 	contact       *contact.Service
+	invitations   *invitations.Service
 	lifecycle     *lifecycle.Service
 	branding      *branding.Service
 	sslcheck      *sslcheck.Service
@@ -125,6 +127,23 @@ func mapError(err error) error {
 			Details: map[string]any{"limit": notifications.MaxSettingsPerOrganization}}
 	case errors.Is(err, notifications.ErrInvalidToken):
 		return &APIError{Status: http.StatusBadRequest, Code: "INVALID_TOKEN", Message: "This link is invalid or has expired."}
+	case errors.Is(err, invitations.ErrAlreadyMember):
+		return &APIError{Status: http.StatusConflict, Code: "ALREADY_MEMBER", Message: "That person is already on your team."}
+	case errors.Is(err, invitations.ErrInvalidToken):
+		return &APIError{Status: http.StatusBadRequest, Code: "INVALID_TOKEN", Message: "This invitation is invalid or has expired. Ask the person who invited you to send a new one."}
+	case errors.Is(err, invitations.ErrWrongAccount):
+		return &APIError{Status: http.StatusForbidden, Code: "INVITATION_EMAIL_MISMATCH",
+			Message: "This invitation was sent to a different email address. Sign in with that address to accept it."}
+	case errors.Is(err, invitations.ErrEmailNotVerified):
+		return &APIError{Status: http.StatusForbidden, Code: "EMAIL_NOT_VERIFIED", Message: "Verify your email address to accept this invitation."}
+	case errors.Is(err, invitations.ErrNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Invitation not found."}
+	case errors.Is(err, invitations.ErrSendFailed):
+		return &APIError{Status: http.StatusServiceUnavailable, Code: "INVITE_UNAVAILABLE", Message: "We couldn't send the invitation email. Try again in a few minutes."}
+	case errors.Is(err, organizations.ErrMemberNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Member not found."}
+	case errors.Is(err, organizations.ErrOwnerProtected):
+		return &APIError{Status: http.StatusConflict, Code: "OWNER_PROTECTED", Message: "The owner of an organization can't be removed, and can't leave it."}
 	case errors.Is(err, organizations.ErrNotFound):
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Organization not found."}
 	case errors.Is(err, organizations.ErrForbidden):

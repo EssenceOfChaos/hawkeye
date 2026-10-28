@@ -34,8 +34,8 @@ function StatusLabel({ w }: { w: MaintenanceWindow }) {
 }
 
 export function MaintenancePage() {
-  const { organizations } = useAuth()
-  const isOwner = organizations[0]?.role === 'owner'
+  const { organization } = useAuth()
+  const isOwner = organization?.role === 'owner'
 
   const [items, setItems] = useState<MaintenanceWindow[] | null>(null)
   const [monitors, setMonitors] = useState<Monitor[]>([])

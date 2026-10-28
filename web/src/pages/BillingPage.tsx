@@ -21,8 +21,8 @@ function statusText(s: BillingSubscription): { icon: string; text: string; tone:
 }
 
 export function BillingPage() {
-  const { user, organizations } = useAuth()
-  const isOwner = organizations[0]?.role === 'owner'
+  const { user, organization } = useAuth()
+  const isOwner = organization?.role === 'owner'
   const verified = Boolean(user?.email_verified_at)
   const [params] = useSearchParams()
   const checkout = params.get('checkout')
@@ -186,6 +186,7 @@ export function BillingPage() {
                     <li>{p.history_retention_days} days of history</li>
                     {p.max_domains !== undefined && <li>Domain expiry warnings for up to {p.max_domains} domains</li>}
                     {(p.max_regions ?? 1) > 1 && <li>Checks from up to {p.max_regions} locations</li>}
+                    {(p.max_team_members ?? 1) > 1 && <li>{p.max_team_members} team members</li>}
                     <li>Email, Slack and webhook alerts</li>
                     <li>Public status page</li>
                     {p.maintenance_enabled && <li>Maintenance windows</li>}

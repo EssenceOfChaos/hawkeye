@@ -17,6 +17,8 @@ export interface Plan {
   max_monitors: number
   minimum_check_interval_seconds: number
   history_retention_days: number
+  /** Seats: the people (including the owner) who can belong to an organization on this plan. */
+  max_team_members?: number
   maintenance_enabled?: boolean
   /** How many locations one monitor may be checked from on this plan (never more than the installation has). */
   max_regions?: number
@@ -43,6 +45,22 @@ export interface BrandingView {
   can_report: boolean
   /** The plan lets reports carry the organization's own name and logo. */
   can_brand: boolean
+}
+
+/** A person who belongs to an organization. */
+export interface Member {
+  user_id: string
+  email: string
+  role: 'owner' | 'member'
+  created_at: string
+}
+
+/** An invitation that has been sent and not yet accepted. */
+export interface Invitation {
+  id: string
+  email: string
+  created_at: string
+  expires_at: string
 }
 
 export interface Usage {
@@ -390,6 +408,18 @@ export interface SiteReport {
 
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
+/**
+ * The organization every request acts for, when it is not the caller's first one. Without the header the server uses the oldest organization, which is
+ * a person's own; this is how someone who has joined a team looks at the team's monitors instead. Set by the auth provider.
+ */
+let activeOrganization: string | null = null
+export function setApiOrganization(id: string | null): void {
+  activeOrganization = id
+}
+
+/** Fired when the server says the organization being acted for is gone (the person was removed from it), so the app can pick another. */
+export const ORGANIZATION_LOST_EVENT = 'hawkeye:organization-lost'
+
 function csrfCookie(): string | undefined {
   return document.cookie
     .split('; ')
@@ -400,6 +430,7 @@ function csrfCookie(): string | undefined {
 async function request<T>(method: string, path: string, body: BodyInit | undefined, contentType?: string): Promise<T> {
   const headers: Record<string, string> = {}
   if (contentType) headers['Content-Type'] = contentType
+  if (activeOrganization) headers['X-Organization-ID'] = activeOrganization
   if (UNSAFE.has(method)) {
     if (!csrfCookie()) await fetch('/api/v1/auth/me', { credentials: 'same-origin' })
     const token = csrfCookie()
@@ -415,6 +446,7 @@ async function request<T>(method: string, path: string, body: BodyInit | undefin
   }
   if (!res.ok) {
     const e = data?.error
+    if (activeOrganization && res.status === 404 && e?.message === 'Organization not found.') window.dispatchEvent(new Event(ORGANIZATION_LOST_EVENT))
     throw new ApiError(res.status, e?.code ?? 'UNKNOWN', e?.message ?? 'Something went wrong.', e?.details)
   }
   return data as T

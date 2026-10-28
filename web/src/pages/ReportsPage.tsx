@@ -12,8 +12,8 @@ import { useApi } from '../hooks'
 const MAX_LOGO_BYTES = 512 * 1024
 
 export function ReportsPage() {
-  const { organizations } = useAuth()
-  const isOwner = organizations[0]?.role === 'owner'
+  const { organization } = useAuth()
+  const isOwner = organization?.role === 'owner'
 
   const usage = useApi<{ usage: Usage }>('/usage')
   const monitors = useApi<{ monitors: Monitor[] }>('/monitors?limit=100')

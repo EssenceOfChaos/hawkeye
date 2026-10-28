@@ -7,7 +7,7 @@ import { CookieBanner } from './components/CookieBanner'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
 import { afterLoginPath } from './navigation'
-import { ConfirmAlertAddressPage, ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage, UnsubscribePage, VerifyEmailPage } from './pages/AuthPages'
+import { AcceptInvitePage, ConfirmAlertAddressPage, ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage, UnsubscribePage, VerifyEmailPage } from './pages/AuthPages'
 import { AccountPage } from './pages/AccountPage'
 import { ContactPage } from './pages/ContactPage'
 import { ReportsPage } from './pages/ReportsPage'
@@ -20,6 +20,7 @@ import { MaintenancePage } from './pages/MaintenancePage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { MonitorFormPage } from './pages/MonitorFormPage'
 import { StatusPage } from './pages/StatusPage'
+import { TeamPage } from './pages/TeamPage'
 import { StatusPageSettings } from './pages/StatusPageSettings'
 import { PrivacyPage, TermsPage } from './pages/LegalPages'
 import { MonitorsPage } from './pages/MonitorsPage'
@@ -83,12 +84,14 @@ export function AppRoutes() {
       <Route path="/reset-password" element={<main className="auth"><ResetPasswordPage /></main>} />
       <Route path="/confirm-alert-address" element={<main className="auth"><ConfirmAlertAddressPage /></main>} />
       <Route path="/unsubscribe" element={<main className="auth"><UnsubscribePage /></main>} />
+      <Route path="/accept-invite" element={<main className="auth"><AcceptInvitePage /></main>} />
       <Route element={<RequireAuth />}>
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/dashboard" element={<Lazy><DashboardPage /></Lazy>} />
         <Route path="/billing" element={<BillingPage />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="/incidents" element={<IncidentsPage />} />
+        <Route path="/team" element={<TeamPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/domains" element={<DomainsPage />} />
         <Route path="/maintenance" element={<MaintenancePage />} />

@@ -24,6 +24,11 @@ const (
 var (
 	ErrNotFound  = errors.New("organization not found")
 	ErrForbidden = errors.New("insufficient role")
+	// ErrMemberNotFound: the person is not a member of this organization.
+	ErrMemberNotFound = errors.New("member not found")
+	// ErrOwnerProtected: an owner can neither be removed nor leave. An organization always has its owner, who is the one billed and who alone can
+	// delete it by deleting their account.
+	ErrOwnerProtected = errors.New("the owner cannot be removed")
 )
 
 type Organization struct {
@@ -118,4 +123,41 @@ func (s *Service) Members(ctx context.Context, userID, orgID uuid.UUID) ([]Membe
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// RemoveMember takes a member out of the organization. Only the owner may, and the owner cannot be removed. The person keeps their own account and
+// their own organization; they simply stop seeing this one, from their next request on, because every request checks membership.
+func (s *Service) RemoveMember(ctx context.Context, actorID, orgID, memberID uuid.UUID) error {
+	o, err := s.Get(ctx, actorID, orgID)
+	if err != nil {
+		return err
+	}
+	if o.Role != RoleOwner {
+		return ErrForbidden
+	}
+	return s.remove(ctx, orgID, memberID)
+}
+
+// Leave removes the caller from an organization they were invited to.
+func (s *Service) Leave(ctx context.Context, userID, orgID uuid.UUID) error {
+	if _, err := s.Get(ctx, userID, orgID); err != nil {
+		return err
+	}
+	return s.remove(ctx, orgID, userID)
+}
+
+func (s *Service) remove(ctx context.Context, orgID, memberID uuid.UUID) error {
+	var role string
+	err := s.pool.QueryRow(ctx, `SELECT role FROM organization_members WHERE organization_id = $1 AND user_id = $2`, orgID, memberID).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrMemberNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if role == RoleOwner {
+		return ErrOwnerProtected
+	}
+	_, err = s.pool.Exec(ctx, `DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND role <> $3`, orgID, memberID, RoleOwner)
+	return err
 }

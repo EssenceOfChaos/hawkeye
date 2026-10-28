@@ -22,3 +22,6 @@ deploy/smoke/certs/
 .deploy.lock
 
 __pycache__/
+
+# Internal documentation
+HawkEye-Product-Roadmap.pdf

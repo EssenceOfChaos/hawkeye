@@ -22,7 +22,7 @@ const json = (status: number, body: unknown) =>
 
 const free = { code: 'free', name: 'Free', monthly_price_cents: 0, max_monitors: 5, minimum_check_interval_seconds: 300, history_retention_days: 7 }
 const pro = { code: 'pro', name: 'Pro', monthly_price_cents: 1900, max_monitors: 50, minimum_check_interval_seconds: 60, history_retention_days: 90 }
-const agency = { code: 'agency', name: 'Agency', monthly_price_cents: 5900, max_monitors: 200, minimum_check_interval_seconds: 60, history_retention_days: 365 }
+const agency = { code: 'agency', name: 'Agency', monthly_price_cents: 5900, max_monitors: 200, minimum_check_interval_seconds: 60, history_retention_days: 365, max_team_members: 5 }
 
 function sub(o: object = {}) {
   return { billing_enabled: true, plan: free, status: 'active', paid_access: false, cancel_at_period_end: false, current_period_end: null, can_manage: false, has_subscription: false, ...o }
@@ -76,6 +76,12 @@ describe('BillingPage', () => {
     setup({ verified: false })
     expect(await screen.findByText('Verify your email address to upgrade.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Choose Agency' })).toBeDisabled()
+  })
+
+  it('lists team seats on the plan that has them, and only there', async () => {
+    setup({})
+    expect(await screen.findByText('5 team members')).toBeInTheDocument()
+    expect(screen.getAllByText(/team members/)).toHaveLength(1)
   })
 
   it('shows members a read-only view', async () => {

@@ -25,6 +25,7 @@ import (
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/healthcheck"
 	"hawkeye/internal/httpapi"
+	"hawkeye/internal/invitations"
 	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/logging"
 	"hawkeye/internal/maintenance"
@@ -127,6 +128,7 @@ func run() error {
 		Account:       account.NewService(pool, authSvc, provider, mailer, log, cfg.AppBaseURL),
 		SSLCheck:      freeTools.ssl,
 		SiteCheck:     freeTools.site,
+		Invitations:   invitations.NewService(pool, planSvc, mailer, log, cfg.AppBaseURL),
 		Lifecycle:     lifecycle.NewService(pool),
 		Branding:      branding.NewService(pool),
 		Contact:       contact.NewService(mailer, log, cfg.SupportAddress, cfg.EmailFromAddress, cfg.AppBaseURL),

@@ -17,8 +17,8 @@ function StatusLabel({ s }: { s: NotificationSetting }) {
 }
 
 export function NotificationsPage() {
-  const { user, organizations } = useAuth()
-  const isOwner = organizations[0]?.role === 'owner'
+  const { user, organization } = useAuth()
+  const isOwner = organization?.role === 'owner'
   const verified = Boolean(user?.email_verified_at)
 
   const [items, setItems] = useState<NotificationSetting[] | null>(null)

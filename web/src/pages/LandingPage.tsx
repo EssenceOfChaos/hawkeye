@@ -145,6 +145,7 @@ export function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: P
         <li>Checks every {mins} minute{mins === 1 ? '' : 's'}</li>
         <li>{plan.history_retention_days} days of history</li>
         {(plan.max_regions ?? 1) > 1 && <li>Checks from up to {plan.max_regions} locations</li>}
+        {(plan.max_team_members ?? 1) > 1 && <li>{plan.max_team_members} team members</li>}
         <li>Website and API monitoring</li>
         <li>SSL certificate expiry warnings</li>
         {plan.max_domains !== undefined && <li>Domain expiry warnings for up to {plan.max_domains} domains</li>}

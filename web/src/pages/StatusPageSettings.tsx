@@ -8,8 +8,8 @@ import { Field } from '../components/Field'
 
 /** The owner's editor for the public status page. */
 export function StatusPageSettings() {
-  const { organizations } = useAuth()
-  const isOwner = organizations[0]?.role === 'owner'
+  const { organization } = useAuth()
+  const isOwner = organization?.role === 'owner'
 
   const [loaded, setLoaded] = useState(false)
   const [exists, setExists] = useState(false)

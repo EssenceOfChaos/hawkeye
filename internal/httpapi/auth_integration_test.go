@@ -26,6 +26,7 @@ import (
 	"hawkeye/internal/email"
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/httpapi"
+	"hawkeye/internal/invitations"
 	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/maintenance"
 	"hawkeye/internal/metrics"
@@ -87,6 +88,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 		Billing:       billing.NewService(pool, o.provider, o.billingCfg, metrics.New(), log),
 		Account:       account.NewService(pool, svc, o.provider, mail, log, "https://app.example.com"),
 		Contact:       contact.NewService(mail, log, "support@test.example", "alerts@test.example", "https://app.example.com"),
+		Invitations:   invitations.NewService(pool, planSvc, mail, log, "http://app.test"),
 		Lifecycle:     lifecycle.NewService(pool),
 		Branding:      branding.NewService(pool),
 		SSLCheck:      o.ssl,

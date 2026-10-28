@@ -42,18 +42,20 @@ The cookie is set on the first `/api/v1` response, so the SPA should call `GET /
 | `POST /auth/verify-email` | – | `{token}` → 204; links valid 48h, single use |
 | `POST /auth/resend-verification` | session | 202; invalidates older links |
 | `POST /auth/change-password` | session | `{current_password, new_password}` → 204; signs out other sessions, emails a notice |
-| `GET /account/export` | session | the caller's own data as a JSON download |
+| `GET /account/export` | session | the caller's own data as a JSON download. For a team they belong to as a member, only its name and their role are included: its data is its owner's |
 | `POST /account/delete` | session | `{password, confirm_email}` (typed email must match) → 204; cancels the Stripe subscription, deletes sole-member organizations; 409 `OWNS_SHARED_ORGANIZATION`; wrong password 403 `WRONG_PASSWORD` while the user owns an organization with other members |
 | `GET /auth/me` | session | `{user, organizations[]}` |
 | `GET /organizations` | session | organizations the caller belongs to, with their `role` |
 | `GET /organizations/:id` | session | 404 if not a member |
 | `PATCH /organizations/:id` | session, owner | `{name}` (1–100 chars); members get 403 |
 | `GET /organizations/:id/members` | session | any member may list |
+| `DELETE /organizations/:id/members/:userID` | session, owner | 204. Removes a member; they lose access on their next request and keep their own account. 409 `OWNER_PROTECTED` for the owner, 404 for someone who is not a member. See **Team** below |
+| `POST /organizations/:id/leave` | session, member | 204. The caller leaves a team they were invited to. 409 `OWNER_PROTECTED` for an owner |
 
 ## Tenant-scoped endpoints
 
 These act on one organization: the one named by header `X-Organization-ID` (membership is verified; a foreign or
-malformed ID gives 404) or, if absent, the caller's oldest organization. Any member may manage monitors.
+malformed ID gives 404) or, if absent, the organization the caller **owns** (their own), else their oldest. Someone invited to a team therefore still opens their own organization by default, and sends `X-Organization-ID` to act for the team. Any member may manage monitors.
 
 | Method & path | Notes |
 |---|---|
@@ -96,6 +98,23 @@ Validation errors for list items name the item, for example `headers[0].name` or
 **URL rules.** `http`/`https` only, no credentials, ports 80/443 only, no `localhost`/`.local`/`.internal`/single-label hosts,
 no literal private/loopback/link-local/metadata IPs. This is early feedback only; the real SSRF defence (DNS resolution and
 dial-time validation) is in the checker (`internal/safehttp`). Editing the URL, method, headers, body or authentication resets health state to `unknown`.
+
+## Team
+
+An owner can invite colleagues to the organization, up to the plan's seats (`max_team_members`: Free and Pro 1, Agency 5). An invitation is an emailed link, valid for 7 days, bound to one address. Whoever follows it signs in (or creates an account) with **that** address, which must be **verified**, and joins as a `member`. A member can see and manage monitors and incidents like any member; owner-only actions (billing, alert recipients, status page, maintenance, domains, branding, and the team itself) stay with the owner. An organization has exactly one owner, who cannot be removed and cannot leave.
+
+A pending invitation holds a seat, so an owner cannot send more invitations than there are seats. Accepting, cancelling or letting one expire frees or uses the seat. If the plan shrinks (a downgrade) after an invitation was sent, nobody new can join until there is room; existing members are never removed automatically.
+
+| Method & path | Who | Notes |
+|---|---|---|
+| `GET /organizations/:id/invitations` | owner | `{invitations: [{id, email, created_at, expires_at}]}`, pending only (expired ones are not listed) |
+| `POST /organizations/:id/invitations` | owner, verified email | `{email}` → 201 `{invitation}`. Emails the link to that address. Sending to an address that is already invited replaces the link (the old one stops working) and needs no extra seat. 400 `VALIDATION_ERROR`, 409 `ALREADY_MEMBER`, 403 `PLAN_LIMIT_REACHED` (`limit_type: "team_members"`), 429 (per IP, and per target address per hour), 503 `INVITE_UNAVAILABLE` when the email could not be sent (nothing is saved) |
+| `POST /organizations/:id/invitations/:invitationID/resend` | owner, verified email | 200 `{invitation}` with a new link and a fresh 7 days; the old link stops working |
+| `DELETE /organizations/:id/invitations/:invitationID` | owner | 204. The link stops working at once and the seat is freed |
+| `POST /invitations/preview` | – (no login) | `{token}` → `{invitation: {organization_name, email}}`, so the page can say what the link is for and which address to use. Changes nothing. 400 `INVALID_TOKEN` for an unknown, used, revoked or expired link |
+| `POST /invitations/accept` | session | `{token}` → `{organization}` with the caller's role. 400 `INVALID_TOKEN`; 403 `INVITATION_EMAIL_MISMATCH` (signed in with a different address; the link is **not** used up); 403 `EMAIL_NOT_VERIFIED` (the account has not confirmed the address); 403 `PLAN_LIMIT_REACHED` (no seat left after a downgrade) |
+
+Only a SHA-256 hash of each link's token is stored. The link is the only thing that authorises a preview; accepting needs the token, a session, the matching address, and a verified address, so a leaked link is useless to anyone who does not own the mailbox.
 
 ## Incidents
 

@@ -195,7 +195,10 @@ describe('legal pages', () => {
     const text = container.textContent ?? ''
     // Plan limits mirror the seeded plans; unbuilt features must not be promised.
     for (const want of ['up to 5 monitors', 'up to 50 monitors', 'up to 200 monitors', '$19 per month', '$59 per month', 'SMS is not currently available', 'Maintenance windows are included in the Pro and Agency plans']) expect(text).toContain(want)
-    expect(text).not.toMatch(/team members|SMS alerts|priority support/i)
+    // Team seats are built: only the Agency plan has them, and the Terms say who is responsible for invited people.
+    for (const want of ['up to 5 team members (you and up to four invited colleagues)', 'You are responsible for whom you invite', 'you can remove anyone at any time']) expect(text).toContain(want)
+    expect(text.match(/team members/g)).toHaveLength(1)
+    expect(text).not.toMatch(/SMS alerts|priority support/i)
     // Reports are built, and the Terms describe them as they work: monthly, owners only, informational.
     for (const want of ['Monthly PDF uptime reports', 'put your own name and logo on them', 'not a guarantee, warranty, or certification', 'emailed only to the owners of your workspace']) expect(text).toContain(want)
     expect(screen.getAllByRole('link', { name: 'support@hawkeye.observer' })[0]).toHaveAttribute('href', 'mailto:support@hawkeye.observer')

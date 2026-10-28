@@ -437,11 +437,16 @@ export function TermsPage() {
       <ul>
         <li><strong>Free:</strong> up to 5 monitors, checks every 5 minutes, and 7 days of monitoring history.</li>
         <li><strong>Pro:</strong> up to 50 monitors, checks every minute, and 90 days of monitoring history.</li>
-        <li><strong>Agency:</strong> up to 200 monitors, checks every minute, and 365 days of monitoring history.</li>
+        <li><strong>Agency:</strong> up to 200 monitors, checks every minute, 365 days of monitoring history, and up to 5 team members (you and up to four invited colleagues).</li>
       </ul>
       <p>
         Paid plans may check each monitor from several locations, up to the limit shown at checkout. Every plan includes email, Slack, and webhook alerts and one public status page. Maintenance windows are included in the Pro and Agency plans. If you move to a plan that does not include maintenance windows, windows you
         already created keep working, but you cannot create new ones.
+      </p>
+      <p>
+        On plans with more than one seat, the owner can invite colleagues by email. People you invite can see and change your workspace’s monitors and see its incidents and uptime data; only the owner manages
+        billing, alert recipients, the status page, and the team itself. You are responsible for whom you invite and for what they do in your workspace, and you can remove anyone at any time. An invitation holds a seat until it is accepted or cancelled.
+        If you move to a plan with fewer seats, existing members keep their access, but you cannot invite anyone new until there is room.
       </p>
       <p>
         Monthly PDF uptime reports for each website are included in the Pro and Agency plans, and the Agency plan lets you put your own name and logo on them. A report is produced from the same check results as your

@@ -43,7 +43,10 @@ func (e *LimitError) Message() string {
 	case LimitCheckInterval:
 		return fmt.Sprintf("Your %s plan supports a check interval of at least %d seconds.", e.Plan.Name, e.Limit)
 	case LimitTeamMembers:
-		return fmt.Sprintf("Your %s plan includes up to %d team members.", e.Plan.Name, e.Limit)
+		if e.Limit <= 1 {
+			return fmt.Sprintf("Your %s plan is for one person. Upgrade to invite your team.", e.Plan.Name)
+		}
+		return fmt.Sprintf("Your %s plan includes up to %d team members, counting people you have invited who have not joined yet.", e.Plan.Name, e.Limit)
 	case LimitRegions:
 		return fmt.Sprintf("Your %s plan can check each monitor from up to %d location%s.", e.Plan.Name, e.Limit, map[bool]string{true: "", false: "s"}[e.Limit == 1])
 	case LimitDomains:
@@ -202,13 +205,26 @@ func (s *Service) CheckInterval(ctx context.Context, db DB, orgID uuid.UUID, sec
 	return nil
 }
 
+// CanAddTeamMember checks that one more person may join now: only people who have already joined count.
 func (s *Service) CanAddTeamMember(ctx context.Context, db DB, orgID uuid.UUID) error {
+	return s.checkSeats(ctx, db, orgID, false)
+}
+
+// CanInviteTeamMember checks that one more invitation may be sent. A pending invitation holds a seat, so an owner cannot send more invitations
+// than there are seats and then find that the last people to accept are turned away.
+func (s *Service) CanInviteTeamMember(ctx context.Context, db DB, orgID uuid.UUID) error {
+	return s.checkSeats(ctx, db, orgID, true)
+}
+
+func (s *Service) checkSeats(ctx context.Context, db DB, orgID uuid.UUID, countInvitations bool) error {
 	p, err := EffectivePlan(ctx, db, orgID)
 	if err != nil {
 		return err
 	}
 	var used int
-	if err := db.QueryRow(ctx, `SELECT count(*) FROM organization_members WHERE organization_id = $1`, orgID).Scan(&used); err != nil {
+	if err := db.QueryRow(ctx, `SELECT (SELECT count(*) FROM organization_members WHERE organization_id = $1)
+		+ CASE WHEN $2 THEN (SELECT count(*) FROM organization_invitations WHERE organization_id = $1 AND expires_at > now()) ELSE 0 END`,
+		orgID, countInvitations).Scan(&used); err != nil {
 		return err
 	}
 	if used >= p.MaxTeamMembers {

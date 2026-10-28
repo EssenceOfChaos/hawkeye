@@ -49,6 +49,7 @@ a { color: var(--accent); }
 .spacer { flex: 1; }
 .who { font-size: .9rem; color: var(--muted); text-decoration: none; }
 .who:hover { color: var(--text); }
+.org-switch { max-width: 14rem; font-size: .9rem; }
 .banner { padding: .6rem 1rem; background: color-mix(in srgb, #f0b429 18%, transparent); border-bottom: 1px solid var(--border); }
 .card { border: 1px solid var(--border); border-radius: .75rem; padding: 1.1rem 1.35rem; margin: 1rem 0; background: linear-gradient(180deg, #0f2744cc, #0b1f38cc); box-shadow: 0 18px 40px -24px #000a; }
 .card.narrow { max-width: 28rem; margin-inline: auto; }

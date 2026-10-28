@@ -10,8 +10,8 @@ const json = (status: number, body: unknown) =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
 
 const plans = [
-  { code: 'free', name: 'Free', monthly_price_cents: 0, max_monitors: 5, minimum_check_interval_seconds: 300, history_retention_days: 7, max_domains: 3 },
-  { code: 'pro', name: 'Pro', monthly_price_cents: 1900, max_monitors: 50, minimum_check_interval_seconds: 60, history_retention_days: 90, max_domains: 25 },
+  { code: 'free', name: 'Free', monthly_price_cents: 0, max_monitors: 5, minimum_check_interval_seconds: 300, history_retention_days: 7, max_domains: 3, max_team_members: 1 },
+  { code: 'pro', name: 'Pro', monthly_price_cents: 1900, max_monitors: 50, minimum_check_interval_seconds: 60, history_retention_days: 90, max_domains: 25, max_team_members: 1 },
 ]
 
 function renderLanding(fetchImpl: (url: string) => Promise<Response>) {
@@ -26,6 +26,14 @@ function renderLanding(fetchImpl: (url: string) => Promise<Response>) {
 }
 
 describe('LandingPage', () => {
+  it('advertises team seats only on a plan that has more than one, with the number from the plans table', async () => {
+    const withSeats = [plans[0], plans[1], { code: 'agency', name: 'Agency', monthly_price_cents: 5900, max_monitors: 200, minimum_check_interval_seconds: 60, history_retention_days: 365, max_domains: 100, max_team_members: 5 }]
+    renderLanding((url) => (url.includes('/plans') ? json(200, { plans: withSeats }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } })))
+    await screen.findByText('200 website monitors')
+    expect(screen.getAllByText(/team members/)).toHaveLength(1)
+    expect(screen.getByText('5 team members')).toBeInTheDocument()
+  })
+
   it('lists reports on a plan only when that plan includes them', async () => {
     const withReports = [
       plans[0],
@@ -48,7 +56,7 @@ describe('LandingPage', () => {
     // Paid checkout is not built yet, so the page must not pretend it is.
     expect(screen.getByRole('button', { name: /open soon/i })).toBeDisabled()
     expect(screen.getAllByRole('link', { name: /start monitoring free/i }).length).toBeGreaterThan(0)
-    // Features that are not built (CSV exports, priority support, team seats, SMS) must not be advertised.
+    // Features that are not built (CSV exports, priority support, SMS) must not be advertised, and neither may team seats on plans that are for one person.
     expect(screen.queryByText(/priority support|team members|csv export/i)).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /Always in sight/ })).toBeInTheDocument()
   })

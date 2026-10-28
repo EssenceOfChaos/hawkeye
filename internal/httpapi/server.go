@@ -19,6 +19,7 @@ import (
 	"hawkeye/internal/contact"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/errtrack"
+	"hawkeye/internal/invitations"
 	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/maintenance"
 	"hawkeye/internal/metrics"
@@ -57,10 +58,11 @@ type Options struct {
 	Billing       *billing.Service
 	Account       *account.Service
 	Contact       *contact.Service
-	Lifecycle     *lifecycle.Service // unsubscribe from onboarding emails; nil turns the endpoint off
-	Branding      *branding.Service  // report branding and PDF reports; nil turns those endpoints off
-	SSLCheck      *sslcheck.Service  // free SSL checker; nil turns the endpoint off
-	SiteCheck     *sitecheck.Service // free website status checker; nil turns the endpoint off
+	Invitations   *invitations.Service // team invitations; nil turns those endpoints off
+	Lifecycle     *lifecycle.Service   // unsubscribe from onboarding emails; nil turns the endpoint off
+	Branding      *branding.Service    // report branding and PDF reports; nil turns those endpoints off
+	SSLCheck      *sslcheck.Service    // free SSL checker; nil turns the endpoint off
+	SiteCheck     *sitecheck.Service   // free website status checker; nil turns the endpoint off
 	PgPool        *pgxpool.Pool
 	Pool          plans.DB
 
@@ -167,7 +169,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, billing: o.Billing, account: o.Account, contact: o.Contact, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies}
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
@@ -343,6 +345,18 @@ func registerAPI(e *echo.Echo, o Options) {
 	org.GET("/:organizationID", h.getOrg)
 	org.PATCH("/:organizationID", h.updateOrg)
 	org.GET("/:organizationID/members", h.listMembers)
+	org.DELETE("/:organizationID/members/:userID", h.removeMember)
+	org.POST("/:organizationID/leave", h.leaveOrg)
+	if h.invitations != nil {
+		// Team invitations. The owner sends them (a verified address, and capped per target address because each one emails a third party);
+		// the invitee previews a link without signing in and accepts it with the account that has the invited address.
+		org.GET("/:organizationID/invitations", h.listInvitations)
+		org.POST("/:organizationID/invitations", h.createInvitation, requireVerifiedEmail, limit("invite"))
+		org.POST("/:organizationID/invitations/:invitationID/resend", h.resendInvitation, requireVerifiedEmail, limit("invite-resend"))
+		org.DELETE("/:organizationID/invitations/:invitationID", h.revokeInvitation)
+		v1.POST("/invitations/preview", h.previewInvitation, limit("invite-preview"))
+		v1.POST("/invitations/accept", h.acceptInvitation, h.requireAuth, limit("invite-accept"))
+	}
 
 	// Group middleware (authentication, CSRF) also guards each group's catch-all, which made unknown paths answer 401/403 to
 	// anonymous callers. Unknown API paths are simply 404 for everyone.

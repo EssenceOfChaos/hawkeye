@@ -40,8 +40,17 @@ func (h *handlers) resolveOrg(next echo.HandlerFunc) echo.HandlerFunc {
 		if len(list) == 0 {
 			return mapError(organizations.ErrNotFound)
 		}
-		c.Set(orgKey, list[0].ID)
-		c.Set(roleKey, list[0].Role)
+		// Without a header the default is the organization the person owns (their own), not simply the oldest one: someone invited to an older team
+		// would otherwise land in it instead of in their own account.
+		def := list[0]
+		for _, o := range list {
+			if o.Role == organizations.RoleOwner {
+				def = o
+				break
+			}
+		}
+		c.Set(orgKey, def.ID)
+		c.Set(roleKey, def.Role)
 		return next(c)
 	}
 }

@@ -154,6 +154,7 @@ func (s *Service) Export(ctx context.Context, userID uuid.UUID) (Export, error) 
 		"Passwords, session tokens and payment-provider identifiers are never included.",
 		"Individual check results are not included (they can be very large and are deleted after your plan's history window); use GET /api/v1/monitors/{id}/results while they are retained.",
 		"Card details are held by Stripe, not by HawkEye.",
+		"For an organization you belong to as a member, only its name and your role are included: its websites, alert recipients, billing and status page belong to its owner, who can export them.",
 	}}
 	if err := s.pool.QueryRow(ctx, `SELECT id, email, email_verified_at, created_at FROM users WHERE id = $1`, userID).
 		Scan(&out.User.ID, &out.User.Email, &out.User.EmailVerifiedAt, &out.User.CreatedAt); err != nil {
@@ -177,7 +178,15 @@ func (s *Service) Export(ctx context.Context, userID uuid.UUID) (Export, error) 
 	}
 	rows.Close()
 	for i := range out.Organizations {
-		if err := s.fillOrg(ctx, &out.Organizations[i]); err != nil {
+		o := &out.Organizations[i]
+		if o.Role != "owner" {
+			// A team's data is its owner's, not the data of everyone invited to look at it.
+			o.Monitors, o.Incidents, o.AlertRecipients = []ExportMonitor{}, []ExportIncident{}, []ExportRecipient{}
+			o.MaintenanceWindows, o.Domains = []ExportWindow{}, []ExportDomain{}
+			o.Billing = ExportBilling{}
+			continue
+		}
+		if err := s.fillOrg(ctx, o); err != nil {
 			return out, err
 		}
 	}

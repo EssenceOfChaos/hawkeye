@@ -79,6 +79,7 @@ export const PAGES: readonly PageMeta[] = [
   { path: '/reset-password', title: 'Choose a new password | HawkEye', description: 'Choose a new password for your HawkEye account.', index: false },
   { path: '/confirm-alert-address', title: 'Confirm alert address | HawkEye', description: 'Confirm an email address for HawkEye alerts.', index: false },
   { path: '/unsubscribe', title: 'Stop these emails | HawkEye', description: 'Stop getting-started emails from HawkEye.', index: false },
+  { path: '/accept-invite', title: 'Join a team | HawkEye', description: 'Accept an invitation to join a team on HawkEye.', index: false },
 
   // Signed-in app.
   { path: '/verify-email', title: 'Verify your email | HawkEye', description: 'Verify your email address for your HawkEye account.', index: false },
@@ -89,6 +90,7 @@ export const PAGES: readonly PageMeta[] = [
   { path: '/monitors/:monitorID/edit', title: 'Edit monitor | HawkEye', description: 'Edit a monitor.', index: false },
   { path: '/incidents', title: 'Incidents | HawkEye', description: 'Your HawkEye incidents.', index: false },
   { path: '/notifications', title: 'Notifications | HawkEye', description: 'Your HawkEye alert channels.', index: false },
+  { path: '/team', title: 'Team | HawkEye', description: 'The people on your HawkEye team.', index: false },
   { path: '/domains', title: 'Domains | HawkEye', description: 'Your HawkEye domain expiry monitoring.', index: false },
   { path: '/maintenance', title: 'Maintenance windows | HawkEye', description: 'Your HawkEye maintenance windows.', index: false },
   { path: '/reports', title: 'Reports | HawkEye', description: 'Your HawkEye monthly PDF reports.', index: false },
