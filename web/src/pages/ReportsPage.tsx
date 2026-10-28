@@ -6,7 +6,7 @@ import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
-import { reportMonths } from '../format'
+import { reportMonths, reportPdfPath } from '../format'
 import { useApi } from '../hooks'
 
 const MAX_LOGO_BYTES = 512 * 1024
@@ -30,7 +30,8 @@ export function ReportsPage() {
   const [logoVersion, setLogoVersion] = useState(0)
 
   const months = reportMonths(usage.data?.usage.plan.history_retention_days ?? 7)
-  const chosen = month ?? months[1]?.value ?? months[0].value
+  // Only a month this page offered is used: the selected value is looked up in our own list, never passed on as typed.
+  const chosen = months.find((x) => x.value === month)?.value ?? months[1]?.value ?? months[0].value
   const canReport = current?.can_report ?? false
   const canBrand = current?.can_brand ?? false
   const shownName = name ?? current?.branding.display_name ?? ''
@@ -119,7 +120,7 @@ export function ReportsPage() {
                   <li key={m.id} className="row">
                     <span>{m.name}</span>
                     <span className="spacer" />
-                    <a className="button" href={`/api/v1/monitors/${m.id}/report.pdf?month=${chosen}`} rel="noreferrer">Download PDF</a>
+                    <a className="button" href={reportPdfPath(m.id, chosen)} rel="noreferrer">Download PDF</a>
                   </li>
                 ))}
               </ul>

@@ -49,6 +49,14 @@ export function reportMonths(retentionDays: number, now: Date = new Date()): Rep
   return out
 }
 
+/**
+ * The address that downloads one website's monthly report. Both parts are encoded, so neither the monitor id (it comes from the page's address) nor the
+ * month (it comes from a form control) can change the path or add to the query.
+ */
+export function reportPdfPath(monitorID: string, month: string): string {
+  return `/api/v1/monitors/${encodeURIComponent(monitorID)}/report.pdf?month=${encodeURIComponent(month)}`
+}
+
 export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString()
 }

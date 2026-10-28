@@ -7,7 +7,7 @@ import { RangePicker } from '../components/RangePicker'
 import { ResponseChart } from '../components/ResponseChart'
 import { StatusBadge } from '../components/StatusBadge'
 import { AvgResponseTile, StatTile, UptimeHero } from '../components/Uptime'
-import { availableRanges, formatDateTime, formatMs, RANGE_LABELS, reportMonths } from '../format'
+import { availableRanges, formatDateTime, formatMs, RANGE_LABELS, reportMonths, reportPdfPath } from '../format'
 import { useApi } from '../hooks'
 import { formatDuration, IncidentStatus } from './IncidentsPage'
 
@@ -21,14 +21,15 @@ function ReportDownload({ monitorID, plan }: { monitorID: string; plan: Plan | u
   if (!plan.reports_enabled) {
     return <p className="hint">A monthly PDF report for this website is included in the Pro and Agency plans. <Link to="/billing">See plans</Link></p>
   }
-  const chosen = month ?? months[1]?.value ?? months[0].value
+  // Only a month this page offered is used: the selected value is looked up in our own list, never passed on as typed.
+  const chosen = months.find((x) => x.value === month)?.value ?? months[1]?.value ?? months[0].value
   return (
     <div className="row">
       <label htmlFor="report-month">Monthly report</label>
       <select id="report-month" value={chosen} onChange={(e) => setMonth(e.target.value)}>
         {months.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}
       </select>
-      <a className="button" href={`/api/v1/monitors/${monitorID}/report.pdf?month=${chosen}`} rel="noreferrer">Download PDF</a>
+      <a className="button" href={reportPdfPath(monitorID, chosen)} rel="noreferrer">Download PDF</a>
       <Link to="/reports">All reports</Link>
     </div>
   )

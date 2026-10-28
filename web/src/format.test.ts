@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { availableRanges, formatMoney, formatMs, formatUptime, reportMonths } from './format'
+import { availableRanges, formatMoney, formatMs, formatUptime, reportMonths, reportPdfPath } from './format'
 
 describe('format', () => {
   it('formats uptime without false precision or rounding up', () => {
@@ -49,5 +49,17 @@ describe('reportMonths', () => {
     expect(reportMonths(7, now).map((m) => m.value)).toEqual(['2026-10'])
     // 60 days back from 5 Jan is 6 Nov: November is partly outside the kept history, so it is left out rather than reported short.
     expect(reportMonths(60, new Date('2027-01-05T00:00:00Z')).map((m) => m.value)).toEqual(['2027-01', '2026-12'])
+  })
+})
+
+describe('reportPdfPath', () => {
+  it('addresses one website and month', () => {
+    expect(reportPdfPath('3f2a-b1', '2026-09')).toBe('/api/v1/monitors/3f2a-b1/report.pdf?month=2026-09')
+  })
+
+  it('cannot be made to change the path or the query by what is passed in', () => {
+    expect(reportPdfPath('../../auth/me?x=', '2026-09')).toBe('/api/v1/monitors/..%2F..%2Fauth%2Fme%3Fx%3D/report.pdf?month=2026-09')
+    expect(reportPdfPath('m1', '2026-09&download=1#x')).toBe('/api/v1/monitors/m1/report.pdf?month=2026-09%26download%3D1%23x')
+    expect(reportPdfPath('m1', 'javascript:alert(1)')).toMatch(/^\/api\/v1\/monitors\/m1\/report\.pdf\?month=javascript%3Aalert/)
   })
 })
