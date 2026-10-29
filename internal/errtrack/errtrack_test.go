@@ -196,21 +196,30 @@ func TestStartMessageIsTheAgreedTextInUTC(t *testing.T) {
 	}
 }
 
-// events collects the events sent to a stand-in for Sentry's ingest endpoint. The body is an envelope: one JSON object per line, of which the event is
-// the one that has a "message" or an "exception".
-func fakeSentry(t *testing.T) (dsn string, events func() []map[string]any) {
+// fakeSentry stands in for Sentry's ingest endpoint. The body is an envelope: one JSON object per line. An error event has a "message" or an "exception";
+// logs travel in an item whose payload is {"items": [...]}. They are kept apart because they end up in different places in Sentry: events are issues.
+func fakeSentry(t *testing.T) (dsn string, events func() []map[string]any, logs func() []map[string]any) {
 	t.Helper()
 	var mu sync.Mutex
-	var out []map[string]any
+	var evs, lgs []map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		mu.Lock()
 		for _, line := range strings.Split(string(b), "\n") {
-			var ev map[string]any
-			if json.Unmarshal([]byte(line), &ev) == nil {
-				if _, ok := ev["message"]; ok {
-					out = append(out, ev)
+			var obj map[string]any
+			if json.Unmarshal([]byte(line), &obj) != nil {
+				continue
+			}
+			if items, ok := obj["items"].([]any); ok {
+				for _, it := range items {
+					if m, ok := it.(map[string]any); ok {
+						lgs = append(lgs, m)
+					}
 				}
+			} else if _, ok := obj["message"]; ok {
+				evs = append(evs, obj)
+			} else if _, ok := obj["exception"]; ok {
+				evs = append(evs, obj)
 			}
 		}
 		mu.Unlock()
@@ -218,15 +227,25 @@ func fakeSentry(t *testing.T) (dsn string, events func() []map[string]any) {
 		io.WriteString(w, `{"id":"1"}`)
 	}))
 	t.Cleanup(srv.Close)
-	return "http://publickey@" + strings.TrimPrefix(srv.URL, "http://") + "/42", func() []map[string]any {
-		mu.Lock()
-		defer mu.Unlock()
-		return append([]map[string]any(nil), out...)
+	get := func(src *[]map[string]any) func() []map[string]any {
+		return func() []map[string]any {
+			mu.Lock()
+			defer mu.Unlock()
+			return append([]map[string]any(nil), *src...)
+		}
 	}
+	return "http://publickey@" + strings.TrimPrefix(srv.URL, "http://") + "/42", get(&evs), get(&lgs)
 }
 
-func TestAnnounceStartSendsAnInfoNoticeGroupedByVersion(t *testing.T) {
-	dsn, events := fakeSentry(t)
+// attr reads a log attribute, which is sent as {"value": ..., "type": ...}.
+func attr(l map[string]any, key string) any {
+	a, _ := l["attributes"].(map[string]any)
+	m, _ := a[key].(map[string]any)
+	return m["value"]
+}
+
+func TestAnnounceStartSendsAnInfoLogNotAnIssue(t *testing.T) {
+	dsn, events, logs := fakeSentry(t)
 	r, shutdown, err := errtrack.New(errtrack.Config{DSN: dsn, Environment: "production", Release: "a1b2c3d4e5f6"})
 	if err != nil {
 		t.Fatal(err)
@@ -234,39 +253,64 @@ func TestAnnounceStartSendsAnInfoNoticeGroupedByVersion(t *testing.T) {
 	at := time.Date(2026, 10, 29, 14, 3, 5, 0, time.UTC)
 	errtrack.AnnounceStart(r, "api", "a1b2c3d4e5f6", at)
 	errtrack.AnnounceStart(r, "worker", "a1b2c3d4e5f6", at.Add(2*time.Second))
-	shutdown() // flushes
+	shutdown() // flushes the batch of logs
 
-	evs := events()
-	if len(evs) != 2 {
-		t.Fatalf("want one notice per process, got %d: %v", len(evs), evs)
+	ls := logs()
+	if len(ls) != 2 {
+		t.Fatalf("want one log per process, got %d: %v", len(ls), ls)
 	}
-	first := evs[0]
-	if first["message"] != "Hawkeye version a1b2c3d4e5f6 is being deployed at 2026-10-29T14:03:05Z" {
-		t.Errorf("message: %v", first["message"])
+	// The whole point of using logs: nothing that creates an issue, raises an issue alert or uses the error quota is sent.
+	if evs := events(); len(evs) != 0 {
+		t.Fatalf("a start notice must not be an error event, got %v", evs)
+	}
+	first := ls[0]
+	if first["body"] != "Hawkeye version a1b2c3d4e5f6 is being deployed at 2026-10-29T14:03:05Z" {
+		t.Errorf("body: %v", first["body"])
 	}
 	if first["level"] != "info" {
-		t.Errorf("a notice is not an error, level: %v", first["level"])
+		t.Errorf("level: %v", first["level"])
 	}
-	if first["release"] != "a1b2c3d4e5f6" || first["environment"] != "production" {
-		t.Errorf("release/environment: %v / %v", first["release"], first["environment"])
+	if attr(first, "sentry.release") != "a1b2c3d4e5f6" || attr(first, "sentry.environment") != "production" {
+		t.Errorf("release/environment: %v / %v", attr(first, "sentry.release"), attr(first, "sentry.environment"))
 	}
-	// Grouped by version: both processes of a deploy, and every restart of that version, share one issue.
-	for _, ev := range evs {
-		fp, _ := ev["fingerprint"].([]any)
-		if len(fp) != 2 || fp[0] != "start" || fp[1] != "a1b2c3d4e5f6" {
-			t.Errorf("fingerprint: %v", ev["fingerprint"])
+	for _, l := range ls {
+		if attr(l, "event") != "start" || attr(l, "version") != "a1b2c3d4e5f6" {
+			t.Errorf("attributes to search by: %v", l["attributes"])
 		}
-		// A notice has nothing to trace.
-		if ev["exception"] != nil || ev["threads"] != nil {
-			t.Errorf("no stack trace expected: %v", ev)
+		// Events carry no server name; neither do logs (the SDK would add the machine's host name).
+		if attr(l, "sentry.server.address") != nil {
+			t.Errorf("host name was sent: %v", attr(l, "sentry.server.address"))
 		}
 	}
-	tags := func(ev map[string]any) map[string]any { m, _ := ev["tags"].(map[string]any); return m }
-	if tags(evs[0])["component"] == tags(evs[1])["component"] {
-		t.Errorf("the two processes must be told apart by tag: %v %v", tags(evs[0]), tags(evs[1]))
+	if attr(ls[0], "component") == attr(ls[1], "component") {
+		t.Errorf("the two processes must be told apart: %v %v", attr(ls[0], "component"), attr(ls[1], "component"))
 	}
-	if tg := tags(evs[0]); tg["event"] != "start" || tg["version"] != "a1b2c3d4e5f6" {
-		t.Errorf("tags: %v", tg)
+}
+
+func TestNoticesAreScrubbedLikeErrors(t *testing.T) {
+	dsn, _, logs := fakeSentry(t)
+	r, shutdown, err := errtrack.New(errtrack.Config{DSN: dsn, Environment: "production", Release: "v1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, ok := r.(errtrack.Notifier)
+	if !ok {
+		t.Fatalf("%T cannot send notices", r)
+	}
+	n.Notify(t.Context(), "sent to victim@example.com with token=abc123secret", map[string]string{"who": "victim@example.com"})
+	shutdown()
+	ls := logs()
+	if len(ls) != 1 {
+		t.Fatalf("got %v", ls)
+	}
+	all, _ := json.Marshal(ls[0])
+	for _, leaked := range []string{"victim@example.com", "abc123secret"} {
+		if strings.Contains(string(all), leaked) {
+			t.Errorf("%q was sent: %s", leaked, all)
+		}
+	}
+	if !strings.Contains(string(all), "[email]") {
+		t.Errorf("expected the address to be replaced: %s", all)
 	}
 }
 

@@ -14,11 +14,12 @@ type Reporter interface {
 	Capture(ctx context.Context, err error, fields map[string]string)
 }
 
-// Notifier is implemented by reporters that can also send a plain informational message that is not an error. It is separate from Reporter so that code
+// Notifier is implemented by reporters that can also record an informational message that is not an error. It is separate from Reporter so that code
 // which only reports errors, and the fakes that stand in for it, need not know about it.
 type Notifier interface {
-	// Notify sends message at the "info" level. Events with the same fingerprint are grouped into one issue; tags are attached to the event.
-	Notify(ctx context.Context, message string, fingerprint []string, tags map[string]string)
+	// Notify records message at the "info" level with the given attributes. It goes to the service's logs, never to its list of issues, so a routine
+	// notice cannot be mistaken for a failure, raise an alert, or use up the error quota.
+	Notify(ctx context.Context, message string, attrs map[string]string)
 }
 
 // StartMessage is the text sent when a process starts, so Sentry shows which version began running and when.
@@ -26,14 +27,13 @@ func StartMessage(version string, at time.Time) string {
 	return fmt.Sprintf("Hawkeye version %s is being deployed at %s", version, at.UTC().Format(time.RFC3339))
 }
 
-// AnnounceStart tells error tracking that a process (component: "api" or "worker") has started running version. It is how a new deploy, a rollback or a
-// restart shows up in Sentry, and it proves that this process can reach Sentry at all: without it a healthy system sends nothing, which looks the same as a
-// broken setup. Events are grouped by version, so each version that has run is one issue and every start of it adds an event with its time. It does nothing
-// when error tracking is off.
+// AnnounceStart records that a process (component: "api" or "worker") has started running version. It is how a new deploy, a rollback or a restart shows
+// up in Sentry's logs, and it proves that this process can reach Sentry at all: without it a healthy system sends nothing, which looks the same as a broken
+// setup. It is a log line, not an issue (see Notifier), carrying the attributes event=start, component and version to search by. It does nothing when error
+// tracking is off.
 func AnnounceStart(r Reporter, component, version string, at time.Time) {
 	if n, ok := r.(Notifier); ok {
-		n.Notify(context.Background(), StartMessage(version, at), []string{"start", version},
-			map[string]string{"event": "start", "component": component, "version": version})
+		n.Notify(context.Background(), StartMessage(version, at), map[string]string{"event": "start", "component": component, "version": version})
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 )
 
 // Config for the Sentry reporter. An empty DSN disables reporting (New returns Noop).
@@ -41,6 +42,8 @@ func Scrub(s string) string {
 
 type sentryReporter struct {
 	client *sentry.Client
+	// logs writes to Sentry's logs. The client is not the process-wide one, so the logger is given a hub of its own that points at it.
+	logs sentry.Logger
 }
 
 // clientOptions is the one place that decides what leaves the process: every event is scrubbed, and no user, server name or request is attached.
@@ -59,6 +62,18 @@ func clientOptions(cfg Config) sentry.ClientOptions {
 			ev.Request = nil
 			return ev
 		},
+		// Logs get the same treatment as events. The SDK adds the machine's host name to every log as sentry.server.address; events carry no server name,
+		// so logs do not either.
+		BeforeSendLog: func(l *sentry.Log) *sentry.Log {
+			l.Body = Scrub(l.Body)
+			delete(l.Attributes, "sentry.server.address")
+			for k, v := range l.Attributes {
+				if v.Type() == attribute.STRING {
+					l.Attributes[k] = attribute.StringValue(Scrub(v.AsString()))
+				}
+			}
+			return l
+		},
 	}
 }
 
@@ -71,7 +86,9 @@ func New(cfg Config) (Reporter, func(), error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("sentry: %w", err)
 	}
-	return &sentryReporter{client: client}, func() { client.Flush(3 * time.Second) }, nil
+	hub := sentry.NewHub(client, sentry.NewScope())
+	logs := sentry.NewLogger(sentry.SetHubOnContext(context.Background(), hub))
+	return &sentryReporter{client: client, logs: logs}, func() { client.Flush(3 * time.Second) }, nil
 }
 
 // Describe names where events go, for the startup log: the ingest host and the project number from the DSN. The key in the DSN is not included.
@@ -167,13 +184,14 @@ func SendTest(cfg Config, message string, timeout time.Duration) (TestReport, er
 	return rep, nil
 }
 
-// Notify sends message as an informational event. It is built by hand rather than with CaptureMessage because the SDK would attach a stack trace to a
-// message, and there is nothing to trace: this is a notice, not a failure.
-func (s *sentryReporter) Notify(_ context.Context, message string, fingerprint []string, tags map[string]string) {
-	scope := sentry.NewScope()
-	scope.SetTags(tags)
-	scope.SetFingerprint(fingerprint)
-	s.client.CaptureEvent(&sentry.Event{Message: message, Level: sentry.LevelInfo}, &sentry.EventHint{}, scope)
+// Notify records message as an info-level log. A log is not an issue: it appears under Explore > Logs, raises no issue alert and does not count against the
+// error quota, which is what a routine notice should do.
+func (s *sentryReporter) Notify(_ context.Context, message string, attrs map[string]string) {
+	entry := s.logs.Info()
+	for k, v := range attrs {
+		entry = entry.String(k, v)
+	}
+	entry.Emit(message)
 }
 
 // Capture sends err with the given tags. It does not block: the SDK sends asynchronously.
