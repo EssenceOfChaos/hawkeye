@@ -1,6 +1,8 @@
 package errtrack_test
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -182,5 +184,103 @@ func TestSendTestReportsDeliveryAndRefusal(t *testing.T) {
 
 	if _, err := errtrack.SendTest(errtrack.Config{}, "test", time.Second); err == nil {
 		t.Fatal("no DSN must be an error")
+	}
+}
+
+func TestStartMessageIsTheAgreedTextInUTC(t *testing.T) {
+	// A time in another zone is shown in UTC, so the message reads the same wherever the server is.
+	zone := time.FixedZone("EDT", -4*60*60)
+	at := time.Date(2026, 10, 29, 10, 3, 5, 0, zone)
+	if got, want := errtrack.StartMessage("a1b2c3d4e5f6", at), "Hawkeye version a1b2c3d4e5f6 is being deployed at 2026-10-29T14:03:05Z"; got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+// events collects the events sent to a stand-in for Sentry's ingest endpoint. The body is an envelope: one JSON object per line, of which the event is
+// the one that has a "message" or an "exception".
+func fakeSentry(t *testing.T) (dsn string, events func() []map[string]any) {
+	t.Helper()
+	var mu sync.Mutex
+	var out []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		for _, line := range strings.Split(string(b), "\n") {
+			var ev map[string]any
+			if json.Unmarshal([]byte(line), &ev) == nil {
+				if _, ok := ev["message"]; ok {
+					out = append(out, ev)
+				}
+			}
+		}
+		mu.Unlock()
+		w.WriteHeader(200)
+		io.WriteString(w, `{"id":"1"}`)
+	}))
+	t.Cleanup(srv.Close)
+	return "http://publickey@" + strings.TrimPrefix(srv.URL, "http://") + "/42", func() []map[string]any {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]map[string]any(nil), out...)
+	}
+}
+
+func TestAnnounceStartSendsAnInfoNoticeGroupedByVersion(t *testing.T) {
+	dsn, events := fakeSentry(t)
+	r, shutdown, err := errtrack.New(errtrack.Config{DSN: dsn, Environment: "production", Release: "a1b2c3d4e5f6"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 10, 29, 14, 3, 5, 0, time.UTC)
+	errtrack.AnnounceStart(r, "api", "a1b2c3d4e5f6", at)
+	errtrack.AnnounceStart(r, "worker", "a1b2c3d4e5f6", at.Add(2*time.Second))
+	shutdown() // flushes
+
+	evs := events()
+	if len(evs) != 2 {
+		t.Fatalf("want one notice per process, got %d: %v", len(evs), evs)
+	}
+	first := evs[0]
+	if first["message"] != "Hawkeye version a1b2c3d4e5f6 is being deployed at 2026-10-29T14:03:05Z" {
+		t.Errorf("message: %v", first["message"])
+	}
+	if first["level"] != "info" {
+		t.Errorf("a notice is not an error, level: %v", first["level"])
+	}
+	if first["release"] != "a1b2c3d4e5f6" || first["environment"] != "production" {
+		t.Errorf("release/environment: %v / %v", first["release"], first["environment"])
+	}
+	// Grouped by version: both processes of a deploy, and every restart of that version, share one issue.
+	for _, ev := range evs {
+		fp, _ := ev["fingerprint"].([]any)
+		if len(fp) != 2 || fp[0] != "start" || fp[1] != "a1b2c3d4e5f6" {
+			t.Errorf("fingerprint: %v", ev["fingerprint"])
+		}
+		// A notice has nothing to trace.
+		if ev["exception"] != nil || ev["threads"] != nil {
+			t.Errorf("no stack trace expected: %v", ev)
+		}
+	}
+	tags := func(ev map[string]any) map[string]any { m, _ := ev["tags"].(map[string]any); return m }
+	if tags(evs[0])["component"] == tags(evs[1])["component"] {
+		t.Errorf("the two processes must be told apart by tag: %v %v", tags(evs[0]), tags(evs[1]))
+	}
+	if tg := tags(evs[0]); tg["event"] != "start" || tg["version"] != "a1b2c3d4e5f6" {
+		t.Errorf("tags: %v", tg)
+	}
+}
+
+// fakeReporter reports errors only, like the stand-ins used by other tests.
+type fakeReporter struct{ n int }
+
+func (f *fakeReporter) Capture(context.Context, error, map[string]string) { f.n++ }
+
+func TestAnnounceStartDoesNothingWithoutAReporterThatCanSendNotices(t *testing.T) {
+	at := time.Now()
+	errtrack.AnnounceStart(errtrack.Noop{}, "api", "v1", at) // error tracking off
+	f := &fakeReporter{}
+	errtrack.AnnounceStart(f, "api", "v1", at) // a reporter that only handles errors
+	if f.n != 0 {
+		t.Fatal("a start notice must never be reported as an error")
 	}
 }

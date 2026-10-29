@@ -206,6 +206,7 @@ func run() error {
 	}()
 
 	log.Info("worker started", "concurrency", cfg.WorkerConcurrency, "scheduler", cfg.RunScheduler, "metrics_addr", srv.Addr)
+	errtrack.AnnounceStart(reporter, "worker", cfg.AppVersion, time.Now())
 	<-ctx.Done()
 	log.Info("shutting down; waiting for in-flight checks")
 	done := make(chan struct{})

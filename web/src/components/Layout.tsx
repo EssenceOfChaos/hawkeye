@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { CookieSettingsButton } from './CookieBanner'
 import { api } from '../api'
 import { Alert } from './Alert'
 import { useAuth } from '../auth'
+import { useDismiss } from '../hooks'
+import { AccountMenu } from './AccountMenu'
 import { BrandMark } from './Brand'
 
 export function Layout() {
@@ -11,6 +13,16 @@ export function Layout() {
   const [resent, setResent] = useState(false)
   const [openIncidents, setOpenIncidents] = useState(0)
   const { pathname } = useLocation()
+  // The phone menu counts as closed as soon as the address changes (see AccountMenu), so choosing a page closes it with no effect to reset it.
+  const [navOpenAt, setNavOpenAt] = useState<string | null>(null)
+  const navOpen = navOpenAt === pathname
+  const header = useRef<HTMLElement>(null)
+  const menuButton = useRef<HTMLButtonElement>(null)
+  const closeNav = useCallback((viaKeyboard: boolean) => {
+    setNavOpenAt(null)
+    if (viaKeyboard) menuButton.current?.focus()
+  }, [])
+  useDismiss(header, navOpen, closeNav)
 
   // The badge on "Incidents" is refreshed on every navigation; a failure just leaves the last count in place.
   useEffect(() => {
@@ -31,17 +43,18 @@ export function Layout() {
 
   return (
     <>
-      <header className="topbar">
+      {/* `multi-org` is for the width of the organization switcher: with it the links need more room, so they collapse behind the menu button sooner. */}
+      <header className={organizations.length > 1 ? 'topbar multi-org' : 'topbar'} ref={header}>
         <Link to="/" className="brand" aria-label="HawkEye home">
           <BrandMark />
         </Link>
-        <nav aria-label="Main">
+        <nav id="main-nav" aria-label="Main" className={navOpen ? 'open' : undefined}>
           <NavLink to="/dashboard">Dashboard</NavLink>
           <NavLink to="/monitors">Monitors</NavLink>
           <NavLink to="/incidents">
             <span className="d-indicator">
               {openIncidents > 0 && (
-                <span className="d-indicator-item d-badge d-badge-error d-badge-xs" aria-hidden="true">{openIncidents > 9 ? '9+' : openIncidents}</span>
+                <span className="d-indicator-item d-badge d-badge-error incident-count" aria-hidden="true">{openIncidents > 9 ? '9+' : openIncidents}</span>
               )}
               Incidents
             </span>
@@ -52,19 +65,34 @@ export function Layout() {
           <NavLink to="/maintenance">Maintenance</NavLink>
           <NavLink to="/status-page">Status page</NavLink>
           <NavLink to="/reports">Reports</NavLink>
-          <NavLink to="/team">Team</NavLink>
-          <NavLink to="/billing">Billing</NavLink>
         </nav>
         <span className="spacer" />
-        {organizations.length > 1 && (
-          <select className="org-switch" aria-label="Organization" value={organization?.id} onChange={(e) => selectOrganization(e.target.value)}>
-            {organizations.map((o) => (
-              <option key={o.id} value={o.id}>{o.name}</option>
-            ))}
-          </select>
-        )}
-        <Link className="who" to="/account" aria-label="Account settings">{user?.email}</Link>
-        <button onClick={() => void logout()}>Log out</button>
+        {/* One group, so when the header is too narrow its controls wrap together instead of one dropping to a line of its own. */}
+        <div className="topbar-actions">
+          {organizations.length > 1 && (
+            <select className="org-switch" aria-label="Organization" value={organization?.id} onChange={(e) => selectOrganization(e.target.value)}>
+              {organizations.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+          )}
+          <AccountMenu email={user?.email ?? ''} onLogout={() => void logout()} />
+          {/* Below the width where the links fit on one row the links are behind this button. It is hidden by CSS on wider screens. */}
+          <button
+            ref={menuButton}
+            type="button"
+            className="menu-toggle"
+            aria-expanded={navOpen}
+            aria-controls="main-nav"
+            aria-label={openIncidents > 0 ? `Menu (${openIncidents} open incident${openIncidents === 1 ? '' : 's'})` : 'Menu'}
+            onClick={() => setNavOpenAt(navOpen ? null : pathname)}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
+              {navOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+            </svg>
+            {openIncidents > 0 && !navOpen && <span className="d-badge d-badge-error incident-count menu-count" aria-hidden="true">{openIncidents > 9 ? '9+' : openIncidents}</span>}
+          </button>
+        </div>
       </header>
       {user && !user.email_verified_at && (
         <Alert tone="warning" role="status">

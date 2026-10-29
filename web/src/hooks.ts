@@ -1,5 +1,29 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { api, ApiError, type Plan } from './api'
+
+/**
+ * Closes a menu or popover: calls `onClose` when the person presses Escape (`viaKeyboard` is true, so the caller can return focus to the button that opened
+ * it) or clicks or taps anywhere outside `ref`. Does nothing while it is closed.
+ */
+export function useDismiss(ref: RefObject<HTMLElement | null>, open: boolean, onClose: (viaKeyboard: boolean) => void): void {
+  useEffect(() => {
+    if (!open) return
+    const outside = (e: MouseEvent | TouchEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose(false)
+    }
+    const escape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose(true)
+    }
+    document.addEventListener('mousedown', outside)
+    document.addEventListener('touchstart', outside)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('mousedown', outside)
+      document.removeEventListener('touchstart', outside)
+      document.removeEventListener('keydown', escape)
+    }
+  }, [ref, open, onClose])
+}
 
 interface State<T> {
   data: T | null

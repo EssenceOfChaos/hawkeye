@@ -163,6 +163,7 @@ func run() error {
 	errCh := make(chan error, 1)
 	go func() {
 		log.Info("api listening", "addr", srv.Addr, "metrics_addr", metricsSrv.Addr, "env", cfg.AppEnv, "version", cfg.AppVersion)
+		errtrack.AnnounceStart(reporter, "api", cfg.AppVersion, time.Now())
 		errCh <- srv.ListenAndServe()
 	}()
 

@@ -167,6 +167,15 @@ func SendTest(cfg Config, message string, timeout time.Duration) (TestReport, er
 	return rep, nil
 }
 
+// Notify sends message as an informational event. It is built by hand rather than with CaptureMessage because the SDK would attach a stack trace to a
+// message, and there is nothing to trace: this is a notice, not a failure.
+func (s *sentryReporter) Notify(_ context.Context, message string, fingerprint []string, tags map[string]string) {
+	scope := sentry.NewScope()
+	scope.SetTags(tags)
+	scope.SetFingerprint(fingerprint)
+	s.client.CaptureEvent(&sentry.Event{Message: message, Level: sentry.LevelInfo}, &sentry.EventHint{}, scope)
+}
+
 // Capture sends err with the given tags. It does not block: the SDK sends asynchronously.
 func (s *sentryReporter) Capture(_ context.Context, err error, fields map[string]string) {
 	if err == nil {
