@@ -526,10 +526,14 @@ main.auth .card p a { font-weight: 600; }
 .mon .row { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; margin: 1.25rem 0 .5rem; }
 .mon a.button:not(.primary) { text-decoration: none; background: #07162acc; color: var(--text); border: 1px solid var(--gold-lo); }
 .mon .mon-benefits { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 0; }
-.mon .audiences { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Three cards, three columns. The selector is as specific as the general `.section .features.audiences` rule (24rem columns, which only fits two), which a plain
+   `.mon .audiences` loses to. */
+.mon .section .features.audiences { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 60rem) { .mon .mon-benefits { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 40rem) { .mon .mon-benefits, .mon .audiences { grid-template-columns: 1fr; } }
-@media (min-width: 40.01rem) and (max-width: 52rem) { .mon .audiences { grid-template-columns: 1fr; } }
+/* The three audience cards read as a centred row: icon, name and one line each, under a centred heading. (The four benefit cards above stay left-aligned.) */
+#mon-audience-h, .mon .section .features.audiences .feature { text-align: center; }
+@media (max-width: 40rem) { .mon .mon-benefits, .mon .section .features.audiences { grid-template-columns: 1fr; } }
+@media (min-width: 40.01rem) and (max-width: 52rem) { .mon .section .features.audiences { grid-template-columns: 1fr; } }
 .mon-earth { padding: clamp(1.5rem, 4vw, 3.5rem); min-height: 22rem; display: flex; align-items: center; }
 .mon-earth-copy { max-width: none; }
 /* The heading may run out over the artwork; only the reading text keeps a narrow measure. */

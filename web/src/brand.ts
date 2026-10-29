@@ -1,4 +1,4 @@
-// Brand artwork. The logo, emblem and app icons come from scripts/prepare_glossy_logos.py, the feature icons from scripts/prepare_glossy_icons.py; the rest from scripts/prepare_brand_assets.py.
+// Brand artwork: final production assets. They were made once (ChatGPT renders, cut out and resized outside this repository) and the originals are not kept; docs/branding.md lists what each file is and the specs to match if one is replaced.
 import appIcon from './assets/brand/app-icon.png'
 import dashboardLaptop from './assets/brand/dashboard-laptop.webp'
 import iconAnalytics from './assets/brand/icon-analytics.png'
@@ -17,6 +17,9 @@ import screenDashboard from './assets/brand/screens/dashboard.webp'
 import screenIncidents from './assets/brand/screens/incidents.webp'
 import monitoringEarth from './assets/brand/monitoring-earth-network.webp'
 import monitoringHawkEye from './assets/brand/monitoring-hawk-eye.webp'
+import audienceFreelancer from './assets/brand/audience-freelancer.png'
+import audienceAgency from './assets/brand/audience-agency.png'
+import audienceBusiness from './assets/brand/audience-business.png'
 import logo from './assets/brand/logo.png'
 import logoWhite from './assets/brand/logo-white.png'
 
@@ -30,11 +33,13 @@ export const brand = {
   /** Square app icon with its own navy background; safe on any theme. */
   appIcon,
   dashboardLaptop,
-  /** Background art for the /monitoring page (scripts/prepare_monitoring_art.py): a gold hawk's eye on navy, and the night Earth with connection arcs. No text in either. */
+  /** Background art for the /monitoring page: a gold hawk's eye on navy, and the night Earth with connection arcs. No text in either. */
   art: { hawkEye: monitoringHawkEye, earth: monitoringEarth },
   /** Real screens of the app with sample data (scripts/screenshots): the dashboard, the incidents list and the alert email. */
   screens: { dashboard: screenDashboard, incidents: screenIncidents, alertEmail: screenAlertEmail },
-  /** Glossy gold-ringed round badges (scripts/prepare_glossy_icons.py); each carries its own navy, so they work on any background. */
+  /** Who it is for: one person, a group and a storefront, as free-standing gold-edged glyphs on transparent backgrounds. */
+  audience: { freelancer: audienceFreelancer, agency: audienceAgency, business: audienceBusiness },
+  /** Glossy gold-ringed round badges: each carries its own navy, so they work on any background. */
   icons: {
     websites: iconWebsites,
     email: iconEmail,

@@ -18,9 +18,9 @@ const BENEFITS = [
 ]
 
 const AUDIENCES = [
-  { title: 'Freelancers', text: 'Know when a client site is offline without refreshing every project.' },
-  { title: 'Web agencies', text: 'Keep an eye on every client website from one place.' },
-  { title: 'Business owners', text: 'Hear about downtime before your customers do.' },
+  { icon: brand.audience.freelancer, title: 'Freelancers', text: 'Know when a client site is offline without refreshing every project.' },
+  { icon: brand.audience.agency, title: 'Web agencies', text: 'Keep an eye on every client website from one place.' },
+  { icon: brand.audience.business, title: 'Business owners', text: 'Hear about downtime before your customers do.' },
 ]
 
 export function MonitoringLandingPage() {
@@ -102,6 +102,7 @@ export function MonitoringLandingPage() {
         <Reveal as="ul" className="features audiences">
           {AUDIENCES.map((a) => (
             <li key={a.title} className="feature" data-reveal>
+              <img src={a.icon} alt="" width={64} height={64} />
               <h3>{a.title}</h3>
               <p>{a.text}</p>
             </li>

@@ -102,7 +102,7 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
   (Stripe does not guarantee order and says not to use `created` for ordering). `apply` locks the organization's subscription row, maps the status (`docs/billing.md`),
   resolves the plan from the configured price IDs and never lets a second subscription overwrite the first. Entitlements still come from `plans.EffectivePlan`: no code path
   grants a plan except a successfully applied provider state.
-- **Brand assets:** `web/src/assets/brand/` holds the cleaned artwork from the supplied pack; `scripts/prepare_brand_assets.py` reproduces it
+- **Brand assets:** `web/src/assets/brand/` holds the finished artwork (logo, icons, background art)
   (see `docs/branding.md`).
 - **Multi-region checks (`internal/regions`, migration `000015`):** a monitor lists the locations it runs in (`monitors.regions`, empty = primary only), capped by `plans.max_regions`. The scheduler queues one job per monitor *and* region (`UNIQUE (monitor_id, region)`; backpressure per region); a worker started with `WORKER_REGION` claims only its region's jobs and labels results (`check_results.region`). `Store.Record` keeps one streak per region (`monitor_region_state`) and decides the monitor's state in the same transaction: down while a majority of its effective regions are down (`regions.Quorum`), recovered when that majority is lost. A monitor with a single effective region takes the original code path unchanged. Results from a region the monitor no longer uses, and from maintenance windows, are recorded but change nothing. Remote workers need private access to PostgreSQL (see `docs/deployment.md`).
 
@@ -170,7 +170,7 @@ Production Dockerfiles and Compose (`deploy/`, `docs/deployment.md`); SMTP sende
 
 To add a page: add the route in `App.tsx`, the path to the `@app` pattern in the Caddyfile, and an entry in `seo.ts`. `seo.test.ts` and `routes.test.ts` fail if one is missing. To make it appear in search results and the sitemap, set `index: true` (and make sure `robots.txt` does not block it). The tags are written at build time, so the page body is still rendered in the browser.
 
-**Link-preview images** (`web/public/share/*.jpg`, 1200x630) come from `scripts/prepare_share_images.py` (background: `web/src/assets/brand/source/share-background.png`; text typeset in headless Chrome with the site's fonts). A page names its image in `seo.ts` (`image`); pages without one use `/share/home.jpg`. `seo.test.ts` fails if a named image is missing.
+**Link-preview images** (`web/public/share/*.jpg`, 1200x630) are finished 1200x630 JPEGs with the page's text baked in (see `docs/branding.md`). A page names its image in `seo.ts` (`image`); pages without one use `/share/home.jpg`. `seo.test.ts` fails if a named image is missing.
 
 ## Free tools (`/tools`)
 

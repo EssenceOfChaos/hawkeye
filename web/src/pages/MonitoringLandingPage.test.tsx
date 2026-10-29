@@ -36,6 +36,17 @@ describe('MonitoringLandingPage', () => {
     expect(screen.getByRole('link', { name: 'View Pricing' })).toHaveAttribute('href', '#pricing-h')
   })
 
+  it('shows the three audiences, each with its own decorative icon', () => {
+    renderPage(anonymous)
+    const section = screen.getByRole('heading', { name: /keep the web running/ }).closest('section')!
+    const cards = [...section.querySelectorAll('li.feature')]
+    expect(cards.map((c) => c.querySelector('h3')?.textContent)).toEqual(['Freelancers', 'Web agencies', 'Business owners'])
+    const icons = cards.map((c) => c.querySelector('img'))
+    for (const img of icons) expect(img, 'every audience card has an icon').not.toBeNull()
+    for (const img of icons) expect(img).toHaveAttribute('alt', '') // decorative: the heading says it
+    expect(new Set(icons.map((i) => i!.getAttribute('src'))).size).toBe(3) // a different one each, not repeated
+  })
+
   it('has no site navigation to wander off to', () => {
     renderPage(anonymous)
     expect(screen.queryByRole('navigation', { name: /product|company/i })).not.toBeInTheDocument()

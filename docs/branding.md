@@ -1,23 +1,28 @@
 # Branding assets
 
-## Current logo (glossy navy and gold)
+## Current logo and icons (glossy navy and gold)
 
-Sources: the three PNGs in `web/src/assets/brand/source/` (`HawkEye Logo Colorway Showcase.png`, `Glossy Golden Hawk Emblem.png`,
-`Glossy Gold-Ringed Hawk Emblem.png`), generated with ChatGPT from the earlier flat logo sheet (`hawkeye-brand-logo-sheet.png`, kept there too).
+These are final production assets, in `web/src/assets/brand/` (and `web/public/` for the favicons, apple-touch icon and email logo). Each was made once
+with ChatGPT and then cut out, cropped and resized outside the repository. **The original renders and the one-off scripts that processed them are not kept**:
+the build and the deploy use only the results. Git history has them if they are ever needed
+(`git log --diff-filter=D --name-only -- web/src/assets/brand/source 'scripts/prepare_*.py'`). What the files are, and the specs to match if one is replaced:
 
-`scripts/prepare_glossy_logos.py "<folder with the three PNGs>"` (needs Pillow and numpy) removes the flat backgrounds by flood fill from
-the edges (so white feathers survive), feathers the edge, clears the letter counters, and writes:
+- **Logo:** `logo.png` (hawk + navy wordmark, for light backgrounds), `logo-white.png` (white wordmark, for dark backgrounds), `emblem.png` (hawk head alone, transparent),
+  `app-icon.png` / `app-icon-round.png` (the gold-ringed badge), `public/{favicon-32,icon-192,apple-touch-icon}.png` (badge; the apple-touch icon sits on a navy square) and
+  `public/email/hawkeye-logo.png`. The art is glossy and shaded, so it is PNG only (it turns muddy if traced to SVG). Backgrounds were removed by flood fill from the edges,
+  so white feathers inside the artwork survive.
+- **Feature and page icons** (`icon-websites`, `-email`, `-analytics`, `-history`, `-settings`, `-shield`, `-notifications`, `-ssl`, `-dashboard`, `-maintenance`): glossy
+  gold-ringed navy round badges, 256x256, transparent background, each centred on its own bounding box so all read at the same size. They were hand-cropped (an automatic
+  cut-out left a white halo outside the ring). Each badge carries its own navy, so it works on any background.
+- **Audience icons** (`audience-freelancer`, `-agency`, `-business`: one person, a group, a storefront): free-standing gold-edged navy glyphs, 256x256, transparent
+  background, trimmed to their outline and centred with a 6% margin so the three read at a similar size (about 70 KB each; the originals were about 1 MB). Near-transparent
+  pixels (alpha 12 or less) were removed: they show as coloured specks against pure black and as nothing on the page.
+- **`dashboard-laptop.webp`:** the hero laptop on the landing page, 1100px wide lossy WebP with alpha (145 KB). It is an illustration (alt text says so): its sidebar
+  labels (Reports, Settings) and "Online" wording are not the app's exact ones.
+- **`monitoring-hawk-eye.webp`, `monitoring-earth-network.webp`:** the /monitoring page's background art (a gold hawk's eye on navy; the night Earth with connection arcs),
+  lossy WebP at full width. No text in either. They are photographic gradients, so WebP is a fraction of a PNG's size with no visible banding.
 
-- `logo.png` (hawk + navy wordmark, for light backgrounds) and `logo-white.png` (white wordmark, for dark backgrounds, not used yet),
-- `emblem.png` (hawk head alone, transparent), `app-icon.png` / `app-icon-round.png` (the gold-ringed badge),
-- `public/{favicon-32,icon-192,apple-touch-icon}.png` (badge; the apple-touch icon sits on a navy square) and `public/email/hawkeye-logo.png`.
-
-The art is glossy and shaded, so it is PNG only (it turns muddy if traced to SVG). The script refuses to run if the image sizes differ;
-if you regenerate the art at another size, update the size check and the crop rows at the top. **Feature and page icons** (`icon-websites`, `-email`, `-analytics`, `-history`, `-settings`, `-shield`, `-notifications`, `-ssl`, `-dashboard`, `-maintenance`) are
-glossy gold-ringed navy badges from the ChatGPT icon sheet, hand-cropped (an automatic cut-out left a white halo outside the ring). The originals are in
-`web/src/assets/brand/source/icons/`; `python3 scripts/prepare_glossy_icons.py` (Pillow and numpy) centres each on a square canvas and writes the 256px PNGs.
-Each badge carries its own navy, so it works on any background. The old blue icons, `alert-bell.png`, `cloud-security.png` and `website-magnifier.png` were removed;
-`dashboard-laptop.png` was replaced by `dashboard-laptop.webp`, the hero laptop on the landing page: `python3 scripts/prepare_hero_laptop.py` resizes the glossy mockup in `source/dashboard-laptop-mockup.png` to 1100px wide lossy WebP with alpha (145 KB). It is an illustration (alt text says so): its sidebar labels (Reports, Settings) and "Online" wording are not the app's exact ones.
+The old blue icons, `alert-bell.png`, `cloud-security.png`, `website-magnifier.png` and `dashboard-laptop.png` were removed.
 
 **Screenshots** (the landing page's "See it in action" section: `web/src/assets/brand/screens/{dashboard,incidents,alert-email}.webp`) are real captures of the app with
 **sample data**, so they stay honest. To regenerate after the UI or the emails change (all local, nothing near production):
@@ -54,13 +59,12 @@ Not used: `10_speedometer_icon.png` (its artwork is cropped flat at the bottom),
 
 ## Link-preview images
 
-`web/public/share/<name>.jpg` (1200x630) are what link previews (Slack, X, LinkedIn, iMessage) show for the public pages. `python3 scripts/prepare_share_images.py` makes them from `web/src/assets/brand/source/share-background.png` (the earth, hawk's eye and laptop artwork, 1774x887, no text): it typesets each image's text in headless Chrome with the site's own fonts (Sora and Inter from `web/node_modules`) over a left-hand shade, adds the white logo, and saves JPEGs. To add or reword one, edit `IMAGES` in the script, run it, and name the image in the page's entry in `web/src/seo.ts`. The laptop screen in the background is generic artwork (it is not a screenshot of HawkEye), like the landing hero.
+`web/public/share/<name>.jpg` (1200x630) are what link previews (Slack, X, LinkedIn, iMessage) show for the public pages. They are finished images: the page's text (set in Sora and Inter over a left-hand shade) and the white logo are baked into each JPEG, over the earth, hawk's eye and laptop artwork. The script that made them and its text-free background are not kept. To add or change one, make a new 1200x630 JPEG in the same style, put it in `web/public/share/`, and name it in the page's entry in `web/src/seo.ts`. The laptop screen in the background is generic artwork (it is not a screenshot of HawkEye), like the landing hero.
 
 ## Cleanup
 
 Four crops contained fragments of neighbouring artwork (a blue circle beside the laptop, a laptop corner under the cloud server,
-bell pieces beside the magnifier, a speck on the bell). `scripts/prepare_brand_assets.py /path/to/pack` removes exactly those
-connected components and fails loudly if the pack differs from the one it was written for. It also regenerates the favicons.
+bell pieces beside the magnifier, a speck on the bell). were removed once, when the pack was first prepared (the script that did it is no longer kept).
 The laptop image is cut off at its right edge in the original; the landing page fades that edge with a CSS mask.
 
 ## Theme and resolution
