@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { api, ApiError, type BillingSubscription, type Plan, type Usage } from '../api'
-import { formatMoney } from '../format'
-import { planTagline } from '../planCopy'
+import { PlanDetails } from '../components/PlanDetails'
 import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { redirectTo } from '../navigation'
+import { trackPurchase } from '../analytics'
 
 const POLL_MS = 3000
 const POLL_MAX = 20 // about a minute
@@ -66,6 +66,20 @@ export function BillingPage() {
     }, POLL_MS)
     return () => clearInterval(timer)
   }, [waiting, load])
+
+  // Report the purchase to Google Ads only once the provider has confirmed it (not on the bare return from Checkout), and only once per period paid for.
+  useEffect(() => {
+    if (checkout !== 'success' || !sub?.paid_access || !sub.current_period_end) return
+    const key = `hawkeye_conversion_${sub.current_period_end}`
+    try {
+      if (localStorage.getItem(key)) return
+      localStorage.setItem(key, '1')
+    } catch {
+      // Storage unavailable: skip rather than risk counting a reload twice.
+      return
+    }
+    trackPurchase(sub.plan.monthly_price_cents / 100, sub.current_period_end)
+  }, [checkout, sub])
 
   async function go(kind: string, path: string, body?: unknown) {
     setBusy(kind)
@@ -178,19 +192,7 @@ export function BillingPage() {
               return (
                 <li key={p.code} className={`plan${current ? ' featured' : ''}`}>
                   <h3>{p.name}{current && <span className="soon">Current plan</span>}</h3>
-                  {planTagline(p.code) && <p className="plan-tagline">{planTagline(p.code)}</p>}
-                  <p className="price"><strong>{formatMoney(p.monthly_price_cents)}</strong>{p.monthly_price_cents > 0 && <span> / month</span>}</p>
-                  <ul>
-                    <li>{p.max_monitors} monitors</li>
-                    <li>Checks every {Math.round(p.minimum_check_interval_seconds / 60)} min</li>
-                    <li>{p.history_retention_days} days of history</li>
-                    {p.max_domains !== undefined && <li>Domain expiry warnings for up to {p.max_domains} domains</li>}
-                    {(p.max_regions ?? 1) > 1 && <li>Checks from up to {p.max_regions} locations</li>}
-                    {(p.max_team_members ?? 1) > 1 && <li>{p.max_team_members} team members</li>}
-                    <li>Email, Slack and webhook alerts</li>
-                    <li>Public status page</li>
-                    {p.maintenance_enabled && <li>Maintenance windows</li>}
-                  </ul>
+                  <PlanDetails plan={p} />
                   {!current && p.monthly_price_cents > 0 && !sub.paid_access && (
                     <button className="primary" disabled={!canBuy || busy !== null}
                       onClick={() => void go(p.code, '/billing/checkout-session', { plan: p.code })}>

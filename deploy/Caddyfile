@@ -26,7 +26,7 @@
 		Cross-Origin-Opener-Policy "same-origin"
 		# The SPA loads only its own scripts, styles and API, plus Google Analytics (the origins Google documents for gtag.js). Checkout/portal are full-page redirects to Stripe, so no Stripe origins are needed.
 		# 'unsafe-inline' for styles is required by the charting library's inline style attributes; scripts stay locked to 'self' and the Google tag origin (no inline scripts: web/src/analytics.ts adds the Google tag from the app bundle unless the visitor opted out).
-		Content-Security-Policy "default-src 'self'; script-src 'self' https://*.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.google-analytics.com https://*.googletagmanager.com; font-src 'self'; connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://*.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.google-analytics.com https://*.googletagmanager.com https://*.googleadservices.com https://*.g.doubleclick.net https://www.google.com; font-src 'self'; connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://*.googleadservices.com https://*.g.doubleclick.net https://www.google.com; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
 		-Server
 	}
 }

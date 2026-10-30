@@ -3,8 +3,8 @@
 ## Current logo and icons (glossy navy and gold)
 
 These are final production assets, in `web/src/assets/brand/` (and `web/public/` for the favicons, apple-touch icon and email logo). Each was made once
-with ChatGPT and then cut out, cropped and resized outside the repository. **The original renders and the one-off scripts that processed them are not kept**:
-the build and the deploy use only the results. Git history has them if they are ever needed
+with ChatGPT and then cut out, cropped and resized outside the repository. **The original renders and the one-off scripts that processed them are not kept**
+(the one exception is `scripts/prepare_share_images.py`, below): the build and the deploy use only the results. Git history has them if they are ever needed
 (`git log --diff-filter=D --name-only -- web/src/assets/brand/source 'scripts/prepare_*.py'`). What the files are, and the specs to match if one is replaced:
 
 - **Logo:** `logo.png` (hawk + navy wordmark, for light backgrounds), `logo-white.png` (white wordmark, for dark backgrounds), `emblem.png` (hawk head alone, transparent),
@@ -59,7 +59,7 @@ Not used: `10_speedometer_icon.png` (its artwork is cropped flat at the bottom),
 
 ## Link-preview images
 
-`web/public/share/<name>.jpg` (1200x630) are what link previews (Slack, X, LinkedIn, iMessage) show for the public pages. They are finished images: the page's text (set in Sora and Inter over a left-hand shade) and the white logo are baked into each JPEG, over the earth, hawk's eye and laptop artwork. The script that made them and its text-free background are not kept. To add or change one, make a new 1200x630 JPEG in the same style, put it in `web/public/share/`, and name it in the page's entry in `web/src/seo.ts`. The laptop screen in the background is generic artwork (it is not a screenshot of HawkEye), like the landing hero.
+`web/public/share/<name>.jpg` (1200x630) are what link previews (Slack, X, LinkedIn, iMessage) show for the public pages. The page's text (set in Sora and Inter over a left-hand shade) and the white logo are baked into each JPEG, over the earth, hawk's eye and laptop artwork. **`scripts/prepare_share_images.py` is kept** because, unlike the other assets, these get redone: a reworded page, or a new page with its own preview. It is not needed to build or deploy (the JPEGs are committed). Its text-free background (1774x887, 2 MB) is not kept in the repository, so the script takes it as an argument; get it from git history with `git show 89f5585^:web/src/assets/brand/source/share-background.png > /tmp/share-background.png`, then `python3 scripts/prepare_share_images.py /tmp/share-background.png` (needs Pillow, Google Chrome, and `make web-install` for the fonts; add `--out <dir>` to try a change without overwriting the live images). To add or reword one, edit `IMAGES` in the script, run it, and name the image in the page's entry in `web/src/seo.ts`. Run on the current script it reproduces the committed JPEGs exactly. The laptop screen in the background is generic artwork (it is not a screenshot of HawkEye), like the landing hero.
 
 ## Cleanup
 

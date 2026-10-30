@@ -7,6 +7,9 @@
 import { useSyncExternalStore } from 'react'
 
 const MEASUREMENT_ID = 'G-ZNT8EMTFGY'
+// Google Ads conversion tracking: the account id, and the "Purchase" conversion action's send_to (account id / label).
+const ADS_ID = 'AW-18527685454'
+const ADS_PURCHASE_SEND_TO = `${ADS_ID}/A0aqCPXL2aMdEM6W2IJF`
 const CHOICE_COOKIE = 'hawkeye_analytics'
 const CHOICE_MAX_AGE = 60 * 60 * 24 * 365
 
@@ -69,6 +72,7 @@ function loadAnalytics() {
   document.head.appendChild(script)
   win.gtag('js', new Date())
   win.gtag('config', MEASUREMENT_ID, { send_page_view: false, allow_google_signals: false, allow_ad_personalization_signals: false })
+  win.gtag('config', ADS_ID, { allow_ad_personalization_signals: false })
 }
 
 // Google's cookies sit on the registrable domain, so try the host and each parent domain.
@@ -123,6 +127,13 @@ export function trackEvent(name: string, params: Record<string, string> = {}) {
   const gtag = w().gtag
   if (!analyticsEnabled() || typeof gtag !== 'function') return
   gtag('event', name, params)
+}
+
+/** A confirmed paid subscription, reported to Google Ads. Call once per purchase; `valueUsd` is the monthly price and `transactionId` lets Google drop duplicates. */
+export function trackPurchase(valueUsd: number, transactionId: string) {
+  const gtag = w().gtag
+  if (!analyticsEnabled() || typeof gtag !== 'function') return
+  gtag('event', 'conversion', { send_to: ADS_PURCHASE_SEND_TO, value: valueUsd, currency: 'USD', transaction_id: transactionId })
 }
 
 /** What the settings panel needs: whether to show it, and whether analytics is currently on. */

@@ -173,7 +173,7 @@ describe('legal pages', () => {
   it('the privacy policy names every service provider and cookie the app really uses', () => {
     const { container } = render(<MemoryRouter><PrivacyPage /></MemoryRouter>)
     const text = container.textContent ?? ''
-    for (const word of ['Vultr', 'Stripe', 'Resend', 'Cloudflare', 'Google Analytics', '_ga', 'hawkeye_session', 'csrf_token', 'at least 18']) expect(text).toContain(word)
+    for (const word of ['Vultr', 'Stripe', 'Resend', 'Cloudflare', 'Google Analytics', 'Google Ads', '_ga', '_gcl_au', 'hawkeye_session', 'csrf_token', 'at least 18']) expect(text).toContain(word)
   })
 
   it('terms are complete, require authorization to monitor and disclaim guaranteed detection', () => {

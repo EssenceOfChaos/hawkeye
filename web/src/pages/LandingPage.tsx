@@ -1,12 +1,11 @@
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router'
 import { type Plan } from '../api'
-import { formatMoney } from '../format'
 import { usePlans } from '../hooks'
-import { planTagline } from '../planCopy'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { CookieSettingsButton } from '../components/CookieBanner'
+import { PlanDetails } from '../components/PlanDetails'
 import { ProductShots } from '../components/ProductShots'
 import { Reveal } from '../components/Reveal'
 import { inScope, parallax, prefersReducedMotion, rotateScramble } from '../motion'
@@ -131,30 +130,10 @@ const FAQ = [
 ]
 
 export function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: Plan; featured: boolean; billingEnabled: boolean; signedIn: boolean }) {
-  const mins = Math.round(plan.minimum_check_interval_seconds / 60)
   const card = (
     <div className={`plan${featured ? ' featured' : ''}`}>
       <h3>{plan.name}</h3>
-      {planTagline(plan.code) && <p className="plan-tagline">{planTagline(plan.code)}</p>}
-      <p className="price">
-        <strong>{formatMoney(plan.monthly_price_cents)}</strong>
-        {plan.monthly_price_cents > 0 && <span> / month</span>}
-      </p>
-      <ul>
-        <li>{plan.max_monitors} website monitors</li>
-        <li>Checks every {mins} minute{mins === 1 ? '' : 's'}</li>
-        <li>{plan.history_retention_days} days of history</li>
-        {(plan.max_regions ?? 1) > 1 && <li>Checks from up to {plan.max_regions} locations</li>}
-        {(plan.max_team_members ?? 1) > 1 && <li>{plan.max_team_members} team members</li>}
-        <li>Website and API monitoring</li>
-        <li>SSL certificate expiry warnings</li>
-        {plan.max_domains !== undefined && <li>Domain expiry warnings for up to {plan.max_domains} domains</li>}
-        <li>Email, Slack and webhook alerts</li>
-        <li>Public status page</li>
-        {plan.maintenance_enabled && <li>Maintenance windows</li>}
-        {plan.reports_enabled && <li>Monthly PDF uptime reports</li>}
-        {plan.branded_reports_enabled && <li>Branded Reports with name and logo</li>}
-      </ul>
+      <PlanDetails plan={plan} />
       {plan.monthly_price_cents === 0 ? (
         <Link className="button primary" to="/register">Start free</Link>
       ) : billingEnabled ? (
@@ -172,6 +151,11 @@ export function LandingPage() {
   const { status } = useAuth()
   const { plans, billingEnabled } = usePlans()
   const multiLocation = plans?.some((p) => (p.max_regions ?? 1) > 1) ?? false
+  const multiSeat = plans?.some((p) => (p.max_team_members ?? 1) > 1) ?? false
+  // What paid plans add over Free, in words with no numbers (the cards carry those). Keep it in step with PlanDetails when a plan feature is added.
+  const paidAdvantages =
+    `Paid plans add more monitors, faster checks, longer history, a higher domain limit, ${multiLocation ? 'checks from several locations, ' : ''}maintenance windows and monthly PDF uptime reports. ` +
+    (multiSeat ? 'Agency also adds team members and reports with your own name and logo.' : 'Agency adds reports with your own name and logo.')
 
   const signedIn = status === 'authenticated'
 
@@ -324,7 +308,9 @@ export function LandingPage() {
 
       <section aria-labelledby="pricing-h" className="section">
         <h2 id="pricing-h">Simple plans. Clear visibility.</h2>
-        <p className="hint">Start free. Upgrade when your monitoring needs grow. Every plan includes website and API monitoring, SSL certificate expiry warnings, domain expiry warnings (up to a limit that grows with the plan), incident tracking, email, Slack and webhook alerts, a public status page, and uptime reports. Paid plans add maintenance windows. Plans otherwise differ in how many monitors and domains you can have, how often they are checked, and how long history is kept. The free plan is a real plan, not a trial, and monitors are never deleted if you move to a smaller plan.</p>
+        <p className="hint">
+          Start free. Upgrade when your monitoring needs grow. Every plan includes website and API monitoring, SSL certificate expiry warnings, domain expiry warnings (up to a limit that grows with the plan), incident tracking, email, Slack and webhook alerts, and a public status page. {paidAdvantages} The free plan is a real plan, not a trial, and monitors are never deleted if you move to a smaller plan.
+        </p>
         {plans === null && (
           <div role="status" aria-label="Loading plans" className="plans-loading">
             <div className="d-skeleton h-56 w-full" />

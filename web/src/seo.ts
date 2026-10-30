@@ -16,7 +16,7 @@ export interface PageMeta {
   description: string
   /** true: listed in the sitemap and open to search engines. false: the page asks not to be indexed. */
   index: boolean
-  /** Link-preview image (1200x630, in web/public/share): a path under /share. Defaults to DEFAULT_SHARE_IMAGE. */
+  /** Link-preview image (1200x630, made by scripts/prepare_share_images.py): a path under /share. Defaults to DEFAULT_SHARE_IMAGE. */
   image?: string
   /** Structured data (schema.org) written into the prerendered page. Only state facts the page itself shows. */
   jsonLd?: Record<string, unknown>

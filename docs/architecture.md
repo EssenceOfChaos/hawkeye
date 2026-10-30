@@ -170,7 +170,7 @@ Production Dockerfiles and Compose (`deploy/`, `docs/deployment.md`); SMTP sende
 
 To add a page: add the route in `App.tsx`, the path to the `@app` pattern in the Caddyfile, and an entry in `seo.ts`. `seo.test.ts` and `routes.test.ts` fail if one is missing. To make it appear in search results and the sitemap, set `index: true` (and make sure `robots.txt` does not block it). The tags are written at build time, so the page body is still rendered in the browser.
 
-**Link-preview images** (`web/public/share/*.jpg`, 1200x630) are finished 1200x630 JPEGs with the page's text baked in (see `docs/branding.md`). A page names its image in `seo.ts` (`image`); pages without one use `/share/home.jpg`. `seo.test.ts` fails if a named image is missing.
+**Link-preview images** (`web/public/share/*.jpg`, 1200x630) come from `scripts/prepare_share_images.py` (text typeset in headless Chrome with the site's fonts, over a text-free background that is kept in git history, not in the repository: see `docs/branding.md`). A page names its image in `seo.ts` (`image`); pages without one use `/share/home.jpg`. `seo.test.ts` fails if a named image is missing.
 
 ## Free tools (`/tools`)
 

@@ -30,8 +30,10 @@ describe('LandingPage', () => {
     const withSeats = [plans[0], plans[1], { code: 'agency', name: 'Agency', monthly_price_cents: 5900, max_monitors: 200, minimum_check_interval_seconds: 60, history_retention_days: 365, max_domains: 100, max_team_members: 5 }]
     renderLanding((url) => (url.includes('/plans') ? json(200, { plans: withSeats }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } })))
     await screen.findByText('200 website monitors')
-    expect(screen.getAllByText(/team members/)).toHaveLength(1)
-    expect(screen.getByText('5 team members')).toBeInTheDocument()
+    const cards = document.querySelector('ul.plans') as HTMLElement
+    expect(within(cards).getAllByText(/team members/)).toHaveLength(1)
+    expect(within(cards).getByText('5 team members')).toBeInTheDocument()
+    expect(screen.getByText(/Agency also adds team members and reports with your own name and logo/)).toBeInTheDocument()
   })
 
   it('lists reports on a plan only when that plan includes them', async () => {
@@ -139,7 +141,7 @@ describe('LandingPage', () => {
     expect(screen.getAllByText('SSL certificate expiry warnings')).toHaveLength(plans.length)
     expect(screen.getAllByText('Website and API monitoring').length).toBeGreaterThanOrEqual(plans.length)
     expect(screen.getByText(/Every plan includes website and API monitoring/)).toBeInTheDocument()
-    expect(screen.getByText(/Paid plans add maintenance windows/)).toBeInTheDocument()
+    expect(screen.getByText(/Paid plans add more monitors, faster checks, longer history.*maintenance windows and monthly PDF uptime reports/)).toBeInTheDocument()
     expect(screen.getByText('Where can HawkEye send alerts?')).toBeInTheDocument()
     expect(screen.getByText('Does HawkEye warn me before my SSL certificate expires?')).toBeInTheDocument()
     expect(screen.getByText(/Can I monitor an API\?/)).toBeInTheDocument()
