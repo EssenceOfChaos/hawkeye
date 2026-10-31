@@ -7,7 +7,7 @@ import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { redirectTo } from '../navigation'
-import { trackPurchase } from '../analytics'
+import { markCheckoutReturn, reportPurchaseIfPaid } from '../purchaseConversion'
 
 const POLL_MS = 3000
 const POLL_MAX = 20 // about a minute
@@ -67,19 +67,13 @@ export function BillingPage() {
     return () => clearInterval(timer)
   }, [waiting, load])
 
-  // Report the purchase to Google Ads only once the provider has confirmed it (not on the bare return from Checkout), and only once per period paid for.
+  // Coming back from Checkout marks the purchase as pending; it is reported to Google Ads as soon as the subscription shows as paid (see purchaseConversion.ts).
   useEffect(() => {
-    if (checkout !== 'success' || !sub?.paid_access || !sub.current_period_end) return
-    const key = `hawkeye_conversion_${sub.current_period_end}`
-    try {
-      if (localStorage.getItem(key)) return
-      localStorage.setItem(key, '1')
-    } catch {
-      // Storage unavailable: skip rather than risk counting a reload twice.
-      return
-    }
-    trackPurchase(sub.plan.monthly_price_cents / 100, sub.current_period_end)
-  }, [checkout, sub])
+    if (checkout === 'success') markCheckoutReturn()
+  }, [checkout])
+  useEffect(() => {
+    if (sub) reportPurchaseIfPaid(sub)
+  }, [sub])
 
   async function go(kind: string, path: string, body?: unknown) {
     setBusy(kind)

@@ -4,15 +4,21 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../auth'
 import { Layout } from './Layout'
+vi.mock('../analytics', async (orig) => ({ ...(await orig<typeof import('../analytics')>()), trackPurchase: vi.fn() }))
+import { trackPurchase } from '../analytics'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  localStorage.clear()
+  vi.mocked(trackPurchase).mockClear()
+})
 
 const json = (status: number, body: unknown) =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
 
 const EMAIL = 'a-rather-long-address.for-a-small-screen@example-company.co.uk'
 
-function mount(o: { openIncidents?: number; orgs?: { id: string; name: string; role: string }[] } = {}) {
+function mount(o: { subscription?: object; openIncidents?: number; orgs?: { id: string; name: string; role: string }[] } = {}) {
   const calls: { m: string; url: string }[] = []
   vi.stubGlobal(
     'fetch',
@@ -22,6 +28,7 @@ function mount(o: { openIncidents?: number; orgs?: { id: string; name: string; r
         return json(200, { user: { id: 'u', email: EMAIL, email_verified_at: '2026-01-01T00:00:00Z' }, organizations: o.orgs ?? [{ id: 'o', name: 'Org', role: 'owner' }] })
       }
       if (url.includes('/incidents')) return json(200, { total: o.openIncidents ?? 0 })
+      if (url.includes('/billing/subscription')) return json(200, { subscription: o.subscription })
       if (url.endsWith('/auth/logout')) return Promise.resolve(new Response(null, { status: 204 }))
       return json(404, {})
     }),
@@ -199,5 +206,23 @@ describe('the account menu', () => {
     await userEvent.click(await accountButton())
     await userEvent.click(screen.getByRole('button', { name: 'Log out' }))
     await vi.waitFor(() => expect(calls.some((c) => c.m === 'POST' && c.url.endsWith('/auth/logout'))).toBe(true))
+  })
+})
+
+describe('a purchase confirmed after the buyer left the billing page', () => {
+  const paid = { plan: { code: 'pro', name: 'Pro', monthly_price_cents: 1900 }, paid_access: true, current_period_end: '2026-11-30T00:00:00Z' }
+
+  it('is reported to Google Ads on the next page they open', async () => {
+    localStorage.setItem('hawkeye_purchase_pending', String(Date.now()))
+    mount({ subscription: paid })
+    await screen.findByText('dashboard page')
+    await vi.waitFor(() => expect(trackPurchase).toHaveBeenCalledWith(19, '2026-11-30T00:00:00Z'))
+  })
+
+  it('costs nothing for everyone else: the subscription is not even requested', async () => {
+    const { calls } = mount({ subscription: paid })
+    await screen.findByText('dashboard page')
+    expect(calls.some((c) => c.url.includes('/billing/subscription'))).toBe(false)
+    expect(trackPurchase).not.toHaveBeenCalled()
   })
 })

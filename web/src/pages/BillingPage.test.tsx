@@ -7,6 +7,8 @@ import { BillingPage } from './BillingPage'
 
 vi.mock('../navigation', () => ({ redirectTo: vi.fn() }))
 import { redirectTo } from '../navigation'
+vi.mock('../analytics', async (orig) => ({ ...(await orig<typeof import('../analytics')>()), trackPurchase: vi.fn() }))
+import { trackPurchase } from '../analytics'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -15,6 +17,8 @@ afterEach(() => {
 beforeEach(() => {
   document.cookie = 'csrf_token=t; path=/'
   vi.mocked(redirectTo).mockClear()
+  vi.mocked(trackPurchase).mockClear()
+  localStorage.clear()
 })
 
 const json = (status: number, body: unknown) =>
@@ -132,6 +136,27 @@ describe('BillingPage', () => {
     setup({ path: '/billing?checkout=success' })
     expect(await screen.findByText(/waiting for the payment provider to confirm/)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Current plan: Free' })).toBeInTheDocument()
+  })
+
+  it('reports the purchase to Google Ads once the provider confirms it, and only once', async () => {
+    const paid = sub({ plan: pro, paid_access: true, current_period_end: '2026-11-30T00:00:00Z', can_manage: true, has_subscription: true })
+    setup({ path: '/billing?checkout=success', subscription: paid, usage: usage(pro) })
+    await screen.findByRole('heading', { name: 'Current plan: Pro' })
+    await vi.waitFor(() => expect(trackPurchase).toHaveBeenCalledTimes(1))
+    expect(trackPurchase).toHaveBeenCalledWith(19, '2026-11-30T00:00:00Z')
+  })
+
+  it('does not report a purchase for an unpaid return from Checkout or for a customer just opening the page', async () => {
+    setup({ path: '/billing?checkout=success' })
+    await screen.findByText(/waiting for the payment provider to confirm/)
+    expect(trackPurchase).not.toHaveBeenCalled()
+  })
+
+  it('does not report anything when a paying customer simply opens the billing page', async () => {
+    const paid = sub({ plan: pro, paid_access: true, current_period_end: '2026-11-30T00:00:00Z', can_manage: true, has_subscription: true })
+    setup({ subscription: paid, usage: usage(pro) })
+    await screen.findByRole('heading', { name: 'Current plan: Pro' })
+    expect(trackPurchase).not.toHaveBeenCalled()
   })
 
   it('acknowledges a cancelled checkout', async () => {

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { CookieSettingsButton } from './CookieBanner'
-import { api } from '../api'
+import { api, type BillingSubscription } from '../api'
+import { hasPendingPurchase, reportPurchaseIfPaid } from '../purchaseConversion'
 import { Alert } from './Alert'
 import { useAuth } from '../auth'
 import { useDismiss } from '../hooks'
@@ -29,6 +30,18 @@ export function Layout() {
     let live = true
     api<{ total: number }>('GET', '/incidents?status=open&limit=1')
       .then((r) => live && setOpenIncidents(r.total))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [pathname])
+
+  // A purchase confirmed after the buyer left the billing page is still reported to Google Ads, the next time they open any page.
+  useEffect(() => {
+    if (!hasPendingPurchase()) return
+    let live = true
+    api<{ subscription: BillingSubscription }>('GET', '/billing/subscription')
+      .then((r) => live && reportPurchaseIfPaid(r.subscription))
       .catch(() => undefined)
     return () => {
       live = false
