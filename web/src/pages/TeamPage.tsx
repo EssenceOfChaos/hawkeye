@@ -101,7 +101,7 @@ export function TeamPage() {
   return (
     <>
       <div className="row">
-        <PageIcon src={brand.icons.settings} />
+        <PageIcon src={brand.icons.team} />
         <h1>Team</h1>
       </div>
       <p>

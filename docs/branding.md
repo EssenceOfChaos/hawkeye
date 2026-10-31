@@ -11,8 +11,8 @@ with ChatGPT and then cut out, cropped and resized outside the repository. **The
   `app-icon.png` / `app-icon-round.png` (the gold-ringed badge), `public/{favicon-32,icon-192,apple-touch-icon}.png` (badge; the apple-touch icon sits on a navy square) and
   `public/email/hawkeye-logo.png`. The art is glossy and shaded, so it is PNG only (it turns muddy if traced to SVG). Backgrounds were removed by flood fill from the edges,
   so white feathers inside the artwork survive.
-- **Feature and page icons** (`icon-websites`, `-email`, `-analytics`, `-history`, `-settings`, `-shield`, `-notifications`, `-ssl`, `-dashboard`, `-maintenance`): glossy
-  gold-ringed navy round badges, 256x256, transparent background, each centred on its own bounding box so all read at the same size. They were hand-cropped (an automatic
+- **Feature and page icons** (`icon-websites`, `-email`, `-analytics`, `-history`, `-settings`, `-shield`, `-notifications`, `-ssl`, `-dashboard`, `-maintenance`, `-billing`, `-team`, `-status-page`, `-reports`, `-monitors`): glossy
+  gold-ringed navy round badges, 256x256, transparent background, each centred on its own bounding box so all read at the same size. The Billing, Team, Status page, Reports and Monitors badges (`-billing`, `-team`, `-status-page`, `-reports`, `-monitors`) came from larger originals: isolated specks outside the ring and pixels of alpha 12 or less were removed, then they were centred and resized to 256x256. Each app page heading has its own badge (Domains uses `-websites`, Account `-settings`). They were hand-cropped (an automatic
   cut-out left a white halo outside the ring). Each badge carries its own navy, so it works on any background.
 - **Audience icons** (`audience-freelancer`, `-agency`, `-business`: one person, a group, a storefront): free-standing gold-edged navy glyphs, 256x256, transparent
   background, trimmed to their outline and centred with a 6% margin so the three read at a similar size (about 70 KB each; the originals were about 1 MB). Near-transparent

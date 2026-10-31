@@ -8,6 +8,11 @@ import iconHistory from './assets/brand/icon-history.png'
 import iconMaintenance from './assets/brand/icon-maintenance.png'
 import iconNotifications from './assets/brand/icon-notifications.png'
 import iconSettings from './assets/brand/icon-settings.png'
+import iconBilling from './assets/brand/icon-billing.png'
+import iconTeam from './assets/brand/icon-team.png'
+import iconStatusPage from './assets/brand/icon-status-page.png'
+import iconReports from './assets/brand/icon-reports.png'
+import iconMonitors from './assets/brand/icon-monitors.png'
 import iconShield from './assets/brand/icon-shield.png'
 import iconSsl from './assets/brand/icon-ssl.png'
 import iconWebsites from './assets/brand/icon-websites.png'
@@ -51,5 +56,10 @@ export const brand = {
     ssl: iconSsl,
     dashboard: iconDashboard,
     maintenance: iconMaintenance,
+    billing: iconBilling,
+    team: iconTeam,
+    statusPage: iconStatusPage,
+    reports: iconReports,
+    monitors: iconMonitors,
   },
 }

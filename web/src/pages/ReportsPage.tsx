@@ -84,7 +84,7 @@ export function ReportsPage() {
   return (
     <>
       <div className="row">
-        <PageIcon src={brand.icons.analytics} />
+        <PageIcon src={brand.icons.reports} />
         <h1>Reports</h1>
       </div>
       <p>

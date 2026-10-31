@@ -90,7 +90,7 @@ export function StatusPageSettings() {
   return (
     <>
       <div className="row">
-        <PageIcon src={brand.icons.analytics} />
+        <PageIcon src={brand.icons.statusPage} />
         <h1>Status page</h1>
       </div>
       <p>

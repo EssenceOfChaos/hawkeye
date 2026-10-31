@@ -116,7 +116,7 @@ export function BillingPage() {
   return (
     <>
       <div className="row">
-        <PageIcon src={brand.icons.settings} />
+        <PageIcon src={brand.icons.billing} />
         <h1>Plan &amp; billing</h1>
       </div>
 

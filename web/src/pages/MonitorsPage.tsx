@@ -87,7 +87,7 @@ export function MonitorsPage() {
   return (
     <>
       <div className="row">
-        <PageIcon src={brand.icons.websites} />
+        <PageIcon src={brand.icons.monitors} />
         <h1>Monitors</h1>
         <span className="spacer" />
         {canAdd ? (
