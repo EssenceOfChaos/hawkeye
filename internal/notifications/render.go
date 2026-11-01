@@ -2,6 +2,7 @@ package notifications
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,6 +34,10 @@ type Alert struct {
 	DomainName      string
 	DomainExpiresAt time.Time
 	DomainBucket    int
+
+	// Slow-response alerts (EventSlow, EventSlowRecovery): the threshold and the slowest response seen. StartedAt and ResolvedAt are the slowdown's.
+	SlowThresholdMs int
+	SlowPeakMs      int
 }
 
 // clean removes control characters (so values cannot inject email headers or fake lines) and bounds the length.
@@ -75,6 +80,9 @@ func Render(a Alert) email.Message {
 	}
 	if a.Event == EventTest {
 		return renderTest(a)
+	}
+	if a.Event == EventSlow || a.Event == EventSlowRecovery {
+		return renderSlow(a, name, url)
 	}
 	started := a.StartedAt.UTC().Format("2006-01-02 15:04 UTC")
 	c := email.Content{
@@ -137,6 +145,48 @@ func renderTest(a Alert) email.Message {
 	}
 	c.Facts = append(c.Facts, email.Fact{Label: "Sent at", Value: sent.UTC().Format("2006-01-02 15:04 UTC")})
 	return c.Message(a.From, a.To, "HawkEye test alert")
+}
+
+// Milliseconds renders a response time such as "2,450 ms".
+func Milliseconds(ms int) string {
+	s := strconv.Itoa(ms)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s + " ms"
+}
+
+// renderSlow is the slow-response alert and its "back to normal" follow-up. Slowness is a warning, not an outage, so the alert is in the brand
+// colour rather than red, and it says plainly that the website is still online.
+func renderSlow(a Alert, name, url string) email.Message {
+	threshold, since := Milliseconds(a.SlowThresholdMs), a.StartedAt.UTC().Format("2006-01-02 15:04 UTC")
+	c := email.Content{
+		ButtonLabel: "View response times", ButtonURL: a.AppBaseURL + "/monitors/" + a.MonitorID, AppBaseURL: a.AppBaseURL,
+		Note:  "Change the threshold or turn these alerts off in the monitor's settings. Manage who receives alerts: " + a.AppBaseURL + "/notifications",
+		Facts: []email.Fact{{Label: "Website", Value: url}, {Label: "Threshold", Value: threshold}},
+	}
+	var subject string
+	if a.Event == EventSlowRecovery {
+		subject = "HawkEye: " + name + " is responding normally again"
+		c.Tone = email.ToneSuccess
+		c.Preheader = name + " is back under " + threshold + "."
+		c.Heading = name + " is responding normally again"
+		c.Paragraphs = []string{"Response times for " + name + " are back at or under your threshold of " + threshold + "."}
+		c.Facts = append(c.Facts, email.Fact{Label: "Slow since", Value: since}, email.Fact{Label: "Slowest response", Value: Milliseconds(a.SlowPeakMs)})
+		if a.ResolvedAt != nil {
+			c.Facts = append(c.Facts, email.Fact{Label: "Slow for", Value: Duration(a.ResolvedAt.Sub(a.StartedAt))})
+		}
+		return c.Message(a.From, a.To, subject)
+	}
+	subject = "HawkEye alert: " + name + " is responding slowly"
+	c.Preheader = name + " is online but slower than " + threshold + "."
+	c.Heading = name + " is responding slowly"
+	c.Paragraphs = []string{
+		"The website is online, but its responses have stayed above your threshold of " + threshold + " for several checks in a row.",
+		"Slow responses are often an early sign of trouble: a busy server, a slow database or a problem with the hosting. HawkEye keeps checking and will tell you once when response times are back to normal.",
+	}
+	c.Facts = append(c.Facts, email.Fact{Label: "Slowest response", Value: Milliseconds(a.SlowPeakMs)}, email.Fact{Label: "Confirmed at", Value: since})
+	return c.Message(a.From, a.To, subject)
 }
 
 // sslLeft describes the time until expiry in words ("12 days", "1 day", "less than a day").

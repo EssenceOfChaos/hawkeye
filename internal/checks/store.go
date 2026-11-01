@@ -22,6 +22,7 @@ var ErrDiscarded = errors.New("monitor no longer active; result discarded")
 type Outcome struct {
 	Before, After State
 	Transition    Transition
+	Speed         SpeedTransition // a confirmed slowdown or return to normal speed (monitors with a slow-response threshold)
 }
 
 // Incidents reacts to confirmed state changes inside the transaction that records the result, so a
@@ -34,6 +35,17 @@ type Incidents interface {
 	// CertificateExpiring is called once per certificate and warning bucket (30, 14, 7, 1 days, or 0 when expired) as the monitor's certificate
 	// approaches its expiry. It queues the warning emails.
 	CertificateExpiring(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, expiresAt time.Time, bucket int) error
+	// SlowStarted is called when successful checks have stayed above the monitor's response-time threshold for the required number of checks.
+	SlowStarted(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, thresholdMs, responseMs int, at time.Time) error
+	// SlowEnded is called when they have then stayed at or under it for as long.
+	SlowEnded(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, at time.Time) error
+}
+
+// speedSettings is a monitor's slow-response configuration and state, read with the monitor row.
+type speedSettings struct {
+	thresholdMs *int // nil: slow-response alerts are off
+	checks      int
+	state       SlowState // Slow is true while a slowdown is open
 }
 
 type Store struct {
@@ -61,9 +73,12 @@ func (s *Store) Record(ctx context.Context, monitorID uuid.UUID, r Result) (Outc
 		var enabled, maintenance bool
 		var orgID uuid.UUID
 		var chosen []string
-		err := tx.QueryRow(ctx, `SELECT current_status, consecutive_failures, consecutive_successes, enabled, in_maintenance(organization_id, id, $2), organization_id, regions
+		var speed speedSettings
+		err := tx.QueryRow(ctx, `SELECT current_status, consecutive_failures, consecutive_successes, enabled, in_maintenance(organization_id, id, $2), organization_id, regions,
+				slow_threshold_ms, slow_checks, slow_streak, normal_streak, EXISTS (SELECT 1 FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open')
 			FROM monitors WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, monitorID, r.FinishedAt).
-			Scan(&out.Before.Status, &out.Before.Failures, &out.Before.Successes, &enabled, &maintenance, &orgID, &chosen)
+			Scan(&out.Before.Status, &out.Before.Failures, &out.Before.Successes, &enabled, &maintenance, &orgID, &chosen,
+				&speed.thresholdMs, &speed.checks, &speed.state.SlowStreak, &speed.state.NormalStreak, &speed.state.Slow)
 		if errors.Is(err, pgx.ErrNoRows) || err == nil && !enabled {
 			return ErrDiscarded
 		}
@@ -87,8 +102,9 @@ func (s *Store) Record(ctx context.Context, monitorID uuid.UUID, r Result) (Outc
 		if err != nil {
 			return err
 		}
+		counts := !maintenance && slices.Contains(effective, region)
 		switch {
-		case maintenance || !slices.Contains(effective, region):
+		case !counts:
 			// During maintenance the result is recorded but changes nothing about the monitor's health: no streaks, no status
 			// change, no incident, no alert. The state picks up where it left off when the window ends. The same goes for a
 			// result from a region the monitor no longer uses (a job that was still running when the regions were edited).
@@ -114,6 +130,23 @@ func (s *Store) Record(ctx context.Context, monitorID uuid.UUID, r Result) (Outc
 		if err := s.recordCertificate(ctx, tx, monitorID, r); err != nil {
 			return err
 		}
+		if counts && speed.thresholdMs != nil && r.Success && r.ResponseTimeMs != nil {
+			if out.Speed, err = s.recordSpeed(ctx, tx, monitorID, region, effective, *r.ResponseTimeMs, speed); err != nil {
+				return err
+			}
+		}
+		if s.incidents != nil {
+			switch out.Speed {
+			case BecameSlow:
+				if err := s.incidents.SlowStarted(ctx, tx, monitorID, *speed.thresholdMs, *r.ResponseTimeMs, r.FinishedAt); err != nil {
+					return err
+				}
+			case BackToNormal:
+				if err := s.incidents.SlowEnded(ctx, tx, monitorID, r.FinishedAt); err != nil {
+					return err
+				}
+			}
+		}
 		if s.incidents == nil || out.Transition == NoTransition && out.After.Status == out.Before.Status {
 			return nil
 		}
@@ -128,6 +161,47 @@ func (s *Store) Record(ctx context.Context, monitorID uuid.UUID, r Result) (Outc
 		return nil
 	})
 	return out, err
+}
+
+// recordSpeed folds one successful check's response time into the monitor's speed state. With one location the streaks live on the monitor;
+// with several, each location keeps its own streaks and verdict and the monitor is slow while a quorum (majority) of its locations are, so one
+// slow location alone never raises an alert. It also keeps the open slowdown's slowest response up to date.
+func (s *Store) recordSpeed(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, region string, effective []string, ms int, sp speedSettings) (SpeedTransition, error) {
+	threshold := *sp.thresholdMs
+	if sp.state.Slow && ms > threshold {
+		if _, err := tx.Exec(ctx, `UPDATE slowdowns SET peak_ms = GREATEST(peak_ms, $2) WHERE monitor_id = $1 AND status = 'open'`, monitorID, ms); err != nil {
+			return NoSpeedChange, err
+		}
+	}
+	if len(effective) == 1 {
+		st, t := ApplySpeed(sp.state, ms, threshold, sp.checks)
+		_, err := tx.Exec(ctx, `UPDATE monitors SET slow_streak = $2, normal_streak = $3 WHERE id = $1`, monitorID, st.SlowStreak, st.NormalStreak)
+		return t, err
+	}
+
+	var reg SlowState
+	if err := tx.QueryRow(ctx, `SELECT slow, slow_streak, normal_streak FROM monitor_region_state WHERE monitor_id = $1 AND region = $2`,
+		monitorID, region).Scan(&reg.Slow, &reg.SlowStreak, &reg.NormalStreak); err != nil {
+		return NoSpeedChange, err // the row was written by applyRegional just before
+	}
+	reg, _ = ApplySpeed(reg, ms, threshold, sp.checks)
+	if _, err := tx.Exec(ctx, `UPDATE monitor_region_state SET slow = $3, slow_streak = $4, normal_streak = $5 WHERE monitor_id = $1 AND region = $2`,
+		monitorID, region, reg.Slow, reg.SlowStreak, reg.NormalStreak); err != nil {
+		return NoSpeedChange, err
+	}
+	var slowRegions int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM monitor_region_state WHERE monitor_id = $1 AND region = ANY($2) AND slow`,
+		monitorID, effective).Scan(&slowRegions); err != nil {
+		return NoSpeedChange, err
+	}
+	slowNow := slowRegions >= regions.Quorum(len(effective))
+	switch {
+	case slowNow && !sp.state.Slow:
+		return BecameSlow, nil
+	case !slowNow && sp.state.Slow:
+		return BackToNormal, nil
+	}
+	return NoSpeedChange, nil
 }
 
 // effectiveRegions is where the monitor runs now. The plan's limit is looked up only for monitors that chose several regions.

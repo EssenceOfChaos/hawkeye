@@ -16,6 +16,9 @@ const (
 	EventSSLExpiry = "ssl_expiry"
 	// EventDomainExpiry warns that a domain's registration is about to expire.
 	EventDomainExpiry = "domain_expiry"
+	// EventSlow: a monitor's responses have stayed above its slow-response threshold. EventSlowRecovery: they are back to normal.
+	EventSlow         = "slow"
+	EventSlowRecovery = "slow_recovery"
 )
 
 // Enqueue records one pending delivery per enabled, verified destination of the organization.
@@ -55,6 +58,19 @@ func EnqueueDomain(ctx context.Context, tx pgx.Tx, orgID, domainID uuid.UUID, ex
 		WHERE s.organization_id = $1 AND s.enabled AND s.verified_at IS NOT NULL
 		ON CONFLICT (domain_id, notification_setting_id, domain_expires_at, domain_bucket) WHERE event_type = 'domain_expiry' DO NOTHING`,
 		orgID, domainID, EventDomainExpiry, expiresAt, bucket)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// EnqueueSlowdown queues a slow-response alert (EventSlow or EventSlowRecovery) for every enabled, verified recipient of the organization. It is
+// idempotent per slowdown, recipient and event.
+func EnqueueSlowdown(ctx context.Context, tx pgx.Tx, orgID, slowdownID uuid.UUID, event string) (int, error) {
+	tag, err := tx.Exec(ctx, `INSERT INTO notification_deliveries (slowdown_id, notification_setting_id, event_type)
+		SELECT $2, s.id, $3 FROM notification_settings s
+		WHERE s.organization_id = $1 AND s.enabled AND s.verified_at IS NOT NULL
+		ON CONFLICT (slowdown_id, notification_setting_id, event_type) WHERE slowdown_id IS NOT NULL DO NOTHING`, orgID, slowdownID, event)
 	if err != nil {
 		return 0, err
 	}

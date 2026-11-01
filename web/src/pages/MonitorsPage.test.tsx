@@ -40,4 +40,19 @@ describe('StatusBadge', () => {
     expect(screen.getByText(/Offline/)).toBeInTheDocument()
     expect(screen.getByText(/Paused/)).toBeInTheDocument()
   })
+
+  it('says Slow only for an online monitor with an open slowdown; offline and paused come first', () => {
+    render(
+      <MemoryRouter>
+        <StatusBadge monitor={{ enabled: true, current_status: 'up', slow_since: '2026-11-02T09:15:00Z' }} />
+        <StatusBadge monitor={{ enabled: true, current_status: 'down', slow_since: '2026-11-02T09:15:00Z' }} />
+        <StatusBadge monitor={{ enabled: false, current_status: 'up', slow_since: '2026-11-02T09:15:00Z' }} />
+        <StatusBadge monitor={{ enabled: true, current_status: 'up', slow_since: null }} />
+      </MemoryRouter>,
+    )
+    expect(screen.getAllByText(/^\s*Slow$/)).toHaveLength(1)
+    expect(screen.getByText(/Offline/)).toBeInTheDocument()
+    expect(screen.getByText(/Paused/)).toBeInTheDocument()
+    expect(screen.getByText(/Online/)).toBeInTheDocument()
+  })
 })

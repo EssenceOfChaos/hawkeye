@@ -3,8 +3,8 @@
 //
 // Policy:
 //   - check results older than the plan's history window are deleted;
-//   - resolved incidents older than the window are deleted (with their delivery records);
-//   - open incidents and live monitors are NEVER deleted, whatever the plan (a downgrade does not delete monitors);
+//   - resolved incidents and slowdowns older than the window are deleted (with their delivery records);
+//   - open incidents, open slowdowns and live monitors are NEVER deleted, whatever the plan (a downgrade does not delete monitors);
 //   - monitors the user deleted are purged after a grace period, cascading to their remaining data;
 //   - expired sessions and spent or expired one-time tokens are removed.
 //
@@ -54,8 +54,8 @@ func (c Config) withDefaults() Config {
 
 // Stats counts what one pass removed.
 type Stats struct {
-	CheckResults, Incidents, Monitors, Sessions, Tokens, BillingEvents, RateLimits int
-	Skipped                                                                        bool // another instance holds the lock
+	CheckResults, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits int
+	Skipped                                                                                   bool // another instance holds the lock
 }
 
 type Job struct {
@@ -94,7 +94,7 @@ func (j *Job) Run(ctx context.Context) {
 			j.m.RetentionRuns.WithLabelValues("ok").Inc()
 			j.m.RetentionLastSuccess.SetToCurrentTime()
 			j.m.RetentionDuration.Set(time.Since(start).Seconds())
-			j.log.Info("retention pass complete", "check_results", st.CheckResults, "incidents", st.Incidents,
+			j.log.Info("retention pass complete", "check_results", st.CheckResults, "incidents", st.Incidents, "slowdowns", st.Slowdowns,
 				"monitors", st.Monitors, "sessions", st.Sessions, "tokens", st.Tokens, "seconds", time.Since(start).Seconds())
 		}
 		select {
@@ -170,6 +170,11 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 				WHERE m.organization_id = $1 AND i.status = 'resolved' AND i.resolved_at < $2 LIMIT $3)`, id, cutoff)
 		st.Incidents += n
 		note(err)
+		n, err = j.batches(ctx, `DELETE FROM slowdowns WHERE id IN (
+				SELECT sd.id FROM slowdowns sd JOIN monitors m ON m.id = sd.monitor_id
+				WHERE m.organization_id = $1 AND sd.status = 'resolved' AND sd.resolved_at < $2 LIMIT $3)`, id, cutoff)
+		st.Slowdowns += n
+		note(err)
 	}
 
 	var err2 error
@@ -202,6 +207,7 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 
 	j.m.RetentionDeleted.WithLabelValues("check_results").Add(float64(st.CheckResults))
 	j.m.RetentionDeleted.WithLabelValues("incidents").Add(float64(st.Incidents))
+	j.m.RetentionDeleted.WithLabelValues("slowdowns").Add(float64(st.Slowdowns))
 	j.m.RetentionDeleted.WithLabelValues("monitors").Add(float64(st.Monitors))
 	j.m.RetentionDeleted.WithLabelValues("sessions").Add(float64(st.Sessions))
 	j.m.RetentionDeleted.WithLabelValues("tokens").Add(float64(st.Tokens))

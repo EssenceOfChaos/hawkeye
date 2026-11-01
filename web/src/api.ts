@@ -140,6 +140,11 @@ export interface Monitor {
   last_checked_at: string | null
   /** The HTTPS certificate as last seen by a check; null until the first one (and for http:// monitors). */
   ssl: SSLInfo | null
+  /** Slow-response alerts: alert when successful checks stay above this many ms for `slow_checks` checks in a row; null means off. */
+  slow_threshold_ms: number | null
+  slow_checks: number
+  /** Set while responses are confirmed slow (a slowdown is open). */
+  slow_since: string | null
 }
 
 export interface SSLInfo {
@@ -343,6 +348,8 @@ export interface MonitorInput {
   auth?: MonitorAuthInput
   assertions?: Assertion[]
   regions?: string[]
+  slow_threshold_ms?: number | null
+  slow_checks?: number
 }
 
 /** An error response from the API, using the common `{error: {code, message, details}}` envelope. */

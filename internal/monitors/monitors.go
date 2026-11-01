@@ -29,8 +29,14 @@ var ErrNotFound = errors.New("monitor not found")
 
 const (
 	DefaultTimeoutSeconds = 10
-	MaxIntervalSeconds    = 86400
-	MinIntervalSeconds    = 60
+	// Slow-response alerts: the threshold range (ms) and how many checks in a row confirm a slowdown (and its end).
+	MinSlowThresholdMs = 100
+	MaxSlowThresholdMs = 60000
+	DefaultSlowChecks  = 3
+	MinSlowChecks      = 2
+	MaxSlowChecks      = 10
+	MaxIntervalSeconds = 86400
+	MinIntervalSeconds = 60
 
 	MaxHeaders     = 20
 	MaxAssertions  = 10
@@ -91,8 +97,12 @@ type Monitor struct {
 	LastSuccessAt                 *time.Time         `json:"last_success_at"`
 	ConsecutiveFailures           int                `json:"consecutive_failures"`
 	ConsecutiveSuccesses          int                `json:"consecutive_successes"`
-	CreatedAt                     time.Time          `json:"created_at"`
-	UpdatedAt                     time.Time          `json:"updated_at"`
+	// Slow-response alerts: alert when successful checks stay above SlowThresholdMs (nil: off) for SlowChecks checks in a row.
+	SlowThresholdMs *int       `json:"slow_threshold_ms"`
+	SlowChecks      int        `json:"slow_checks"`
+	SlowSince       *time.Time `json:"slow_since"` // set while a slowdown is open: responses are confirmed slow
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 // SSLInfo describes the TLS certificate of an HTTPS monitor as last seen by a check.
@@ -153,6 +163,8 @@ type CreateInput struct {
 	Auth                 *AuthInput         `json:"auth"`
 	Assertions           []checks.Assertion `json:"assertions"`
 	Regions              []string           `json:"regions"`
+	SlowThresholdMs      *int               `json:"slow_threshold_ms"`
+	SlowChecks           *int               `json:"slow_checks"`
 }
 
 type UpdateInput struct {
@@ -167,6 +179,8 @@ type UpdateInput struct {
 	Auth                 *AuthInput          `json:"auth"`
 	Assertions           *[]checks.Assertion `json:"assertions"`
 	Regions              *[]string           `json:"regions"`
+	SlowThresholdMs      Nullable[int]       `json:"slow_threshold_ms"`
+	SlowChecks           *int                `json:"slow_checks"`
 }
 
 type ListFilter struct {
@@ -266,7 +280,8 @@ func (s *Service) EncryptLegacySecrets(ctx context.Context) (int, error) {
 const cols = `id, organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
 	enabled, current_status, last_checked_at, last_success_at, consecutive_failures, consecutive_successes, created_at, updated_at,
 	request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), auth_secret IS NOT NULL,
-	assertions, ssl_expires_at, ssl_checked_at, in_maintenance(organization_id, id, now()), regions`
+	assertions, ssl_expires_at, ssl_checked_at, in_maintenance(organization_id, id, now()), regions,
+	slow_threshold_ms, slow_checks, (SELECT started_at FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open')`
 
 func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	var m Monitor
@@ -274,7 +289,8 @@ func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	err := row.Scan(&m.ID, &m.OrganizationID, &m.Name, &m.URL, &m.Method, &m.ExpectedStatusCode, &m.CheckIntervalSeconds,
 		&m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.LastCheckedAt, &m.LastSuccessAt, &m.ConsecutiveFailures,
 		&m.ConsecutiveSuccesses, &m.CreatedAt, &m.UpdatedAt, &m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username,
-		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked, &m.InMaintenance, &m.Regions)
+		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked, &m.InMaintenance, &m.Regions,
+		&m.SlowThresholdMs, &m.SlowChecks, &m.SlowSince)
 	m.EffectiveCheckIntervalSeconds = max(m.CheckIntervalSeconds, minInterval)
 	if sslExpires != nil {
 		now := time.Now()
@@ -298,6 +314,8 @@ type fields struct {
 	hasSecret         bool        // a secret is stored for the current auth type
 	assertions        []checks.Assertion
 	regions           []string
+	slowThreshold     *int // ms; nil: slow-response alerts off
+	slowChecks        int
 }
 
 // setAuth applies an auth input on top of the current type, keeping the stored secret when allowed.
@@ -485,6 +503,18 @@ func (f *fields) validate() error {
 	if f.timeout < 1 || f.timeout > 30 {
 		bad["timeout_seconds"] = "must be between 1 and 30"
 	}
+	if f.slowThreshold != nil {
+		switch t := *f.slowThreshold; {
+		case t < MinSlowThresholdMs || t > MaxSlowThresholdMs:
+			bad["slow_threshold_ms"] = fmt.Sprintf("must be between %d and %d milliseconds, or null to turn slow-response alerts off", MinSlowThresholdMs, MaxSlowThresholdMs)
+		case t >= f.timeout*1000:
+			// A response slower than the timeout is a failed check, so a threshold at or above it could never be reached.
+			bad["slow_threshold_ms"] = fmt.Sprintf("must be lower than the timeout (%d seconds)", f.timeout)
+		}
+	}
+	if f.slowChecks < MinSlowChecks || f.slowChecks > MaxSlowChecks {
+		bad["slow_checks"] = fmt.Sprintf("must be between %d and %d", MinSlowChecks, MaxSlowChecks)
+	}
 	if IsWriteMethod(f.method) && f.interval < MinWriteIntervalSeconds {
 		bad["check_interval_seconds"] = fmt.Sprintf("must be at least %d minutes for %s, because the request is repeated on every check", MinWriteIntervalSeconds/60, f.method)
 	}
@@ -546,6 +576,10 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 			f.timeout = *in.TimeoutSeconds
 		}
 		f.headers, f.body, f.assertions = slices.Clone(in.Headers), in.Body, slices.Clone(in.Assertions)
+		f.slowThreshold, f.slowChecks = in.SlowThresholdMs, DefaultSlowChecks
+		if in.SlowChecks != nil {
+			f.slowChecks = *in.SlowChecks
+		}
 		if f.regions, err = s.cleanRegions(in.Regions); err != nil {
 			return err
 		}
@@ -574,10 +608,10 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		}
 		out, err = scan(tx.QueryRow(ctx, `INSERT INTO monitors
 			(id, organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
-			 request_headers, request_body, auth_type, auth_username, auth_header_name, auth_secret, assertions, regions)
-			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16) RETURNING `+cols,
+			 request_headers, request_body, auth_type, auth_username, auth_header_name, auth_secret, assertions, regions, slow_threshold_ms, slow_checks)
+			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16,$17,$18) RETURNING `+cols,
 			orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout,
-			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, sealed, f.assertions, id, f.regions), minInterval)
+			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, sealed, f.assertions, id, f.regions, f.slowThreshold, f.slowChecks), minInterval)
 		if err != nil {
 			return err
 		}
@@ -662,6 +696,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		f := fields{name: cur.Name, url: cur.URL, method: cur.Method, expected: cur.ExpectedStatusCode,
 			interval: cur.CheckIntervalSeconds, timeout: cur.TimeoutSeconds, headers: slices.Clone(cur.Headers),
 			body: cur.Body, assertions: slices.Clone(cur.Assertions), regions: slices.Clone(cur.Regions),
+			slowThreshold: cur.SlowThresholdMs, slowChecks: cur.SlowChecks,
 			auth: checks.Auth{Type: cur.Auth.Type, Username: cur.Auth.Username, HeaderName: cur.Auth.HeaderName}}
 		f.setAuth(in.Auth, cur.Auth.Type, cur.Auth.SecretSet)
 		if in.Headers != nil {
@@ -696,6 +731,12 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		if in.TimeoutSeconds != nil {
 			f.timeout = *in.TimeoutSeconds
 		}
+		if in.SlowThresholdMs.Set {
+			f.slowThreshold = in.SlowThresholdMs.Value
+		}
+		if in.SlowChecks != nil {
+			f.slowChecks = *in.SlowChecks
+		}
 		if err := f.validate(); err != nil {
 			return err
 		}
@@ -720,6 +761,14 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		if err != nil {
 			return fmt.Errorf("protect credentials: %w", err)
 		}
+		// Streaks measured against another threshold, or another request, say nothing about the new one: start counting again, and close an
+		// open slowdown without a "back to normal" alert, since nothing got faster.
+		speedReset := reset || regionsChanged || !equalPtr(f.slowThreshold, cur.SlowThresholdMs) || f.slowChecks != cur.SlowChecks
+		if speedReset {
+			if err := resetSpeed(ctx, tx, id); err != nil {
+				return err
+			}
+		}
 		out, err = scan(tx.QueryRow(ctx, `UPDATE monitors SET name=$3, url=$4, method=$5, expected_status_code=$6,
 			check_interval_seconds=$7, timeout_seconds=$8,
 			next_check_at = CASE WHEN $9 THEN now() ELSE next_check_at END,
@@ -729,12 +778,13 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			request_headers=$10, request_body=$11, auth_type=$12, auth_username=NULLIF($13,''),
 			auth_header_name=NULLIF($14,''),
 			auth_secret = CASE WHEN $12 = 'none' THEN NULL WHEN $15 THEN auth_secret ELSE NULLIF($16,'') END,
-			assertions=$17, regions=$19,
+			assertions=$17, regions=$19, slow_threshold_ms=$20, slow_checks=$21,
 			ssl_expires_at = CASE WHEN $18 THEN NULL ELSE ssl_expires_at END, ssl_checked_at = CASE WHEN $18 THEN NULL ELSE ssl_checked_at END,
 			ssl_notified_bucket = CASE WHEN $18 THEN NULL ELSE ssl_notified_bucket END, ssl_notified_for = CASE WHEN $18 THEN NULL ELSE ssl_notified_for END
 			WHERE id = $1 AND organization_id = $2 RETURNING `+cols,
 			id, orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout, reset,
-			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.keepSecret, sealed, f.assertions, f.url != cur.URL, f.regions), minInterval)
+			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.keepSecret, sealed, f.assertions, f.url != cur.URL, f.regions,
+			f.slowThreshold, f.slowChecks), minInterval)
 		if err != nil {
 			return err
 		}
@@ -750,6 +800,18 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		return nil
 	})
 	return out, err
+}
+
+// resetSpeed clears a monitor's slow-response streaks (its own and every location's) and quietly closes its open slowdown.
+func resetSpeed(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	if _, err := tx.Exec(ctx, `UPDATE monitors SET slow_streak = 0, normal_streak = 0 WHERE id = $1`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE monitor_region_state SET slow = false, slow_streak = 0, normal_streak = 0 WHERE monitor_id = $1`, id); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `UPDATE slowdowns SET status = 'resolved', resolved_at = GREATEST(started_at, now()) WHERE monitor_id = $1 AND status = 'open'`, id)
+	return err
 }
 
 func equalPtr[T comparable](a, b *T) bool {

@@ -72,6 +72,40 @@ func (Engine) Resolved(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, succ
 	return err
 }
 
+// SlowStarted opens a slowdown for a monitor whose responses have stayed above its threshold, and queues the slow-response alerts. At most one
+// slowdown is open per monitor (partial unique index); a second call is a no-op.
+func (Engine) SlowStarted(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, thresholdMs, responseMs int, at time.Time) error {
+	var id, orgID uuid.UUID
+	err := tx.QueryRow(ctx, `INSERT INTO slowdowns (monitor_id, started_at, threshold_ms, peak_ms)
+		SELECT id, $2, $3, $4 FROM monitors WHERE id = $1
+		ON CONFLICT (monitor_id) WHERE status = 'open' DO NOTHING
+		RETURNING id, (SELECT organization_id FROM monitors WHERE id = $1)`, monitorID, at, thresholdMs, responseMs).Scan(&id, &orgID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil // already open: do not notify twice
+	}
+	if err != nil {
+		return err
+	}
+	_, err = notifications.EnqueueSlowdown(ctx, tx, orgID, id, notifications.EventSlow)
+	return err
+}
+
+// SlowEnded closes the monitor's open slowdown, if any, and queues the "back to normal" alerts.
+func (Engine) SlowEnded(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, at time.Time) error {
+	var id, orgID uuid.UUID
+	err := tx.QueryRow(ctx, `UPDATE slowdowns sd SET status = 'resolved', resolved_at = GREATEST(sd.started_at, $2)
+		FROM monitors m WHERE sd.monitor_id = $1 AND sd.status = 'open' AND m.id = sd.monitor_id
+		RETURNING sd.id, m.organization_id`, monitorID, at).Scan(&id, &orgID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	_, err = notifications.EnqueueSlowdown(ctx, tx, orgID, id, notifications.EventSlowRecovery)
+	return err
+}
+
 // Incident is the API representation of an incident.
 type Incident struct {
 	ID              uuid.UUID  `json:"id"`

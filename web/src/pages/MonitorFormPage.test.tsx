@@ -108,6 +108,58 @@ describe('MonitorFormPage', () => {
 })
 
 describe('MonitorFormPage editing', () => {
+  it('sends no slow-response alert unless it is turned on, then the chosen threshold and streak', async () => {
+    setup(() => json(201, { monitor: {} }))
+    const fetchMock = vi.mocked(globalThis.fetch)
+    await fill('Shop')
+    expect(screen.queryByLabelText('Slower than (milliseconds)')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByLabelText('Alert me when this site responds slowly'))
+    const threshold = screen.getByLabelText('Slower than (milliseconds)')
+    expect(threshold).toHaveValue(2000)
+    expect(screen.getByText(/One slow response never alerts/)).toBeInTheDocument()
+    await userEvent.clear(threshold)
+    await userEvent.type(threshold, '1500')
+    await userEvent.selectOptions(screen.getByLabelText('For this many checks in a row'), '5')
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Monitor list' })).toBeInTheDocument())
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!
+    const sent = JSON.parse(post[1]!.body as string)
+    expect(sent.slow_threshold_ms).toBe(1500)
+    expect(sent.slow_checks).toBe(5)
+  })
+
+  it('shows a monitor’s slow-response alert with its usual response time, and turns it off with null', async () => {
+    document.cookie = 'csrf_token=t; path=/'
+    const monitor = {
+      id: 'm1', name: 'Shop', url: 'https://shop.example.com', method: 'GET', expected_status_code: null,
+      check_interval_seconds: 300, effective_check_interval_seconds: 300, timeout_seconds: 10, enabled: true,
+      current_status: 'up', last_checked_at: null, headers: [], body: null, auth: { type: 'none', secret_set: false }, assertions: [],
+      slow_threshold_ms: 2500, slow_checks: 4, slow_since: null,
+    }
+    const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
+      if (url.endsWith('/usage')) return json(200, { usage: { plan: { minimum_check_interval_seconds: 300 } } })
+      if (url.includes('/uptime')) return json(200, { uptime: { avg_response_ms: 420.4 } })
+      return json(200, { monitor })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <MemoryRouter initialEntries={['/monitors/m1/edit']}>
+        <Routes>
+          <Route path="/monitors/:monitorID/edit" element={<MonitorFormPage />} />
+          <Route path="/monitors" element={<h1>Monitor list</h1>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByLabelText('Slower than (milliseconds)')).toHaveValue(2500)
+    expect(screen.getByLabelText('For this many checks in a row')).toHaveValue('4')
+    expect(await screen.findByText(/averaged 420 ms/)).toBeInTheDocument()
+    await userEvent.click(screen.getByLabelText('Alert me when this site responds slowly'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Monitor list' })).toBeInTheDocument())
+    const patch = fetchMock.mock.calls.find(([, init]) => init?.method === 'PATCH')!
+    expect(JSON.parse(patch[1]!.body as string).slow_threshold_ms).toBeNull()
+  })
+
   it('keeps the stored secret unless a new one is entered', async () => {
     document.cookie = 'csrf_token=t; path=/'
     const monitor = {

@@ -105,7 +105,7 @@ fieldset.group legend { font-weight: 600; padding: 0 .35rem; }
 .error { color: var(--down); }
 .hint { opacity: .75; font-size: .85rem; }
 .badge { white-space: nowrap; font-weight: 600; }
-.badge.up { color: var(--up); } .badge.down { color: var(--down); }
+.badge.up { color: var(--up); } .badge.down { color: var(--down); } .badge.slow { color: var(--warn); }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: .7rem .6rem; border-bottom: 1px solid #ffffff17; vertical-align: top; }

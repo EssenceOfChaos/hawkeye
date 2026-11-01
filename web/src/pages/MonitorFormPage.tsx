@@ -49,6 +49,9 @@ function RowError({ id, children }: { id: string; children?: string }) {
   ) : null
 }
 
+/** The threshold offered when slow-response alerts are turned on. */
+const DEFAULT_SLOW_MS = 2000
+
 export function MonitorFormPage() {
   const { monitorID } = useParams()
   const editing = Boolean(monitorID)
@@ -74,6 +77,10 @@ export function MonitorFormPage() {
   const [chosen, setChosen] = useState<string[]>([])
   const [error, setError] = useState<ApiError | null>(null)
   const [busy, setBusy] = useState(false)
+  const [slowOn, setSlowOn] = useState(false)
+  const [slowMs, setSlowMs] = useState(String(DEFAULT_SLOW_MS))
+  const [slowChecks, setSlowChecks] = useState('3')
+  const [avgMs, setAvgMs] = useState<number | null>(null) // this monitor's average response over the last 24 hours, as a guide
 
   useEffect(() => {
     api<{ usage: { plan: { minimum_check_interval_seconds: number } } }>('GET', '/usage')
@@ -103,9 +110,15 @@ export function MonitorFormPage() {
         }
         setAssertions(m.assertions ?? [])
         setChosen(m.regions ?? [])
+        setSlowOn(m.slow_threshold_ms != null)
+        if (m.slow_threshold_ms != null) setSlowMs(String(m.slow_threshold_ms))
+        setSlowChecks(String(m.slow_checks ?? 3))
         setLoaded(true)
       })
       .catch((e: ApiError) => setError(e))
+    api<{ uptime: { avg_response_ms: number | null } }>('GET', `/monitors/${monitorID}/uptime?range=24h`)
+      .then((r) => setAvgMs(r.uptime.avg_response_ms != null ? Math.round(r.uptime.avg_response_ms) : null))
+      .catch(() => undefined)
   }, [monitorID])
 
   const bodyAllowed = BODY_METHODS.includes(method)
@@ -130,6 +143,8 @@ export function MonitorFormPage() {
       assertions: assertionsAllowed
         ? assertions.map((a) => (a.type === 'json_path' ? a : { type: a.type, value: a.value }))
         : [],
+      slow_threshold_ms: slowOn ? Number(slowMs) : null,
+      slow_checks: Number(slowChecks),
     }
     if (allRegions.length > 1) payload.regions = chosen
     if (authType === 'basic') payload.auth!.username = authUsername
@@ -307,6 +322,33 @@ export function MonitorFormPage() {
                 All assertions must pass for the check to count as online. JSON paths look like data.items[0].status.
               </small>
             </div>
+          </fieldset>
+
+          <fieldset className="group">
+            <legend>Slow-response alert</legend>
+            <label>
+              <input type="checkbox" checked={slowOn} onChange={(e) => setSlowOn(e.target.checked)} /> Alert me when this site responds slowly
+            </label>
+            {slowOn ? (
+              <>
+                <Field label="Slower than (milliseconds)" type="number" required min={100} max={59999} step={100} value={slowMs}
+                  onChange={(e) => setSlowMs(e.target.value)} error={f.slow_threshold_ms}
+                  hint={`${avgMs != null ? `Over the last 24 hours it averaged ${avgMs.toLocaleString()} ms. ` : 'Most websites answer well within 1,000 ms. '}A threshold of two to three times the usual time avoids alerts for normal ups and downs.`} />
+                <div className="field">
+                  <label htmlFor="slow-checks">For this many checks in a row</label>
+                  <select id="slow-checks" value={slowChecks} onChange={(e) => setSlowChecks(e.target.value)} aria-invalid={f.slow_checks ? true : undefined}>
+                    {[2, 3, 4, 5, 6, 8, 10].map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                  {f.slow_checks && <small className="error">{f.slow_checks}</small>}
+                  <small className="hint">
+                    One slow response never alerts. You get one alert when slowness is confirmed and one when responses are back to normal for as many checks.
+                    A slow site still counts as online.
+                  </small>
+                </div>
+              </>
+            ) : (
+              f.slow_threshold_ms && <small className="error">{f.slow_threshold_ms}</small>
+            )}
           </fieldset>
 
           {allRegions.length > 1 && (

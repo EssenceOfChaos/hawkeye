@@ -81,7 +81,14 @@ export function MonitorDetailPage() {
           <p className="hint">
             {m.method} {m.url} · every {Math.round(m.effective_check_interval_seconds / 60)} min ·{' '}
             {m.last_checked_at ? `last checked ${formatDateTime(m.last_checked_at)}` : 'not checked yet'}
+            {m.slow_threshold_ms != null && ` · slow-response alert over ${m.slow_threshold_ms.toLocaleString()} ms`}
           </p>
+          {m.slow_since && m.current_status === 'up' && (
+            <Alert tone="warning" role="status">
+              Responding slowly since {formatDateTime(m.slow_since)}: responses have been over {m.slow_threshold_ms?.toLocaleString()} ms for{' '}
+              {m.slow_checks} checks in a row. The site is online; you will get one alert when response times are back to normal.
+            </Alert>
+          )}
 
           <CertificateCard monitor={m} />
 

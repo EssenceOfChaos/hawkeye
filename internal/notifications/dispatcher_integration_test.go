@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -275,5 +276,28 @@ func TestPendingMetric(t *testing.T) {
 	n, age, err := notifications.Pending(t.Context(), e.pool)
 	if err != nil || n != 1 || age < time.Minute {
 		t.Fatalf("n=%d age=%v err=%v", n, age, err)
+	}
+}
+
+func TestSlowResponseAlertsAreDelivered(t *testing.T) {
+	e := newEnv(t, 5)
+	var setting, slowdown, delivery uuid.UUID
+	e.pool.QueryRow(t.Context(), `INSERT INTO notification_settings (organization_id, channel, destination, verified_at)
+		VALUES ($1, 'email', 'ops@example.com', now()) RETURNING id`, e.org).Scan(&setting)
+	e.pool.QueryRow(t.Context(), `INSERT INTO slowdowns (monitor_id, started_at, threshold_ms, peak_ms)
+		VALUES ($1, now() - interval '5 minutes', 1500, 3200) RETURNING id`, e.monitor).Scan(&slowdown)
+	e.pool.QueryRow(t.Context(), `INSERT INTO notification_deliveries (slowdown_id, notification_setting_id, event_type)
+		VALUES ($1, $2, 'slow') RETURNING id`, slowdown, setting).Scan(&delivery)
+
+	mail := &scriptedSender{}
+	if worked, err := dispatcher(e, mail, notifications.DispatcherConfig{}).ProcessOne(t.Context()); !worked || err != nil {
+		t.Fatalf("worked=%v err=%v", worked, err)
+	}
+	if r := e.row(t, delivery); r.Status != "sent" || len(mail.sent) != 1 {
+		t.Fatalf("%+v %d", r, len(mail.sent))
+	}
+	if m := mail.sent[0]; m.Subject != "HawkEye alert: Site is responding slowly" || !strings.Contains(m.Text, "1,500 ms") || !strings.Contains(m.Text, "3,200 ms") ||
+		!strings.Contains(m.Text, "/monitors/"+e.monitor.String()) {
+		t.Fatalf("%s\n%s", m.Subject, m.Text)
 	}
 }

@@ -167,3 +167,57 @@ func TestRenderDomainExpiryCannotInjectLines(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderSlowResponseAlerts(t *testing.T) {
+	start := time.Date(2026, 11, 2, 9, 15, 0, 0, time.UTC)
+	end := start.Add(25 * time.Minute)
+	base := Alert{MonitorID: "m1", MonitorName: "Shop", MonitorURL: "https://shop.example.com", StartedAt: start, SlowThresholdMs: 2000, SlowPeakMs: 4350,
+		AppBaseURL: "https://app.example.com", To: "me@example.com", From: "alerts@example.com"}
+
+	slow := base
+	slow.Event = EventSlow
+	m := Render(slow)
+	if m.Subject != "HawkEye alert: Shop is responding slowly" {
+		t.Fatalf("%q", m.Subject)
+	}
+	for _, want := range []string{"The website is online", "2,000 ms", "4,350 ms", "2026-11-02 09:15 UTC", "https://app.example.com/monitors/m1"} {
+		if !strings.Contains(m.Text, want) {
+			t.Errorf("slow alert missing %q:\n%s", want, m.Text)
+		}
+	}
+	if strings.Contains(m.Text, "offline") {
+		t.Error("a slow site is not offline; the alert must not say so")
+	}
+
+	back := base
+	back.Event, back.ResolvedAt = EventSlowRecovery, &end
+	m = Render(back)
+	if m.Subject != "HawkEye: Shop is responding normally again" || !strings.Contains(m.Text, "25m") {
+		t.Fatalf("%q\n%s", m.Subject, m.Text)
+	}
+
+	c := chatContent(slow, end)
+	if c.Title != "🐢 Shop is responding slowly" || c.Tone != toneWarning || c.Link != "https://app.example.com/monitors/m1" || !strings.Contains(c.Lines[0], "slowest 4,350 ms") {
+		t.Fatalf("%+v", c)
+	}
+	if c := chatContent(back, end); c.Tone != toneGood || !strings.Contains(c.Lines[0], "after 25m") {
+		t.Fatalf("%+v", c)
+	}
+
+	w := buildWebhook(back, end)
+	if w.Event != "slow_recovery" || w.Slowdown == nil || w.Slowdown.ThresholdMs != 2000 || w.Slowdown.PeakMs != 4350 || w.Slowdown.ResolvedAt == nil ||
+		w.Incident != nil || w.Monitor == nil || w.URL != "https://app.example.com/monitors/m1" {
+		t.Fatalf("%+v", w)
+	}
+	if w := buildWebhook(slow, end); w.Slowdown == nil || w.Slowdown.ResolvedAt != nil {
+		t.Fatalf("a slow event carries no end time: %+v", w.Slowdown)
+	}
+}
+
+func TestMilliseconds(t *testing.T) {
+	for ms, want := range map[int]string{0: "0 ms", 950: "950 ms", 1000: "1,000 ms", 12345: "12,345 ms", 1234567: "1,234,567 ms"} {
+		if got := Milliseconds(ms); got != want {
+			t.Errorf("%d: %q", ms, got)
+		}
+	}
+}

@@ -183,7 +183,7 @@ func Sign(secret string, ts int64, body []byte) string {
 
 // WebhookPayload is the JSON body sent to a webhook destination.
 type WebhookPayload struct {
-	Event   string         `json:"event"` // outage, recovery, ssl_expiry, domain_expiry or test
+	Event   string         `json:"event"` // outage, recovery, ssl_expiry, domain_expiry, slow, slow_recovery or test
 	SentAt  time.Time      `json:"sent_at"`
 	Monitor *PayloadTarget `json:"monitor,omitempty"`
 	// Incident is set for outage and recovery events.
@@ -192,7 +192,9 @@ type WebhookPayload struct {
 	Certificate *PayloadCertificate `json:"certificate,omitempty"`
 	// Domain is set for domain_expiry events.
 	Domain *PayloadDomain `json:"domain,omitempty"`
-	URL    string         `json:"url"` // where to look in HawkEye
+	// Slowdown is set for slow and slow_recovery events.
+	Slowdown *PayloadSlowdown `json:"slowdown,omitempty"`
+	URL      string           `json:"url"` // where to look in HawkEye
 }
 
 type PayloadTarget struct {
@@ -210,6 +212,13 @@ type PayloadIncident struct {
 type PayloadCertificate struct {
 	ExpiresAt time.Time `json:"expires_at"`
 	Bucket    int       `json:"warning_days"` // 30, 14, 7, 1, or 0 once expired
+}
+
+type PayloadSlowdown struct {
+	StartedAt   time.Time  `json:"started_at"`
+	ResolvedAt  *time.Time `json:"resolved_at"`
+	ThresholdMs int        `json:"threshold_ms"`
+	PeakMs      int        `json:"peak_ms"` // the slowest successful check while it lasted
 }
 
 type PayloadDomain struct {
@@ -234,6 +243,13 @@ func buildWebhook(a Alert, now time.Time) WebhookPayload {
 	case EventSSLExpiry:
 		p.URL = a.AppBaseURL + "/monitors/" + a.MonitorID
 		p.Certificate = &PayloadCertificate{ExpiresAt: a.SSLExpiresAt.UTC(), Bucket: a.SSLBucket}
+	case EventSlow, EventSlowRecovery:
+		p.URL = a.AppBaseURL + "/monitors/" + a.MonitorID
+		p.Slowdown = &PayloadSlowdown{StartedAt: a.StartedAt.UTC(), ThresholdMs: a.SlowThresholdMs, PeakMs: a.SlowPeakMs}
+		if a.Event == EventSlowRecovery && a.ResolvedAt != nil {
+			r := a.ResolvedAt.UTC()
+			p.Slowdown.ResolvedAt = &r
+		}
 	default:
 		p.Incident = &PayloadIncident{StartedAt: a.StartedAt.UTC(), Cause: a.Cause}
 		if a.ResolvedAt != nil {
@@ -285,6 +301,17 @@ func chatContent(a Alert, now time.Time) chatMessage {
 		if a.ResolvedAt != nil {
 			m.Lines = []string{"Offline for " + Duration(a.ResolvedAt.Sub(a.StartedAt))}
 		}
+	case EventSlow:
+		m.Title, m.Tone = "🐢 "+name+" is responding slowly", toneWarning
+		m.Lines = []string{"Online, but over " + Milliseconds(a.SlowThresholdMs) + " for several checks in a row (slowest " + Milliseconds(a.SlowPeakMs) + ")"}
+		m.Link = a.AppBaseURL + "/monitors/" + a.MonitorID
+	case EventSlowRecovery:
+		m.Title, m.Tone = "✅ "+name+" is responding normally again", toneGood
+		m.Lines = []string{"Back under " + Milliseconds(a.SlowThresholdMs)}
+		if a.ResolvedAt != nil {
+			m.Lines[0] += " after " + Duration(a.ResolvedAt.Sub(a.StartedAt)) + " (slowest " + Milliseconds(a.SlowPeakMs) + ")"
+		}
+		m.Link = a.AppBaseURL + "/monitors/" + a.MonitorID
 	case EventSSLExpiry:
 		m.Title, m.Tone = "🔒 SSL certificate for "+name+" expires in "+sslLeft(a.SSLExpiresAt, now), toneWarning
 		if a.SSLBucket == 0 {

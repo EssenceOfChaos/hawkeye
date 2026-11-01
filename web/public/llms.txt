@@ -8,6 +8,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 
 - Website and API monitoring: custom request methods, headers, bodies, Basic/bearer/API-key authentication, and checks of the status code and response content.
 - Response-time tracking, uptime reports and incident history.
+- Slow-response alerts: an alert when a site stays slower than a threshold you choose for several checks in a row, and another when it is back to normal.
 - Alerts by email, Slack, Microsoft Teams, Discord or Telegram, or signed JSON webhook.
 - Public status page for your customers.
 - Maintenance windows that pause alerts during planned work (paid plans).

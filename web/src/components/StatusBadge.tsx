@@ -1,9 +1,10 @@
 import type { Monitor } from '../api'
 
-type Kind = 'up' | 'down' | 'paused' | 'maintenance' | 'unknown'
+type Kind = 'up' | 'slow' | 'down' | 'paused' | 'maintenance' | 'unknown'
 
 const LOOK: Record<Kind, { text: string; tip: string; dot: string }> = {
   up: { text: 'Online', tip: 'Active · Online', dot: 'd-status-success' },
+  slow: { text: 'Slow', tip: 'Active · Online, but responding slower than its alert threshold', dot: 'd-status-warning' },
   down: { text: 'Offline', tip: 'Active · Offline', dot: 'd-status-error' },
   paused: { text: 'Paused', tip: 'Inactive · Paused', dot: 'd-status-warning' },
   maintenance: { text: 'Maintenance', tip: 'Active · In a maintenance window, no alerts', dot: 'd-status-info' },
@@ -14,8 +15,14 @@ const LOOK: Record<Kind, { text: string; tip: string; dot: string }> = {
  * A daisyUI status dot (green = online, yellow = paused/inactive, red = offline and pulsing) with a hover tooltip.
  * The text beside the dot always carries the meaning, so colour and motion are never the only signal.
  */
-export function StatusBadge({ monitor }: { monitor: Pick<Monitor, 'enabled' | 'current_status'> & { in_maintenance?: boolean } }) {
-  const kind: Kind = !monitor.enabled ? 'paused' : monitor.in_maintenance ? 'maintenance' : monitor.current_status === 'up' ? 'up' : monitor.current_status === 'down' ? 'down' : 'unknown'
+export function StatusBadge({ monitor }: { monitor: Pick<Monitor, 'enabled' | 'current_status'> & { in_maintenance?: boolean; slow_since?: string | null } }) {
+  const kind: Kind = !monitor.enabled
+    ? 'paused'
+    : monitor.in_maintenance
+      ? 'maintenance'
+      : monitor.current_status === 'up'
+        ? monitor.slow_since ? 'slow' : 'up'
+        : monitor.current_status === 'down' ? 'down' : 'unknown'
   const look = LOOK[kind]
   return (
     <span className={`badge ${kind}`}>

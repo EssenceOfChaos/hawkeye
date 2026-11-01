@@ -62,13 +62,13 @@ malformed ID gives 404) or, if absent, the organization the caller **owns** (the
 | `GET /plans` | public price list (active plans, cheapest first) |
 | `GET /usage` | `{usage: {plan, monitors_used, monitor_limit, over_limit, next_plan}}` |
 | `GET /monitors` | filters `status` (unknown/up/down), `enabled`, `q` (name/URL substring); pagination `limit` (1–100, default 25) and `offset`; returns `{monitors, total, limit, offset}`, newest first |
-| `POST /monitors` | `{name, url, method?, expected_status_code?, check_interval_seconds?, timeout_seconds?, headers?, body?, auth?, assertions?}` → 201 |
-| `GET/PATCH/DELETE /monitors/:id` | PATCH is partial; `expected_status_code: null` and `body: null` clear them, `headers` and `assertions` replace the whole list. DELETE is a soft delete (204) and frees a plan slot |
+| `POST /monitors` | `{name, url, method?, expected_status_code?, check_interval_seconds?, timeout_seconds?, headers?, body?, auth?, assertions?, slow_threshold_ms?, slow_checks?}` → 201 |
+| `GET/PATCH/DELETE /monitors/:id` | PATCH is partial; `expected_status_code: null`, `body: null` and `slow_threshold_ms: null` clear them, `headers` and `assertions` replace the whole list. DELETE is a soft delete (204) and frees a plan slot |
 | `POST /monitors/:id/pause`, `/resume` | toggles `enabled`; allowed even when over the plan limit |
 
 **Monitor fields.** Editable: `name` (1–100), `url`, `method` (`GET` default, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`), `expected_status_code`
 (100–599 or null; null means any response below 400 is up), `check_interval_seconds` (60–86400, default = plan minimum),
-`timeout_seconds` (1–30, default 10). Read-only and ignored if sent: `current_status`, `consecutive_*`, `last_*`,
+`timeout_seconds` (1–30, default 10), `slow_threshold_ms` (100–60000 and below the timeout, or null = off; see *Slow-response alerts*) and `slow_checks` (2–10, default 3). Read-only and ignored if sent: `slow_since`, `current_status`, `consecutive_*`, `last_*`,
 `enabled` (use pause/resume), `organization_id`. `effective_check_interval_seconds` is what the scheduler will use: the stored
 interval raised to the plan minimum, so a downgrade takes effect without rewriting data.
 
@@ -237,7 +237,7 @@ Alerts to these chats are sent by the worker with the token from configuration, 
 
 Every enabled, verified destination receives outage, recovery, certificate-expiry and domain-expiry alerts through the same durable queue as email (retries with backoff, at-least-once). A 2xx is success; 408, 429, 5xx and network errors are retried; any other 4xx (for example 404/410 for a revoked URL) fails the delivery permanently. Requests go through the SSRF-safe client, so private addresses are refused.
 
-Webhook requests are `POST` with `Content-Type: application/json` and these headers: `X-HawkEye-Event` (`outage`, `recovery`, `ssl_expiry`, `domain_expiry`, `test`), `X-HawkEye-Delivery` (stable across retries; use it to drop duplicates), `X-HawkEye-Timestamp` (Unix seconds) and `X-HawkEye-Signature` = `sha256=` + hex HMAC-SHA256 of `"<timestamp>.<raw body>"` keyed with the signing secret. Reject requests whose signature does not match or whose timestamp is old. Body:
+Webhook requests are `POST` with `Content-Type: application/json` and these headers: `X-HawkEye-Event` (`outage`, `recovery`, `ssl_expiry`, `domain_expiry`, `slow`, `slow_recovery`, `test`), `X-HawkEye-Delivery` (stable across retries; use it to drop duplicates), `X-HawkEye-Timestamp` (Unix seconds) and `X-HawkEye-Signature` = `sha256=` + hex HMAC-SHA256 of `"<timestamp>.<raw body>"` keyed with the signing secret. Reject requests whose signature does not match or whose timestamp is old. Body:
 
 ```json
 {"event": "outage", "sent_at": "2026-10-12T15:00:00Z", "url": "https://app.example.com/incidents",
@@ -245,7 +245,24 @@ Webhook requests are `POST` with `Content-Type: application/json` and these head
  "incident": {"started_at": "…", "resolved_at": null, "cause": "Received HTTP 503"}}
 ```
 
-`ssl_expiry` carries `certificate: {expires_at, warning_days}` instead of `incident` (`warning_days` 30, 14, 7, 1, or 0 once expired); `domain_expiry` carries `domain: {name, expires_at, warning_days}` and no `monitor` (its `url` points at `/domains`); `test` carries none of them. Chat destinations receive an equivalent, unsigned message in the app's own format: Slack incoming-webhook blocks; a Discord embed colored by severity, with mentions switched off (`allowed_mentions: {parse: []}`) so names such as `@everyone` never ping; a Teams Adaptive Card with an "Open in HawkEye" button; and a Telegram `sendMessage` in HTML mode with link previews off. Text from monitors (names, addresses, causes) is escaped for each app's markup so it cannot add links or formatting.
+`ssl_expiry` carries `certificate: {expires_at, warning_days}` instead of `incident` (`warning_days` 30, 14, 7, 1, or 0 once expired); `domain_expiry` carries `domain: {name, expires_at, warning_days}` and no `monitor` (its `url` points at `/domains`); `slow` and `slow_recovery` carry `slowdown: {started_at, resolved_at, threshold_ms, peak_ms}` (`resolved_at` only on `slow_recovery`) instead of `incident`, and their `url` points at the monitor; `test` carries none of them. Chat destinations receive an equivalent, unsigned message in the app's own format: Slack incoming-webhook blocks; a Discord embed colored by severity, with mentions switched off (`allowed_mentions: {parse: []}`) so names such as `@everyone` never ping; a Teams Adaptive Card with an "Open in HawkEye" button; and a Telegram `sendMessage` in HTML mode with link previews off. Text from monitors (names, addresses, causes) is escaped for each app's markup so it cannot add links or formatting.
+
+## Slow-response alerts
+
+A monitor with `slow_threshold_ms` set is **slow** once its successful checks have taken longer than the threshold for `slow_checks` checks in a row, and
+**back to normal** once they have taken at most the threshold for as many checks in a row; one slow (or one quick) response never changes anything. A
+response exactly at the threshold is normal. Failed checks are left out: they are outages, reported as such, and neither extend nor end slowness. With
+several check locations each location keeps its own streak and verdict, and the monitor is slow while a **majority** of its locations are, so one distant
+location alone never raises an alert. Results recorded during a maintenance window are ignored, like everything else about health. Available on every plan; off by default.
+
+Becoming slow opens a **slowdown** (at most one open per monitor; `slowdowns`: `started_at` = when it was confirmed, `threshold_ms`, `peak_ms` = the slowest
+response while it lasted) and queues a `slow` alert to every enabled, verified recipient; returning to normal resolves it and queues `slow_recovery`. Both use
+the delivery queue (retries, one per slowdown, recipient and event). A slowdown is **not an incident**: the site is online, so it does not count against
+uptime, does not appear on the status page and does not open an incident. Monitors carry `slow_since` (the open slowdown's start, else null); the app shows
+the monitor as "Slow".
+
+Changing `slow_threshold_ms` or `slow_checks`, or anything that resets the monitor's health (its request or locations), starts the streaks again and closes
+an open slowdown **without** a `slow_recovery` alert, because nothing got faster. Resolved slowdowns are deleted with the plan's history window, like incidents.
 
 ## SSL certificate expiry
 
@@ -280,7 +297,7 @@ Domain: `{id, name, manual, monitor_count, tracked, status, expires_at, days_rem
 
 ## Notification delivery
 
-One logical notification exists per (incident, recipient, event) — or, for certificate warnings, per (monitor, recipient, certificate expiry, bucket), and for domain warnings per (domain, recipient, expiry, bucket) — — a unique constraint — created in the same transaction as the incident,
+One logical notification exists per (incident, recipient, event) — or, for certificate warnings, per (monitor, recipient, certificate expiry, bucket), for domain warnings per (domain, recipient, expiry, bucket), and for slow-response alerts per (slowdown, recipient, event) — a unique constraint — created in the same transaction as the incident,
 so it cannot be lost or duplicated. The worker's dispatcher claims due deliveries with a visibility timeout and sends them; transient
 failures retry with backoff 1 m, 5 m, 15 m, 1 h, 3 h up to `NOTIFY_MAX_ATTEMPTS` (default 6), then the delivery is marked `failed`.
 Permanent errors (`email.ErrPermanent`) fail immediately. Delivery is at-least-once: a crash between sending and recording can cause one duplicate email.
