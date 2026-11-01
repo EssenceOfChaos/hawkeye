@@ -342,3 +342,26 @@ func TestMonthlyReportsAreOnByDefaultAndConfigurable(t *testing.T) {
 		t.Fatalf("a too-short interval should be refused: %v", err)
 	}
 }
+
+func TestTelegramBotIsOptionalButBothOrNeither(t *testing.T) {
+	const token, secret = "123456789:AAEhBP0av28MapQ3a_Bb-cDeFgHiJkLmNoP", "0123456789abcdef0123456789abcdef"
+	for name, c := range map[string]struct {
+		token, secret, wantErr string
+	}{
+		"neither":      {"", "", ""},
+		"both":         {token, secret, ""},
+		"token only":   {token, "", "set both or neither"},
+		"secret only":  {"", secret, "set both or neither"},
+		"bad token":    {"not-a-token", secret, "TELEGRAM_BOT_TOKEN: must be"},
+		"short secret": {token, "abc", "TELEGRAM_WEBHOOK_SECRET: must be"},
+		"bad secret":   {token, "has spaces in it, sixteen+", "TELEGRAM_WEBHOOK_SECRET: must be"},
+	} {
+		_, err := load(env(map[string]string{"DATABASE_URL": "postgres://x", "TELEGRAM_BOT_TOKEN": c.token, "TELEGRAM_WEBHOOK_SECRET": c.secret}))
+		if (err == nil) != (c.wantErr == "") || (err != nil && !strings.Contains(err.Error(), c.wantErr)) {
+			t.Errorf("%s: %v", name, err)
+		}
+		if err != nil && strings.Contains(err.Error(), "AAEh") {
+			t.Errorf("%s: the token must never appear in an error", name)
+		}
+	}
+}

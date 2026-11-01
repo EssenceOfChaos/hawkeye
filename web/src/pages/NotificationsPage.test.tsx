@@ -14,7 +14,7 @@ const mk = (id: string, destination: string, o: Partial<{ verified: boolean; ena
   id, destination, channel: 'email', user_id: null, enabled: true, verified: true, created_at: '2026-01-01T00:00:00Z', ...o,
 })
 
-function setup(opts: { role?: 'owner' | 'member'; emailVerified?: boolean; items: ReturnType<typeof mk>[]; onPost?: () => Promise<Response> }) {
+function setup(opts: { role?: 'owner' | 'member'; emailVerified?: boolean; items: ReturnType<typeof mk>[]; onPost?: () => Promise<Response>; telegramBot?: string }) {
   document.cookie = 'csrf_token=t; path=/'
   const user = { id: 'u', email: 'me@example.com', email_verified_at: opts.emailVerified === false ? null : '2026-01-01T00:00:00Z' }
   const calls: string[] = []
@@ -24,7 +24,8 @@ function setup(opts: { role?: 'owner' | 'member'; emailVerified?: boolean; items
       calls.push(`${init?.method ?? 'GET'} ${url}`)
       if (url.includes('/auth/me')) return json(200, { user, organizations: [{ id: 'o', name: 'Org', role: opts.role ?? 'owner' }] })
       if (url.endsWith('/notification-settings') && init?.method === 'POST') return opts.onPost?.() ?? json(201, { notification_setting: mk('new', 'x@example.com', { verified: false }) })
-      if (url.includes('/notification-settings')) return json(200, { notification_settings: opts.items, max: 10 })
+      if (url.endsWith('/notification-settings/telegram-link')) return json(201, { telegram_link: telegramLink })
+      if (url.includes('/notification-settings')) return json(200, { notification_settings: opts.items, max: 10, telegram_bot: opts.telegramBot ?? '' })
       return json(404, {})
     }),
   )
@@ -36,6 +37,12 @@ function setup(opts: { role?: 'owner' | 'member'; emailVerified?: boolean; items
     </MemoryRouter>,
   )
   return calls
+}
+
+const telegramLink = {
+  bot: 'HawkEyeObserverBot', code: 'abc123', chat_url: 'https://t.me/HawkEyeObserverBot?start=abc123',
+  group_url: 'https://t.me/HawkEyeObserverBot?startgroup=abc123', channel_url: 'https://t.me/HawkEyeObserverBot?startchannel&admin=post_messages',
+  expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
 }
 
 describe('NotificationsPage', () => {
@@ -111,6 +118,63 @@ describe('NotificationsPage', () => {
     await screen.findByText('me@example.com')
     await userEvent.selectOptions(screen.getByLabelText('Channel'), 'slack')
     expect(screen.getByLabelText('Slack incoming webhook URL')).toBeInTheDocument()
+  })
+
+  it('asks for the right thing for each chat app', async () => {
+    setup({ items: [mk('1', 'me@example.com', { user_id: 'u' })] })
+    await screen.findByText('me@example.com')
+    await userEvent.selectOptions(screen.getByLabelText('Channel'), 'discord')
+    expect(screen.getByLabelText('Discord webhook URL')).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Channel'), 'teams')
+    expect(screen.getByLabelText('Teams workflow URL')).toBeInTheDocument()
+  })
+
+  it('connects Telegram through HawkEye’s bot with no token, and notices the chat once it is connected', async () => {
+    const items = [mk('1', 'me@example.com', { user_id: 'u' })]
+    const calls = setup({ items, telegramBot: 'HawkEyeObserverBot' })
+    await screen.findByText('me@example.com')
+    await userEvent.selectOptions(screen.getByLabelText('Channel'), 'telegram')
+    expect(screen.getByText('@HawkEyeObserverBot')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Bot token')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add destination' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Connect Telegram' }))
+    expect(await screen.findByRole('link', { name: 'Send alerts to me' })).toHaveAttribute('href', telegramLink.chat_url)
+    expect(screen.getByRole('link', { name: 'Add to a group' })).toHaveAttribute('href', telegramLink.group_url)
+    expect(screen.getByText('/connect abc123')).toBeInTheDocument()
+    expect(calls).toContain('POST /api/v1/notification-settings/telegram-link')
+
+    // Someone taps Start in Telegram: the chat shows up in the list, and the page notices by itself.
+    items.push({ ...mk('2', 'Ops team'), channel: 'telegram' })
+    expect(await screen.findByText(/Ops team will receive alerts in Telegram/, undefined, { timeout: 5000 })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Send alerts to me' })).not.toBeInTheDocument()
+  })
+
+  it('offers your own bot as the advanced option, and only that when HawkEye’s bot is unavailable', async () => {
+    setup({ items: [mk('1', 'me@example.com', { user_id: 'u' })], telegramBot: 'HawkEyeObserverBot' })
+    await screen.findByText('me@example.com')
+    await userEvent.selectOptions(screen.getByLabelText('Channel'), 'telegram')
+    await userEvent.click(screen.getByRole('button', { name: 'use your own bot instead' }))
+    expect(screen.getByLabelText('Bot token')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Connect Telegram' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Use @HawkEyeObserverBot instead' }))
+    expect(screen.getByRole('button', { name: 'Connect Telegram' })).toBeInTheDocument()
+  })
+
+  it('sends a Telegram bot token and chat ID, and shows errors on the right field', async () => {
+    setup({
+      items: [mk('1', 'me@example.com', { user_id: 'u' })],
+      onPost: () => json(400, { error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: { fields: { bot_token: 'must be a bot token from @BotFather' } } } }),
+    })
+    const fetchMock = vi.mocked(fetch)
+    await screen.findByText('me@example.com')
+    await userEvent.selectOptions(screen.getByLabelText('Channel'), 'telegram')
+    await userEvent.type(screen.getByLabelText('Bot token'), 'bad')
+    await userEvent.type(screen.getByLabelText('Chat ID'), '-100123')
+    await userEvent.click(screen.getByRole('button', { name: 'Add destination' }))
+    expect(await screen.findByText('must be a bot token from @BotFather')).toBeInTheDocument()
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({ channel: 'telegram', destination: '-100123', bot_token: 'bad' })
   })
 
   describe('sending a test alert', () => {

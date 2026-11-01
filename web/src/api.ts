@@ -224,11 +224,21 @@ export interface PublicStatus {
   generated_at: string
 }
 
+/** A one-time link that connects a Telegram chat through HawkEye's bot (POST /notification-settings/telegram-link). */
+export interface TelegramLink {
+  bot: string // the bot's @name, without the @
+  code: string // for a channel: post "/connect <code>" there
+  chat_url: string
+  group_url: string
+  channel_url: string
+  expires_at: string
+}
+
 export interface NotificationSetting {
   id: string
   user_id: string | null
-  channel: 'email' | 'webhook' | 'slack'
-  destination: string // the address, or for webhook and Slack a masked host such as hooks.slack.com/…
+  channel: 'email' | 'webhook' | 'slack' | 'discord' | 'teams' | 'telegram'
+  destination: string // the address; for webhook and chat URLs a masked host such as hooks.slack.com/…; for Telegram "chat <id>"
   enabled: boolean
   verified: boolean
   created_at: string

@@ -51,6 +51,7 @@ type Options struct {
 	Plans         *plans.Service
 	Monitors      *monitors.Service
 	Notifications *notifications.Service
+	TelegramBot   *notifications.TelegramBot // HawkEye's own Telegram bot; nil turns its webhook off
 	Maintenance   *maintenance.Service
 	Domains       *domains.Service
 	Regions       regions.Set
@@ -114,6 +115,10 @@ func New(o Options) *echo.Echo {
 		// The provider calls this endpoint, not a browser: no session, no CSRF token. It is authenticated by the signature
 		// over the raw body, which is checked before anything is stored. Registered before the CSRF-protected group.
 		e.POST("/api/v1/webhooks/stripe", (&handlers{billing: o.Billing, log: o.Logger}).stripeWebhook)
+	}
+	if o.TelegramBot != nil && o.Notifications != nil {
+		// Called by Telegram with the bot's updates; authenticated by the webhook secret. Registered outside the CSRF-protected group.
+		e.POST(notifications.TelegramWebhookPath, (&handlers{notifications: o.Notifications, telegramBot: o.TelegramBot, log: o.Logger}).telegramWebhook)
 	}
 	if o.Auth != nil && o.Orgs != nil && o.Plans != nil && o.Monitors != nil && o.Notifications != nil && o.PgPool != nil && o.Billing != nil && o.Account != nil {
 		registerAPI(e, o)
@@ -335,6 +340,7 @@ func registerAPI(e *echo.Echo, o Options) {
 	scoped.DELETE("/domains/:domainID", h.deleteDomain, requireOwner)
 	scoped.GET("/notification-settings", h.listSettings)
 	scoped.POST("/notification-settings", h.createSetting, requireOwner, requireVerifiedEmail, limit("create-alert"))
+	scoped.POST("/notification-settings/telegram-link", h.telegramLink, requireOwner, requireVerifiedEmail, limit("create-alert"))
 	scoped.PATCH("/notification-settings/:settingID", h.updateSetting, requireOwner)
 	scoped.DELETE("/notification-settings/:settingID", h.deleteSetting, requireOwner)
 	scoped.POST("/notification-settings/:settingID/test", h.testSetting, requireOwner, requireVerifiedEmail, limit("create-alert"))

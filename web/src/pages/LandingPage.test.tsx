@@ -95,6 +95,7 @@ describe('LandingPage', () => {
       Facebook: 'https://www.facebook.com/people/HawkEye/61595561066921/',
       LinkedIn: 'https://www.linkedin.com/company/hawkeye-observer/',
       Reddit: 'https://www.reddit.com/r/HawkEye_Observer/',
+      Telegram: 'https://t.me/hawkeye_community',
     }
     for (const [name, href] of Object.entries(expected)) {
       const link = screen.getByRole('link', { name: `HawkEye on ${name}` })

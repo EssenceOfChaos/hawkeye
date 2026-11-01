@@ -13,6 +13,7 @@ import (
 	"net/mail"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -121,7 +122,17 @@ type Config struct {
 	StripeWebhookSecret string
 	StripePricePro      string
 	StripePriceAgency   string
+
+	// HawkEye's own Telegram bot (from @BotFather), which customers add to a chat to receive alerts there. Both or neither: without them only the
+	// "use your own bot" option is offered. The webhook secret is what Telegram sends back on every update, so the endpoint knows the caller.
+	TelegramBotToken      string
+	TelegramWebhookSecret string
 }
+
+var (
+	telegramBotToken      = regexp.MustCompile(`^\d{3,20}:[A-Za-z0-9_-]{20,100}$`)
+	telegramWebhookSecret = regexp.MustCompile(`^[A-Za-z0-9_-]{16,256}$`)
+)
 
 // dbSSLMode extracts sslmode from a PostgreSQL URL ("" if absent or unparseable).
 func dbSSLMode(raw string) string {
@@ -316,6 +327,9 @@ func load(get func(string) string) (Config, error) {
 		StripePricePro:      str("STRIPE_PRICE_PRO_ID", ""),
 		StripePriceAgency:   str("STRIPE_PRICE_AGENCY_ID", ""),
 
+		TelegramBotToken:      str("TELEGRAM_BOT_TOKEN", ""),
+		TelegramWebhookSecret: str("TELEGRAM_WEBHOOK_SECRET", ""),
+
 		EmailProvider: str("EMAIL_PROVIDER", "console"),
 		SMTPHost:      str("SMTP_HOST", ""),
 		SMTPPort:      integer("SMTP_PORT", 587),
@@ -438,6 +452,15 @@ func load(get func(string) string) (Config, error) {
 		if _, err := mail.ParseAddress(v); err != nil {
 			errs = append(errs, fmt.Errorf("%s: must be a valid email address", key))
 		}
+	}
+	if (c.TelegramBotToken == "") != (c.TelegramWebhookSecret == "") {
+		errs = append(errs, errors.New("TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET: set both or neither"))
+	}
+	if c.TelegramBotToken != "" && !telegramBotToken.MatchString(c.TelegramBotToken) {
+		errs = append(errs, errors.New("TELEGRAM_BOT_TOKEN: must be the token from @BotFather (digits, a colon, then letters, digits, _ and -)"))
+	}
+	if c.TelegramWebhookSecret != "" && !telegramWebhookSecret.MatchString(c.TelegramWebhookSecret) {
+		errs = append(errs, errors.New("TELEGRAM_WEBHOOK_SECRET: must be 16 to 256 letters, digits, _ or - (generate with: openssl rand -hex 32)"))
 	}
 	if c.CanaryInterval < 10*time.Second {
 		errs = append(errs, errors.New("CANARY_INTERVAL: must be at least 10s"))

@@ -145,7 +145,7 @@ export function WebsiteStatusPage() {
       intro="Check whether a website is up right now. Enter a domain to see whether it answers, its HTTP status code and how long it takes to respond."
       cta={{
         heading: bad ? 'Be the first to know next time' : 'Do not wait for a customer to tell you',
-        text: 'HawkEye checks your website or API on a schedule and alerts you by email, Slack or webhook as soon as an outage is confirmed, then tells you when it is back.',
+        text: 'HawkEye checks your website or API on a schedule and alerts you by email, Slack, Teams, Discord, Telegram or webhook as soon as an outage is confirmed, then tells you when it is back.',
       }}
     >
       <form className="card" onSubmit={onSubmit} noValidate aria-labelledby="site-form-h">

@@ -120,6 +120,15 @@ func run() error {
 	// Compare Stripe's prices with the advertised plan prices now and hourly; a mismatch refuses that plan's checkout (internal/billing/prices.go).
 	go billingSvc.WatchPrices(ctx, time.Hour)
 
+	// HawkEye's own Telegram bot: learn its name and register its webhook in the background (Telegram may be unreachable at startup).
+	var telegramBot *notifications.TelegramBot
+	if cfg.TelegramBotToken != "" {
+		telegramBot = notifications.NewTelegramBot(cfg.TelegramBotToken, cfg.TelegramWebhookSecret, "", nil)
+		go telegramBot.Run(ctx, cfg.APIBaseURL+notifications.TelegramWebhookPath, log)
+	} else {
+		log.Info("telegram bot disabled: set TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET to let customers connect chats with one tap")
+	}
+
 	freeTools := newFreeTools(cfg.FreeToolsEnabled, log)
 	e := httpapi.New(httpapi.Options{
 		Logger: log, DB: pool, RequestTimeout: cfg.RequestTimeout, BodyLimit: cfg.BodyLimit,
@@ -136,7 +145,8 @@ func run() error {
 		Domains:       domains.NewService(pool, planSvc),
 		Regions:       cfg.Regions(),
 		StatusPages:   statuspage.NewService(pool),
-		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress, notifications.WithSecretBox(box)),
+		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress, notifications.WithSecretBox(box), notifications.WithTelegramBot(telegramBot)),
+		TelegramBot:   telegramBot,
 		SecureCookies: cfg.IsProduction(), AuthRateLimitPerMin: cfg.AuthRateLimitPerMin, TrustForwardedFor: cfg.TrustForwardedFor,
 		HSTS: cfg.IsProduction(), Metrics: apiMetrics, Limiter: ratelimit.New(pool), Errors: reporter,
 		GlobalRateLimitPerMin: cfg.GlobalRateLimitPerMin, EmailActionLimitPerHour: cfg.EmailActionLimitPerHour,

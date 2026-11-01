@@ -137,7 +137,7 @@ type ExportStatusPage struct {
 	MonitorIDs  []string `json:"monitor_ids"`
 }
 
-// ExportRecipient is an alert destination. For Slack and webhook destinations the URL is a secret, so only the masked label is exported.
+// ExportRecipient is an alert destination. For webhook and chat destinations the URL is a secret, so only the masked label is exported.
 type ExportRecipient struct {
 	Channel     string    `json:"channel"`
 	Destination string    `json:"destination"`

@@ -25,7 +25,7 @@ export function PlanDetails({ plan }: { plan: Plan }) {
         <li>Website and API monitoring</li>
         <li>SSL certificate expiry warnings</li>
         {plan.max_domains !== undefined && <li>Domain expiry warnings for up to {plan.max_domains} domains</li>}
-        <li>Email, Slack and webhook alerts</li>
+        <li>Email, Slack, Teams, Discord, Telegram and webhook alerts</li>
         <li>Public status page</li>
         {plan.maintenance_enabled && <li>Maintenance windows</li>}
         {plan.reports_enabled && <li>Monthly PDF uptime reports</li>}

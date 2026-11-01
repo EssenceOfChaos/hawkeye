@@ -67,21 +67,28 @@ type Dispatcher struct {
 	m    *metrics.Metrics
 	log  *slog.Logger
 	rep  errtrack.Reporter
-	http *http.Client // reaches webhook and Slack URLs
-	box  *secrets.Box // opens stored webhook and Slack URLs and signing secrets
+	http *http.Client // reaches webhook and chat URLs
+	box  *secrets.Box // opens stored webhook and chat URLs and signing secrets
+	bot  *TelegramBot // sends to chats connected through HawkEye's own Telegram bot
 }
 
 func NewDispatcher(pool *pgxpool.Pool, mail email.Sender, cfg DispatcherConfig, m *metrics.Metrics, log *slog.Logger) *Dispatcher {
 	return &Dispatcher{pool: pool, mail: mail, cfg: cfg.withDefaults(), m: m, log: log, rep: errtrack.Noop{}, http: NewHTTPClient()}
 }
 
-// WithSecrets sets the key that opens stored webhook and Slack URLs. Without it those deliveries fail permanently.
+// WithSecrets sets the key that opens stored webhook and chat URLs. Without it those deliveries fail permanently.
 func (d *Dispatcher) WithSecrets(b *secrets.Box) *Dispatcher {
 	d.box = b
 	return d
 }
 
-// WithHTTPClient replaces the client used for webhook and Slack deliveries (tests use a local server).
+// WithTelegramBot sets HawkEye's own Telegram bot. Without it, deliveries to chats connected through the bot fail permanently.
+func (d *Dispatcher) WithTelegramBot(b *TelegramBot) *Dispatcher {
+	d.bot = b
+	return d
+}
+
+// WithHTTPClient replaces the client used for webhook and chat deliveries (tests use a local server).
 func (d *Dispatcher) WithHTTPClient(c *http.Client) *Dispatcher {
 	d.http = c
 	return d
@@ -119,6 +126,8 @@ type claimed struct {
 	secret    string // webhook signing secret, sealed
 	enabled   bool
 	verified  bool
+	// hawkeyeBot: a Telegram chat reached through HawkEye's own bot; alert.To is then the chat ID in clear.
+	hawkeyeBot bool
 }
 
 // ProcessOne claims and attempts at most one due delivery. It reports whether one was found.
@@ -131,7 +140,7 @@ func (d *Dispatcher) ProcessOne(ctx context.Context) (bool, error) {
 				ORDER BY next_attempt_at FOR UPDATE SKIP LOCKED LIMIT 1)
 			RETURNING id, incident_id, monitor_id, domain_id, notification_setting_id, event_type, attempt_count, ssl_expires_at, ssl_bucket,
 				domain_expires_at, domain_bucket)
-		SELECT p.id, s.id, s.channel, COALESCE(s.signing_secret, ''), p.attempt_count, p.event_type, s.destination, s.enabled, s.verified_at IS NOT NULL,
+		SELECT p.id, s.id, s.channel, s.hawkeye_bot, COALESCE(s.signing_secret, ''), p.attempt_count, p.event_type, s.destination, s.enabled, s.verified_at IS NOT NULL,
 			COALESCE(i.started_at, now()), i.resolved_at, COALESCE(i.summary, ''), COALESCE(m.id::text, ''), COALESCE(m.name, ''), COALESCE(m.url, ''),
 			COALESCE(p.ssl_expires_at, now()), COALESCE(p.ssl_bucket, 0),
 			COALESCE(dm.name, ''), COALESCE(p.domain_expires_at, now()), COALESCE(p.domain_bucket, 0)
@@ -141,7 +150,7 @@ func (d *Dispatcher) ProcessOne(ctx context.Context) (bool, error) {
 		LEFT JOIN monitors m ON m.id = COALESCE(i.monitor_id, p.monitor_id)
 		LEFT JOIN domains dm ON dm.id = p.domain_id
 		WHERE COALESCE(m.id, dm.id) IS NOT NULL`, d.cfg.Lease).
-		Scan(&c.id, &c.settingID, &c.channel, &c.secret, &c.attempts, &c.alert.Event, &c.alert.To, &c.enabled, &c.verified,
+		Scan(&c.id, &c.settingID, &c.channel, &c.hawkeyeBot, &c.secret, &c.attempts, &c.alert.Event, &c.alert.To, &c.enabled, &c.verified,
 			&c.alert.StartedAt, &c.alert.ResolvedAt, &c.alert.Cause, &c.alert.MonitorID, &c.alert.MonitorName, &c.alert.MonitorURL,
 			&c.alert.SSLExpiresAt, &c.alert.SSLBucket, &c.alert.DomainName, &c.alert.DomainExpiresAt, &c.alert.DomainBucket)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -176,14 +185,22 @@ func (d *Dispatcher) ProcessOne(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// send delivers one alert over the destination's channel. For webhook and Slack, alert.To holds the sealed URL.
+// send delivers one alert over the destination's channel. For the other channels, alert.To holds the sealed URL.
 func (d *Dispatcher) send(ctx context.Context, c claimed) error {
 	if c.channel == ChannelEmail {
 		return d.mail.Send(ctx, Render(c.alert))
 	}
-	target, err := d.box.Open(c.alert.To, c.settingID.String())
-	if err != nil {
-		return permanent("stored destination cannot be opened")
+	var target string
+	var err error
+	switch {
+	case c.hawkeyeBot && d.bot == nil:
+		return permanent("HawkEye's Telegram bot is not configured")
+	case c.hawkeyeBot:
+		target = d.bot.sendURL(c.alert.To)
+	default:
+		if target, err = d.box.Open(c.alert.To, c.settingID.String()); err != nil {
+			return permanent("stored destination cannot be opened")
+		}
 	}
 	secret := ""
 	if c.channel == ChannelWebhook {
@@ -191,11 +208,11 @@ func (d *Dispatcher) send(ctx context.Context, c claimed) error {
 			return permanent("stored signing secret cannot be opened")
 		}
 	}
-	body, header, err := buildRequest(c.channel, c.alert, secret, c.id.String(), time.Now())
+	to, body, header, err := buildRequest(c.channel, target, c.alert, secret, c.id.String(), time.Now())
 	if err != nil {
-		return permanent("%v", err)
+		return permanent("message could not be built")
 	}
-	return post(ctx, d.http, target, body, header)
+	return post(ctx, d.http, to, body, header)
 }
 
 func (d *Dispatcher) finish(ctx context.Context, c claimed, status, errText string) {

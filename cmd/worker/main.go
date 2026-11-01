@@ -154,6 +154,10 @@ func run() error {
 	}
 	dispatcher := notifications.NewDispatcher(pool, mailer,
 		notifications.DispatcherConfig{MaxAttempts: cfg.NotifyMaxAttempts, AppBaseURL: cfg.AppBaseURL, From: cfg.EmailFromAddress}, m, log).WithReporter(reporter).WithSecrets(box)
+	if cfg.TelegramBotToken != "" {
+		// Only sends: the API process registers the webhook and handles the bot's updates.
+		dispatcher.WithTelegramBot(notifications.NewTelegramBot(cfg.TelegramBotToken, cfg.TelegramWebhookSecret, "", nil))
+	}
 	spawn(func() { dispatcher.Run(ctx) })
 	// Onboarding emails to new accounts with no monitor. They are sent from their own address, so their engagement never affects the alerts' reputation.
 	switch {

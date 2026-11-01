@@ -30,6 +30,7 @@ import (
 )
 
 type handlers struct {
+	telegramBot   *notifications.TelegramBot
 	auth          *auth.Service
 	orgs          *organizations.Service
 	plans         *plans.Service
@@ -125,6 +126,8 @@ func mapError(err error) error {
 		return &APIError{Status: http.StatusForbidden, Code: "NOTIFICATION_SETTINGS_LIMIT",
 			Message: "You can have at most 10 alert destinations. Remove one to add another.",
 			Details: map[string]any{"limit": notifications.MaxSettingsPerOrganization}}
+	case errors.Is(err, notifications.ErrTelegramUnavailable):
+		return &APIError{Status: http.StatusServiceUnavailable, Code: "TELEGRAM_UNAVAILABLE", Message: "Connecting Telegram is not available right now. Try again in a few minutes, or use your own bot."}
 	case errors.Is(err, notifications.ErrInvalidToken):
 		return &APIError{Status: http.StatusBadRequest, Code: "INVALID_TOKEN", Message: "This link is invalid or has expired."}
 	case errors.Is(err, invitations.ErrAlreadyMember):

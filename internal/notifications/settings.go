@@ -59,13 +59,20 @@ type Service struct {
 	appBaseURL string
 	from       string
 	tokenTTL   time.Duration
-	box        *secrets.Box // seals webhook and Slack URLs; without it, adding one fails rather than storing a URL in clear
+	box        *secrets.Box // seals webhook and chat URLs; without it, adding one fails rather than storing a URL in clear
 	http       *http.Client
+	bot        *TelegramBot // HawkEye's own Telegram bot; nil when not configured
 }
 
 type Option func(*Service)
 
-// WithSecretBox sets the key that seals webhook and Slack URLs and signing secrets.
+// WithTelegramBot enables connecting Telegram chats through HawkEye's own bot.
+func WithTelegramBot(b *TelegramBot) Option { return func(s *Service) { s.bot = b } }
+
+// TelegramBotName is the @name of HawkEye's bot (without the @), or "" when chats cannot be connected through it right now.
+func (s *Service) TelegramBotName() string { return s.bot.Username() }
+
+// WithSecretBox sets the key that seals webhook and chat URLs and signing secrets.
 func WithSecretBox(b *secrets.Box) Option { return func(s *Service) { s.box = b } }
 
 // WithHTTPClient replaces the client used to send test messages (tests use a local server).
@@ -79,7 +86,7 @@ func NewService(pool *pgxpool.Pool, mail email.Sender, log *slog.Logger, appBase
 	return s
 }
 
-// For webhook and Slack destinations the stored destination is sealed, so what is shown is the masked label.
+// For webhook and chat destinations the stored destination is sealed, so what is shown is the masked label.
 const cols = `id, user_id, channel, COALESCE(label, destination), enabled, verified_at IS NOT NULL, created_at`
 
 func scan(row pgx.Row) (Setting, error) {
@@ -170,11 +177,12 @@ func (s *Service) SetEnabled(ctx context.Context, orgID, id uuid.UUID, enabled b
 	return st, err
 }
 
-// CreateURL adds a webhook or Slack destination. A test message is delivered first and the destination is only saved
-// (already verified) if the receiver accepts it, so a typo or a revoked URL is reported immediately. The URL is sealed
-// before storage. For webhooks the returned signing secret is shown to the caller exactly once; it cannot be read back.
-func (s *Service) CreateURL(ctx context.Context, orgID uuid.UUID, channel, rawURL string) (st Setting, signingSecret string, err error) {
-	u, label, err := ParseURL(channel, rawURL)
+// CreateURL adds a webhook or chat (Slack, Discord, Teams, Telegram) destination. A test message is delivered first and the
+// destination is only saved (already verified) if the receiver accepts it, so a typo or a revoked URL is reported immediately.
+// The URL is sealed before storage. For webhooks the returned signing secret is shown to the caller exactly once; it cannot be
+// read back. destination is a URL, except for Telegram, where it is the chat ID and botToken is the bot's token.
+func (s *Service) CreateURL(ctx context.Context, orgID uuid.UUID, channel, destination, botToken string) (st Setting, signingSecret string, err error) {
+	u, label, err := ParseDestination(channel, destination, botToken)
 	if err != nil {
 		return Setting{}, "", err
 	}
@@ -193,7 +201,7 @@ func (s *Service) CreateURL(ctx context.Context, orgID uuid.UUID, channel, rawUR
 		sealedSecret = &v
 	}
 	if err := s.sendTest(ctx, channel, u.String(), signingSecret); err != nil {
-		return Setting{}, "", validation.New("destination", "the test message was not delivered ("+testReason(err)+")")
+		return Setting{}, "", validation.New("destination", "the test message was not delivered ("+testReason(channel, err)+")")
 	}
 
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
@@ -221,15 +229,15 @@ func (s *Service) CreateURL(ctx context.Context, orgID uuid.UUID, channel, rawUR
 	return st, signingSecret, nil
 }
 
-// Test sends a test message to an existing destination: a signed test request to a webhook or Slack URL, or the test alert email to an email
+// Test sends a test message to an existing destination: a test message to a webhook or chat URL, or the test alert email to an email
 // recipient. requestedBy (the signed-in user's address) is named in the email. allowEmail, when set, is asked before an email is sent (the
 // per-address rate limit lives in the HTTP layer); returning false gives ErrTestRateLimited.
 func (s *Service) Test(ctx context.Context, orgID, id uuid.UUID, requestedBy string, allowEmail func(address string) bool) error {
 	var channel, dest string
-	var verified bool
+	var verified, hawkeyeBot bool
 	var sealedSecret *string
-	err := s.pool.QueryRow(ctx, `SELECT channel, destination, signing_secret, verified_at IS NOT NULL FROM notification_settings
-		WHERE id = $1 AND organization_id = $2`, id, orgID).Scan(&channel, &dest, &sealedSecret, &verified)
+	err := s.pool.QueryRow(ctx, `SELECT channel, destination, signing_secret, verified_at IS NOT NULL, hawkeye_bot FROM notification_settings
+		WHERE id = $1 AND organization_id = $2`, id, orgID).Scan(&channel, &dest, &sealedSecret, &verified, &hawkeyeBot)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -250,6 +258,15 @@ func (s *Service) Test(ctx context.Context, orgID, id uuid.UUID, requestedBy str
 		}
 		return nil
 	}
+	if hawkeyeBot {
+		if s.bot == nil {
+			return ErrTelegramUnavailable
+		}
+		if err := s.sendTest(ctx, channel, s.bot.sendURL(dest), ""); err != nil {
+			return validation.New("destination", "the test message was not delivered ("+testReason(channel, err)+")")
+		}
+		return nil
+	}
 	target, err := s.box.Open(dest, id.String())
 	if err != nil {
 		return err
@@ -261,25 +278,39 @@ func (s *Service) Test(ctx context.Context, orgID, id uuid.UUID, requestedBy str
 		}
 	}
 	if err := s.sendTest(ctx, channel, target, secret); err != nil {
-		return validation.New("destination", "the test message was not delivered ("+testReason(err)+")")
+		return validation.New("destination", "the test message was not delivered ("+testReason(channel, err)+")")
 	}
 	return nil
 }
 
 func (s *Service) sendTest(ctx context.Context, channel, target, secret string) error {
 	a := Alert{Event: EventTest, AppBaseURL: s.appBaseURL}
-	body, header, err := buildRequest(channel, a, secret, "", time.Now())
+	to, body, header, err := buildRequest(channel, target, a, secret, "", time.Now())
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, postTimeout)
 	defer cancel()
-	return post(ctx, s.http, target, body, header)
+	return post(ctx, s.http, to, body, header)
 }
 
-// testReason is the part of a delivery error that is safe and useful to show the user.
-func testReason(err error) string {
-	return clean(err.Error())
+// testReason is the part of a delivery error that is safe and useful to show the user. Telegram's statuses map to the usual
+// set-up mistakes, so those get a hint.
+func testReason(channel string, err error) string {
+	reason := clean(err.Error())
+	var se statusError
+	if channel != ChannelTelegram || !errors.As(err, &se) {
+		return reason
+	}
+	switch se.code {
+	case http.StatusBadRequest:
+		return reason + "; check the chat ID, and that the bot has been added to that chat"
+	case http.StatusUnauthorized, http.StatusNotFound:
+		return reason + "; check the bot token"
+	case http.StatusForbidden:
+		return reason + "; the bot is not allowed to post in that chat (add it to the group, or as an admin of the channel)"
+	}
+	return reason
 }
 
 func (s *Service) Delete(ctx context.Context, orgID, id uuid.UUID) error {

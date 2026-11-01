@@ -28,7 +28,7 @@ const SUPPORT = 'support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> October 15, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 1, 2026</p>
       <p>
         HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -53,7 +53,7 @@ export function PrivacyPage() {
         <li>Your password, which we never store. We keep only a one-way hash made with the Argon2id algorithm.</li>
         <li>Whether your email address has been verified, and the name of the workspace (organization) created for your account.</li>
         <li>Your subscription plan, account status, and related service records.</li>
-        <li>Alert destinations you add: email addresses you ask us to notify and their confirmation status, and Slack or webhook URLs. We store those URLs and any webhook signing secret encrypted, and show you only the host name afterwards.</li>
+        <li>Alert destinations you add: email addresses you ask us to notify and their confirmation status, Slack, Discord, Microsoft Teams or webhook URLs, and Telegram bot tokens and chat IDs. We store those URLs, tokens and any webhook signing secret encrypted, and show you only the host name (or, for Telegram, the chat ID) afterwards. If you connect a Telegram chat through our bot, we store that chat’s ID and its name (for a private chat, the person’s Telegram username or first name) so we can deliver alerts there and show you which chat it is.</li>
         <li>If you use PDF reports on the Agency plan: the name and logo image you add to put on them. We check the image and store a cleaned copy, and print it on your reports.</li>
         <li>Communications you send to us. If you use our contact form we receive the name, email address, subject, message, and optional website address you enter and, if you are signed in, your account identifier and plan.</li>
       </ul>
@@ -197,11 +197,11 @@ export function PrivacyPage() {
       <h3>E. At your direction</h3>
       <p>We may disclose information when you request or authorize us to do so, for example by adding an alert recipient.</p>
 
-      <h3>F. Slack and webhook destinations</h3>
+      <h3>F. Chat and webhook destinations</h3>
       <p>
-        If you add a Slack or webhook destination, we send alert content to the address you provide: the monitor’s name and web address, the time of the event, a short description of the failure (or the certificate
-        or domain expiry date), and a link back to HawkEye. That destination is operated by you or by a third party you chose (for example Slack), and its handling of the information is governed by its own terms and policies, not this
-        Policy. Treat these addresses as secrets: anyone who has a Slack webhook address can post to your channel.
+        If you add a Slack, Discord, Microsoft Teams, Telegram or webhook destination, we send alert content to the address you provide: the monitor’s name and web address, the time of the event, a short description of the failure (or the certificate
+        or domain expiry date), and a link back to HawkEye. That destination is operated by you or by a third party you chose (for example Slack, Discord, Microsoft or Telegram), and its handling of the information is governed by its own terms and policies, not this
+        Policy. Treat these addresses and bot tokens as secrets: anyone who has one can post to your channel.
       </p>
 
       <h3>G. Information on a public status page</h3>
@@ -346,7 +346,7 @@ export function PrivacyPage() {
 export function TermsPage() {
   return (
     <Shell title="HawkEye Terms and Conditions" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> October 15, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 1, 2026</p>
       <p>
         These Terms and Conditions (“Terms”) govern access to and use of the HawkEye website, applications, and website-monitoring services (together, the “Service”).
       </p>
@@ -389,7 +389,7 @@ export function TermsPage() {
         <li>SSL certificate expiry tracking for HTTPS monitors, with email warnings as the expiry date approaches (currently 30, 14, 7, and 1 days before, and when the certificate has expired).</li>
         <li>Domain expiry tracking, with email warnings as a domain’s registration expiry date approaches (currently 30, 14, 7, and 1 days before, and when it has expired).</li>
         <li>Incident detection, incident records, and recovery status.</li>
-        <li>Alert notifications by email, to a Slack channel, or to a webhook address you provide, as described in Section 9.</li>
+        <li>Alert notifications by email, to a Slack, Discord, Microsoft Teams or Telegram channel, or to a webhook address you provide, as described in Section 9.</li>
         <li>An optional public status page showing the monitors you choose.</li>
         <li>Maintenance windows, on the plans that include them, during which alerts and incidents are suppressed for the monitors you choose.</li>
         <li>Dashboard views and historical uptime and response-time reports.</li>
@@ -409,7 +409,7 @@ export function TermsPage() {
       <p>You must not use HawkEye to:</p>
       <ul>
         <li>Monitor a website or endpoint without the necessary authorization.</li>
-        <li>Send alerts to a Slack channel or webhook address that you are not authorized to use, or use alerts to send unsolicited or unlawful content to others.</li>
+        <li>Send alerts to a chat channel, bot or webhook address that you are not authorized to use, or use alerts to send unsolicited or unlawful content to others.</li>
         <li>Publish on a status page anything that is unlawful, infringing, misleading, or that you are not authorized to publish, including another party’s name or marks in a way that suggests their endorsement.</li>
         <li>Conduct denial-of-service attacks, stress tests, or excessive request campaigns.</li>
         <li>Attempt to bypass authentication, access controls, rate limits, or security measures.</li>
@@ -442,7 +442,7 @@ export function TermsPage() {
         <li><strong>Agency:</strong> up to 200 monitors, checks every minute, 365 days of monitoring history, and up to 5 team members (you and up to four invited colleagues).</li>
       </ul>
       <p>
-        Paid plans may check each monitor from several locations, up to the limit shown at checkout. Every plan includes email, Slack, and webhook alerts and one public status page. Maintenance windows are included in the Pro and Agency plans. If you move to a plan that does not include maintenance windows, windows you
+        Paid plans may check each monitor from several locations, up to the limit shown at checkout. Every plan includes email, chat (Slack, Discord, Microsoft Teams and Telegram), and webhook alerts and one public status page. Maintenance windows are included in the Pro and Agency plans. If you move to a plan that does not include maintenance windows, windows you
         already created keep working, but you cannot create new ones.
       </p>
       <p>
@@ -556,16 +556,16 @@ export function TermsPage() {
 
       <h3>A. Alerts and notifications</h3>
       <p>
-        You may configure the Service to send notifications about incidents, recovery events, and approaching certificate and domain expiry to email addresses, to a Slack channel through a Slack incoming-webhook address, and to a webhook
-        address of your choice. SMS is not currently available. You are responsible for providing valid destinations, confirming email addresses as the Service requires,
+        You may configure the Service to send notifications about incidents, recovery events, and approaching certificate and domain expiry to email addresses, to a Slack, Discord or Microsoft Teams channel through a webhook address that app gives you, to a Telegram chat
+        through our bot or one you create, and to a webhook address of your choice. SMS is not currently available. You are responsible for providing valid destinations, confirming email addresses as the Service requires,
         keeping your notification settings current, and for the systems that receive webhooks, including verifying the signature we send and handling repeated deliveries.
       </p>
       <p>
-        A Slack or webhook address is a credential. Keep it confidential: anyone who has it may be able to post to your Slack channel or to send requests to your endpoint pretending to be HawkEye. We store these addresses
-        encrypted, but you are responsible for revoking and replacing any that you believe have been exposed. Slack and your own endpoints are third-party systems outside HawkEye’s control, and their terms apply to your use of them.
+        A chat or webhook address, and a Telegram bot token, is a credential. Keep it confidential: anyone who has it may be able to post to your channel or to send requests to your endpoint pretending to be HawkEye. We store these addresses
+        encrypted, but you are responsible for revoking and replacing any that you believe have been exposed. Chat services and your own endpoints are third-party systems outside HawkEye’s control, and their terms apply to your use of them.
       </p>
       <p>
-        Alerts may be delayed, filtered, rejected, rate-limited, duplicated, or interrupted by systems outside HawkEye’s control, including email providers, Slack, and your own servers. We retry failed deliveries for a limited
+        Alerts may be delayed, filtered, rejected, rate-limited, duplicated, or interrupted by systems outside HawkEye’s control, including email providers, chat services, and your own servers. We retry failed deliveries for a limited
         time and then stop. You should not rely on any single alert as your sole means of detecting or responding to a critical event.
       </p>
 

@@ -35,6 +35,7 @@ internet ─443/80─▶ web (Caddy: TLS, HSTS, CSP, static SPA, proxies /api /h
 4. Verify: `scripts/smoke.sh https://your-domain` (42 checks: health, redirect to HTTPS, HSTS and CSP headers, security-sensitive routes, auth flow; `--full` also drives the registration and account-deletion lifecycle and needs a mail API).
 5. Apply the egress firewall on the host and prove it: `sudo ALLOW_TCP=... ALLOW_DNS=... deploy/egress-filter.sh apply`, then `scripts/verify-egress.sh`. **This script has not been tested on Linux by the author; do not skip the verifier.**
 6. Add the Stripe webhook endpoint `https://your-domain/api/v1/webhooks/stripe`, put its signing secret in `STRIPE_WEBHOOK_SECRET`, restart `api` and `worker`.
+   For one-tap Telegram alerts, set `TELEGRAM_BOT_TOKEN` (from @BotFather) and `TELEGRAM_WEBHOOK_SECRET` (`openssl rand -hex 32`). Nothing else: the API registers its webhook with Telegram at startup and logs `telegram bot ready`. Only one deployment may use a given bot (Telegram sends its updates to the last webhook registered), so never give a staging or development server the production bot's token.
 7. Load `deploy/prometheus-alerts.yml`, add an external uptime check on `/readyz`, schedule backups (`docs/backup-restore.md`).
 
 ## Email with Resend

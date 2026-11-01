@@ -144,6 +144,64 @@ func TestSlackDeliverySendsASlackMessage(t *testing.T) {
 	}
 }
 
+func TestChatDeliveriesUseEachAppsFormat(t *testing.T) {
+	for _, c := range []struct {
+		channel, target, path, want string
+	}{
+		{"discord", "https://discord.com/api/webhooks/1/XXXX", "/api/webhooks/1/XXXX", `"embeds"`},
+		{"teams", "https://prod-1.westus.logic.azure.com/workflows/abc?sig=XXXX", "/workflows/abc", `"AdaptiveCard"`},
+		{"telegram", "https://api.telegram.org/bot1:XXXX/sendMessage?chat_id=-100123", "/bot1:XXXX/sendMessage", `"chat_id":"-100123"`},
+	} {
+		t.Run(c.channel, func(t *testing.T) {
+			e := newEnv(t, 5)
+			rcv := newReceiver(t, 204)
+			_, id, _ := e.urlDelivery(t, c.channel, c.target, "outage")
+			d := dispatcher(e, &scriptedSender{}, notifications.DispatcherConfig{}).WithSecrets(testutil.SecretBox()).WithHTTPClient(rcv.client())
+			d.ProcessOne(t.Context())
+			got := rcv.requests()
+			if e.row(t, id).Status != "sent" || len(got) != 1 || got[0].Path != c.path {
+				t.Fatalf("%+v %+v", e.row(t, id), got)
+			}
+			if !strings.Contains(string(got[0].Body), c.want) || !strings.Contains(string(got[0].Body), "may be offline") || got[0].Header.Get("X-HawkEye-Signature") != "" {
+				t.Fatalf("%s", got[0].Body)
+			}
+		})
+	}
+}
+
+func TestCreateTelegramSealsTheTokenAndShowsOnlyTheChat(t *testing.T) {
+	e := newEnv(t, 5)
+	rcv := newReceiver(t, 200)
+	svc := newService(t, e, rcv)
+	const token = "123456789:AAEhBP0av28MapQ3a_Bb-cDeFgHiJkLmNoP"
+
+	st, secret, err := svc.CreateURL(t.Context(), e.org, "telegram", "-1001234567890", token)
+	if err != nil || !st.Verified || st.Channel != "telegram" || st.Destination != "chat -1001234567890" || secret != "" {
+		t.Fatalf("%+v %q %v", st, secret, err)
+	}
+	got := rcv.requests()
+	if len(got) != 1 || got[0].Path != "/bot"+token+"/sendMessage" || !strings.Contains(string(got[0].Body), `"chat_id":"-1001234567890"`) {
+		t.Fatalf("test message: %+v", got)
+	}
+	var dest string
+	e.pool.QueryRow(t.Context(), `SELECT destination FROM notification_settings WHERE id = $1`, st.ID).Scan(&dest)
+	if !strings.HasPrefix(dest, "enc:v1:") || strings.Contains(dest, "AAEh") {
+		t.Fatalf("the bot token must be stored sealed: %q", dest)
+	}
+	if _, _, err := svc.CreateURL(t.Context(), e.org, "telegram", "-1001234567890", token); !errors.Is(err, notifications.ErrDuplicate) {
+		t.Fatalf("duplicate: %v", err)
+	}
+}
+
+func TestATelegramTestFailureNamesTheLikelyMistake(t *testing.T) {
+	e := newEnv(t, 5)
+	svc := newService(t, e, newReceiver(t, 403))
+	_, _, err := svc.CreateURL(t.Context(), e.org, "telegram", "42", "123456789:AAEhBP0av28MapQ3a_Bb-cDeFgHiJkLmNoP")
+	if err == nil || !strings.Contains(err.Error(), "403") || !strings.Contains(err.Error(), "not allowed to post") || strings.Contains(err.Error(), "AAEh") {
+		t.Fatalf("%v", err)
+	}
+}
+
 func TestWebhookServerErrorIsRetriedWithTheSameDeliveryID(t *testing.T) {
 	e := newEnv(t, 5)
 	rcv := newReceiver(t, 503, 502, 200)
@@ -199,7 +257,7 @@ func TestCreateURLSealsTheURLSendsATestAndShowsTheSecretOnce(t *testing.T) {
 	rcv := newReceiver(t, 200)
 	svc := newService(t, e, rcv)
 
-	st, secret, err := svc.CreateURL(t.Context(), e.org, "webhook", "https://hooks.example.com/in/token123")
+	st, secret, err := svc.CreateURL(t.Context(), e.org, "webhook", "https://hooks.example.com/in/token123", "")
 	if err != nil || !st.Verified || !st.Enabled || st.Channel != "webhook" || st.Destination != "hooks.example.com/…" || !strings.HasPrefix(secret, "whsec_") {
 		t.Fatalf("%+v %q %v", st, secret, err)
 	}
@@ -219,7 +277,7 @@ func TestCreateURLSealsTheURLSendsATestAndShowsTheSecretOnce(t *testing.T) {
 		t.Fatalf("listing must show only the masked label: %s", b)
 	}
 
-	if _, _, err := svc.CreateURL(t.Context(), e.org, "webhook", "https://hooks.example.com/in/token123"); !errors.Is(err, notifications.ErrDuplicate) {
+	if _, _, err := svc.CreateURL(t.Context(), e.org, "webhook", "https://hooks.example.com/in/token123", ""); !errors.Is(err, notifications.ErrDuplicate) {
 		t.Fatalf("duplicate: %v", err)
 	}
 	if err := svc.Test(t.Context(), e.org, st.ID, "owner@example.com", nil); err != nil || len(rcv.requests()) != 3 { // create test, duplicate's test, this one
@@ -239,7 +297,7 @@ func mustInt(t *testing.T, s string) int64 {
 func TestCreateURLIsRefusedWhenTheTestMessageFails(t *testing.T) {
 	e := newEnv(t, 5)
 	svc := newService(t, e, newReceiver(t, 404))
-	if _, _, err := svc.CreateURL(t.Context(), e.org, "slack", "https://hooks.slack.com/services/T0/B0/XXXX"); err == nil || !strings.Contains(err.Error(), "404") {
+	if _, _, err := svc.CreateURL(t.Context(), e.org, "slack", "https://hooks.slack.com/services/T0/B0/XXXX", ""); err == nil || !strings.Contains(err.Error(), "404") {
 		t.Fatalf("want a validation error naming the status, got %v", err)
 	}
 	var n int
@@ -254,17 +312,17 @@ func TestCreateURLRespectsTheDestinationLimitAndNeedsAKey(t *testing.T) {
 	rcv := newReceiver(t, 200)
 	svc := newService(t, e, rcv)
 	for i := range notifications.MaxSettingsPerOrganization {
-		if _, _, err := svc.CreateURL(t.Context(), e.org, "webhook", "https://hooks.example.com/in/"+string(rune('a'+i))); err != nil {
+		if _, _, err := svc.CreateURL(t.Context(), e.org, "webhook", "https://hooks.example.com/in/"+string(rune('a'+i)), ""); err != nil {
 			t.Fatal(i, err)
 		}
 	}
-	if _, _, err := svc.CreateURL(t.Context(), e.org, "webhook", "https://hooks.example.com/in/z"); !errors.Is(err, notifications.ErrTooMany) {
+	if _, _, err := svc.CreateURL(t.Context(), e.org, "webhook", "https://hooks.example.com/in/z", ""); !errors.Is(err, notifications.ErrTooMany) {
 		t.Fatalf("limit: %v", err)
 	}
 
 	e2 := newEnv(t, 5)
 	keyless := notifications.NewService(e2.pool, &scriptedSender{}, slog.New(slog.NewTextHandler(io.Discard, nil)), "https://app", "a@b", notifications.WithHTTPClient(rcv.client()))
-	if _, _, err := keyless.CreateURL(t.Context(), e2.org, "webhook", "https://hooks.example.com/in/x"); err == nil {
+	if _, _, err := keyless.CreateURL(t.Context(), e2.org, "webhook", "https://hooks.example.com/in/x", ""); err == nil {
 		t.Fatal("without an encryption key a URL must not be stored in clear")
 	}
 }

@@ -62,6 +62,7 @@ type envOpts struct {
 	global    int
 	ssl       *sslcheck.Service
 	site      *sitecheck.Service
+	telegram  *notifications.TelegramBot
 }
 
 func newEnv(t *testing.T, rateLimit int) *env { return newEnvOpts(t, rateLimit, envOpts{}) }
@@ -81,7 +82,8 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 		Logger: log, DB: pool, RequestTimeout: 10 * time.Second, BodyLimit: "1M",
 		Auth: svc, Orgs: organizations.NewService(pool), AuthRateLimitPerMin: rateLimit,
 		Plans: planSvc, Monitors: monitors.NewService(pool, planSvc, monitors.WithSecretBox(testutil.SecretBox()), monitors.WithDomainSync(domains.SyncTx)), Pool: pool, PgPool: pool,
-		Notifications: notifications.NewService(pool, mail, log, "http://app.test", "alerts@test"),
+		Notifications: notifications.NewService(pool, mail, log, "http://app.test", "alerts@test", notifications.WithTelegramBot(o.telegram)),
+		TelegramBot:   o.telegram,
 		Maintenance:   maintenance.NewService(pool, planSvc),
 		Domains:       domains.NewService(pool, planSvc),
 		StatusPages:   statuspage.NewService(pool),

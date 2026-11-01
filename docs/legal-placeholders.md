@@ -36,7 +36,7 @@ The app ships `/privacy` and `/terms` pages containing a prominent "PLACEHOLDER 
 | Session records (hashed token, expiry; no IP or user agent stored) | sign-in | until expiry/sign-out |
 | Monitor URLs/names, check results (status, latency, error class) | the service | per plan: 7 / 90 / 365 days; incidents kept |
 | Alert recipient emails | alerts | until removed or account deleted |
-| Slack / webhook destination URLs and webhook signing secrets (stored encrypted; only the host is ever displayed) | alerts | until removed or account deleted |
+| Slack, Discord, Teams and webhook destination URLs, customers' own Telegram bot tokens, and webhook signing secrets (stored encrypted; only the host, or a Telegram chat ID, is ever displayed); for chats connected through HawkEye's own bot, the Telegram chat ID and the chat's name (or the person's @username or first name, for a private chat) | alerts | until removed or account deleted |
 | Maintenance windows (name, schedule, covered monitors) | suppress alerts during planned work | until removed or account deleted |
 | Status page (address, title, description, chosen monitor names; **public once published**) | customer-facing status | until unpublished/deleted or account deleted; cached under a minute |
 | Billing: Stripe customer ID, subscription state | billing | until account deletion; Stripe keeps its own records (tax/accounting law) |
@@ -45,7 +45,7 @@ The app ships `/privacy` and `/terms` pages containing a prominent "PLACEHOLDER 
 | Contact-form messages (name, email, message, optional website, account id/plan if signed in) | support | live in the support mailbox, not the database; decide a deletion period |
 | Server logs (request ids, no bodies; tokens redacted) | operations | set by your log retention |
 
-Alert content (monitor name and address, event time, short failure description) is also sent to customer-chosen Slack and webhook endpoints; Slack is a third party the customer chooses, not our sub-processor.
+Alert content (monitor name and address, event time, short failure description) is also sent to customer-chosen Slack, Discord, Microsoft Teams, Telegram and webhook endpoints; those services are third parties the customer chooses, not our sub-processors.
 
 Sub-processors to list: hosting provider, database provider, SMTP provider, Stripe, Sentry (if `SENTRY_DSN` set; events are scrubbed of emails/tokens), uptime monitor.
 

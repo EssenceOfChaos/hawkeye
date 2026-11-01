@@ -1,0 +1,2 @@
+# The docs are hand-formatted (compact tables, one-line JSON examples). Formatting them on save rewrites every table and buries real changes in the diff.
+docs/

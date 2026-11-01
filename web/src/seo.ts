@@ -28,7 +28,7 @@ export const SHARE_IMAGE_ALT = 'HawkEye website monitoring dashboard on a glowin
 
 export const HOME_TITLE = 'HawkEye — Website Uptime Monitoring & Alerts'
 export const HOME_DESCRIPTION =
-  'Website and API uptime monitoring with outage alerts by email, Slack or webhook, SSL and domain expiry warnings, and public status pages. Start free.'
+  'Website and API uptime monitoring: alerts by email, Slack, Teams, Discord, Telegram or webhook, SSL and domain expiry warnings, and status pages. Start free.'
 
 /** A free tool page. With a name it also carries WebApplication structured data (a free, browser-based tool). */
 function tool(path: string, title: string, description: string, name?: string): PageMeta {

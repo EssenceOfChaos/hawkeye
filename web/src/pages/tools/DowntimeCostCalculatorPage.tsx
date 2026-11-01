@@ -57,7 +57,7 @@ export function DowntimeCostCalculatorPage() {
       intro="Estimate the revenue a website outage puts at risk from your daily revenue, the hours you trade and how long the site is down."
       cta={{
         heading: 'Hear about an outage in minutes, not from customers',
-        text: 'HawkEye checks your website or API on a schedule and alerts you by email, Slack or webhook when an outage is confirmed, so you can start fixing it sooner.',
+        text: 'HawkEye checks your website or API on a schedule and alerts you by email, Slack, Teams, Discord, Telegram or webhook when an outage is confirmed, so you can start fixing it sooner.',
       }}
     >
       <section className="card" aria-labelledby="cost-inputs-h">

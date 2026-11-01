@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -45,22 +46,56 @@ func (h *handlers) listSettings(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"notification_settings": list, "max": notifications.MaxSettingsPerOrganization})
+	// telegram_bot is the @name of HawkEye's bot when chats can be connected through it, otherwise "" (then only "use your own bot" is offered).
+	return c.JSON(http.StatusOK, map[string]any{"notification_settings": list, "max": notifications.MaxSettingsPerOrganization,
+		"telegram_bot": h.notifications.TelegramBotName()})
+}
+
+// telegramLink issues a one-time link that connects a Telegram chat through HawkEye's bot. The chat appears in the list once someone taps Start.
+func (h *handlers) telegramLink(c echo.Context) error {
+	link, err := h.notifications.TelegramLink(c.Request().Context(), currentOrg(c), currentUser(c).ID)
+	if err != nil {
+		return mapError(err)
+	}
+	return c.JSON(http.StatusCreated, map[string]any{"telegram_link": link})
+}
+
+// telegramWebhook receives updates for HawkEye's Telegram bot. Telegram calls it, not a browser: no session or CSRF token. It is authenticated by
+// the secret registered with setWebhook, which Telegram sends back in a header. A reply to the chat, if any, is returned as the response body
+// (Telegram performs the method it names).
+func (h *handlers) telegramWebhook(c echo.Context) error {
+	if !h.telegramBot.CheckSecret(c.Request().Header.Get("X-Telegram-Bot-Api-Secret-Token")) {
+		h.log.Warn("rejected telegram webhook with a wrong secret", "remote", c.RealIP())
+		return &APIError{Status: http.StatusUnauthorized, Code: "UNAUTHORIZED", Message: "Unauthorized."}
+	}
+	var u notifications.TelegramUpdate
+	if err := json.NewDecoder(c.Request().Body).Decode(&u); err != nil {
+		return c.NoContent(http.StatusOK) // not an update we understand; a non-2xx would only make Telegram resend it
+	}
+	reply, err := h.notifications.HandleTelegramUpdate(c.Request().Context(), u)
+	if err != nil {
+		return err // 500: Telegram retries the update
+	}
+	if reply == nil {
+		return c.NoContent(http.StatusOK)
+	}
+	return c.JSON(http.StatusOK, reply)
 }
 
 func (h *handlers) createSetting(c echo.Context) error {
 	var in struct {
 		Channel     string `json:"channel"`
 		Destination string `json:"destination"`
+		BotToken    string `json:"bot_token"` // Telegram only
 	}
 	if err := bind(c, &in); err != nil {
 		return err
 	}
-	switch in.Channel {
-	case "", notifications.ChannelEmail:
-	case notifications.ChannelWebhook, notifications.ChannelSlack:
+	switch {
+	case in.Channel == "" || in.Channel == notifications.ChannelEmail:
+	case notifications.IsURLChannel(in.Channel):
 		// The test message is delivered before anything is saved; the signing secret is shown only in this response.
-		s, secret, err := h.notifications.CreateURL(c.Request().Context(), currentOrg(c), in.Channel, in.Destination)
+		s, secret, err := h.notifications.CreateURL(c.Request().Context(), currentOrg(c), in.Channel, in.Destination, in.BotToken)
 		if err != nil {
 			return mapError(err)
 		}
@@ -70,7 +105,7 @@ func (h *handlers) createSetting(c echo.Context) error {
 		}
 		return c.JSON(http.StatusCreated, out)
 	default:
-		return mapError(validation.New("channel", "must be email, webhook or slack"))
+		return mapError(validation.New("channel", "must be email, webhook, slack, discord, teams or telegram"))
 	}
 	// Adding a recipient emails a third party: cap how often any one address can be targeted.
 	if !h.emailBudget(c, "alert-confirm", in.Destination) {
@@ -84,7 +119,7 @@ func (h *handlers) createSetting(c echo.Context) error {
 	return c.JSON(http.StatusCreated, map[string]any{"notification_setting": s})
 }
 
-// testSetting sends a test to a recipient: a signed test request to a webhook or Slack URL, or a test alert email to a confirmed email address.
+// testSetting sends a test to a recipient: a test message to a webhook or chat URL, or a test alert email to a confirmed email address.
 // Emailing is capped per address, like every other action that emails a third party.
 func (h *handlers) testSetting(c echo.Context) error {
 	id, err := settingID(c)
