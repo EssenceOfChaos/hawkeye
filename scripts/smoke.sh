@@ -57,6 +57,8 @@ H="$(hdr "$BASE/")"
 check "Content-Security-Policy is set and forbids framing" 'echo "$H" | grep -qi "^content-security-policy:.*frame-ancestors .none"'
 check "CSP allows no inline scripts (script-src has no unsafe-inline)" '! echo "$H" | grep -i "^content-security-policy:" | grep -qE "script-src[^;]*unsafe-inline"'
 check "CSP allows the Google Analytics script and data endpoints" 'echo "$H" | grep -i "^content-security-policy:" | grep -q "script-src[^;]*googletagmanager.com" && echo "$H" | grep -i "^content-security-policy:" | grep -q "connect-src[^;]*google-analytics.com"'
+# A wildcard like *.analytics.google.com does not match analytics.google.com itself, so these hosts are listed by name (a browser blocks and logs each one that is missing).
+check "CSP allows the Google Analytics and Google Ads conversion hosts by name" 'c=$(echo "$H" | grep -i "^content-security-policy:"); echo "$c" | grep -qE "connect-src[^;]*https://analytics.google.com" && echo "$c" | grep -qE "connect-src[^;]*https://ad.doubleclick.net" && echo "$c" | grep -qE "img-src[^;]*https://ad.doubleclick.net" && echo "$c" | grep -qE "connect-src[^;]*https://[*].google.co.uk" && echo "$c" | grep -qE "connect-src[^;]*https://[*].google.ca"'
 check "Google Analytics is not hard-coded in the page (the app loads it unless the visitor opted out)" '! "${CURL[@]}" "$BASE/" | grep -qi "googletagmanager"'
 check "X-Content-Type-Options: nosniff"      'echo "$H" | grep -qi "^x-content-type-options: nosniff"'
 check "X-Frame-Options: DENY"                'echo "$H" | grep -qi "^x-frame-options: DENY"'

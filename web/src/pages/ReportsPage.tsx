@@ -151,7 +151,7 @@ export function ReportsPage() {
         {current && !canBrand && (
           <Alert tone="info">Reports with your own name and logo are included in the Agency plan. Other plans get the HawkEye look. <Link to="/billing">See plans</Link></Alert>
         )}
-        <form onSubmit={saveName}>
+        <form className="brand-name-form" onSubmit={saveName}>
           <Field
             label="Name on reports"
             value={shownName}
@@ -177,7 +177,7 @@ export function ReportsPage() {
             </p>
           )}
           <input id="logo-file" type="file" accept="image/png,image/jpeg" disabled={busy || !canBrand || !isOwner} onChange={uploadLogo} aria-describedby="logo-hint" />
-          <small id="logo-hint" className="hint">PNG or JPEG, up to 512 KB and 2000 × 2000 pixels. A wide logo on a transparent or white background works best.</small>
+          <small id="logo-hint" className="hint">PNG or JPEG, up to 512 KB, and no bigger than 2000 × 2000 pixels. Reports show your logo in a wide, short space, so a wide logo on a transparent or white background looks best. It is saved as soon as you choose the file.</small>
           {fields.logo && <small className="error">{`Logo ${fields.logo}`}</small>}
           {current?.branding.has_logo && (
             <p><button type="button" onClick={removeLogo} disabled={busy || !isOwner}>Remove logo</button></p>
