@@ -18,17 +18,18 @@ import {
   type RequestHeader,
 } from '../api'
 import { Field } from '../components/Field'
+import { KeywordChecks } from '../components/KeywordChecks'
+
+/** The server allows this many checks in total: text checks and JSON checks together. */
+const MAX_CHECKS = 10
+
+/** Where each submitted assertion came from, so a field error (assertions[i].…) can be shown on the right row. */
+type Origin = { list: 'contains' | 'notContains' | 'json'; row: number }
 
 function limitMessage(e: ApiError): string {
   const next = e.details.next_plan as { name: string; max_monitors: number } | undefined
   return next ? `${e.message} ${next.name} includes ${next.max_monitors} monitors.` : e.message
 }
-
-const ASSERTION_TYPES: { value: Assertion['type']; label: string }[] = [
-  { value: 'body_contains', label: 'Body contains' },
-  { value: 'body_not_contains', label: 'Body does not contain' },
-  { value: 'json_path', label: 'JSON value' },
-]
 
 const OPERATORS: { value: JsonOperator; label: string }[] = [
   { value: 'equals', label: 'equals' },
@@ -71,7 +72,10 @@ export function MonitorFormPage() {
   const [authSecret, setAuthSecret] = useState('')
   // The auth type whose secret is already stored; leaving the secret empty keeps it.
   const [storedAuthType, setStoredAuthType] = useState<AuthType | null>(null)
-  const [assertions, setAssertions] = useState<Assertion[]>([])
+  const [assertions, setAssertions] = useState<Assertion[]>([]) // JSON checks; text checks live in the two lists below
+  const [contains, setContains] = useState<string[]>([])
+  const [notContains, setNotContains] = useState<string[]>([])
+  const [sent, setSent] = useState<Origin[]>([])
   const [allRegions, setAllRegions] = useState<RegionInfo[]>([])
   const [maxRegions, setMaxRegions] = useState(1)
   const [chosen, setChosen] = useState<string[]>([])
@@ -108,7 +112,10 @@ export function MonitorFormPage() {
           setAuthHeaderName(m.auth.header_name ?? '')
           setStoredAuthType(m.auth.secret_set ? m.auth.type : null)
         }
-        setAssertions(m.assertions ?? [])
+        const all = m.assertions ?? []
+        setContains(all.filter((a) => a.type === 'body_contains').map((a) => a.value ?? ''))
+        setNotContains(all.filter((a) => a.type === 'body_not_contains').map((a) => a.value ?? ''))
+        setAssertions(all.filter((a) => a.type === 'json_path'))
         setChosen(m.regions ?? [])
         setSlowOn(m.slow_threshold_ms != null)
         if (m.slow_threshold_ms != null) setSlowMs(String(m.slow_threshold_ms))
@@ -132,6 +139,15 @@ export function MonitorFormPage() {
     e.preventDefault()
     setBusy(true)
     setError(null)
+    // Text checks first, then JSON checks. Empty text rows are dropped rather than refused.
+    const checks: { assertion: Assertion; origin: Origin }[] = [
+      ...contains.map((v, row) => ({ v, row })).filter((x) => x.v.trim() !== '')
+        .map(({ v, row }) => ({ assertion: { type: 'body_contains' as const, value: v }, origin: { list: 'contains' as const, row } })),
+      ...notContains.map((v, row) => ({ v, row })).filter((x) => x.v.trim() !== '')
+        .map(({ v, row }) => ({ assertion: { type: 'body_not_contains' as const, value: v }, origin: { list: 'notContains' as const, row } })),
+      ...assertions.map((a, row) => ({ assertion: a, origin: { list: 'json' as const, row } })),
+    ]
+    setSent(checks.map((c) => c.origin))
     const payload: MonitorInput = {
       name,
       url,
@@ -140,9 +156,7 @@ export function MonitorFormPage() {
       headers: headers.filter((h) => h.name.trim() !== '' || h.value !== ''),
       body: bodyAllowed && body !== '' ? body : null,
       auth: { type: authType },
-      assertions: assertionsAllowed
-        ? assertions.map((a) => (a.type === 'json_path' ? a : { type: a.type, value: a.value }))
-        : [],
+      assertions: assertionsAllowed ? checks.map((c) => c.assertion) : [],
       slow_threshold_ms: slowOn ? Number(slowMs) : null,
       slow_checks: Number(slowChecks),
     }
@@ -168,6 +182,14 @@ export function MonitorFormPage() {
     setAssertions((as) => as.map((a, j) => (j === i ? { ...a, ...patch } : a)))
 
   const f = error?.fields ?? {}
+  const totalChecks = contains.length + notContains.length + assertions.length
+  // A field error for one submitted check, found through where that check came from.
+  const errorAt = (list: Origin['list'], row: number): string | undefined => {
+    const i = sent.findIndex((o) => o.list === list && o.row === row)
+    if (i < 0) return undefined
+    return f[`assertions[${i}].type`] ?? f[`assertions[${i}].path`] ?? f[`assertions[${i}].operator`] ?? f[`assertions[${i}].value`]
+  }
+  const rowErrors = (list: Origin['list'], n: number) => Object.fromEntries(Array.from({ length: n }, (_, row) => [row, errorAt(list, row)]))
   const generic = error && !Object.keys(f).length
   const secretLabel = authType === 'basic' ? 'Password' : authType === 'bearer' ? 'Token' : 'Header value'
   return (
@@ -263,63 +285,56 @@ export function MonitorFormPage() {
             )}
           </fieldset>
 
+          <KeywordChecks contains={contains} notContains={notContains} onContains={setContains} onNotContains={setNotContains}
+            disabled={!assertionsAllowed} full={totalChecks >= MAX_CHECKS}
+            errors={{ contains: rowErrors('contains', contains.length), notContains: rowErrors('notContains', notContains.length) }} />
+
           <fieldset className="group">
             <legend>Response checks</legend>
             <Field label="Expected status code (optional)" type="number" min={100} max={599} value={expected}
               onChange={(e) => setExpected(e.target.value)} error={f.expected_status_code}
               hint="Leave empty to treat any response below 400 as online." />
             <div className="field">
-              <span>Assertions</span>
+              <span>JSON checks (for APIs)</span>
               {!assertionsAllowed && <small className="hint">HEAD responses have no body. Use GET to check the content.</small>}
               {assertionsAllowed &&
                 assertions.map((a, i) => (
                   <div key={i}>
                     <div className="kv-row">
-                      <select aria-label={`Assertion ${i + 1} type`} value={a.type}
-                        onChange={(e) => setAssertion(i, { type: e.target.value as Assertion['type'], operator: a.operator ?? 'equals' })}>
-                        {ASSERTION_TYPES.map((t) => (
-                          <option key={t.value} value={t.value}>{t.label}</option>
+                      <input aria-label={`JSON check ${i + 1} path`} placeholder="data.status" value={a.path ?? ''}
+                        aria-invalid={errorAt('json', i) ? true : undefined}
+                        onChange={(e) => setAssertion(i, { path: e.target.value })} />
+                      <select aria-label={`JSON check ${i + 1} operator`} value={a.operator ?? 'equals'}
+                        onChange={(e) => setAssertion(i, { operator: e.target.value as JsonOperator })}>
+                        {OPERATORS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
                         ))}
                       </select>
-                      <button type="button" className="linklike" aria-label={`Remove assertion ${i + 1}`}
+                      <button type="button" className="linklike" aria-label={`Remove JSON check ${i + 1}`}
                         onClick={() => setAssertions((as) => as.filter((_, j) => j !== i))}>Remove</button>
                     </div>
-                    {a.type === 'json_path' && (
-                      <div className="kv-row">
-                        <input aria-label={`Assertion ${i + 1} JSON path`} placeholder="data.status" value={a.path ?? ''}
-                          aria-invalid={f[`assertions[${i}].path`] ? true : undefined}
-                          onChange={(e) => setAssertion(i, { path: e.target.value })} />
-                        <select aria-label={`Assertion ${i + 1} operator`} value={a.operator ?? 'equals'}
-                          onChange={(e) => setAssertion(i, { operator: e.target.value as JsonOperator })}>
-                          {OPERATORS.map((o) => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
                     {needsValue(a) && (
                       <div className="kv-row">
-                        <input aria-label={`Assertion ${i + 1} value`} placeholder={a.type === 'json_path' ? 'ok' : 'text to look for'}
-                          value={a.value ?? ''} aria-invalid={f[`assertions[${i}].value`] ? true : undefined}
+                        <input aria-label={`JSON check ${i + 1} value`} placeholder="ok"
+                          value={a.value ?? ''} aria-invalid={errorAt('json', i) ? true : undefined}
                           onChange={(e) => setAssertion(i, { value: e.target.value })} />
                       </div>
                     )}
-                    <RowError id={`a${i}-err`}>
-                      {f[`assertions[${i}].type`] ?? f[`assertions[${i}].path`] ?? f[`assertions[${i}].operator`] ?? f[`assertions[${i}].value`]}
-                    </RowError>
+                    <RowError id={`a${i}-err`}>{errorAt('json', i)}</RowError>
                   </div>
                 ))}
               <RowError id="assertions-err">{f.assertions}</RowError>
               {assertionsAllowed && (
                 <div>
-                  <button type="button" className="linklike"
-                    onClick={() => setAssertions((as) => [...as, { type: 'body_contains', value: '' }])}>
-                    Add assertion
+                  <button type="button" className="linklike" disabled={totalChecks >= MAX_CHECKS}
+                    onClick={() => setAssertions((as) => [...as, { type: 'json_path', path: '', operator: 'equals', value: '' }])}>
+                    Add JSON check
                   </button>
                 </div>
               )}
               <small className="hint">
-                All assertions must pass for the check to count as online. JSON paths look like data.items[0].status.
+                For an API that answers in JSON: check a value at a path such as data.items[0].status. Every check (text and JSON) must pass for the monitor to
+                count as online; up to {MAX_CHECKS} in total.
               </small>
             </div>
           </fieldset>

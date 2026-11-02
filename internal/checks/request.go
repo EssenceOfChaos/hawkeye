@@ -176,11 +176,11 @@ func evaluate(as []Assertion, body []byte, truncated bool) string {
 		switch a.Type {
 		case AssertBodyContains:
 			if !bytes.Contains(body, []byte(a.Value)) {
-				return fmt.Sprintf("Response body does not contain %q", a.Value)
+				return fmt.Sprintf("The page does not contain %q", a.Value)
 			}
 		case AssertBodyNotContains:
 			if bytes.Contains(body, []byte(a.Value)) {
-				return fmt.Sprintf("Response body contains %q", a.Value)
+				return fmt.Sprintf("The page contains %q", a.Value)
 			}
 		case AssertJSONPath:
 			if !parsed {

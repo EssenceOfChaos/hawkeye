@@ -414,6 +414,9 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 .status-back { margin: 0 0 .75rem; font-size: .9rem; }
 .status-logo.preview { display: block; margin: .25rem 0 .5rem; }
 .badge-preview { display: block; max-width: 100%; height: auto; }
+/* One-click keyword presets on the monitor form. */
+.presets { list-style: none; padding: 0; margin: .25rem 0; display: grid; gap: .35rem; }
+.presets button { font-size: .85rem; padding: .2rem .55rem; }
 .accent-preview { margin-top: .5rem; padding: .75rem 1rem; border-radius: .5rem; font-weight: 700; }
 .status-bars > .d-tooltip { flex: 1; min-width: 2px; display: block; }
 .status-bars > .d-tooltip > span { display: block; height: 1.75rem; border-radius: 2px; background: var(--border); }

@@ -63,10 +63,9 @@ describe('MonitorFormPage', () => {
     await userEvent.type(screen.getByLabelText('Request body (optional)'), 'ping')
     await userEvent.selectOptions(screen.getByLabelText('Authentication'), 'bearer')
     await userEvent.type(screen.getByLabelText('Token'), 'tok')
-    await userEvent.click(screen.getByRole('button', { name: 'Add assertion' }))
-    await userEvent.selectOptions(screen.getByLabelText('Assertion 1 type'), 'json_path')
-    await userEvent.type(screen.getByLabelText('Assertion 1 JSON path'), 'data.status')
-    await userEvent.type(screen.getByLabelText('Assertion 1 value'), 'ok')
+    await userEvent.click(screen.getByRole('button', { name: 'Add JSON check' }))
+    await userEvent.type(screen.getByLabelText('JSON check 1 path'), 'data.status')
+    await userEvent.type(screen.getByLabelText('JSON check 1 value'), 'ok')
     await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Monitor list' })).toBeInTheDocument())
     const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!
@@ -84,9 +83,12 @@ describe('MonitorFormPage', () => {
     setup(() => json(201, { monitor: {} }))
     await fill('Site')
     expect(screen.queryByLabelText('Request body (optional)')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add JSON check' })).toBeInTheDocument()
     await userEvent.selectOptions(screen.getByLabelText('Request method'), 'HEAD')
-    expect(screen.queryByRole('button', { name: 'Add assertion' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add JSON check' })).not.toBeInTheDocument()
     expect(screen.getByText(/HEAD responses have no body/)).toBeInTheDocument()
+    expect(screen.getByText(/HEAD requests have no page content/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Watch for/ })).not.toBeInTheDocument()
   })
 
   it('shows errors for a header row', async () => {
@@ -160,6 +162,43 @@ describe('MonitorFormPage editing', () => {
     expect(JSON.parse(patch[1]!.body as string).slow_threshold_ms).toBeNull()
   })
 
+  it('watches for text with one-click presets and sends text checks before JSON checks', async () => {
+    setup(() => json(201, { monitor: {} }))
+    const fetchMock = vi.mocked(globalThis.fetch)
+    await fill('Shop')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Add text' })[0])
+    await userEvent.type(screen.getByLabelText('The page must contain: text 1'), 'Add to cart')
+    await userEvent.click(screen.getByRole('button', { name: /Watch for “Error establishing a database connection”/ }))
+    expect(screen.getByLabelText('The page must not contain: text 1')).toHaveValue('Error establishing a database connection')
+    expect(screen.getByRole('button', { name: /already watched for/ })).toBeDisabled() // added once only
+    await userEvent.click(screen.getByRole('button', { name: /Watch for “Account Suspended”/ }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Add text' })[1]) // an empty row is dropped, not sent
+    await userEvent.click(screen.getByRole('button', { name: 'Add JSON check' }))
+    await userEvent.type(screen.getByLabelText('JSON check 1 path'), 'status')
+    await userEvent.type(screen.getByLabelText('JSON check 1 value'), 'ok')
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Monitor list' })).toBeInTheDocument())
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!
+    expect(JSON.parse(post[1]!.body as string).assertions).toEqual([
+      { type: 'body_contains', value: 'Add to cart' },
+      { type: 'body_not_contains', value: 'Error establishing a database connection' },
+      { type: 'body_not_contains', value: 'Account Suspended' },
+      { type: 'json_path', path: 'status', operator: 'equals', value: 'ok' },
+    ])
+  })
+
+  it('shows a server error for a text check on that row', async () => {
+    setup(() => json(400, { error: { code: 'VALIDATION_ERROR', message: 'bad', details: { fields: { 'assertions[1].value': 'must be at most 1000 characters' } } } }))
+    await fill('Shop')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Add text' })[0])
+    await userEvent.type(screen.getByLabelText('The page must contain: text 1'), 'Welcome')
+    await userEvent.click(screen.getByRole('button', { name: /Watch for “Fatal error”/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    expect(await screen.findByText('must be at most 1000 characters')).toBeInTheDocument()
+    expect(screen.getByLabelText('The page must not contain: text 1')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText('The page must contain: text 1')).not.toHaveAttribute('aria-invalid')
+  })
+
   it('keeps the stored secret unless a new one is entered', async () => {
     document.cookie = 'csrf_token=t; path=/'
     const monitor = {
@@ -184,7 +223,7 @@ describe('MonitorFormPage editing', () => {
     )
     expect(await screen.findByLabelText('Username')).toHaveValue('svc')
     expect(screen.getByText(/Leave empty to keep it/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Assertion 1 value')).toHaveValue('ok')
+    expect(screen.getByLabelText('The page must contain: text 1')).toHaveValue('ok') // a text check opens in the page content section
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Monitor list' })).toBeInTheDocument())
     const patch = fetchMock.mock.calls.find(([, init]) => init?.method === 'PATCH')!
