@@ -10,24 +10,36 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/plans"
 	"hawkeye/internal/statuspage"
 	"hawkeye/internal/testutil"
 	"hawkeye/internal/validation"
 )
 
 type env struct {
-	pool *pgxpool.Pool
-	svc  *statuspage.Service
-	org  uuid.UUID
+	pool  *pgxpool.Pool
+	svc   *statuspage.Service
+	org   uuid.UUID
+	pages map[string]uuid.UUID // slug -> id, for publish
 }
 
 func newEnv(t *testing.T, plan string) *env {
 	t.Helper()
 	pool := testutil.NewPoolSize(t, 5)
-	e := &env{pool: pool, svc: statuspage.NewService(pool)}
+	e := &env{pool: pool, svc: statuspage.NewService(pool, plans.NewService("http://app.test")), pages: map[string]uuid.UUID{}}
 	pool.QueryRow(t.Context(), `INSERT INTO organizations (name) VALUES ('o') RETURNING id`).Scan(&e.org)
 	pool.Exec(t.Context(), `INSERT INTO subscriptions (organization_id, plan_id, status) SELECT $1, id, 'active' FROM plans WHERE code=$2`, e.org, plan)
 	return e
+}
+
+// otherOrg is a second organization in the same database, for isolation tests (each env otherwise has a database of its own).
+func (e *env) otherOrg(t *testing.T) *env {
+	t.Helper()
+	o := &env{pool: e.pool, svc: e.svc, pages: map[string]uuid.UUID{}}
+	if err := e.pool.QueryRow(t.Context(), `INSERT INTO organizations (name) VALUES ('other') RETURNING id`).Scan(&o.org); err != nil {
+		t.Fatal(err)
+	}
+	return o
 }
 
 func (e *env) monitor(t *testing.T, name, status string) uuid.UUID {
@@ -51,62 +63,123 @@ func (e *env) checks(t *testing.T, monitor uuid.UUID, start time.Time, n int, su
 	}
 }
 
+// publish creates the page with this slug, or saves it again, published.
 func (e *env) publish(t *testing.T, slug string, ms ...statuspage.MonitorConfig) {
 	t.Helper()
-	if _, err := e.svc.Put(t.Context(), e.org, statuspage.Config{Slug: slug, Title: "Acme status", Description: "Live status", Published: true, Monitors: ms}); err != nil {
+	cfg := statuspage.Config{Slug: slug, Title: "Acme status", Description: "Live status", Published: true, Monitors: ms}
+	var c *statuspage.Config
+	var err error
+	if id, ok := e.pages[slug]; ok {
+		c, err = e.svc.Update(t.Context(), e.org, id, cfg)
+	} else {
+		c, err = e.svc.Create(t.Context(), e.org, cfg)
+	}
+	if err != nil {
 		t.Fatal(err)
 	}
+	e.pages[slug] = c.ID
 }
 
-func TestPutGetDeleteAndValidation(t *testing.T) {
+func TestCreateGetUpdateDeleteAndValidation(t *testing.T) {
 	e := newEnv(t, "free")
-	if c, err := e.svc.Get(t.Context(), e.org); err != nil || c != nil {
-		t.Fatalf("a new organization has no page: %+v %v", c, err)
+	if list, err := e.svc.List(t.Context(), e.org); err != nil || len(list) != 0 {
+		t.Fatalf("a new organization has no pages: %+v %v", list, err)
 	}
 	a, b := e.monitor(t, "Website", "up"), e.monitor(t, "API", "up")
-	c, err := e.svc.Put(t.Context(), e.org, statuspage.Config{Slug: "Acme", Title: "Acme", Published: true,
+	c, err := e.svc.Create(t.Context(), e.org, statuspage.Config{Slug: "Acme", Title: "Acme", Published: true,
 		Monitors: []statuspage.MonitorConfig{{MonitorID: b, DisplayName: " Public API "}, {MonitorID: a}}})
-	if err != nil || c.Slug != "acme" || len(c.Monitors) != 2 || c.Monitors[0].MonitorID != b || c.Monitors[0].DisplayName != "Public API" || c.Monitors[1].DisplayName != "" {
+	if err != nil || c.ID == uuid.Nil || c.Slug != "acme" || len(c.Monitors) != 2 || c.Monitors[0].MonitorID != b || c.Monitors[0].DisplayName != "Public API" || c.Monitors[1].DisplayName != "" {
 		t.Fatalf("%+v %v", c, err)
 	}
 	// Saving again replaces the page and the monitor list.
-	c, err = e.svc.Put(t.Context(), e.org, statuspage.Config{Slug: "acme2", Title: "Acme 2", Monitors: []statuspage.MonitorConfig{{MonitorID: a}}})
+	c, err = e.svc.Update(t.Context(), e.org, c.ID, statuspage.Config{Slug: "acme2", Title: "Acme 2", Monitors: []statuspage.MonitorConfig{{MonitorID: a}}})
 	if err != nil || c.Slug != "acme2" || c.Published || len(c.Monitors) != 1 {
 		t.Fatalf("%+v %v", c, err)
 	}
+	if got, err := e.svc.Get(t.Context(), e.org, c.ID); err != nil || got.Slug != "acme2" {
+		t.Fatalf("%+v %v", got, err)
+	}
 
 	var ve *validation.Error
-	other := newEnv(t, "free")
+	other := e.otherOrg(t)
 	foreign := other.monitor(t, "Not yours", "up")
-	if _, err := e.svc.Put(t.Context(), e.org, statuspage.Config{Slug: "acme2", Title: "x", Monitors: []statuspage.MonitorConfig{{MonitorID: foreign}}}); !errors.As(err, &ve) || ve.Fields["monitors"] == "" {
+	if _, err := e.svc.Update(t.Context(), e.org, c.ID, statuspage.Config{Slug: "acme2", Title: "x", Monitors: []statuspage.MonitorConfig{{MonitorID: foreign}}}); !errors.As(err, &ve) || ve.Fields["monitors"] == "" {
 		t.Fatalf("another organization's monitor: %v", err)
 	}
-	if _, err := e.svc.Put(t.Context(), e.org, statuspage.Config{Slug: "acme2", Title: "x", Monitors: []statuspage.MonitorConfig{{MonitorID: uuid.New()}}}); !errors.As(err, &ve) {
+	if _, err := e.svc.Update(t.Context(), e.org, c.ID, statuspage.Config{Slug: "acme2", Title: "x", Monitors: []statuspage.MonitorConfig{{MonitorID: uuid.New()}}}); !errors.As(err, &ve) {
 		t.Fatalf("unknown monitor: %v", err)
 	}
+	// Another organization cannot read, change or delete this page.
+	if _, err := other.svc.Get(t.Context(), other.org, c.ID); !errors.Is(err, statuspage.ErrNotFound) {
+		t.Fatalf("%v", err)
+	}
+	if _, err := other.svc.Update(t.Context(), other.org, c.ID, statuspage.Config{Slug: "stolen", Title: "x"}); !errors.Is(err, statuspage.ErrNotFound) {
+		t.Fatalf("%v", err)
+	}
+	if err := other.svc.Delete(t.Context(), other.org, c.ID); !errors.Is(err, statuspage.ErrNotFound) {
+		t.Fatalf("%v", err)
+	}
 
-	if err := e.svc.Delete(t.Context(), e.org); err != nil {
+	if err := e.svc.Delete(t.Context(), e.org, c.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.svc.Delete(t.Context(), e.org); !errors.Is(err, statuspage.ErrNotFound) {
+	if err := e.svc.Delete(t.Context(), e.org, c.ID); !errors.Is(err, statuspage.ErrNotFound) {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestPagesPerPlanAndDowngrades(t *testing.T) {
+	e := newEnv(t, "pro") // Pro includes 3
+	m := e.monitor(t, "Website", "up")
+	var ids []uuid.UUID
+	for _, slug := range []string{"client-a", "client-b", "client-c"} {
+		c, err := e.svc.Create(t.Context(), e.org, statuspage.Config{Slug: slug, Title: slug, Published: true, Monitors: []statuspage.MonitorConfig{{MonitorID: m}}})
+		if err != nil {
+			t.Fatalf("%s: %v", slug, err)
+		}
+		ids = append(ids, c.ID)
+	}
+	var le *plans.LimitError
+	if _, err := e.svc.Create(t.Context(), e.org, statuspage.Config{Slug: "client-d", Title: "D"}); !errors.As(err, &le) || le.Kind != plans.LimitStatusPages || le.Limit != 3 {
+		t.Fatalf("a fourth page on Pro: %v", err)
+	}
+	if list, _ := e.svc.List(t.Context(), e.org); len(list) != 3 || list[0].Slug != "client-a" {
+		t.Fatalf("%+v", list)
+	}
+
+	// After a downgrade to Free (one page) every page keeps working and can still be edited; only adding another is refused.
+	e.pool.Exec(t.Context(), `UPDATE subscriptions SET status = 'canceled' WHERE organization_id = $1`, e.org)
+	for _, slug := range []string{"client-a", "client-b", "client-c"} {
+		if _, err := e.svc.Public(t.Context(), slug); err != nil {
+			t.Fatalf("%s must stay public after a downgrade: %v", slug, err)
+		}
+	}
+	if _, err := e.svc.Update(t.Context(), e.org, ids[2], statuspage.Config{Slug: "client-c", Title: "Client C", Published: true, Monitors: []statuspage.MonitorConfig{{MonitorID: m}}}); err != nil {
+		t.Fatalf("editing an existing page after a downgrade: %v", err)
+	}
+	if _, err := e.svc.Create(t.Context(), e.org, statuspage.Config{Slug: "client-d", Title: "D"}); !errors.As(err, &le) || le.Limit != 1 || le.Used != 3 ||
+		!strings.Contains(le.Message(), "delete 3") {
+		t.Fatalf("%v / %q", err, le.Message())
 	}
 }
 
 func TestSlugsAreUnique(t *testing.T) {
-	e1 := newEnv(t, "free")
-	var org2 uuid.UUID
-	e1.pool.QueryRow(t.Context(), `INSERT INTO organizations (name) VALUES ('two') RETURNING id`).Scan(&org2)
-	if _, err := e1.svc.Put(t.Context(), e1.org, statuspage.Config{Slug: "taken", Title: "One"}); err != nil {
+	e1 := newEnv(t, "pro")
+	e2 := e1.otherOrg(t)
+	one, err := e1.svc.Create(t.Context(), e1.org, statuspage.Config{Slug: "taken", Title: "One"})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e1.svc.Put(t.Context(), org2, statuspage.Config{Slug: "TAKEN", Title: "Two"}); !errors.Is(err, statuspage.ErrSlugTaken) {
-		t.Fatalf("%v", err)
+	if _, err := e2.svc.Create(t.Context(), e2.org, statuspage.Config{Slug: "TAKEN", Title: "Two"}); !errors.Is(err, statuspage.ErrSlugTaken) {
+		t.Fatalf("another organization: %v", err)
 	}
-	if err := e1.svc.Delete(t.Context(), e1.org); err != nil {
+	if _, err := e1.svc.Create(t.Context(), e1.org, statuspage.Config{Slug: "taken", Title: "Again"}); !errors.Is(err, statuspage.ErrSlugTaken) {
+		t.Fatalf("the same organization's other page: %v", err)
+	}
+	if err := e1.svc.Delete(t.Context(), e1.org, one.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e1.svc.Put(t.Context(), org2, statuspage.Config{Slug: "taken", Title: "Two"}); err != nil {
+	if _, err := e2.svc.Create(t.Context(), e2.org, statuspage.Config{Slug: "taken", Title: "Two"}); err != nil {
 		t.Fatalf("a deleted page frees its address: %v", err)
 	}
 }
@@ -166,8 +239,7 @@ func TestMaintenanceChecksAreLeftOutAndShownAsMaintenance(t *testing.T) {
 	}
 
 	e.pool.Exec(t.Context(), `INSERT INTO maintenance_windows (organization_id, name, starts_at, duration_minutes, all_monitors) VALUES ($1, 'w', now() - interval '1 minute', 60, true)`, e.org)
-	e.svc.Delete(t.Context(), e.org) // clears the cache
-	e.publish(t, "acme", statuspage.MonitorConfig{MonitorID: m})
+	e.publish(t, "acme", statuspage.MonitorConfig{MonitorID: m}) // saving clears the cache
 	if p, _ = e.svc.Public(t.Context(), "acme"); p.Monitors[0].State != "maintenance" || p.Overall != statuspage.Maintenance {
 		t.Fatalf("%+v", p)
 	}
@@ -182,9 +254,11 @@ func TestUnpublishedAndUnknownPagesAreNotFoundAndPlanLimitsHistory(t *testing.T)
 	if _, err := e.svc.Public(t.Context(), "../etc/passwd"); !errors.Is(err, statuspage.ErrNotFound) {
 		t.Fatalf("%v", err)
 	}
-	if _, err := e.svc.Put(t.Context(), e.org, statuspage.Config{Slug: "draft", Title: "Draft", Monitors: []statuspage.MonitorConfig{{MonitorID: m}}}); err != nil {
+	draft, err := e.svc.Create(t.Context(), e.org, statuspage.Config{Slug: "draft", Title: "Draft", Monitors: []statuspage.MonitorConfig{{MonitorID: m}}})
+	if err != nil {
 		t.Fatal(err)
 	}
+	e.pages["draft"] = draft.ID
 	if _, err := e.svc.Public(t.Context(), "draft"); !errors.Is(err, statuspage.ErrNotFound) {
 		t.Fatalf("a draft must look like a page that does not exist: %v", err)
 	}

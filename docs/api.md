@@ -199,16 +199,18 @@ Alerts go only to destinations that are **enabled and verified**.
 
 Monitors have `regions` (create and PATCH accept it; `[]` means the primary location only). An unknown or repeated code is a 400 `VALIDATION_ERROR`; more than the plan allows is 403 `PLAN_LIMIT_REACHED` with `limit_type: "regions"`. A monitor is down while a **majority** of its locations are down. Check results carry `region`.
 
-## Status page
+## Status pages
 
-One public page per organization at `/status/<slug>`, available on every plan. Only the monitors the owner adds appear, under the name the owner chooses. **Monitor URLs, error messages and causes are never exposed.** Nothing is public until `published` is true; a draft and a page that does not exist both answer 404.
+Public pages at `/status/<slug>`. An organization may have as many as its plan includes (`plans.max_status_pages`: Free 1, Pro 3, Agency 50), so an agency can give each client its own; a monitor may appear on several pages. After a downgrade every existing page keeps working and can still be edited; only creating another is refused. Slugs are unique across the whole installation. Only the monitors the owner adds appear, under the name the owner chooses. **Monitor URLs, error messages and causes are never exposed.** Nothing is public until `published` is true; a draft and a page that does not exist both answer 404.
 
 | Method & path | Who | Notes |
 |---|---|---|
 | `GET /public/status/:slug` | **no login** | `{title, description, overall, monitors: [{name, state, uptime_percent, days: [{date, uptime_percent, status}]}], incidents: [{monitor, started_at, resolved_at}], history_days, generated_at}`. `overall` is `operational`, `partial_outage`, `major_outage` or `maintenance`; `state` is `up`, `down`, `maintenance` or `unknown` (paused / no check yet); day `status` is `ok` (≥ 99.5 %), `degraded` (≥ 95 %), `down` or `none` (fewer than 5 checks). Uptime leaves out checks made during maintenance windows. `history_days` is 90, or the plan's retention if shorter (Free: 7). Incidents are those from the last 14 days. Cached for 30 s (`Cache-Control: public, max-age=30`); 120 requests/min/IP |
-| `GET /status-page` | any member | `{status_page: {slug, title, description, published, monitors: [{monitor_id, display_name}]} \| null}` |
-| `PUT /status-page` | owner | Creates or replaces the page (same body). `slug`: 3–40 lowercase letters, digits, hyphens. `display_name` empty = the monitor's own name. Publishing needs at least one monitor. 409 `SLUG_TAKEN`, 400 `VALIDATION_ERROR` (for example a monitor from another organization) |
-| `DELETE /status-page` | owner | 204; the address becomes available again |
+| `GET /status-pages` | any member | `{status_pages: [{id, slug, title, description, published, monitors: [{monitor_id, display_name}]}], max}`, oldest first; `max` is the plan's limit |
+| `POST /status-pages` | owner | `{slug, title, description?, published, monitors}` → 201 `{status_page}`. `slug`: 3–40 lowercase letters, digits, hyphens. `display_name` empty = the monitor's own name. Publishing needs at least one monitor. 409 `SLUG_TAKEN`, 400 `VALIDATION_ERROR` (for example a monitor from another organization), 403 `PLAN_LIMIT_REACHED` with `limit_type: "status_pages"` |
+| `GET /status-pages/:id` | any member | `{status_page}`; another organization's page (or a malformed id) is a 404 |
+| `PUT /status-pages/:id` | owner | Replaces the page (same body as POST) → 200. Allowed above the plan's limit |
+| `DELETE /status-pages/:id` | owner | 204; the address becomes available again |
 
 ## Maintenance windows
 
@@ -329,8 +331,8 @@ Settings disabled or removed after queuing are skipped.
               "next_plan": {"code": "pro", "name": "Pro", "max_monitors": 50, "monthly_price_cents": 1900}}}}
 ```
 
-`limit_type` is `monitors`, `check_interval` (limit = minimum seconds) or `team_members`. If an organization is *above* its limit
-after a downgrade, existing monitors are untouched, creation is refused, the message says how many to delete, and `usage.over_limit` is true.
+`limit_type` is `monitors`, `check_interval` (limit = minimum seconds), `team_members`, `regions`, `domains`, `status_pages`, `maintenance_windows`, `reports` or `branded_reports`. If an organization is *above* its limit
+after a downgrade, existing monitors (and status pages) are untouched, creation is refused, the message says how many to delete, and `usage.over_limit` is true.
 
 ## Known trade-offs
 

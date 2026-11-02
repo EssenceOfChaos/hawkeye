@@ -404,41 +404,56 @@ func TestStatusPageIsPublicOnlyOnceTheOwnerPublishesIt(t *testing.T) {
 	if r := anon.do("GET", "/api/v1/public/status/acme", nil, false); r.Status != 404 {
 		t.Fatalf("no page yet: %d", r.Status)
 	}
-	if r := anon.do("PUT", "/api/v1/status-page", map[string]any{}, true); r.Status == 200 {
-		t.Fatal("anonymous callers cannot edit")
+	if r := anon.do("POST", "/api/v1/status-pages", map[string]any{}, true); r.Status == 201 {
+		t.Fatal("anonymous callers cannot create pages")
 	}
-	if g := owner.call("GET", "/api/v1/status-page", nil); g.Status != 200 || g.Body["status_page"] != nil {
-		t.Fatalf("%d %v", g.Status, g.Body)
+	if g := owner.call("GET", "/api/v1/status-pages", nil); g.Status != 200 || len(g.Body["status_pages"].([]any)) != 0 || g.Body["max"] != float64(1) {
+		t.Fatalf("Free starts with no pages and room for one: %d %v", g.Status, g.Body)
 	}
 
 	cfg := map[string]any{"slug": "acme", "title": "Acme status", "published": false, "monitors": []map[string]any{{"monitor_id": id, "display_name": "Website"}}}
-	if r := owner.call("PUT", "/api/v1/status-page", cfg); r.Status != 200 {
-		t.Fatalf("%d %v", r.Status, r.Body)
+	created := owner.call("POST", "/api/v1/status-pages", cfg)
+	if created.Status != 201 {
+		t.Fatalf("%d %v", created.Status, created.Body)
 	}
+	page := "/api/v1/status-pages/" + created.Body["status_page"].(map[string]any)["id"].(string)
 	if r := anon.do("GET", "/api/v1/public/status/acme", nil, false); r.Status != 404 {
 		t.Fatalf("a draft is not public: %d", r.Status)
 	}
 	cfg["published"] = true
-	if r := owner.call("PUT", "/api/v1/status-page", cfg); r.Status != 200 {
+	if r := owner.call("PUT", page, cfg); r.Status != 200 {
 		t.Fatalf("%d %v", r.Status, r.Body)
 	}
 	r := anon.do("GET", "/api/v1/public/status/acme", nil, false)
 	if r.Status != 200 || r.Body["title"] != "Acme status" || r.Body["overall"] != "operational" || len(r.Body["monitors"].([]any)) != 1 {
 		t.Fatalf("%d %v", r.Status, r.Body)
 	}
+	// Free includes one page: a second is refused with the plan's limit.
+	second := owner.call("POST", "/api/v1/status-pages", map[string]any{"slug": "acme-two", "title": "Two", "monitors": []map[string]any{}})
+	if d, _ := second.Body["error"].(map[string]any)["details"].(map[string]any); second.Status != 403 || errCode(second) != "PLAN_LIMIT_REACHED" || d["limit_type"] != "status_pages" {
+		t.Fatalf("%d %v", second.Status, second.Body)
+	}
 
-	// Another organization cannot take the address, nor use this organization's monitor.
+	// Another organization cannot take the address, use this organization's monitor, or touch its page.
 	cfg2 := map[string]any{"slug": "ACME", "title": "Copycat", "monitors": []map[string]any{}}
-	if r := other.call("PUT", "/api/v1/status-page", cfg2); r.Status != 409 || errCode(r) != "SLUG_TAKEN" {
+	if r := other.call("POST", "/api/v1/status-pages", cfg2); r.Status != 409 || errCode(r) != "SLUG_TAKEN" {
 		t.Fatalf("%d %v", r.Status, r.Body)
 	}
 	cfg2["slug"] = "copycat"
 	cfg2["monitors"] = []map[string]any{{"monitor_id": id}}
-	if r := other.call("PUT", "/api/v1/status-page", cfg2); r.Status != 400 || errCode(r) != "VALIDATION_ERROR" {
+	if r := other.call("POST", "/api/v1/status-pages", cfg2); r.Status != 400 || errCode(r) != "VALIDATION_ERROR" {
 		t.Fatalf("%d %v", r.Status, r.Body)
 	}
+	for _, m := range []string{"GET", "DELETE"} {
+		if r := other.call(m, page, nil); r.Status != 404 {
+			t.Fatalf("%s another organization's page: %d", m, r.Status)
+		}
+	}
+	if r := owner.call("GET", "/api/v1/status-pages/not-a-uuid", nil); r.Status != 404 {
+		t.Fatalf("%d", r.Status)
+	}
 
-	if r := owner.call("DELETE", "/api/v1/status-page", nil); r.Status != 204 {
+	if r := owner.call("DELETE", page, nil); r.Status != 204 {
 		t.Fatalf("%d", r.Status)
 	}
 	if r := anon.do("GET", "/api/v1/public/status/acme", nil, false); r.Status != 404 {

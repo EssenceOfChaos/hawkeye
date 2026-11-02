@@ -55,18 +55,18 @@ type ExportUser struct {
 }
 
 type ExportOrg struct {
-	ID                   uuid.UUID         `json:"id"`
-	Name                 string            `json:"name"`
-	Role                 string            `json:"role"`
-	CreatedAt            time.Time         `json:"created_at"`
-	Billing              ExportBilling     `json:"billing"`
-	Monitors             []ExportMonitor   `json:"monitors"`
-	Incidents            []ExportIncident  `json:"incidents"`
-	AlertRecipients      []ExportRecipient `json:"alert_recipients"`
-	MaintenanceWindows   []ExportWindow    `json:"maintenance_windows"`
-	Domains              []ExportDomain    `json:"domains"`
-	StatusPage           *ExportStatusPage `json:"status_page"`
-	CheckResultsRetained int               `json:"check_results_retained_count"`
+	ID                   uuid.UUID          `json:"id"`
+	Name                 string             `json:"name"`
+	Role                 string             `json:"role"`
+	CreatedAt            time.Time          `json:"created_at"`
+	Billing              ExportBilling      `json:"billing"`
+	Monitors             []ExportMonitor    `json:"monitors"`
+	Incidents            []ExportIncident   `json:"incidents"`
+	AlertRecipients      []ExportRecipient  `json:"alert_recipients"`
+	MaintenanceWindows   []ExportWindow     `json:"maintenance_windows"`
+	Domains              []ExportDomain     `json:"domains"`
+	StatusPages          []ExportStatusPage `json:"status_pages"`
+	CheckResultsRetained int                `json:"check_results_retained_count"`
 }
 
 type ExportBilling struct {
@@ -283,14 +283,23 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 	}
 	rows.Close()
 
-	var sp ExportStatusPage
-	err = s.pool.QueryRow(ctx, `SELECT p.slug, p.title, p.description, p.published,
+	rows, err = s.pool.Query(ctx, `SELECT p.slug, p.title, p.description, p.published,
 			COALESCE((SELECT array_agg(pm.monitor_id::text ORDER BY pm.position) FROM status_page_monitors pm WHERE pm.page_id = p.id), '{}')
-		FROM status_pages p WHERE p.organization_id = $1`, o.ID).Scan(&sp.Slug, &sp.Title, &sp.Description, &sp.Published, &sp.MonitorIDs)
-	switch {
-	case err == nil:
-		o.StatusPage = &sp
-	case !errors.Is(err, pgx.ErrNoRows):
+		FROM status_pages p WHERE p.organization_id = $1 ORDER BY p.created_at, p.id`, o.ID)
+	if err != nil {
+		return err
+	}
+	o.StatusPages = []ExportStatusPage{}
+	for rows.Next() {
+		var sp ExportStatusPage
+		if err := rows.Scan(&sp.Slug, &sp.Title, &sp.Description, &sp.Published, &sp.MonitorIDs); err != nil {
+			rows.Close()
+			return err
+		}
+		o.StatusPages = append(o.StatusPages, sp)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
 		return err
 	}
 	return s.pool.QueryRow(ctx, `SELECT count(*) FROM check_results r JOIN monitors m ON m.id = r.monitor_id WHERE m.organization_id = $1`, o.ID).Scan(&o.CheckResultsRetained)

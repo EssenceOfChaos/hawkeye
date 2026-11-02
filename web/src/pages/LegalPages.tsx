@@ -390,7 +390,7 @@ export function TermsPage() {
         <li>Domain expiry tracking, with email warnings as a domain’s registration expiry date approaches (currently 30, 14, 7, and 1 days before, and when it has expired).</li>
         <li>Incident detection, incident records, and recovery status.</li>
         <li>Alert notifications by email, to a Slack, Discord, Microsoft Teams or Telegram channel, or to a webhook address you provide, as described in Section 9.</li>
-        <li>An optional public status page showing the monitors you choose.</li>
+        <li>Optional public status pages, each showing the monitors you choose, up to the number your plan includes.</li>
         <li>Maintenance windows, on the plans that include them, during which alerts and incidents are suppressed for the monitors you choose.</li>
         <li>Dashboard views and historical uptime and response-time reports.</li>
         <li>Plan-based monitor limits, check intervals, and history-retention periods.</li>
@@ -442,7 +442,7 @@ export function TermsPage() {
         <li><strong>Agency:</strong> up to 200 monitors, checks every minute, 365 days of monitoring history, and up to 5 team members (you and up to four invited colleagues).</li>
       </ul>
       <p>
-        Paid plans may check each monitor from several locations, up to the limit shown at checkout. Every plan includes email, chat (Slack, Discord, Microsoft Teams and Telegram), and webhook alerts and one public status page. Maintenance windows are included in the Pro and Agency plans. If you move to a plan that does not include maintenance windows, windows you
+        Paid plans may check each monitor from several locations, up to the limit shown at checkout. Every plan includes email, chat (Slack, Discord, Microsoft Teams and Telegram), and webhook alerts and at least one public status page; the number of status pages depends on the plan, up to the limit shown at checkout. Maintenance windows are included in the Pro and Agency plans. If you move to a plan that does not include maintenance windows, windows you
         already created keep working, but you cannot create new ones.
       </p>
       <p>

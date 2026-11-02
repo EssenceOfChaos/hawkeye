@@ -54,9 +54,9 @@ const FEATURES = [
   },
   {
     icon: brand.icons.websites,
-    title: 'Public status page',
+    title: 'Public status pages',
     lead: 'Tell your customers before they ask.',
-    text: 'Share live status, uptime and incidents. You choose what appears.',
+    text: 'Share live status, uptime and incidents, with one page per client on paid plans. You choose what appears.',
   },
   {
     icon: brand.icons.analytics,
@@ -310,7 +310,7 @@ export function LandingPage() {
       <section aria-labelledby="pricing-h" className="section">
         <h2 id="pricing-h">Simple plans. Clear visibility.</h2>
         <p className="hint">
-          Start free. Upgrade when your monitoring needs grow. Every plan includes website and API monitoring, SSL certificate expiry warnings, domain expiry warnings (up to a limit that grows with the plan), incident tracking, alerts by email, Slack, Microsoft Teams, Discord, Telegram and webhook, and a public status page. {paidAdvantages} The free plan is a real plan, not a trial, and monitors are never deleted if you move to a smaller plan.
+          Start free. Upgrade when your monitoring needs grow. Every plan includes website and API monitoring, SSL certificate expiry warnings, domain expiry warnings (up to a limit that grows with the plan), incident tracking, alerts by email, Slack, Microsoft Teams, Discord, Telegram and webhook, and public status pages (one on Free, more on paid plans). {paidAdvantages} The free plan is a real plan, not a trial, and monitors are never deleted if you move to a smaller plan.
         </p>
         {plans === null && (
           <div role="status" aria-label="Loading plans" className="plans-loading">

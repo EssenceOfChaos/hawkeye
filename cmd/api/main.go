@@ -144,7 +144,7 @@ func run() error {
 		Maintenance:   maintenance.NewService(pool, planSvc),
 		Domains:       domains.NewService(pool, planSvc),
 		Regions:       cfg.Regions(),
-		StatusPages:   statuspage.NewService(pool),
+		StatusPages:   statuspage.NewService(pool, planSvc),
 		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress, notifications.WithSecretBox(box), notifications.WithTelegramBot(telegramBot)),
 		TelegramBot:   telegramBot,
 		SecureCookies: cfg.IsProduction(), AuthRateLimitPerMin: cfg.AuthRateLimitPerMin, TrustForwardedFor: cfg.TrustForwardedFor,

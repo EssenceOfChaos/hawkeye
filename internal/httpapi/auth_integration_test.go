@@ -86,7 +86,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 		TelegramBot:   o.telegram,
 		Maintenance:   maintenance.NewService(pool, planSvc),
 		Domains:       domains.NewService(pool, planSvc),
-		StatusPages:   statuspage.NewService(pool),
+		StatusPages:   statuspage.NewService(pool, planSvc),
 		Billing:       billing.NewService(pool, o.provider, o.billingCfg, metrics.New(), log),
 		Account:       account.NewService(pool, svc, o.provider, mail, log, "https://app.example.com"),
 		Contact:       contact.NewService(mail, log, "support@test.example", "alerts@test.example", "https://app.example.com"),

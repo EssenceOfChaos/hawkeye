@@ -58,7 +58,7 @@ describe('the main navigation', () => {
     mount()
     await accountButton()
     const nav = within(screen.getByRole('navigation', { name: 'Main' }))
-    for (const name of ['Dashboard', 'Monitors', 'Incidents', 'Domains', 'Alerts', 'Maintenance', 'Status page', 'Reports']) {
+    for (const name of ['Dashboard', 'Monitors', 'Incidents', 'Domains', 'Alerts', 'Maintenance', 'Status pages', 'Reports']) {
       expect(nav.getByRole('link', { name })).toBeInTheDocument()
     }
     for (const name of ['Team', 'Billing', 'Account settings']) expect(nav.queryByRole('link', { name })).not.toBeInTheDocument()

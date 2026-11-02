@@ -24,6 +24,8 @@ export interface Plan {
   max_regions?: number
   /** How many domains HawkEye looks up the registration expiry of on this plan. */
   max_domains?: number
+  /** How many public status pages an organization may have on this plan. */
+  max_status_pages?: number
   /** Monthly PDF uptime reports (Pro and Agency). */
   reports_enabled?: boolean
   /** The organization's own name and logo on those reports (Agency). */
@@ -207,6 +209,7 @@ export interface MaintenanceWindow {
 }
 
 export interface StatusPageConfig {
+  id: string
   slug: string
   title: string
   description: string

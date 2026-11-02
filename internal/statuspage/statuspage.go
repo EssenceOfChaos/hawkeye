@@ -1,4 +1,4 @@
-// Package statuspage manages an organization's public status page and builds what the public sees.
+// Package statuspage manages an organization's public status pages (one or more, by plan) and builds what the public sees.
 //
 // The public view is deliberately narrow: only monitors the owner added, under a name the owner chose, with their
 // current state, daily uptime and recent incident times. Monitor URLs, error messages and causes are never included.
@@ -54,8 +54,9 @@ const (
 	StateUnknown     = "unknown" // paused, or no check yet
 )
 
-// Config is what the owner edits.
+// Config is what the owner edits. ID is set by the server.
 type Config struct {
+	ID          uuid.UUID       `json:"id"`
 	Slug        string          `json:"slug"`
 	Title       string          `json:"title"`
 	Description string          `json:"description"`
@@ -98,8 +99,9 @@ type Public struct {
 }
 
 type Service struct {
-	pool *pgxpool.Pool
-	now  func() time.Time
+	pool  *pgxpool.Pool
+	plans *plans.Service
+	now   func() time.Time
 
 	mu    sync.Mutex
 	cache map[string]cached
@@ -110,24 +112,44 @@ type cached struct {
 	expires time.Time
 }
 
-func NewService(pool *pgxpool.Pool) *Service {
-	return &Service{pool: pool, now: time.Now, cache: map[string]cached{}}
+func NewService(pool *pgxpool.Pool, p *plans.Service) *Service {
+	return &Service{pool: pool, plans: p, now: time.Now, cache: map[string]cached{}}
 }
 
-// Get returns the organization's page configuration, or nil when it has none.
-func (s *Service) Get(ctx context.Context, orgID uuid.UUID) (*Config, error) {
+// List returns the organization's pages, oldest first.
+func (s *Service) List(ctx context.Context, orgID uuid.UUID) ([]Config, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id FROM status_pages WHERE organization_id = $1 ORDER BY created_at, id`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Config, 0, len(ids))
+	for _, id := range ids {
+		c, err := s.Get(ctx, orgID, id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *c)
+	}
+	return out, nil
+}
+
+// Get returns one of the organization's pages. Another organization's page is ErrNotFound.
+func (s *Service) Get(ctx context.Context, orgID, id uuid.UUID) (*Config, error) {
 	var c Config
-	var pageID uuid.UUID
-	err := s.pool.QueryRow(ctx, `SELECT id, slug, title, description, published FROM status_pages WHERE organization_id = $1`, orgID).
-		Scan(&pageID, &c.Slug, &c.Title, &c.Description, &c.Published)
+	err := s.pool.QueryRow(ctx, `SELECT id, slug, title, description, published FROM status_pages WHERE id = $1 AND organization_id = $2`, id, orgID).
+		Scan(&c.ID, &c.Slug, &c.Title, &c.Description, &c.Published)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
 	rows, err := s.pool.Query(ctx, `SELECT m.id, COALESCE(pm.display_name, '') FROM status_page_monitors pm
-		JOIN monitors m ON m.id = pm.monitor_id WHERE pm.page_id = $1 AND m.deleted_at IS NULL ORDER BY pm.position`, pageID)
+		JOIN monitors m ON m.id = pm.monitor_id WHERE pm.page_id = $1 AND m.deleted_at IS NULL ORDER BY pm.position`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -143,13 +165,27 @@ func (s *Service) Get(ctx context.Context, orgID uuid.UUID) (*Config, error) {
 	return &c, rows.Err()
 }
 
-// Put creates or replaces the organization's page.
-func (s *Service) Put(ctx context.Context, orgID uuid.UUID, in Config) (*Config, error) {
+// Create adds a page, within the plan's limit of pages.
+func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in Config) (*Config, error) {
+	return s.save(ctx, orgID, nil, in)
+}
+
+// Update replaces one of the organization's pages. It works even above the plan's limit (after a downgrade), like editing a monitor.
+func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in Config) (*Config, error) {
+	return s.save(ctx, orgID, &id, in)
+}
+
+func (s *Service) save(ctx context.Context, orgID uuid.UUID, id *uuid.UUID, in Config) (*Config, error) {
 	in, err := validate(in)
 	if err != nil {
 		return nil, err
 	}
+	var pageID uuid.UUID
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		// Serialise per organization so two creations cannot both pass the limit check.
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM organizations WHERE id = $1 FOR UPDATE`, orgID); err != nil {
+			return err
+		}
 		ids := make([]uuid.UUID, len(in.Monitors))
 		for i, m := range in.Monitors {
 			ids[i] = m.MonitorID
@@ -161,14 +197,26 @@ func (s *Service) Put(ctx context.Context, orgID uuid.UUID, in Config) (*Config,
 		if found != len(ids) {
 			return validation.New("monitors", "contains a monitor that does not exist")
 		}
-		var pageID uuid.UUID
-		if err := tx.QueryRow(ctx, `INSERT INTO status_pages (organization_id, slug, title, description, published) VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (organization_id) DO UPDATE SET slug = EXCLUDED.slug, title = EXCLUDED.title, description = EXCLUDED.description, published = EXCLUDED.published
-			RETURNING id`, orgID, in.Slug, in.Title, in.Description, in.Published).Scan(&pageID); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `DELETE FROM status_page_monitors WHERE page_id = $1`, pageID); err != nil {
-			return err
+		if id == nil {
+			if err := s.plans.CanCreateStatusPage(ctx, tx, orgID); err != nil {
+				return err
+			}
+			if err := tx.QueryRow(ctx, `INSERT INTO status_pages (organization_id, slug, title, description, published) VALUES ($1, $2, $3, $4, $5)
+				RETURNING id`, orgID, in.Slug, in.Title, in.Description, in.Published).Scan(&pageID); err != nil {
+				return err
+			}
+		} else {
+			err := tx.QueryRow(ctx, `UPDATE status_pages SET slug = $3, title = $4, description = $5, published = $6
+				WHERE id = $1 AND organization_id = $2 RETURNING id`, *id, orgID, in.Slug, in.Title, in.Description, in.Published).Scan(&pageID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrNotFound
+			}
+			if err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `DELETE FROM status_page_monitors WHERE page_id = $1`, pageID); err != nil {
+				return err
+			}
 		}
 		for i, m := range in.Monitors {
 			if _, err := tx.Exec(ctx, `INSERT INTO status_page_monitors (page_id, monitor_id, display_name, position) VALUES ($1, $2, NULLIF($3, ''), $4)`,
@@ -186,12 +234,12 @@ func (s *Service) Put(ctx context.Context, orgID uuid.UUID, in Config) (*Config,
 		return nil, err
 	}
 	s.forget()
-	return s.Get(ctx, orgID)
+	return s.Get(ctx, orgID, pageID)
 }
 
-// Delete removes the organization's page (its address becomes available again).
-func (s *Service) Delete(ctx context.Context, orgID uuid.UUID) error {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM status_pages WHERE organization_id = $1`, orgID)
+// Delete removes one of the organization's pages (its address becomes available again).
+func (s *Service) Delete(ctx context.Context, orgID, id uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM status_pages WHERE id = $1 AND organization_id = $2`, id, orgID)
 	if err != nil {
 		return err
 	}

@@ -15,6 +15,7 @@ const (
 	LimitMaintenance    = "maintenance_windows"
 	LimitRegions        = "regions"
 	LimitDomains        = "domains"
+	LimitStatusPages    = "status_pages"
 	LimitReports        = "reports"
 	LimitBrandedReports = "branded_reports"
 )
@@ -51,6 +52,15 @@ func (e *LimitError) Message() string {
 		return fmt.Sprintf("Your %s plan can check each monitor from up to %d location%s.", e.Plan.Name, e.Limit, map[bool]string{true: "", false: "s"}[e.Limit == 1])
 	case LimitDomains:
 		return fmt.Sprintf("Your %s plan includes up to %d tracked domains and all of them are in use.", e.Plan.Name, e.Limit)
+	case LimitStatusPages:
+		if e.Used > e.Limit {
+			return fmt.Sprintf("Your %s plan includes %d status page%s but you have %d. Your existing pages keep working; delete %d or upgrade to add another.",
+				e.Plan.Name, e.Limit, map[bool]string{true: "", false: "s"}[e.Limit == 1], e.Used, e.Used-e.Limit+1)
+		}
+		if e.Limit == 1 {
+			return fmt.Sprintf("Your %s plan includes one status page. Upgrade to give each client or product its own.", e.Plan.Name)
+		}
+		return fmt.Sprintf("Your %s plan includes up to %d status pages and all of them are in use.", e.Plan.Name, e.Limit)
 	case LimitMaintenance:
 		return fmt.Sprintf("Maintenance windows are not included in your %s plan. Upgrade to silence alerts during planned work.", e.Plan.Name)
 	case LimitReports:
@@ -166,6 +176,23 @@ func (s *Service) CanAddDomain(ctx context.Context, db DB, orgID uuid.UUID) erro
 	}
 	if used >= p.MaxDomains {
 		return s.limitError(ctx, db, LimitDomains, p.MaxDomains, used, p)
+	}
+	return nil
+}
+
+// CanCreateStatusPage returns a *LimitError when the organization already has as many status pages as its plan includes. Pages kept after a
+// downgrade keep working; only adding another is refused. To be safe under concurrency, call it in a transaction that holds the organization row lock.
+func (s *Service) CanCreateStatusPage(ctx context.Context, db DB, orgID uuid.UUID) error {
+	p, err := EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	var used int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM status_pages WHERE organization_id = $1`, orgID).Scan(&used); err != nil {
+		return err
+	}
+	if used >= p.MaxStatusPages {
+		return s.limitError(ctx, db, LimitStatusPages, p.MaxStatusPages, used, p)
 	}
 	return nil
 }

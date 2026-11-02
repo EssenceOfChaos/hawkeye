@@ -21,7 +21,7 @@ import { NotificationsPage } from './pages/NotificationsPage'
 import { MonitorFormPage } from './pages/MonitorFormPage'
 import { StatusPage } from './pages/StatusPage'
 import { TeamPage } from './pages/TeamPage'
-import { StatusPageSettings } from './pages/StatusPageSettings'
+import { StatusPageEditor, StatusPagesPage } from './pages/StatusPageSettings'
 import { PrivacyPage, TermsPage } from './pages/LegalPages'
 import { MonitorsPage } from './pages/MonitorsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
@@ -96,7 +96,10 @@ export function AppRoutes() {
         <Route path="/domains" element={<DomainsPage />} />
         <Route path="/maintenance" element={<MaintenancePage />} />
         <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/status-page" element={<StatusPageSettings />} />
+        <Route path="/status-page" element={<Navigate to="/status-pages" replace />} />
+        <Route path="/status-pages" element={<StatusPagesPage />} />
+        <Route path="/status-pages/new" element={<StatusPageEditor />} />
+        <Route path="/status-pages/:pageID" element={<StatusPageEditor />} />
         <Route path="/monitors" element={<MonitorsPage />} />
         <Route path="/monitors/new" element={<MonitorFormPage />} />
         <Route path="/monitors/:monitorID" element={<Lazy><MonitorDetailPage /></Lazy>} />
