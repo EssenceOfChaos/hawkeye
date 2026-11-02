@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { api, ApiError } from '../api'
 import { Alert } from '../components/Alert'
@@ -142,6 +142,59 @@ function DeleteAccount({ email }: { email: string }) {
   )
 }
 
+interface EmailPreferences {
+  weekly_summary: boolean
+  onboarding: boolean
+}
+
+/** The optional emails the person receives. Alerts, verification and security email are not optional, so they are not here. */
+function EmailPreferencesCard() {
+  const [prefs, setPrefs] = useState<EmailPreferences | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState<string | null>(null)
+
+  useEffect(() => {
+    api<{ email_preferences: EmailPreferences }>('GET', '/account/email-preferences').then((r) => setPrefs(r.email_preferences), (e: unknown) => setError(msg(e)))
+  }, [])
+
+  async function change(patch: Partial<EmailPreferences>, done: string) {
+    setError(null)
+    setSaved(null)
+    try {
+      const r = await api<{ email_preferences: EmailPreferences }>('PUT', '/account/email-preferences', patch)
+      setPrefs(r.email_preferences)
+      setSaved(done)
+    } catch (e) {
+      setError(msg(e))
+    }
+  }
+
+  return (
+    <section className="card narrow-left" aria-labelledby="mail-h">
+      <h2 id="mail-h">Email preferences</h2>
+      {error && <Alert>{error}</Alert>}
+      {prefs && (
+        <>
+          <label>
+            <input type="checkbox" className="d-toggle d-toggle-sm" checked={prefs.weekly_summary}
+              onChange={(e) => void change({ weekly_summary: e.target.checked }, e.target.checked ? 'Weekly summary is on.' : 'Weekly summary is off.')} />{' '}
+            Weekly summary
+          </label>
+          <p className="hint">Every Monday: last week’s uptime, incidents and slowest sites, and certificates and domains about to expire, for each team you belong to.</p>
+          <label>
+            <input type="checkbox" className="d-toggle d-toggle-sm" checked={prefs.onboarding}
+              onChange={(e) => void change({ onboarding: e.target.checked }, e.target.checked ? 'Getting-started tips are on.' : 'Getting-started tips are off.')} />{' '}
+            Getting-started tips
+          </label>
+          <p className="hint">A few emails in your first days, only until you add your first website.</p>
+          {saved && <p className="hint" role="status">{saved}</p>}
+          <p className="hint">Alerts about your websites, and account and security emails, are always sent.</p>
+        </>
+      )}
+    </section>
+  )
+}
+
 export function AccountPage() {
   const { user } = useAuth()
   const [resent, setResent] = useState(false)
@@ -169,6 +222,7 @@ export function AccountPage() {
         )}
       </section>
 
+      <EmailPreferencesCard />
       <ChangePassword />
       <ExportData />
       <DeleteAccount email={user.email} />

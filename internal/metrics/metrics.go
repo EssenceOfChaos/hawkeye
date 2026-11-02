@@ -32,7 +32,7 @@ type Metrics struct {
 	NotificationsOldest  prometheus.Gauge
 
 	DomainLookups        *prometheus.CounterVec // result=known|unavailable|error
-	LifecycleEmails      *prometheus.CounterVec // kind=no_monitor_*, result=sent|refused|failed
+	LifecycleEmails      *prometheus.CounterVec // kind=no_monitor_*|weekly_summary, result=sent|refused|failed
 	MonthlyReportEmails  *prometheus.CounterVec // result=sent|refused|failed
 	RetentionDeleted     *prometheus.CounterVec // kind=check_results|incidents|monitors|sessions|tokens
 	RetentionRuns        *prometheus.CounterVec // result=ok|error|skipped
@@ -84,7 +84,7 @@ func newOn(r *prometheus.Registry) *Metrics {
 		DomainLookups: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_domain_lookups_total",
 			Help: "Domain expiry lookups by result (known, unavailable, error)."}, []string{"result"}),
 		MonthlyReportEmails:  prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_monthly_report_emails_total", Help: "Monthly report emails by result."}, []string{"result"}),
-		LifecycleEmails:      prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_lifecycle_emails_total", Help: "Onboarding emails by kind and result."}, []string{"kind", "result"}),
+		LifecycleEmails:      prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_lifecycle_emails_total", Help: "Onboarding and weekly summary emails by kind and result."}, []string{"kind", "result"}),
 		RetentionDeleted:     prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_retention_deleted_rows_total", Help: "Rows removed by retention, by kind."}, []string{"kind"}),
 		RetentionRuns:        prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_retention_runs_total", Help: "Retention passes by result."}, []string{"result"}),
 		RetentionErrors:      prometheus.NewCounter(prometheus.CounterOpts{Name: "hawkeye_retention_errors_total", Help: "Failed retention steps."}),

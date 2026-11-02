@@ -124,6 +124,21 @@ FROM users u WHERE u.email_verified_at IS NOT NULL GROUP BY 1 ORDER BY 1 DESC;
 
 And who added a monitor after each email: join `lifecycle_emails` (`user_id`, `kind`, `sent_at`) to the first `monitors.created_at` of the user's organizations. Links in the emails carry `utm_campaign=<kind>`, so the analytics landing report shows the same split.
 
+### Weekly summary email
+
+Every Monday each verified member of an organization that has monitors gets a summary of the previous week (Monday to Monday, UTC): overall and per-site uptime (least available first, ten listed), incidents and downtime, the slowest sites, and certificates and domains expiring within 30 days (`internal/weeklysummary`). **On by default**; each person turns it off under Account → Email preferences or with the email's link (`/unsubscribe?token=…&list=weekly_summary`, which stops only this email). Someone in two organizations with monitors gets one email for each.
+
+**Sending behaviour.** Passes run every `WEEKLY_SUMMARY_INTERVAL` (15m) but send only from Monday 07:00 UTC until Wednesday 24:00 UTC: a worker that was down on Monday catches up, and nobody gets last week's summary at the end of the week. At most 200 per pass, one per second. A row in `weekly_summaries` (person, organization, week) is claimed before each send, so with several workers each email goes at most once; a temporary failure releases the claim and ends the pass, a permanent refusal is not retried. Sent from `LIFECYCLE_FROM_ADDRESS` (replies to `LIFECYCLE_REPLY_TO`) when set, so this bulk mail never affects the alert sender's reputation; otherwise from `EMAIL_FROM_ADDRESS`. `DISABLE_WEEKLY_SUMMARY=true` turns it off on a worker. Metric: `hawkeye_lifecycle_emails_total{kind="weekly_summary"}`.
+
+**Who turned it off:**
+
+```sql
+SELECT count(*) FILTER (WHERE weekly_summary_opt_out_at IS NULL) AS receiving, count(*) FILTER (WHERE weekly_summary_opt_out_at IS NOT NULL) AS opted_out
+FROM users WHERE email_verified_at IS NOT NULL;
+```
+
+Links in the email carry `utm_campaign=weekly_summary`.
+
 ### Monthly PDF reports
 
 Pro and Agency can download a PDF uptime report for any website (Reports page, or the monitor's page): uptime, confirmed downtime, a day-by-day chart and the incident list for a calendar month in UTC. The PDF is drawn in Go (`internal/reportpdf`, the `go-pdf/fpdf` library), so there is no browser or other program to run, and a report is generated when asked for and never stored. A month is refused if it is older than the plan's history (its results would be partly deleted and the report wrong), and the month in progress is a "so far" report. Agency can add a name and a logo (`organization_branding`); the logo is validated and re-encoded on upload (PNG or JPEG only, 512 KB, 2000 x 2000 pixels, never SVG), and is printed only while the plan includes branding: after a downgrade it is kept but the reports go back to the HawkEye look.

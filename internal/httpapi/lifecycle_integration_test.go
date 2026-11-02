@@ -54,3 +54,35 @@ func TestOnlyTheUnsubscribeEndpointSkipsCSRF(t *testing.T) {
 		t.Fatalf("logout without a CSRF token = %d, want 403", res.StatusCode)
 	}
 }
+
+func TestEmailPreferencesAndTheWeeklySummaryLink(t *testing.T) {
+	e := newEnv(t, 1000)
+	c, _ := e.register(t, "reader@example.org")
+	if r := c.call("GET", "/api/v1/account/email-preferences", nil); r.Status != 200 ||
+		r.Body["email_preferences"].(map[string]any)["weekly_summary"] != true || r.Body["email_preferences"].(map[string]any)["onboarding"] != true {
+		t.Fatalf("both on by default: %d %v", r.Status, r.Body)
+	}
+	if r := e.newClient(t).call("GET", "/api/v1/account/email-preferences", nil); r.Status != 401 {
+		t.Fatalf("signed out: %d", r.Status)
+	}
+
+	// The summary's one-click link, as a mail client sends it: a bare POST with the list in the address.
+	var token string
+	e.pool.QueryRow(context.Background(), `SELECT unsubscribe_token::text FROM users WHERE email = 'reader@example.org'`).Scan(&token)
+	res, err := http.Post(e.srv.URL+"/api/v1/lifecycle/unsubscribe?token="+url.QueryEscape(token)+"&list=weekly_summary", "application/x-www-form-urlencoded",
+		strings.NewReader("List-Unsubscribe=One-Click"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 204 {
+		t.Fatalf("%d", res.StatusCode)
+	}
+	p := c.call("GET", "/api/v1/account/email-preferences", nil).Body["email_preferences"].(map[string]any)
+	if p["weekly_summary"] != false || p["onboarding"] != true {
+		t.Fatalf("only the summary stops: %v", p)
+	}
+	if r := c.call("PUT", "/api/v1/account/email-preferences", map[string]any{"weekly_summary": true}); r.Body["email_preferences"].(map[string]any)["weekly_summary"] != true {
+		t.Fatalf("turned back on: %v", r.Body)
+	}
+}

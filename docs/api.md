@@ -42,6 +42,9 @@ The cookie is set on the first `/api/v1` response, so the SPA should call `GET /
 | `POST /auth/verify-email` | – | `{token}` → 204; links valid 48h, single use |
 | `POST /auth/resend-verification` | session | 202; invalidates older links |
 | `POST /auth/change-password` | session | `{current_password, new_password}` → 204; signs out other sessions, emails a notice |
+| `GET /account/email-preferences` | session | `{email_preferences: {weekly_summary, onboarding}}`: the optional emails the person receives (both on by default). Alerts, account and security email are not optional |
+| `PUT /account/email-preferences` | session | `{weekly_summary?, onboarding?}` → the same; an omitted field is unchanged |
+| `POST /lifecycle/unsubscribe?token=…&list=…` | – (no login, no CSRF) | The unsubscribe link in optional emails (and mail clients' one-click `List-Unsubscribe` POST). `list` is `onboarding` (the default) or `weekly_summary`; it stops only that list → 204, idempotent. 400 `INVALID_TOKEN` for an unknown token or list |
 | `GET /account/export` | session | the caller's own data as a JSON download. For a team they belong to as a member, only its name and their role are included: its data is its owner's |
 | `POST /account/delete` | session | `{password, confirm_email}` (typed email must match) → 204; cancels the Stripe subscription, deletes sole-member organizations; 409 `OWNS_SHARED_ORGANIZATION`; wrong password 403 `WRONG_PASSWORD` while the user owns an organization with other members |
 | `GET /auth/me` | session | `{user, organizations[]}` |

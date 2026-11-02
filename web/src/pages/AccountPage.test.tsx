@@ -26,6 +26,7 @@ interface Setup {
 function setup(o: Setup = {}) {
   const posts: { url: string; body: any }[] = []
   let signedIn = true
+  let prefs = { weekly_summary: true, onboarding: true }
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     if (url.includes('/auth/me')) {
       return signedIn
@@ -33,6 +34,14 @@ function setup(o: Setup = {}) {
         : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } })
     }
     if (url.includes('/account/export')) return o.exportResponse ? o.exportResponse() : Promise.resolve(new Response('{"user":{}}', { status: 200 }))
+    if (url.includes('/account/email-preferences')) {
+      if (init?.method === 'PUT') {
+        const body = JSON.parse(init.body as string)
+        posts.push({ url: 'PUT ' + url, body })
+        prefs = { ...prefs, ...body }
+      }
+      return json(200, { email_preferences: prefs })
+    }
     if (init?.method === 'POST') {
       const body = init.body ? JSON.parse(init.body as string) : undefined
       posts.push({ url, body })
@@ -55,6 +64,20 @@ function setup(o: Setup = {}) {
 }
 
 describe('AccountPage', () => {
+  it('turns the weekly summary off and on again', async () => {
+    const posts = setup()
+    const box = await screen.findByLabelText('Weekly summary')
+    expect(box).toBeChecked()
+    await userEvent.click(box)
+    expect(await screen.findByText('Weekly summary is off.')).toBeInTheDocument()
+    expect(box).not.toBeChecked()
+    expect(posts.find((p) => p.url.startsWith('PUT'))?.body).toEqual({ weekly_summary: false })
+    await userEvent.click(box)
+    expect(await screen.findByText('Weekly summary is on.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Getting-started tips')).toBeChecked()
+    expect(screen.getByText(/Alerts about your websites, and account and security emails, are always sent/)).toBeInTheDocument()
+  })
+
   it('shows the email and verification state', async () => {
     setup()
     expect(await screen.findByText('me@example.com')).toBeInTheDocument()

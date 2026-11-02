@@ -285,12 +285,12 @@ func TestUnsubscribeStopsTheEmailsAndTouchesNothingElse(t *testing.T) {
 	e.pool.QueryRow(context.Background(), `SELECT unsubscribe_token::text FROM users WHERE id = $1`, uid).Scan(&token)
 	svc := lifecycle.NewService(e.pool)
 
-	if err := svc.Unsubscribe(context.Background(), token); err != nil {
+	if err := svc.Unsubscribe(context.Background(), token, ""); err != nil {
 		t.Fatal(err)
 	}
 	var first time.Time
 	e.pool.QueryRow(context.Background(), `SELECT lifecycle_opt_out_at FROM users WHERE id = $1`, uid).Scan(&first)
-	if err := svc.Unsubscribe(context.Background(), token); err != nil {
+	if err := svc.Unsubscribe(context.Background(), token, ""); err != nil {
 		t.Fatalf("a second click must also succeed: %v", err)
 	}
 	var again time.Time
@@ -303,7 +303,7 @@ func TestUnsubscribeStopsTheEmailsAndTouchesNothingElse(t *testing.T) {
 		t.Fatalf("mailed someone who unsubscribed: %+v", st)
 	}
 	for _, bad := range []string{"", "nope", uuid.NewString()} {
-		if err := svc.Unsubscribe(context.Background(), bad); !errors.Is(err, lifecycle.ErrInvalidToken) {
+		if err := svc.Unsubscribe(context.Background(), bad, ""); !errors.Is(err, lifecycle.ErrInvalidToken) {
 			t.Errorf("token %q: %v", bad, err)
 		}
 	}

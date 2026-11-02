@@ -33,6 +33,7 @@ import (
 	"hawkeye/internal/retention"
 	"hawkeye/internal/safehttp"
 	"hawkeye/internal/scheduler"
+	"hawkeye/internal/weeklysummary"
 	"hawkeye/internal/worker"
 )
 
@@ -169,6 +170,18 @@ func run() error {
 		job := lifecycle.NewJob(pool, mailer, lifecycle.Config{Interval: cfg.LifecycleInterval, From: cfg.LifecycleFromAddress, ReplyTo: cfg.LifecycleReplyTo,
 			AppBaseURL: cfg.AppBaseURL, Address: cfg.LifecyclePostalAddress, Pace: time.Second}, m, log).WithReporter(reporter)
 		spawn(func() { job.Run(ctx) })
+	}
+	// The Monday summary, on by default for every verified member (each can turn it off).
+	if cfg.RunWeeklySummary {
+		from, replyTo := cfg.LifecycleFromAddress, cfg.LifecycleReplyTo
+		if from == "" {
+			from, replyTo = cfg.EmailFromAddress, ""
+		}
+		job := weeklysummary.NewJob(pool, mailer, weeklysummary.Config{Interval: cfg.WeeklySummaryInterval, From: from, ReplyTo: replyTo,
+			AppBaseURL: cfg.AppBaseURL, Address: cfg.LifecyclePostalAddress, Pace: time.Second}, m, log).WithReporter(reporter)
+		spawn(func() { job.Run(ctx) })
+	} else {
+		log.Info("weekly summary emails disabled on this worker (DISABLE_WEEKLY_SUMMARY)")
 	}
 	// Monthly PDF reports, emailed on the first day of the month to organizations that turned that on.
 	if cfg.RunMonthlyReports {

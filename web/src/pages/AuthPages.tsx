@@ -227,14 +227,26 @@ export function ConfirmAlertAddressPage() {
  * Opened from the footer of an onboarding email; the visitor need not be signed in. It asks before it acts: some mail systems open every link in a
  * message to scan it, and that must never unsubscribe anyone. (A mail client's own "Unsubscribe" button uses the API directly.)
  */
+/** What each unsubscribe link stops. An email names its own list in its link; links without one are from the getting-started emails. */
+const LISTS: Record<string, { what: string; done: string }> = {
+  onboarding: { what: 'getting-started emails', done: 'We won’t send you any more getting-started emails.' },
+  weekly_summary: { what: 'the weekly summary', done: 'We won’t send you the weekly summary any more. You can turn it back on under Account → Email preferences.' },
+}
+
 export function UnsubscribePage() {
+  const [params] = useSearchParams()
+  // Read once, before the token hook tidies the address bar.
+  const [list] = useState(() => {
+    const l = params.get('list') ?? 'onboarding'
+    return l in LISTS ? l : 'onboarding'
+  })
   const token = useTokenFromUrl()
   const [state, setState] = useState<'ask' | 'working' | 'ok' | 'failed'>(token ? 'ask' : 'failed')
 
   async function unsubscribe() {
     setState('working')
     try {
-      await api('POST', `/lifecycle/unsubscribe?token=${encodeURIComponent(token)}`)
+      await api('POST', `/lifecycle/unsubscribe?token=${encodeURIComponent(token)}&list=${encodeURIComponent(list)}`)
       setState('ok')
     } catch {
       setState('failed')
@@ -247,11 +259,11 @@ export function UnsubscribePage() {
       <h1>Stop these emails?</h1>
       {(state === 'ask' || state === 'working') && (
         <>
-          <p>You will stop receiving getting-started emails from HawkEye. Alerts about your monitors, and account and security emails, are not affected.</p>
+          <p>You will stop receiving {LISTS[list].what} from HawkEye. Alerts about your monitors, and account and security emails, are not affected.</p>
           <button type="button" onClick={() => void unsubscribe()} disabled={state === 'working'}>Stop these emails</button>
         </>
       )}
-      {state === 'ok' && <p role="status">Done. We won't send you any more getting-started emails.</p>}
+      {state === 'ok' && <p role="status">Done. {LISTS[list].done}</p>}
       {state === 'failed' && <Alert>This link is not valid. Please <Link to="/contact">contact us</Link> and we will stop them for you.</Alert>}
     </section>
   )

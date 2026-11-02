@@ -303,6 +303,10 @@ func registerAPI(e *echo.Echo, o Options) {
 	acct := v1.Group("/account", h.requireAuth)
 	acct.GET("/export", h.exportData, limit("account-export"))
 	acct.POST("/delete", h.deleteAccount, limit("account-delete"))
+	if h.lifecycle != nil {
+		acct.GET("/email-preferences", h.emailPreferences)
+		acct.PUT("/email-preferences", h.putEmailPreferences)
+	}
 
 	scoped := v1.Group("", h.requireAuth, h.resolveOrg)
 	scoped.GET("/usage", h.usage)

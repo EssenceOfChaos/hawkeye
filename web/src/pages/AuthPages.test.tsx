@@ -77,8 +77,22 @@ describe('unsubscribing from onboarding emails', () => {
     expect(posts).toHaveLength(0)
     expect(screen.getByTestId('where')).not.toHaveTextContent('UNSUB-1')
     await userEvent.click(screen.getByRole('button', { name: 'Stop these emails' }))
-    expect(await screen.findByText(/won't send you any more getting-started emails/)).toBeInTheDocument()
-    expect(posts).toEqual([{ url: '/api/v1/lifecycle/unsubscribe?token=UNSUB-1', body: undefined }])
+    expect(await screen.findByText(/won’t send you any more getting-started emails/)).toBeInTheDocument()
+    expect(posts).toEqual([{ url: '/api/v1/lifecycle/unsubscribe?token=UNSUB-1&list=onboarding', body: undefined }])
+  })
+
+  it('stops only the weekly summary from the summary’s own link', async () => {
+    const posts = mount('/unsubscribe?token=UNSUB-2&list=weekly_summary')
+    expect(await screen.findByText(/stop receiving the weekly summary/)).toBeInTheDocument()
+    expect(screen.getByTestId('where')).not.toHaveTextContent('UNSUB-2')
+    await userEvent.click(screen.getByRole('button', { name: 'Stop these emails' }))
+    expect(await screen.findByText(/turn it back on under Account → Email preferences/)).toBeInTheDocument()
+    expect(posts).toEqual([{ url: '/api/v1/lifecycle/unsubscribe?token=UNSUB-2&list=weekly_summary', body: undefined }])
+  })
+
+  it('treats a list it does not know as the getting-started emails', async () => {
+    mount('/unsubscribe?token=UNSUB-3&list=everything')
+    expect(await screen.findByText(/stop receiving getting-started emails/)).toBeInTheDocument()
   })
 
   it('says so when the link is not valid', async () => {

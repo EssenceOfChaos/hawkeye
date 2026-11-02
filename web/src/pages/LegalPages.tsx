@@ -150,6 +150,7 @@ export function PrivacyPage() {
         <li>Create, manage, renew, and administer subscriptions, and handle billing questions through Stripe.</li>
         <li>Send account and security emails, such as email verification, password reset, and alerts.</li>
         <li>If you have not added a website yet, send up to three short getting-started emails during your first ten days. Each one has an unsubscribe link, and unsubscribing does not affect alerts or account and security emails.</li>
+        <li>Each Monday, email you a short summary of the past week for each team you belong to that monitors websites: uptime, incidents, the slowest sites, and certificates and domains about to expire. It is on by default; turn it off under Account → Email preferences or with the link in the email, which does not affect alerts or account and security emails.</li>
         <li>Produce monthly uptime reports from your monitoring results and, if you turn that on, email them as PDF files to the owners of your workspace.</li>
         <li>Respond to support requests.</li>
         <li>Maintain, troubleshoot, and improve the reliability and performance of the Service.</li>

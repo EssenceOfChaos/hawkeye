@@ -54,8 +54,8 @@ func (c Config) withDefaults() Config {
 
 // Stats counts what one pass removed.
 type Stats struct {
-	CheckResults, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits int
-	Skipped                                                                                   bool // another instance holds the lock
+	CheckResults, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits, SentEmails int
+	Skipped                                                                                               bool // another instance holds the lock
 }
 
 type Job struct {
@@ -191,6 +191,10 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 		note(err)
 	}
 
+	// Records of sent weekly summaries only need to cover the week being sent; keep a quarter for investigation.
+	st.SentEmails, err2 = j.batchesNoOrg(ctx, `DELETE FROM weekly_summaries WHERE (user_id, organization_id, week) IN (
+			SELECT user_id, organization_id, week FROM weekly_summaries WHERE week < $1 LIMIT $2)`, j.now().Add(-91*24*time.Hour))
+	note(err2)
 	// Shared rate-limit counters only matter for the current window; keep a day for investigation.
 	st.RateLimits, err2 = j.batchesNoOrg(ctx, `DELETE FROM rate_limits WHERE (key, window_start) IN (
 			SELECT key, window_start FROM rate_limits WHERE window_start < $1 LIMIT $2)`, j.now().Add(-24*time.Hour))

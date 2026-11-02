@@ -114,6 +114,11 @@ type Config struct {
 	LifecycleReplyTo       string // defaults to the From address
 	LifecyclePostalAddress string // optional, shown in the footer of these emails
 
+	// The Monday summary email (internal/weeklysummary), on by default for every verified member; each person can turn it off. It is sent from the
+	// lifecycle sender when one is set (so bulk mail never affects the alert sender's reputation), otherwise from the normal sender.
+	RunWeeklySummary      bool
+	WeeklySummaryInterval time.Duration
+
 	// Monthly PDF report emails to organizations that turned them on (internal/monthlyreport). They come from the normal sender, so nothing to set up.
 	RunMonthlyReports     bool
 	MonthlyReportInterval time.Duration
@@ -319,6 +324,8 @@ func load(get func(string) string) (Config, error) {
 		LifecycleReplyTo:       str("LIFECYCLE_REPLY_TO", ""),
 		LifecyclePostalAddress: str("LIFECYCLE_POSTAL_ADDRESS", ""),
 
+		RunWeeklySummary:      !boolean("DISABLE_WEEKLY_SUMMARY"),
+		WeeklySummaryInterval: duration("WEEKLY_SUMMARY_INTERVAL", 15*time.Minute),
 		RunMonthlyReports:     !boolean("DISABLE_MONTHLY_REPORTS"),
 		MonthlyReportInterval: duration("MONTHLY_REPORT_INTERVAL", time.Hour),
 
