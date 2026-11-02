@@ -52,6 +52,31 @@ describe('public StatusPage', () => {
     expect(screen.getByText(/ongoing/)).toBeInTheDocument()
   })
 
+  it('shows the standard look, with Powered by HawkEye, when the page has no branding', async () => {
+    renderPublic(() => json(200, page({ branding: { powered_by: true } })))
+    expect(await screen.findByText(/Powered by/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Back to/ })).not.toBeInTheDocument()
+    expect(document.querySelector('.status-logo')).toBeNull()
+  })
+
+  it('shows the client’s logo, colour and link, readably, and hides Powered by when asked', async () => {
+    renderPublic(() => json(200, page({
+      branding: { logo_url: '/api/v1/public/status/acme/logo?v=1', accent_color: '#ffeb3b', website_url: 'https://www.acme.example.com/', powered_by: false },
+    })))
+    expect(await screen.findByRole('link', { name: '← Back to acme.example.com' })).toHaveAttribute('href', 'https://www.acme.example.com/')
+    expect(document.querySelector('.status-logo')).toHaveAttribute('src', '/api/v1/public/status/acme/logo?v=1')
+    const hero = document.querySelector('.status-hero') as HTMLElement
+    expect(hero.style.background).toBe('rgb(255, 235, 59)')
+    expect(hero.style.color).toBe('rgb(0, 0, 0)') // black text on pale yellow
+    expect(screen.queryByText(/Powered by/)).not.toBeInTheDocument()
+  })
+
+  it('never turns a non-https website value into a link', async () => {
+    renderPublic(() => json(200, page({ branding: { website_url: 'javascript:alert(1)', powered_by: true } })))
+    expect(await screen.findByText(/All systems operational/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Back to/ })).not.toBeInTheDocument()
+  })
+
   it('shows a plain not-found page for an unknown or unpublished address', async () => {
     renderPublic(() => json(404, { error: { code: 'NOT_FOUND', message: 'Status page not found.' } }))
     expect(await screen.findByRole('heading', { name: 'Status page not found' })).toBeInTheDocument()
@@ -59,10 +84,11 @@ describe('public StatusPage', () => {
 })
 
 describe('status page settings', () => {
-  const pageA = { id: 'p1', slug: 'client-a', title: 'Client A', description: '', published: true, monitors: [{ monitor_id: 'm2', display_name: '' }] }
-  const pageB = { id: 'p2', slug: 'client-b', title: 'Client B', description: '', published: false, monitors: [] }
+  const look = { accent_color: '', website_url: '', hide_powered_by: false, has_logo: false, logo_version: 0 }
+  const pageA = { id: 'p1', slug: 'client-a', title: 'Client A', description: '', published: true, monitors: [{ monitor_id: 'm2', display_name: '' }], ...look }
+  const pageB = { id: 'p2', slug: 'client-b', title: 'Client B', description: '', published: false, monitors: [], ...look }
 
-  function renderAt(path: string, list: { status_pages: unknown[]; max: number } = { status_pages: [], max: 1 }) {
+  function renderAt(path: string, list: { status_pages: unknown[]; max: number } = { status_pages: [], max: 1 }, plan: Record<string, unknown> = {}) {
     document.cookie = 'csrf_token=t; path=/'
     const calls: { m: string; url: string; body?: string }[] = []
     vi.stubGlobal(
@@ -73,7 +99,10 @@ describe('status page settings', () => {
         if (url.includes('/auth/me')) return json(200, { user: { id: 'u', email: 'me@example.com', email_verified_at: '2026-01-01T00:00:00Z' }, organizations: [{ id: 'o', name: 'Org', role: 'owner' }] })
         if (url.endsWith('/status-pages') && m === 'POST') return json(201, { status_page: { ...pageB, id: 'new' } })
         if (url.endsWith('/status-pages')) return json(200, list)
+        if (url.endsWith('/status-pages/p1') && m === 'PUT') return json(200, { status_page: pageA })
+        if (url.endsWith('/status-pages/p1/logo') && m === 'PUT') return json(200, { status_page: { ...pageA, has_logo: true, logo_version: 7 } })
         if (url.endsWith('/status-pages/p1')) return json(200, { status_page: pageA })
+        if (url.endsWith('/usage')) return json(200, { usage: { plan: { code: 'pro', ...plan } } })
         if (url.includes('/monitors')) return json(200, { monitors: [{ id: 'm1', name: 'Website' }, { id: 'm2', name: 'API' }], total: 2 })
         return json(404, {})
       }),
@@ -131,5 +160,32 @@ describe('status page settings', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save status page' }))
     expect(await screen.findByText(/Client A is public/)).toBeInTheDocument()
     expect(calls.some((c) => c.m === 'PUT' && c.url.endsWith('/status-pages/p1'))).toBe(true)
+  })
+
+  it('on Pro: sends the colour and website, uploads a logo at once, and keeps "Powered by" for Agency', async () => {
+    const calls = renderAt('/status-pages/p1', undefined, { status_page_branding: true, status_page_white_label: false })
+    await screen.findByDisplayValue('client-a')
+    expect(screen.getByLabelText(/Hide “Powered by HawkEye”/)).toBeDisabled()
+    expect(screen.getByText('Included in the Agency plan.')).toBeInTheDocument()
+
+    await userEvent.upload(screen.getByLabelText('Upload a logo (PNG or JPEG)'), new File([new Uint8Array([137, 80, 78, 71])], 'logo.png', { type: 'image/png' }))
+    expect(await screen.findByText('Logo saved.')).toBeInTheDocument()
+    expect(screen.getByAltText('Current logo')).toHaveAttribute('src', '/api/v1/status-pages/p1/logo?v=7')
+    expect(calls.find((c) => c.m === 'PUT' && c.url.endsWith('/logo'))).toBeTruthy()
+
+    await userEvent.click(screen.getByLabelText('Use an accent colour for the header'))
+    expect(screen.getByLabelText('Accent colour')).toHaveValue('#1a73e8')
+    await userEvent.type(screen.getByLabelText(/Link back to your client’s website/), 'https://www.acme.example.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Save status page' }))
+    expect(await screen.findByText(/Client A is public/)).toBeInTheDocument()
+    const put = calls.find((c) => c.m === 'PUT' && c.url.endsWith('/status-pages/p1'))
+    expect(JSON.parse(put!.body!)).toMatchObject({ accent_color: '#1a73e8', website_url: 'https://www.acme.example.com', hide_powered_by: false })
+  })
+
+  it('on Free: offers branding as an upgrade and asks to create the page before adding a logo', async () => {
+    renderAt('/status-pages/new')
+    expect(await screen.findByText(/included in the Pro and Agency plans/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Use an accent colour for the header')).toBeDisabled()
+    expect(screen.getByText(/Create the page first/)).toBeInTheDocument()
   })
 })

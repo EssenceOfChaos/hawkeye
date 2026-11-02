@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
-import { api, ApiError, type Monitor, type StatusPageConfig } from '../api'
+import { api, ApiError, apiUpload, type Monitor, type StatusPageConfig, type Usage } from '../api'
+import { readableTextOn } from '../color'
 import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
@@ -111,21 +112,40 @@ export function StatusPageEditor() {
   const [error, setError] = useState<string | null>(null)
   const [fields, setFields] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  // Branding. The plan decides what may be changed; stored values are always sent back unchanged, so a page kept after a downgrade still saves.
+  const [accent, setAccent] = useState('') // '' = the standard look
+  const [website, setWebsite] = useState('')
+  const [hidePoweredBy, setHidePoweredBy] = useState(false)
+  const [hasLogo, setHasLogo] = useState(false)
+  const [logoVersion, setLogoVersion] = useState(0)
+  const [logoNotice, setLogoNotice] = useState<string | null>(null)
+  const [canBrand, setCanBrand] = useState(false)
+  const [canWhiteLabel, setCanWhiteLabel] = useState(false)
+
+  const apply = (p: StatusPageConfig) => {
+    setSlug(p.slug)
+    setTitle(p.title)
+    setDescription(p.description)
+    setPublished(p.published)
+    setShown(Object.fromEntries(p.monitors.map((x) => [x.monitor_id, x.display_name])))
+    setAccent(p.accent_color ?? '')
+    setWebsite(p.website_url ?? '')
+    setHidePoweredBy(p.hide_powered_by ?? false)
+    setHasLogo(p.has_logo ?? false)
+    setLogoVersion(p.logo_version ?? 0)
+  }
 
   const load = useCallback(async () => {
     try {
-      const [p, m] = await Promise.all([
+      const [p, m, u] = await Promise.all([
         pageID ? api<{ status_page: StatusPageConfig }>('GET', `/status-pages/${encodeURIComponent(pageID)}`) : Promise.resolve(null),
         api<{ monitors: Monitor[] }>('GET', '/monitors?limit=100'),
+        api<{ usage: Usage }>('GET', '/usage').catch(() => null),
       ])
       setMonitors(m.monitors)
-      if (p) {
-        setSlug(p.status_page.slug)
-        setTitle(p.status_page.title)
-        setDescription(p.status_page.description)
-        setPublished(p.status_page.published)
-        setShown(Object.fromEntries(p.status_page.monitors.map((x) => [x.monitor_id, x.display_name])))
-      }
+      setCanBrand(Boolean(u?.usage.plan.status_page_branding))
+      setCanWhiteLabel(Boolean(u?.usage.plan.status_page_white_label))
+      if (p) apply(p.status_page)
       setLoaded(true)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not load the status page.')
@@ -143,7 +163,10 @@ export function StatusPageEditor() {
     setFields({})
     try {
       const ordered = monitors.filter((m) => m.id in shown)
-      const body = { slug, title, description, published, monitors: ordered.map((m) => ({ monitor_id: m.id, display_name: shown[m.id] ?? '' })) }
+      const body = {
+        slug, title, description, published, monitors: ordered.map((m) => ({ monitor_id: m.id, display_name: shown[m.id] ?? '' })),
+        accent_color: accent, website_url: website.trim(), hide_powered_by: hidePoweredBy,
+      }
       if (pageID) await api('PUT', `/status-pages/${encodeURIComponent(pageID)}`, body)
       else await api('POST', '/status-pages', body)
       const notice = published ? `Saved. ${title} is public at /status/${slug}.` : `Saved. ${title} is a draft and is not visible to anyone yet.`
@@ -163,6 +186,22 @@ export function StatusPageEditor() {
       navigate('/status-pages', { state: { notice: `${title} was deleted.` } satisfies ListState })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'That did not work. Try again.')
+    }
+  }
+
+  /** Uploads or removes the logo at once (it is not part of the form). */
+  async function changeLogo(fn: () => Promise<{ status_page: StatusPageConfig }>, done: string) {
+    setError(null)
+    setLogoNotice(null)
+    setFields({})
+    try {
+      const r = await fn()
+      setHasLogo(r.status_page.has_logo)
+      setLogoVersion(r.status_page.logo_version)
+      setLogoNotice(done)
+    } catch (err) {
+      if (err instanceof ApiError && err.fields.logo) setFields({ logo: err.fields.logo })
+      else setError(err instanceof ApiError ? err.message : 'That did not work. Try again.')
     }
   }
 
@@ -214,6 +253,59 @@ export function StatusPageEditor() {
                 </div>
               ))}
               {fields.monitors && <small className="error">{fields.monitors}</small>}
+            </fieldset>
+            <fieldset className="field">
+              <legend>Branding</legend>
+              {!canBrand && (
+                <p className="hint">
+                  A logo, an accent colour and a link back to your client’s website are included in the Pro and Agency plans. <Link to="/billing">Upgrade</Link>
+                  {(accent || website || hasLogo) && ' Branding saved earlier is kept, but not shown on your current plan.'}
+                </p>
+              )}
+              <fieldset disabled={!canBrand} className="plain">
+                <div className="field">
+                  <span>Logo</span>
+                  {editing ? (
+                    <>
+                      {hasLogo && pageID && <img className="status-logo preview" src={`/api/v1/status-pages/${encodeURIComponent(pageID)}/logo?v=${logoVersion}`} alt="Current logo" />}
+                      <input type="file" accept="image/png,image/jpeg" aria-label="Upload a logo (PNG or JPEG)"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          e.target.value = ''
+                          if (file && pageID) void changeLogo(() => apiUpload('PUT', `/status-pages/${encodeURIComponent(pageID)}/logo`, file), 'Logo saved.')
+                        }} />
+                      {hasLogo && pageID && (
+                        <button type="button" className="linklike" onClick={() => void changeLogo(() => api('DELETE', `/status-pages/${encodeURIComponent(pageID)}/logo`), 'Logo removed.')}>
+                          Remove logo
+                        </button>
+                      )}
+                      {fields.logo && <small className="error">{fields.logo}</small>}
+                      {logoNotice && <small className="hint" role="status">{logoNotice}</small>}
+                      <small className="hint">PNG or JPEG, up to 512 KB. Shown at the top of the page. It is saved as soon as you choose it.</small>
+                    </>
+                  ) : (
+                    <small className="hint">Create the page first, then add your client’s logo.</small>
+                  )}
+                </div>
+                <label>
+                  <input type="checkbox" checked={accent !== ''} onChange={(e) => setAccent(e.target.checked ? '#1a73e8' : '')} /> Use an accent colour for the header
+                </label>
+                {accent !== '' && (
+                  <div className="field">
+                    <label htmlFor="accent">Accent colour</label>
+                    <input id="accent" type="color" value={accent} onChange={(e) => setAccent(e.target.value.toLowerCase())} />
+                    {fields.accent_color && <small className="error">{fields.accent_color}</small>}
+                    <div className="accent-preview" style={{ background: accent, color: readableTextOn(accent) }} aria-hidden="true">{title || 'Status'}</div>
+                    <small className="hint">The header text is set to black or white automatically, whichever is easier to read on this colour.</small>
+                  </div>
+                )}
+                <Field label="Link back to your client’s website (optional)" type="url" value={website} onChange={(e) => setWebsite(e.target.value)} error={fields.website_url}
+                  placeholder="https://www.example.com" hint="Shown above the page title as “← Back to example.com”." />
+              </fieldset>
+              <label>
+                <input type="checkbox" checked={hidePoweredBy} disabled={!canWhiteLabel && !hidePoweredBy} onChange={(e) => setHidePoweredBy(e.target.checked)} /> Hide “Powered by HawkEye”
+              </label>
+              {!canWhiteLabel && <small className="hint">Included in the Agency plan.</small>}
             </fieldset>
             <label>
               <input type="checkbox" className="d-toggle d-toggle-sm" checked={published} onChange={(e) => setPublished(e.target.checked)} /> Publish — anyone with the link can see this page

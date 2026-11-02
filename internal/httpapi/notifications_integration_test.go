@@ -2,9 +2,12 @@ package httpapi_test
 
 import (
 	"fmt"
-	"github.com/google/uuid"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func (e *env) verify(t *testing.T, c *client, addr string) {
@@ -487,5 +490,56 @@ func TestRegionsEndpointAndMonitorRegionValidation(t *testing.T) {
 	}
 	if r := c.call("GET", "/api/v1/monitors/"+uuid.NewString()+"/regions", nil); r.Status != 404 {
 		t.Fatalf("%d", r.Status)
+	}
+}
+
+func TestStatusPageBrandingOverHTTP(t *testing.T) {
+	e := newEnv(t, 1000)
+	owner, _ := e.register(t, "owner@example.com")
+	id := owner.call("POST", "/api/v1/monitors", monitorBody("Website")).Body["monitor"].(map[string]any)["id"].(string)
+	cfg := map[string]any{"slug": "client-a", "title": "Client A", "published": true, "monitors": []map[string]any{{"monitor_id": id}}}
+	page := "/api/v1/status-pages/" + owner.call("POST", "/api/v1/status-pages", cfg).Body["status_page"].(map[string]any)["id"].(string)
+
+	// Free: no logo, no colour.
+	if status, _, _ := owner.raw("PUT", page+"/logo", logoPNG(t, 60, 20), map[string]string{"Content-Type": "image/png"}); status != 403 {
+		t.Fatalf("Free uploads no page logo: %d", status)
+	}
+	cfg["accent_color"] = "#1a73e8"
+	if r := owner.call("PUT", page, cfg); r.Status != 403 || errCode(r) != "PLAN_LIMIT_REACHED" {
+		t.Fatalf("%d %v", r.Status, r.Body)
+	}
+
+	if _, err := e.pool.Exec(t.Context(), `UPDATE subscriptions SET plan_id = (SELECT id FROM plans WHERE code = 'pro')`); err != nil {
+		t.Fatal(err)
+	}
+	if r := owner.call("PUT", page, cfg); r.Status != 200 {
+		t.Fatalf("%d %v", r.Status, r.Body)
+	}
+	status, _, body := owner.raw("PUT", page+"/logo", logoPNG(t, 60, 20), map[string]string{"Content-Type": "image/png"})
+	if status != 200 || !strings.Contains(string(body), `"has_logo":true`) {
+		t.Fatalf("%d %s", status, body)
+	}
+
+	anon := e.newClient(t)
+	pub := anon.do("GET", "/api/v1/public/status/client-a", nil, false)
+	b, _ := pub.Body["branding"].(map[string]any)
+	logoURL, _ := b["logo_url"].(string)
+	if pub.Status != 200 || b["accent_color"] != "#1a73e8" || b["powered_by"] != true || !strings.HasPrefix(logoURL, "/api/v1/public/status/client-a/logo?v=") {
+		t.Fatalf("%d %v", pub.Status, pub.Body)
+	}
+	res, err := http.Get(e.srv.URL + logoURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 200 || res.Header.Get("Content-Type") != "image/png" || res.Header.Get("X-Content-Type-Options") != "nosniff" ||
+		!strings.Contains(res.Header.Get("Cache-Control"), "public") {
+		t.Fatalf("%d %v", res.StatusCode, res.Header)
+	}
+	if res, _ := http.Get(e.srv.URL + "/api/v1/public/status/nope/logo"); res.StatusCode != 404 {
+		t.Fatalf("an unknown page has no logo: %d", res.StatusCode)
+	}
+	if r := owner.call("DELETE", page+"/logo", nil); r.Status != 200 || r.Body["status_page"].(map[string]any)["has_logo"] != false {
+		t.Fatalf("%d %v", r.Status, r.Body)
 	}
 }

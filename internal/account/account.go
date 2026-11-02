@@ -138,6 +138,11 @@ type ExportStatusPage struct {
 	Description string   `json:"description"`
 	Published   bool     `json:"published"`
 	MonitorIDs  []string `json:"monitor_ids"`
+	// Branding settings; the logo image itself is not exported, only whether there is one.
+	AccentColor   string `json:"accent_color"`
+	WebsiteURL    string `json:"website_url"`
+	HidePoweredBy bool   `json:"hide_powered_by"`
+	HasLogo       bool   `json:"has_logo"`
 }
 
 // ExportRecipient is an alert destination. For webhook and chat destinations the URL is a secret, so only the masked label is exported.
@@ -284,7 +289,8 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 	rows.Close()
 
 	rows, err = s.pool.Query(ctx, `SELECT p.slug, p.title, p.description, p.published,
-			COALESCE((SELECT array_agg(pm.monitor_id::text ORDER BY pm.position) FROM status_page_monitors pm WHERE pm.page_id = p.id), '{}')
+			COALESCE((SELECT array_agg(pm.monitor_id::text ORDER BY pm.position) FROM status_page_monitors pm WHERE pm.page_id = p.id), '{}'),
+			COALESCE(p.accent_color, ''), COALESCE(p.website_url, ''), p.hide_powered_by, p.logo IS NOT NULL
 		FROM status_pages p WHERE p.organization_id = $1 ORDER BY p.created_at, p.id`, o.ID)
 	if err != nil {
 		return err
@@ -292,7 +298,7 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 	o.StatusPages = []ExportStatusPage{}
 	for rows.Next() {
 		var sp ExportStatusPage
-		if err := rows.Scan(&sp.Slug, &sp.Title, &sp.Description, &sp.Published, &sp.MonitorIDs); err != nil {
+		if err := rows.Scan(&sp.Slug, &sp.Title, &sp.Description, &sp.Published, &sp.MonitorIDs, &sp.AccentColor, &sp.WebsiteURL, &sp.HidePoweredBy, &sp.HasLogo); err != nil {
 			rows.Close()
 			return err
 		}

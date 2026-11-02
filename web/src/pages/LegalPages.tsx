@@ -55,6 +55,7 @@ export function PrivacyPage() {
         <li>Your subscription plan, account status, and related service records.</li>
         <li>Alert destinations you add: email addresses you ask us to notify and their confirmation status, Slack, Discord, Microsoft Teams or webhook URLs, and Telegram bot tokens and chat IDs. We store those URLs, tokens and any webhook signing secret encrypted, and show you only the host name (or, for Telegram, the chat ID) afterwards. If you connect a Telegram chat through our bot, we store that chat’s ID and its name (for a private chat, the person’s Telegram username or first name) so we can deliver alerts there and show you which chat it is.</li>
         <li>If you use PDF reports on the Agency plan: the name and logo image you add to put on them. We check the image and store a cleaned copy, and print it on your reports.</li>
+        <li>If you brand a status page: the logo image, accent colour and website address you add to it. We check the image and store a cleaned copy, and show these on that page while it is published.</li>
         <li>Communications you send to us. If you use our contact form we receive the name, email address, subject, message, and optional website address you enter and, if you are signed in, your account identifier and plan.</li>
       </ul>
       <p>
@@ -83,7 +84,7 @@ export function PrivacyPage() {
 
       <h3>Information you choose to publish</h3>
       <p>
-        If you create a public status page, anyone who has its address can see the page title and description you enter, the names you give the monitors you add to it, each one’s current state (up, down, or under maintenance),
+        If you create a public status page, anyone who has its address can see the page title and description you enter, any logo, accent colour and website link you add to it, the names you give the monitors you add to it, each one’s current state (up, down, or under maintenance),
         daily and overall uptime percentages, and the start and end times of recent incidents. We do not show monitored web addresses, error messages, or the causes of incidents on the page. The page is not visible until you
         publish it, and you can unpublish or delete it at any time. Do not put personal or confidential information in the title, description, or monitor names. Public status pages may be cached by us for a short time (under a minute)
         and, once published, may be copied or indexed by others, which we cannot control.
@@ -579,7 +580,7 @@ export function TermsPage() {
       <h3>C. Public status pages</h3>
       <p>
         If you publish a status page, the information described in the Privacy Policy becomes visible to anyone with its address. You are solely responsible for what you publish and for choosing the monitors and names shown.
-        Status pages are generated automatically from check results, which are periodic and may be incomplete, delayed, or wrong. A status page is not a guarantee, certification, or statement by HawkEye about the availability of
+        You may add to a status page only a logo, name, or link you have the right to use; if a page shows a client’s brand, you are responsible for having their permission. Status pages are generated automatically from check results, which are periodic and may be incomplete, delayed, or wrong. A status page is not a guarantee, certification, or statement by HawkEye about the availability of
         your services, and you should not present it as one. We may unpublish or remove a status page that violates these Terms.
       </p>
 

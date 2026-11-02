@@ -205,12 +205,18 @@ Public pages at `/status/<slug>`. An organization may have as many as its plan i
 
 | Method & path | Who | Notes |
 |---|---|---|
-| `GET /public/status/:slug` | **no login** | `{title, description, overall, monitors: [{name, state, uptime_percent, days: [{date, uptime_percent, status}]}], incidents: [{monitor, started_at, resolved_at}], history_days, generated_at}`. `overall` is `operational`, `partial_outage`, `major_outage` or `maintenance`; `state` is `up`, `down`, `maintenance` or `unknown` (paused / no check yet); day `status` is `ok` (≥ 99.5 %), `degraded` (≥ 95 %), `down` or `none` (fewer than 5 checks). Uptime leaves out checks made during maintenance windows. `history_days` is 90, or the plan's retention if shorter (Free: 7). Incidents are those from the last 14 days. Cached for 30 s (`Cache-Control: public, max-age=30`); 120 requests/min/IP |
-| `GET /status-pages` | any member | `{status_pages: [{id, slug, title, description, published, monitors: [{monitor_id, display_name}]}], max}`, oldest first; `max` is the plan's limit |
-| `POST /status-pages` | owner | `{slug, title, description?, published, monitors}` → 201 `{status_page}`. `slug`: 3–40 lowercase letters, digits, hyphens. `display_name` empty = the monitor's own name. Publishing needs at least one monitor. 409 `SLUG_TAKEN`, 400 `VALIDATION_ERROR` (for example a monitor from another organization), 403 `PLAN_LIMIT_REACHED` with `limit_type: "status_pages"` |
+| `GET /public/status/:slug` | **no login** | `{branding, title, description, overall, monitors: [{name, state, uptime_percent, days: [{date, uptime_percent, status}]}], incidents: [{monitor, started_at, resolved_at}], history_days, generated_at}`. `overall` is `operational`, `partial_outage`, `major_outage` or `maintenance`; `state` is `up`, `down`, `maintenance` or `unknown` (paused / no check yet); day `status` is `ok` (≥ 99.5 %), `degraded` (≥ 95 %), `down` or `none` (fewer than 5 checks). Uptime leaves out checks made during maintenance windows. `history_days` is 90, or the plan's retention if shorter (Free: 7). Incidents are those from the last 14 days. Cached for 30 s (`Cache-Control: public, max-age=30`); 120 requests/min/IP |
+| `GET /status-pages` | any member | `{status_pages: [{id, slug, title, description, published, monitors: [{monitor_id, display_name}], accent_color, website_url, hide_powered_by, has_logo, logo_version}], max}`, oldest first; `max` is the plan's limit |
+| `POST /status-pages` | owner | `{slug, title, description?, published, monitors, accent_color?, website_url?, hide_powered_by?}` → 201 `{status_page}`. `slug`: 3–40 lowercase letters, digits, hyphens. `display_name` empty = the monitor's own name. Publishing needs at least one monitor. 409 `SLUG_TAKEN`, 400 `VALIDATION_ERROR` (for example a monitor from another organization), 403 `PLAN_LIMIT_REACHED` with `limit_type: "status_pages"` |
 | `GET /status-pages/:id` | any member | `{status_page}`; another organization's page (or a malformed id) is a 404 |
 | `PUT /status-pages/:id` | owner | Replaces the page (same body as POST) → 200. Allowed above the plan's limit |
 | `DELETE /status-pages/:id` | owner | 204; the address becomes available again |
+| `PUT /status-pages/:id/logo` | owner | The image itself as the body (PNG or JPEG, ≤ 512 KB, ≤ 2000 × 2000; never SVG); validated and re-encoded like report logos → 200 `{status_page}`. 400 `VALIDATION_ERROR` on `logo`; 403 `PLAN_LIMIT_REACHED` (`status_page_branding`) |
+| `GET /status-pages/:id/logo` | any member | The stored logo for the editor's preview, whatever the plan; 404 when there is none |
+| `DELETE /status-pages/:id/logo` | owner | → 200 `{status_page}`; allowed on every plan |
+| `GET /public/status/:slug/logo` | **no login** | A published page's logo, only while its plan includes branding (else 404, so drafts and logos kept after a downgrade reveal nothing). `Cache-Control: public, max-age=3600` (the public page links to it with `?v=<version>`), `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'` |
+
+**Branding.** `accent_color` is `#rrggbb` (stored lower-case) or `""`; the public header uses it as its background with black or white text, whichever reads better (always at least 4.5:1). `website_url` is an `https://` address (no credentials) or `""`, shown as "← Back to example.com". `hide_powered_by` removes "Powered by HawkEye". A logo, colour and link need `plans.status_page_branding` (Pro, Agency); hiding "Powered by" needs `plans.status_page_white_label` (Agency); otherwise 403 `PLAN_LIMIT_REACHED` with `limit_type` `status_page_branding` or `status_page_white_label`. Only a *change* is checked: clearing is always allowed, and values stored before a downgrade may be saved again unchanged (they are kept but not shown). The public view carries `branding: {logo_url?, accent_color?, website_url?, powered_by}` with only what the plan currently allows.
 
 ## Maintenance windows
 
@@ -331,7 +337,7 @@ Settings disabled or removed after queuing are skipped.
               "next_plan": {"code": "pro", "name": "Pro", "max_monitors": 50, "monthly_price_cents": 1900}}}}
 ```
 
-`limit_type` is `monitors`, `check_interval` (limit = minimum seconds), `team_members`, `regions`, `domains`, `status_pages`, `maintenance_windows`, `reports` or `branded_reports`. If an organization is *above* its limit
+`limit_type` is `monitors`, `check_interval` (limit = minimum seconds), `team_members`, `regions`, `domains`, `status_pages`, `status_page_branding`, `status_page_white_label`, `maintenance_windows`, `reports` or `branded_reports`. If an organization is *above* its limit
 after a downgrade, existing monitors (and status pages) are untouched, creation is refused, the message says how many to delete, and `usage.over_limit` is true.
 
 ## Known trade-offs

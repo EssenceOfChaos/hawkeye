@@ -406,6 +406,14 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 .status-hero { justify-content: flex-start; }
 .status-hero .d-hero-content { padding-inline: 0; justify-content: flex-start; }
 .status-hero h1 { margin-bottom: .25rem; }
+/* A branded header: the page's accent colour, with black or white text chosen in code for contrast, so it overrides the theme's colours. */
+.status-hero.branded { border-radius: .75rem; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+.status-hero.branded h1, .status-hero.branded p { color: inherit; }
+.status-hero .d-hero-content { gap: 1rem; align-items: center; }
+.status-logo { max-height: 56px; max-width: 200px; width: auto; height: auto; object-fit: contain; }
+.status-back { margin: 0 0 .75rem; font-size: .9rem; }
+.status-logo.preview { display: block; margin: .25rem 0 .5rem; }
+.accent-preview { margin-top: .5rem; padding: .75rem 1rem; border-radius: .5rem; font-weight: 700; }
 .status-bars > .d-tooltip { flex: 1; min-width: 2px; display: block; }
 .status-bars > .d-tooltip > span { display: block; height: 1.75rem; border-radius: 2px; background: var(--border); }
 .status-bars > .d-tooltip::before { white-space: nowrap; }

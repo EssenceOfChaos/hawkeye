@@ -16,6 +16,8 @@ const (
 	LimitRegions        = "regions"
 	LimitDomains        = "domains"
 	LimitStatusPages    = "status_pages"
+	LimitPageBranding   = "status_page_branding"
+	LimitWhiteLabel     = "status_page_white_label"
 	LimitReports        = "reports"
 	LimitBrandedReports = "branded_reports"
 )
@@ -61,6 +63,10 @@ func (e *LimitError) Message() string {
 			return fmt.Sprintf("Your %s plan includes one status page. Upgrade to give each client or product its own.", e.Plan.Name)
 		}
 		return fmt.Sprintf("Your %s plan includes up to %d status pages and all of them are in use.", e.Plan.Name, e.Limit)
+	case LimitPageBranding:
+		return fmt.Sprintf("A logo, accent colour and website link on status pages are not included in your %s plan. Upgrade to give each page its client's look.", e.Plan.Name)
+	case LimitWhiteLabel:
+		return fmt.Sprintf("Hiding \"Powered by HawkEye\" is not included in your %s plan. Upgrade to show status pages under your clients' brands alone.", e.Plan.Name)
 	case LimitMaintenance:
 		return fmt.Sprintf("Maintenance windows are not included in your %s plan. Upgrade to silence alerts during planned work.", e.Plan.Name)
 	case LimitReports:
@@ -193,6 +199,30 @@ func (s *Service) CanCreateStatusPage(ctx context.Context, db DB, orgID uuid.UUI
 	}
 	if used >= p.MaxStatusPages {
 		return s.limitError(ctx, db, LimitStatusPages, p.MaxStatusPages, used, p)
+	}
+	return nil
+}
+
+// CanBrandStatusPages returns a *LimitError when the plan does not include a logo, accent colour and website link on status pages.
+func (s *Service) CanBrandStatusPages(ctx context.Context, db DB, orgID uuid.UUID) error {
+	p, err := EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	if !p.StatusPageBranding {
+		return s.limitError(ctx, db, LimitPageBranding, 0, 0, p)
+	}
+	return nil
+}
+
+// CanWhiteLabelStatusPages returns a *LimitError when the plan does not include hiding "Powered by HawkEye" on status pages.
+func (s *Service) CanWhiteLabelStatusPages(ctx context.Context, db DB, orgID uuid.UUID) error {
+	p, err := EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	if !p.StatusPageWhiteLabel {
+		return s.limitError(ctx, db, LimitWhiteLabel, 0, 0, p)
 	}
 	return nil
 }

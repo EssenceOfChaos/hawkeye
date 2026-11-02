@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router'
 import { api, ApiError, type PublicStatus } from '../api'
 import { Alert } from '../components/Alert'
+import { isHexColor, readableTextOn } from '../color'
 
 const OVERALL: Record<PublicStatus['overall'], string> = {
   operational: '✔ All systems operational',
@@ -23,6 +24,15 @@ const STATE: Record<PublicStatus['monitors'][number]['state'], { text: string; c
   down: { text: '✖ Offline', cls: 'd-badge d-badge-soft d-badge-error' },
   maintenance: { text: '🛠 Maintenance', cls: 'd-badge d-badge-soft d-badge-info' },
   unknown: { text: 'No recent data', cls: 'd-badge d-badge-soft d-badge-ghost' },
+}
+
+/** The host of the client's website, for the "Back to …" link. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host.replace(/^www\./, '')
+  } catch {
+    return url
+  }
 }
 
 const when = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
@@ -60,10 +70,18 @@ export function StatusPage() {
   if (state === 'missing') return <main className="status-wrap"><h1>Status page not found</h1><p>Check the address, or ask the site’s owner for the right link.</p></main>
   if (state === 'error' || !data) return <main className="status-wrap"><Alert>The status could not be loaded. Try again in a moment.</Alert></main>
 
+  const brand = data.branding ?? { powered_by: true }
+  const accent = brand.accent_color && isHexColor(brand.accent_color) ? brand.accent_color : null
+  // The server only sends an https address, but check again before it becomes a link.
+  const website = brand.website_url?.startsWith('https://') ? brand.website_url : null
   return (
     <main className="status-wrap">
-      <section className="d-hero status-hero">
+      {website && (
+        <p className="status-back"><a href={website} rel="noopener noreferrer nofollow">← Back to {hostOf(website)}</a></p>
+      )}
+      <section className={`d-hero status-hero${accent ? ' branded' : ''}`} style={accent ? { background: accent, color: readableTextOn(accent) } : undefined}>
         <div className="d-hero-content">
+          {brand.logo_url && <img className="status-logo" src={brand.logo_url} alt="" />}
           <div>
             <h1>{data.title}</h1>
             {data.description && <p>{data.description}</p>}
@@ -129,7 +147,7 @@ export function StatusPage() {
           ))}
         </ul>
       )}
-      <p className="hint">Updated {when(data.generated_at)} · Powered by <a href="/">HawkEye</a></p>
+      <p className="hint">Updated {when(data.generated_at)}{brand.powered_by && <> · Powered by <a href="/">HawkEye</a></>}</p>
     </main>
   )
 }

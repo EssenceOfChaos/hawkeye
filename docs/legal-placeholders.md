@@ -36,6 +36,7 @@ The app ships `/privacy` and `/terms` pages containing a prominent "PLACEHOLDER 
 | Session records (hashed token, expiry; no IP or user agent stored) | sign-in | until expiry/sign-out |
 | Monitor URLs/names, check results (status, latency, error class) | the service | per plan: 7 / 90 / 365 days; incidents kept |
 | Alert recipient emails | alerts | until removed or account deleted |
+| Status page branding: a logo image (validated and re-encoded), accent colour and website address per page, shown publicly while the page is published | status pages | until removed, the page is deleted, or account deleted |
 | Slack, Discord, Teams and webhook destination URLs, customers' own Telegram bot tokens, and webhook signing secrets (stored encrypted; only the host, or a Telegram chat ID, is ever displayed); for chats connected through HawkEye's own bot, the Telegram chat ID and the chat's name (or the person's @username or first name, for a private chat) | alerts | until removed or account deleted |
 | Maintenance windows (name, schedule, covered monitors) | suppress alerts during planned work | until removed or account deleted |
 | Status page (address, title, description, chosen monitor names; **public once published**) | customer-facing status | until unpublished/deleted or account deleted; cached under a minute |

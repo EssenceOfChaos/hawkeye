@@ -26,6 +26,10 @@ export interface Plan {
   max_domains?: number
   /** How many public status pages an organization may have on this plan. */
   max_status_pages?: number
+  /** A logo, accent colour and website link on status pages (Pro and Agency). */
+  status_page_branding?: boolean
+  /** Hiding "Powered by HawkEye" on status pages (Agency). */
+  status_page_white_label?: boolean
   /** Monthly PDF uptime reports (Pro and Agency). */
   reports_enabled?: boolean
   /** The organization's own name and logo on those reports (Agency). */
@@ -215,9 +219,18 @@ export interface StatusPageConfig {
   description: string
   published: boolean
   monitors: { monitor_id: string; display_name: string }[]
+  /** Branding: '' means the standard look. Kept after a downgrade, but only shown while the plan includes it. */
+  accent_color: string
+  website_url: string
+  hide_powered_by: boolean
+  /** Read-only: the logo is uploaded separately; the version changes whenever it does. */
+  has_logo: boolean
+  logo_version: number
 }
 
 export interface PublicStatus {
+  /** The page's look as far as the plan allows it; absent fields mean the standard HawkEye look. */
+  branding?: { logo_url?: string; accent_color?: string; website_url?: string; powered_by: boolean }
   title: string
   description: string
   overall: 'operational' | 'partial_outage' | 'major_outage' | 'maintenance'

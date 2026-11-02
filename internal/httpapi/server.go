@@ -259,6 +259,7 @@ func registerAPI(e *echo.Echo, o Options) {
 		})
 	}
 	v1.GET("/public/status/:slug", h.publicStatus, publicLimit)
+	v1.GET("/public/status/:slug/logo", h.publicStatusLogo, publicLimit)
 	// Public contact form: per-IP burst and hourly caps, a spam trap, and per-address limits on the acknowledgement email.
 	contactLimits := []echo.MiddlewareFunc{limit("contact")}
 	if h.limits.l != nil {
@@ -334,6 +335,9 @@ func registerAPI(e *echo.Echo, o Options) {
 	scoped.GET("/status-pages/:pageID", h.getStatusPage)
 	scoped.PUT("/status-pages/:pageID", h.updateStatusPage, requireOwner)
 	scoped.DELETE("/status-pages/:pageID", h.deleteStatusPage, requireOwner)
+	scoped.GET("/status-pages/:pageID/logo", h.getStatusPageLogo)
+	scoped.PUT("/status-pages/:pageID/logo", h.putStatusPageLogo, requireOwner, limit("branding"))
+	scoped.DELETE("/status-pages/:pageID/logo", h.deleteStatusPageLogo, requireOwner)
 	scoped.GET("/maintenance-windows", h.listMaintenance)
 	scoped.POST("/maintenance-windows", h.createMaintenance, requireOwner)
 	scoped.DELETE("/maintenance-windows/:windowID", h.deleteMaintenance, requireOwner)

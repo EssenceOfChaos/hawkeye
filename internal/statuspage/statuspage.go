@@ -7,6 +7,8 @@ package statuspage
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -17,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/branding"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/reports"
 	"hawkeye/internal/validation"
@@ -32,10 +35,12 @@ const (
 )
 
 var (
+	ErrNoLogo    = errors.New("this status page has no logo")
 	ErrNotFound  = errors.New("status page not found")
 	ErrSlugTaken = errors.New("status page address already taken")
 
-	slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$`)
+	slugRE  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$`)
+	colorRE = regexp.MustCompile(`^#[0-9a-f]{6}$`)
 )
 
 // Overall states of a page.
@@ -62,6 +67,12 @@ type Config struct {
 	Description string          `json:"description"`
 	Published   bool            `json:"published"`
 	Monitors    []MonitorConfig `json:"monitors"`
+	// Branding (Pro and Agency; hiding "Powered by" on Agency). Kept after a downgrade, but only shown while the plan includes it.
+	AccentColor   string `json:"accent_color"`    // "#rrggbb", or "" for the standard look
+	WebsiteURL    string `json:"website_url"`     // an https link back to the client's own website, or ""
+	HidePoweredBy bool   `json:"hide_powered_by"` // hide "Powered by HawkEye"
+	HasLogo       bool   `json:"has_logo"`        // read-only: the logo is uploaded separately
+	LogoVersion   int64  `json:"logo_version"`    // read-only: changes whenever the logo does, for cache-busting
 }
 
 type MonitorConfig struct {
@@ -88,7 +99,16 @@ type IncidentView struct {
 	ResolvedAt *time.Time `json:"resolved_at"`
 }
 
+// PublicBranding is the page's look, as far as the plan allows it. Empty fields mean the standard HawkEye look.
+type PublicBranding struct {
+	LogoURL     string `json:"logo_url,omitempty"`
+	AccentColor string `json:"accent_color,omitempty"`
+	WebsiteURL  string `json:"website_url,omitempty"`
+	PoweredBy   bool   `json:"powered_by"` // show "Powered by HawkEye"
+}
+
 type Public struct {
+	Branding    PublicBranding `json:"branding"`
 	Title       string         `json:"title"`
 	Description string         `json:"description"`
 	Overall     string         `json:"overall"`
@@ -140,8 +160,13 @@ func (s *Service) List(ctx context.Context, orgID uuid.UUID) ([]Config, error) {
 // Get returns one of the organization's pages. Another organization's page is ErrNotFound.
 func (s *Service) Get(ctx context.Context, orgID, id uuid.UUID) (*Config, error) {
 	var c Config
-	err := s.pool.QueryRow(ctx, `SELECT id, slug, title, description, published FROM status_pages WHERE id = $1 AND organization_id = $2`, id, orgID).
-		Scan(&c.ID, &c.Slug, &c.Title, &c.Description, &c.Published)
+	var logoAt *time.Time
+	err := s.pool.QueryRow(ctx, `SELECT id, slug, title, description, published, COALESCE(accent_color, ''), COALESCE(website_url, ''), hide_powered_by, logo_updated_at
+		FROM status_pages WHERE id = $1 AND organization_id = $2`, id, orgID).
+		Scan(&c.ID, &c.Slug, &c.Title, &c.Description, &c.Published, &c.AccentColor, &c.WebsiteURL, &c.HidePoweredBy, &logoAt)
+	if logoAt != nil {
+		c.HasLogo, c.LogoVersion = true, logoAt.UnixMilli()
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -197,21 +222,34 @@ func (s *Service) save(ctx context.Context, orgID uuid.UUID, id *uuid.UUID, in C
 		if found != len(ids) {
 			return validation.New("monitors", "contains a monitor that does not exist")
 		}
-		if id == nil {
-			if err := s.plans.CanCreateStatusPage(ctx, tx, orgID); err != nil {
-				return err
-			}
-			if err := tx.QueryRow(ctx, `INSERT INTO status_pages (organization_id, slug, title, description, published) VALUES ($1, $2, $3, $4, $5)
-				RETURNING id`, orgID, in.Slug, in.Title, in.Description, in.Published).Scan(&pageID); err != nil {
-				return err
-			}
-		} else {
-			err := tx.QueryRow(ctx, `UPDATE status_pages SET slug = $3, title = $4, description = $5, published = $6
-				WHERE id = $1 AND organization_id = $2 RETURNING id`, *id, orgID, in.Slug, in.Title, in.Description, in.Published).Scan(&pageID)
+		var cur Config // the stored branding, so a page saved again after a downgrade keeps what it had
+		if id != nil {
+			err := tx.QueryRow(ctx, `SELECT COALESCE(accent_color, ''), COALESCE(website_url, ''), hide_powered_by FROM status_pages
+				WHERE id = $1 AND organization_id = $2 FOR UPDATE`, *id, orgID).Scan(&cur.AccentColor, &cur.WebsiteURL, &cur.HidePoweredBy)
 			if errors.Is(err, pgx.ErrNoRows) {
 				return ErrNotFound
 			}
 			if err != nil {
+				return err
+			}
+		}
+		if err := s.checkBranding(ctx, tx, orgID, cur, in); err != nil {
+			return err
+		}
+		if id == nil {
+			if err := s.plans.CanCreateStatusPage(ctx, tx, orgID); err != nil {
+				return err
+			}
+			if err := tx.QueryRow(ctx, `INSERT INTO status_pages (organization_id, slug, title, description, published, accent_color, website_url, hide_powered_by)
+				VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), NULLIF($7, ''), $8) RETURNING id`,
+				orgID, in.Slug, in.Title, in.Description, in.Published, in.AccentColor, in.WebsiteURL, in.HidePoweredBy).Scan(&pageID); err != nil {
+				return err
+			}
+		} else {
+			if err := tx.QueryRow(ctx, `UPDATE status_pages SET slug = $3, title = $4, description = $5, published = $6,
+					accent_color = NULLIF($7, ''), website_url = NULLIF($8, ''), hide_powered_by = $9
+				WHERE id = $1 AND organization_id = $2 RETURNING id`,
+				*id, orgID, in.Slug, in.Title, in.Description, in.Published, in.AccentColor, in.WebsiteURL, in.HidePoweredBy).Scan(&pageID); err != nil {
 				return err
 			}
 			if _, err := tx.Exec(ctx, `DELETE FROM status_page_monitors WHERE page_id = $1`, pageID); err != nil {
@@ -235,6 +273,97 @@ func (s *Service) save(ctx context.Context, orgID uuid.UUID, id *uuid.UUID, in C
 	}
 	s.forget()
 	return s.Get(ctx, orgID, pageID)
+}
+
+// checkBranding refuses branding the plan does not include. Only a change counts: clearing is always allowed, and values already stored (kept after a
+// downgrade) may be saved again unchanged, so editing the title of such a page still works.
+func (s *Service) checkBranding(ctx context.Context, tx pgx.Tx, orgID uuid.UUID, cur, in Config) error {
+	if (in.AccentColor != "" && in.AccentColor != cur.AccentColor) || (in.WebsiteURL != "" && in.WebsiteURL != cur.WebsiteURL) {
+		if err := s.plans.CanBrandStatusPages(ctx, tx, orgID); err != nil {
+			return err
+		}
+	}
+	if in.HidePoweredBy && !cur.HidePoweredBy {
+		return s.plans.CanWhiteLabelStatusPages(ctx, tx, orgID)
+	}
+	return nil
+}
+
+// SaveLogo validates, cleans and stores a page's logo, replacing any earlier one. The plan must include status page branding.
+func (s *Service) SaveLogo(ctx context.Context, orgID, id uuid.UUID, raw []byte) error {
+	if err := s.plans.CanBrandStatusPages(ctx, s.pool, orgID); err != nil {
+		return err
+	}
+	logo, err := branding.NormalizeLogo(raw)
+	if err != nil {
+		return err
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE status_pages SET logo = $3, logo_type = $4, logo_width = $5, logo_height = $6, logo_updated_at = now()
+		WHERE id = $1 AND organization_id = $2`, id, orgID, logo.Data, logo.Type, logo.Width, logo.Height)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	s.forget()
+	return nil
+}
+
+// DeleteLogo removes a page's logo; it succeeds when there is none. Allowed on every plan.
+func (s *Service) DeleteLogo(ctx context.Context, orgID, id uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE status_pages SET logo = NULL, logo_type = NULL, logo_width = NULL, logo_height = NULL, logo_updated_at = NULL
+		WHERE id = $1 AND organization_id = $2`, id, orgID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	s.forget()
+	return nil
+}
+
+// Logo returns a page's stored logo for the owner's preview (whatever the plan). ErrNoLogo when there is none.
+func (s *Service) Logo(ctx context.Context, orgID, id uuid.UUID) ([]byte, string, error) {
+	return s.logo(ctx, `SELECT logo, logo_type FROM status_pages WHERE id = $1 AND organization_id = $2`, id, orgID)
+}
+
+// PublicLogo returns the logo of a published page whose plan includes branding; anything else is ErrNoLogo, so the public endpoint reveals
+// nothing about drafts or about logos kept after a downgrade.
+func (s *Service) PublicLogo(ctx context.Context, slug string) ([]byte, string, error) {
+	if !slugRE.MatchString(slug) {
+		return nil, "", ErrNoLogo
+	}
+	var id, orgID uuid.UUID
+	err := s.pool.QueryRow(ctx, `SELECT id, organization_id FROM status_pages WHERE slug = $1 AND published`, slug).Scan(&id, &orgID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, "", ErrNoLogo
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	plan, err := plans.EffectivePlan(ctx, s.pool, orgID)
+	if err != nil {
+		return nil, "", err
+	}
+	if !plan.StatusPageBranding {
+		return nil, "", ErrNoLogo
+	}
+	return s.Logo(ctx, orgID, id)
+}
+
+func (s *Service) logo(ctx context.Context, q string, args ...any) ([]byte, string, error) {
+	var data []byte
+	var typ *string
+	err := s.pool.QueryRow(ctx, q, args...).Scan(&data, &typ)
+	if errors.Is(err, pgx.ErrNoRows) || err == nil && typ == nil {
+		return nil, "", ErrNoLogo
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	return data, "image/" + *typ, nil
 }
 
 // Delete removes one of the organization's pages (its address becomes available again).
@@ -269,6 +398,20 @@ func validate(in Config) (Config, error) {
 	in.Description = strings.TrimSpace(in.Description)
 	if len([]rune(in.Description)) > 500 {
 		bad["description"] = "must be at most 500 characters"
+	}
+	in.AccentColor = strings.ToLower(strings.TrimSpace(in.AccentColor))
+	if in.AccentColor != "" && !colorRE.MatchString(in.AccentColor) {
+		bad["accent_color"] = "must be a colour like #1a73e8"
+	}
+	in.WebsiteURL = strings.TrimSpace(in.WebsiteURL)
+	if in.WebsiteURL != "" {
+		u, err := url.Parse(in.WebsiteURL)
+		switch {
+		case err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || len(in.WebsiteURL) > 2048:
+			bad["website_url"] = "must be an https:// web address, like https://www.example.com"
+		default:
+			in.WebsiteURL = u.String()
+		}
 	}
 	if len(in.Monitors) > MaxMonitors {
 		bad["monitors"] = "too many monitors"
@@ -365,8 +508,11 @@ func (s *Service) build(ctx context.Context, slug string, now time.Time) (Public
 	}
 	var p Public
 	var pageID, orgID uuid.UUID
-	err := s.pool.QueryRow(ctx, `SELECT id, organization_id, title, description FROM status_pages WHERE slug = $1 AND published`, slug).
-		Scan(&pageID, &orgID, &p.Title, &p.Description)
+	var look Config
+	var logoAt *time.Time
+	err := s.pool.QueryRow(ctx, `SELECT id, organization_id, title, description, COALESCE(accent_color, ''), COALESCE(website_url, ''), hide_powered_by, logo_updated_at
+		FROM status_pages WHERE slug = $1 AND published`, slug).
+		Scan(&pageID, &orgID, &p.Title, &p.Description, &look.AccentColor, &look.WebsiteURL, &look.HidePoweredBy, &logoAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Public{}, ErrNotFound
 	}
@@ -376,6 +522,13 @@ func (s *Service) build(ctx context.Context, slug string, now time.Time) (Public
 	plan, err := plans.EffectivePlan(ctx, s.pool, orgID)
 	if err != nil {
 		return Public{}, err
+	}
+	p.Branding = PublicBranding{PoweredBy: !(look.HidePoweredBy && plan.StatusPageWhiteLabel)}
+	if plan.StatusPageBranding {
+		p.Branding.AccentColor, p.Branding.WebsiteURL = look.AccentColor, look.WebsiteURL
+		if logoAt != nil {
+			p.Branding.LogoURL = fmt.Sprintf("/api/v1/public/status/%s/logo?v=%d", slug, logoAt.UnixMilli())
+		}
 	}
 	p.HistoryDays = min(MaxHistory, plan.HistoryRetentionDays)
 	p.GeneratedAt = now.UTC().Truncate(time.Second)
