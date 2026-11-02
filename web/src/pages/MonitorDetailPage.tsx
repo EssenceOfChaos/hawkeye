@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import type { CheckResult, Incident, Monitor, Plan, RangeInfo, RegionStatus, SeriesPoint, Uptime, Usage } from '../api'
 import { Alert } from '../components/Alert'
+import { useAuth } from '../auth'
+import { BadgeCard } from '../components/BadgeCard'
 import { CertificateCard } from '../components/Certificate'
 import { RangePicker } from '../components/RangePicker'
 import { ResponseChart } from '../components/ResponseChart'
@@ -37,6 +39,7 @@ function ReportDownload({ monitorID, plan }: { monitorID: string; plan: Plan | u
 
 export function MonitorDetailPage() {
   const { monitorID = '' } = useParams()
+  const { organization } = useAuth()
   const [range, setRange] = useState('24h')
   const [offset, setOffset] = useState(0)
 
@@ -93,6 +96,8 @@ export function MonitorDetailPage() {
           <CertificateCard monitor={m} />
 
           <ReportDownload monitorID={m.id} plan={usage.data?.usage.plan} />
+
+          <BadgeCard key={m.id} monitor={m} plan={usage.data?.usage.plan} isOwner={organization?.role === 'owner'} />
 
           <RangePicker value={range} options={options} onChange={changeRange} />
 

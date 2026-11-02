@@ -87,7 +87,7 @@ export function PrivacyPage() {
       <p>
         If you create a public status page, anyone who has its address can see the page title and description you enter, any logo, accent colour and website link you add to it, the names you give the monitors you add to it, each one’s current state (up, down, or under maintenance),
         daily and overall uptime percentages, and the start and end times of recent incidents. We do not show monitored web addresses, error messages, or the causes of incidents on the page. The page is not visible until you
-        publish it, and you can unpublish or delete it at any time. Do not put personal or confidential information in the title, description, or monitor names. Public status pages may be cached by us for a short time (under a minute)
+        publish it, and you can unpublish or delete it at any time. Likewise, if you turn on a public uptime badge for a monitor, anyone with the badge’s address can see that monitor’s uptime percentage, the period it covers and whether it is currently up, but never its name or web address; turning the badge off makes its address stop working. Do not put personal or confidential information in the title, description, or monitor names. Public status pages may be cached by us for a short time (under a minute)
         and, once published, may be copied or indexed by others, which we cannot control.
       </p>
 

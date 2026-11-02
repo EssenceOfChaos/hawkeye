@@ -40,8 +40,9 @@
 
 	import security_headers
 
-	# API, health and readiness go to the API container. Prometheus metrics are NOT proxied (they live on private ports).
-	@backend path /api/* /healthz /readyz
+	# API, health and readiness go to the API container, and so do the public uptime badges (/badge/<token>.svg). Prometheus metrics are NOT proxied
+	# (they live on private ports).
+	@backend path /api/* /healthz /readyz /badge/*
 	handle @backend {
 		reverse_proxy api:8080 {
 			# The API trusts X-Forwarded-For only from private ranges (TRUST_FORWARDED_FOR=true); Caddy replaces any client-sent value.

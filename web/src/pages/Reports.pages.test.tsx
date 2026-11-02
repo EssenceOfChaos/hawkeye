@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { AuthProvider } from '../auth'
 import { DashboardPage } from './DashboardPage'
 import { MonitorDetailPage } from './MonitorDetailPage'
 
@@ -15,10 +16,13 @@ const usage = (days: number) => ({ usage: { plan: plan(days), monitors_used: 1, 
 const range = { from: '2026-10-11T00:00:00Z', to: '2026-10-12T00:00:00Z', preset: '24h', clamped_to_retention: false, retention_days: 7 }
 const uptime = { from: range.from, to: range.to, clamped_to_retention: false, total_checks: 288, successful_checks: 287, failed_checks: 1, uptime_percent: 99.652, insufficient_data: false, min_checks: 5, avg_response_ms: 180, method: 'check_based' }
 
+// The pages run as a signed-in owner (the monitor page offers the owner its uptime badge switch).
+const me = { user: { id: 'u', email: 'owner@example.com', email_verified_at: '2026-01-01T00:00:00Z' }, organizations: [{ id: 'o', name: 'Org', role: 'owner' }] }
+
 function mount(ui: React.ReactNode, path: string, route: string, handler: (url: string) => Promise<Response>) {
   const calls: string[] = []
-  vi.stubGlobal('fetch', vi.fn((url: string) => { calls.push(url); return handler(url) }))
-  render(<MemoryRouter initialEntries={[path]}><Routes><Route path={route} element={ui} /></Routes></MemoryRouter>)
+  vi.stubGlobal('fetch', vi.fn((url: string) => { calls.push(url); return url.includes('/auth/me') ? json(200, me) : handler(url) }))
+  render(<MemoryRouter initialEntries={[path]}><AuthProvider><Routes><Route path={route} element={ui} /></Routes></AuthProvider></MemoryRouter>)
   return calls
 }
 
@@ -83,6 +87,7 @@ describe('MonitorDetailPage', () => {
     expect(screen.getByText('Failed')).toBeInTheDocument()
     expect(screen.getByText('Success')).toBeInTheDocument()
     expect(screen.getByText('No incidents for this website.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Public uptime badge')).not.toBeChecked() // off until the owner turns it on
     expect(ui).toBeTruthy()
   })
 

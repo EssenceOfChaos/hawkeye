@@ -11,6 +11,7 @@ import (
 
 	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
+	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/branding"
 	"hawkeye/internal/contact"
@@ -41,6 +42,7 @@ type handlers struct {
 	maintenance   *maintenance.Service
 	domains       *domains.Service
 	statusPages   *statuspage.Service
+	badges        *badges.Service
 	regions       regions.Set
 	billing       *billing.Service
 	account       *account.Service
@@ -126,6 +128,8 @@ func mapError(err error) error {
 		return &APIError{Status: http.StatusForbidden, Code: "NOTIFICATION_SETTINGS_LIMIT",
 			Message: "You can have at most 10 alert destinations. Remove one to add another.",
 			Details: map[string]any{"limit": notifications.MaxSettingsPerOrganization}}
+	case errors.Is(err, badges.ErrNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Monitor not found."}
 	case errors.Is(err, invitations.ErrConfirmMismatch):
 		return mapError(validation.New("confirm_name", "must be the organization's name, exactly"))
 	case errors.Is(err, invitations.ErrNewOwnerNotVerified):

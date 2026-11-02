@@ -151,6 +151,8 @@ export interface Monitor {
   slow_checks: number
   /** Set while responses are confirmed slow (a slowdown is open). */
   slow_since: string | null
+  /** The public uptime badge's token (/badge/<token>.svg); null while the badge is off. */
+  badge_token: string | null
 }
 
 export interface SSLInfo {

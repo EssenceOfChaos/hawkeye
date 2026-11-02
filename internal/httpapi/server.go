@@ -14,6 +14,7 @@ import (
 
 	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
+	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/branding"
 	"hawkeye/internal/contact"
@@ -56,6 +57,7 @@ type Options struct {
 	Domains       *domains.Service
 	Regions       regions.Set
 	StatusPages   *statuspage.Service
+	Badges        *badges.Service // public uptime badges; nil turns them off
 	Billing       *billing.Service
 	Account       *account.Service
 	Contact       *contact.Service
@@ -174,7 +176,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies}
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
@@ -260,6 +262,16 @@ func registerAPI(e *echo.Echo, o Options) {
 	}
 	v1.GET("/public/status/:slug", h.publicStatus, publicLimit)
 	v1.GET("/public/status/:slug/logo", h.publicStatusLogo, publicLimit)
+	if h.badges != nil {
+		// Uptime badges are embedded on other sites and in READMEs, so they live at a short address outside /api and outside its CSRF and global
+		// limits. Requests come largely from a few image proxies (GitHub's camo, for one), so the per-IP budget is generous and kept in memory: a
+		// badge is served from a one-minute cache and never costs a rate-limiter query.
+		e.GET("/badge/:file", h.publicBadge, middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+			Store:               middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(20), Burst: 600, ExpiresIn: time.Hour}),
+			IdentifierExtractor: func(c echo.Context) (string, error) { return c.RealIP(), nil },
+			DenyHandler:         func(echo.Context, string, error) error { return errRateLimited },
+		}))
+	}
 	// Public contact form: per-IP burst and hourly caps, a spam trap, and per-address limits on the acknowledgement email.
 	contactLimits := []echo.MiddlewareFunc{limit("contact")}
 	if h.limits.l != nil {
@@ -301,6 +313,10 @@ func registerAPI(e *echo.Echo, o Options) {
 	scoped.DELETE("/monitors/:monitorID", h.deleteMonitor)
 	scoped.POST("/monitors/:monitorID/pause", h.pauseMonitor)
 	scoped.POST("/monitors/:monitorID/resume", h.resumeMonitor)
+	if h.badges != nil {
+		scoped.POST("/monitors/:monitorID/badge", h.enableBadge, requireOwner)
+		scoped.DELETE("/monitors/:monitorID/badge", h.disableBadge, requireOwner)
+	}
 	scoped.GET("/monitors/:monitorID/incidents", h.listMonitorIncidents)
 	scoped.GET("/incidents", h.listIncidents)
 

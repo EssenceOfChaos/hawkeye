@@ -101,8 +101,10 @@ type Monitor struct {
 	SlowThresholdMs *int       `json:"slow_threshold_ms"`
 	SlowChecks      int        `json:"slow_checks"`
 	SlowSince       *time.Time `json:"slow_since"` // set while a slowdown is open: responses are confirmed slow
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	// BadgeToken addresses the monitor's public uptime badge (/badge/<token>.svg); nil while the badge is off.
+	BadgeToken *string   `json:"badge_token"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 // SSLInfo describes the TLS certificate of an HTTPS monitor as last seen by a check.
@@ -281,7 +283,7 @@ const cols = `id, organization_id, name, url, method, expected_status_code, chec
 	enabled, current_status, last_checked_at, last_success_at, consecutive_failures, consecutive_successes, created_at, updated_at,
 	request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), auth_secret IS NOT NULL,
 	assertions, ssl_expires_at, ssl_checked_at, in_maintenance(organization_id, id, now()), regions,
-	slow_threshold_ms, slow_checks, (SELECT started_at FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open')`
+	slow_threshold_ms, slow_checks, (SELECT started_at FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'), badge_token`
 
 func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	var m Monitor
@@ -290,7 +292,7 @@ func scan(row pgx.Row, minInterval int) (Monitor, error) {
 		&m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.LastCheckedAt, &m.LastSuccessAt, &m.ConsecutiveFailures,
 		&m.ConsecutiveSuccesses, &m.CreatedAt, &m.UpdatedAt, &m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username,
 		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked, &m.InMaintenance, &m.Regions,
-		&m.SlowThresholdMs, &m.SlowChecks, &m.SlowSince)
+		&m.SlowThresholdMs, &m.SlowChecks, &m.SlowSince, &m.BadgeToken)
 	m.EffectiveCheckIntervalSeconds = max(m.CheckIntervalSeconds, minInterval)
 	if sslExpires != nil {
 		now := time.Now()

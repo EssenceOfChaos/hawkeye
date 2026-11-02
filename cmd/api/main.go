@@ -15,6 +15,7 @@ import (
 
 	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
+	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/branding"
 	"hawkeye/internal/config"
@@ -145,6 +146,7 @@ func run() error {
 		Domains:       domains.NewService(pool, planSvc),
 		Regions:       cfg.Regions(),
 		StatusPages:   statuspage.NewService(pool, planSvc),
+		Badges:        badges.NewService(pool),
 		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress, notifications.WithSecretBox(box), notifications.WithTelegramBot(telegramBot)),
 		TelegramBot:   telegramBot,
 		SecureCookies: cfg.IsProduction(), AuthRateLimitPerMin: cfg.AuthRateLimitPerMin, TrustForwardedFor: cfg.TrustForwardedFor,

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="28" viewBox="0 0 200 28" role="img" aria-label="{{.Description}}">
+  <title>{{.Description}}</title>
+  <defs>
+    <linearGradient id="navy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#142A47"/><stop offset="0.52" stop-color="#0B1B33"/><stop offset="1" stop-color="#071325"/></linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFE5A0"/><stop offset="0.42" stop-color="#DCAC52"/><stop offset="0.78" stop-color="#B98532"/><stop offset="1" stop-color="#F3D082"/></linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".085"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect x=".75" y=".75" width="198.5" height="26.5" rx="7" fill="url(#navy)" stroke="url(#gold)" stroke-width="1.3"/>
+  <rect x="2.5" y="2.5" width="195" height="11" rx="5" fill="url(#sheen)"/>
+  <text x="10" y="18.5" fill="#F7F9FC" font-family="Inter, Arial, Helvetica, sans-serif" font-size="12" font-weight="750" letter-spacing="-.3">Hawk<tspan fill="#E9BC63">Eye</tspan></text>
+  <line x1="66" y1="6.5" x2="66" y2="21.5" stroke="#E5B969" stroke-opacity=".43" stroke-width="1"/>
+{{- if not .Percent}}
+  <text x="74" y="18.5" fill="#E8C98B" font-family="Inter, Arial, Helvetica, sans-serif" font-size="10.5" font-weight="650">No data yet</text>
+{{- else if eq .State "up"}}
+  <text x="74" y="18.5" fill="#FFFFFF" font-family="Inter, Arial, Helvetica, sans-serif" font-size="12.5" font-weight="750" letter-spacing="-.4"><tspan>{{.Percent}}</tspan><tspan dx="4" fill="#E9BC63" font-size="10.5" font-weight="700" letter-spacing="0">uptime</tspan><tspan dx="4" fill="#B7C8DA" font-size="10" font-weight="500" letter-spacing="0">{{.ShortPeriod}}</tspan></text>
+{{- else if eq .State "down"}}
+  <text x="74" y="18.5" fill="#FFFFFF" font-family="Inter, Arial, Helvetica, sans-serif" font-size="12.5" font-weight="750" letter-spacing="-.4"><tspan>{{.Percent}}</tspan><tspan dx="4" fill="#FFB0B0" font-size="10.5" font-weight="700" letter-spacing="0">down now</tspan></text>
+{{- else}}
+  <text x="74" y="18.5" fill="#FFFFFF" font-family="Inter, Arial, Helvetica, sans-serif" font-size="12.5" font-weight="750" letter-spacing="-.4"><tspan>{{.Percent}}</tspan><tspan dx="4" fill="#E8C98B" font-size="10.5" font-weight="700" letter-spacing="0">unknown</tspan></text>
+{{- end}}
+{{- if eq .State "up"}}
+  <circle cx="186" cy="14" r="8" fill="#103D33" stroke="#29D68D" stroke-width="1"/>
+  <path d="M182.6 14.1 185 16.4 189.4 11.8" stroke="#36E29A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+{{- else if eq .State "down"}}
+  <circle cx="186" cy="14" r="8" fill="#4B1C25" stroke="#FF6F7A" stroke-width="1"/>
+  <path d="M183.3 11.3 188.7 16.7 M188.7 11.3 183.3 16.7" stroke="#FF7985" stroke-width="1.8" stroke-linecap="round"/>
+{{- else}}
+  <circle cx="186" cy="14" r="8" fill="#4F3D19" stroke="#F1C86A" stroke-width="1"/>
+  <text x="186" y="18" text-anchor="middle" fill="#FFD67C" font-family="Inter, Arial, Helvetica, sans-serif" font-size="11" font-weight="800">?</text>
+{{- end}}
+</svg>

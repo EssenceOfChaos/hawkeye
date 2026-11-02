@@ -275,6 +275,18 @@ the monitor as "Slow".
 Changing `slow_threshold_ms` or `slow_checks`, or anything that resets the monitor's health (its request or locations), starts the streaks again and closes
 an open slowdown **without** a `slow_recovery` alert, because nothing got faster. Resolved slowdowns are deleted with the plan's history window, like incidents.
 
+## Uptime badges
+
+An embeddable SVG showing a monitor's uptime, **off by default** and turned on per monitor by the owner. Available on every plan. A badge is addressed by a random 22-character token, never by the monitor's id; turning it off clears the token (the address stops working at once, within a minute on other API processes), and turning it on again issues a new one.
+
+| Method & path | Who | Notes |
+|---|---|---|
+| `POST /monitors/:id/badge` | owner | → 200 `{badge_token}`. Keeps an existing token, so embedded badges keep working |
+| `DELETE /monitors/:id/badge` | owner | 204 |
+| `GET /badge/<token>.svg` | **no login** (outside `/api`) | The large badge (400 × 84); `?style=small` gives the README size (200 × 28). `image/svg+xml`, `Cache-Control: public, max-age=300`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'`. 404 for an unknown, revoked or malformed token and for a deleted monitor. Served from a one-minute in-memory cache with a generous in-memory per-IP limit (requests come largely from image proxies such as GitHub's camo) |
+
+Monitors carry `badge_token` (null while off). A badge shows only the uptime percentage (truncated to two decimals, as everywhere: never rounded up to 100%), the period and the state, never the monitor's name or address. The period is 30 days, or 7 on a plan that keeps less history (Free). The state is **up** or **down** from the monitor's current status, and **unknown** while it is paused or in a maintenance window (the percentage is still shown); with fewer than 5 checks in the period the badge says "Not enough data yet" instead of a number. The templates are `internal/badges/templates/*.svg` (the design's own SVG with only those values filled in, all escaped).
+
 ## SSL certificate expiry
 
 Every monitor object carries `ssl`: `null` until a check has seen the certificate (and always for `http://` monitors), otherwise

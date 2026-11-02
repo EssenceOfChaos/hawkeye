@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="84" viewBox="0 0 400 84" role="img" aria-labelledby="title description">
+  <title id="title">{{.Title}}</title>
+  <desc id="description">{{.Description}}</desc>
+  <defs>
+    <linearGradient id="navy" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#142A47"/>
+      <stop offset="0.52" stop-color="#0B1B33"/>
+      <stop offset="1" stop-color="#071325"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFE5A0"/>
+      <stop offset="0.42" stop-color="#DCAC52"/>
+      <stop offset="0.78" stop-color="#B98532"/>
+      <stop offset="1" stop-color="#F3D082"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".085"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+{{- if eq .State "up"}}
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#36E29A"/>
+      <stop offset="1" stop-color="#18B975"/>
+    </linearGradient>
+{{- else if eq .State "down"}}
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF8B8B"/>
+      <stop offset="1" stop-color="#FF5D5D"/>
+    </linearGradient>
+{{- else}}
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFD67C"/>
+      <stop offset="1" stop-color="#F0B84A"/>
+    </linearGradient>
+{{- end}}
+  </defs>
+  <rect x="1.5" y="1.5" width="397" height="81" rx="16" fill="url(#navy)" stroke="url(#gold)" stroke-width="2"/>
+  <rect x="4.7" y="4.7" width="390.6" height="74.6" rx="12.5" fill="none" stroke="#FFFFFF" stroke-opacity=".10" stroke-width=".8"/>
+  <rect x="5" y="5" width="390" height="38" rx="12" fill="url(#sheen)"/>
+
+  <text x="22" y="30" fill="#B7C8DA" font-family="Inter, Arial, Helvetica, sans-serif" font-size="10.5" font-weight="550" letter-spacing=".5">MONITORED BY</text>
+  <text x="22" y="52" fill="#F7F9FC" font-family="Inter, Arial, Helvetica, sans-serif" font-size="19" font-weight="750" letter-spacing="-.55">Hawk<tspan fill="#E9BC63">Eye</tspan></text>
+  <line x1="141" y1="19" x2="141" y2="65" stroke="#E5B969" stroke-opacity=".43" stroke-width="1"/>
+
+{{- if .Percent}}
+  <text x="160" y="39" fill="#FFFFFF" font-family="Inter, Arial, Helvetica, sans-serif" font-size="25" font-weight="750" letter-spacing="-.9"><tspan>{{.Percent}}</tspan><tspan dx="6" fill="#E9BC63" font-size="15" font-weight="700">uptime</tspan></text>
+{{- else}}
+  <text x="160" y="39" fill="#FFFFFF" font-family="Inter, Arial, Helvetica, sans-serif" font-size="30" font-weight="700">—</text>
+{{- end}}
+{{- if eq .State "up"}}
+  <text x="161" y="58" fill="#B7C8DA" font-family="Inter, Arial, Helvetica, sans-serif" font-size="12" font-weight="500">{{.Caption}}</text>
+{{- else if eq .State "down"}}
+  <text x="161" y="58" fill="#FFB0B0" font-family="Inter, Arial, Helvetica, sans-serif" font-size="12" font-weight="550">{{.Caption}}</text>
+{{- else}}
+  <text x="161" y="58" fill="#E8C98B" font-family="Inter, Arial, Helvetica, sans-serif" font-size="12" font-weight="550">{{.Caption}}</text>
+{{- end}}
+
+{{- if eq .State "up"}}
+  <circle cx="365" cy="42" r="16" fill="#103D33" stroke="#29D68D" stroke-width="1.4"/>
+  <circle cx="365" cy="42" r="12.5" fill="#164C3D"/>
+  <path d="M358.5 42.1 363.1 46.5 371.6 37.6" stroke="url(#green)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+{{- else if eq .State "down"}}
+  <circle cx="365" cy="42" r="16" fill="#4B1C25" stroke="#FF6F7A" stroke-width="1.4"/>
+  <circle cx="365" cy="42" r="12.5" fill="#5A202B"/>
+  <path d="M360 37 370 47" stroke="url(#red)" stroke-width="3" stroke-linecap="round"/>
+  <path d="M370 37 360 47" stroke="url(#red)" stroke-width="3" stroke-linecap="round"/>
+{{- else}}
+  <circle cx="365" cy="42" r="16" fill="#4F3D19" stroke="#F1C86A" stroke-width="1.4"/>
+  <circle cx="365" cy="42" r="12.5" fill="#5D4920"/>
+  <text x="365" y="47" text-anchor="middle" fill="url(#amber)" font-family="Inter, Arial, Helvetica, sans-serif" font-size="20" font-weight="800">?</text>
+{{- end}}
+</svg>
