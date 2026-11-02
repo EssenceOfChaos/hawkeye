@@ -116,6 +116,13 @@ func (h *handlers) listMonitors(c echo.Context) error {
 		}
 		f.Enabled = &b
 	}
+	if v := c.QueryParam("tag"); v != "" {
+		id, err := uuid.Parse(v)
+		if err != nil {
+			bad["tag"] = "must be a tag id"
+		}
+		f.TagID = &id
+	}
 	if v := c.QueryParam("limit"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > 100 {

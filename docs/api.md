@@ -64,10 +64,15 @@ malformed ID gives 404) or, if absent, the organization the caller **owns** (the
 |---|---|
 | `GET /plans` | public price list (active plans, cheapest first) |
 | `GET /usage` | `{usage: {plan, monitors_used, monitor_limit, over_limit, next_plan}}` |
-| `GET /monitors` | filters `status` (unknown/up/down), `enabled`, `q` (name/URL substring); pagination `limit` (1–100, default 25) and `offset`; returns `{monitors, total, limit, offset}`, newest first |
-| `POST /monitors` | `{name, url, method?, expected_status_code?, check_interval_seconds?, timeout_seconds?, headers?, body?, auth?, assertions?, slow_threshold_ms?, slow_checks?}` → 201 |
-| `GET/PATCH/DELETE /monitors/:id` | PATCH is partial; `expected_status_code: null`, `body: null` and `slow_threshold_ms: null` clear them, `headers` and `assertions` replace the whole list. DELETE is a soft delete (204) and frees a plan slot |
+| `GET /monitors` | filters `status` (unknown/up/down), `enabled`, `q` (name/URL substring), `tag` (a tag id); pagination `limit` (1–100, default 25) and `offset`; returns `{monitors, total, limit, offset}`, newest first |
+| `POST /monitors` | `{name, url, method?, expected_status_code?, check_interval_seconds?, timeout_seconds?, headers?, body?, auth?, assertions?, slow_threshold_ms?, slow_checks?, tag_ids?}` → 201 |
+| `GET/PATCH/DELETE /monitors/:id` | PATCH is partial; `expected_status_code: null`, `body: null` and `slow_threshold_ms: null` clear them, `headers`, `assertions` and `tag_ids` replace the whole list. DELETE is a soft delete (204) and frees a plan slot |
 | `POST /monitors/:id/pause`, `/resume` | toggles `enabled`; allowed even when over the plan limit |
+| `POST /monitors/bulk` | `{monitor_ids, action, check_interval_seconds?, tag_ids?}` → `{updated}`. See *Tags and bulk actions* |
+| `GET /tags` | `{tags: [{id, name, color, monitor_count}]}`, sorted by name |
+| `POST /tags` | `{name, color?}` → 201 `{tag}` |
+| `PATCH /tags/:id` | `{name?, color?}`; `color: null` clears it |
+| `DELETE /tags/:id` | 204; the tag's monitors are kept |
 
 **Monitor fields.** Editable: `name` (1–100), `url`, `method` (`GET` default, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`), `expected_status_code`
 (100–599 or null; null means any response below 400 is up), `check_interval_seconds` (60–86400, default = plan minimum),
@@ -101,6 +106,21 @@ Validation errors for list items name the item, for example `headers[0].name` or
 **URL rules.** `http`/`https` only, no credentials, ports 80/443 only, no `localhost`/`.local`/`.internal`/single-label hosts,
 no literal private/loopback/link-local/metadata IPs. This is early feedback only; the real SSRF defence (DNS resolution and
 dial-time validation) is in the checker (`internal/safehttp`). Editing the URL, method, headers, body or authentication resets health state to `unknown`.
+
+### Tags and bulk actions
+
+Tags group an organization's monitors, for example by client or project. Any member may manage them, on every plan. A tag `name` is 1–40
+characters and unique in the organization regardless of case (409 `TAG_EXISTS`); `color` is `#rrggbb` or null. At most 100 tags per organization
+(403 `TAGS_LIMIT`) and 10 per monitor. Monitors carry `tags: [{id, name, color}]`, sorted by name. `tag_ids` on create or PATCH must be the
+organization's own tags (otherwise 400 on `tag_ids`). Deleting a monitor removes its tags; deleting a tag keeps its monitors. Data exports list
+each monitor's tag names.
+
+`POST /monitors/bulk` applies one `action` to up to 200 `monitor_ids`: `pause`, `resume`, `delete`, `set_interval` (with
+`check_interval_seconds`), `add_tags` or `remove_tags` (with `tag_ids`). It is **all or nothing**: if any listed monitor is missing, deleted or in
+another organization the result is 404 and nothing changes, and if the action is not allowed for any of them (an interval below the plan's minimum,
+403 `PLAN_LIMIT_REACHED`; below 5 minutes for a monitor using a state-changing method, or a monitor left with more than 10 tags, 400) nothing
+changes either. Repeated ids count once; `updated` is how many monitors were changed. The same rules as the single-monitor endpoints apply
+(resume makes a monitor due at once; delete erases credentials, closes open incidents without alerts and frees plan slots).
 
 ## Team
 

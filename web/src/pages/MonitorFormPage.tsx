@@ -16,9 +16,11 @@ import {
   type MonitorInput,
   type RegionInfo,
   type RequestHeader,
+  type TagSummary,
 } from '../api'
 import { Field } from '../components/Field'
 import { KeywordChecks } from '../components/KeywordChecks'
+import { TagPicker } from '../components/Tags'
 
 /** The server allows this many checks in total: text checks and JSON checks together. */
 const MAX_CHECKS = 10
@@ -85,6 +87,8 @@ export function MonitorFormPage() {
   const [slowMs, setSlowMs] = useState(String(DEFAULT_SLOW_MS))
   const [slowChecks, setSlowChecks] = useState('3')
   const [avgMs, setAvgMs] = useState<number | null>(null) // this monitor's average response over the last 24 hours, as a guide
+  const [allTags, setAllTags] = useState<TagSummary[]>([])
+  const [tagIDs, setTagIDs] = useState<string[]>([])
 
   useEffect(() => {
     api<{ usage: { plan: { minimum_check_interval_seconds: number } } }>('GET', '/usage')
@@ -95,6 +99,9 @@ export function MonitorFormPage() {
         setAllRegions(r.regions ?? [])
         setMaxRegions(r.max_regions ?? 1)
       })
+      .catch(() => undefined)
+    api<{ tags: TagSummary[] }>('GET', '/tags')
+      .then((r) => setAllTags(r.tags ?? []))
       .catch(() => undefined)
     if (!monitorID) return
     api<{ monitor: Monitor }>('GET', `/monitors/${monitorID}`)
@@ -120,6 +127,7 @@ export function MonitorFormPage() {
         setSlowOn(m.slow_threshold_ms != null)
         if (m.slow_threshold_ms != null) setSlowMs(String(m.slow_threshold_ms))
         setSlowChecks(String(m.slow_checks ?? 3))
+        setTagIDs((m.tags ?? []).map((t) => t.id))
         setLoaded(true)
       })
       .catch((e: ApiError) => setError(e))
@@ -159,6 +167,7 @@ export function MonitorFormPage() {
       assertions: assertionsAllowed ? checks.map((c) => c.assertion) : [],
       slow_threshold_ms: slowOn ? Number(slowMs) : null,
       slow_checks: Number(slowChecks),
+      tag_ids: tagIDs,
     }
     if (allRegions.length > 1) payload.regions = chosen
     if (authType === 'basic') payload.auth!.username = authUsername
@@ -205,6 +214,8 @@ export function MonitorFormPage() {
           <Field label="Name" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} error={f.name} />
           <Field label="URL" type="url" required value={url} onChange={(e) => setUrl(e.target.value)} error={f.url}
             hint="A public http(s) address. Private and internal addresses are not allowed." />
+          <TagPicker tags={allTags} selected={tagIDs} onChange={setTagIDs} error={f.tag_ids}
+            onCreated={(t) => setAllTags((ts) => [...ts, t].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())))} />
           <div className="field">
             <label htmlFor="method">Request method</label>
             <select id="method" value={method} onChange={(e) => setMethod(e.target.value as HttpMethod)}

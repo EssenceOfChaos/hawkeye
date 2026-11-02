@@ -80,6 +80,15 @@ func mapError(err error) error {
 		return limitAPIError(le)
 	case errors.Is(err, monitors.ErrNotFound):
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Monitor not found."}
+	case errors.Is(err, monitors.ErrTagNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Tag not found."}
+	case errors.Is(err, monitors.ErrTagDuplicate):
+		return &APIError{Status: http.StatusConflict, Code: "TAG_EXISTS", Message: "A tag with this name already exists.",
+			Details: map[string]any{"fields": map[string]string{"name": "is already used by another tag"}}}
+	case errors.Is(err, monitors.ErrTooManyTags):
+		return &APIError{Status: http.StatusForbidden, Code: "TAGS_LIMIT",
+			Message: "You can have at most 100 tags. Delete one to add another.",
+			Details: map[string]any{"limit": monitors.MaxTagsPerOrganization}}
 	case errors.As(err, &ve):
 		return &APIError{Status: http.StatusBadRequest, Code: "VALIDATION_ERROR",
 			Message: "One or more fields are invalid.", Details: map[string]any{"fields": ve.Fields}}

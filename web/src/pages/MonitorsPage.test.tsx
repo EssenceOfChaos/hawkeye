@@ -1,9 +1,56 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it } from 'vitest'
-import type { Plan, Usage } from '../api'
+import { describe, expect, it, vi } from 'vitest'
+import type { Plan, TagSummary, Usage } from '../api'
 import { StatusBadge } from '../components/StatusBadge'
-import { UsagePanel } from './MonitorsPage'
+import { TagList } from '../components/Tags'
+import { BulkBar, UsagePanel } from './MonitorsPage'
+
+const tags: TagSummary[] = [
+  { id: 't1', name: 'Acme', color: '#1a73e8', monitor_count: 3 },
+  { id: 't2', name: 'Beta', color: null, monitor_count: 0 },
+]
+
+describe('TagList', () => {
+  it('shows each tag by name, so colour is never the only signal', () => {
+    render(<TagList tags={tags} />)
+    expect(screen.getByRole('list', { name: 'Tags' })).toHaveTextContent(/Acme.*Beta/)
+  })
+
+  it('renders nothing for an untagged monitor', () => {
+    const { container } = render(<TagList tags={[]} />)
+    expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe('BulkBar', () => {
+  it('runs simple actions on the selection', () => {
+    const onRun = vi.fn()
+    render(<BulkBar count={3} tags={tags} minMinutes={5} onRun={onRun} onClear={() => undefined} />)
+    expect(screen.getByText('3 monitors selected')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(onRun.mock.calls).toEqual([['pause'], ['delete']])
+  })
+
+  it('adds a chosen tag and sets an interval in seconds', () => {
+    const onRun = vi.fn()
+    render(<BulkBar count={1} tags={tags} minMinutes={1} onRun={onRun} onClear={() => undefined} />)
+    expect(screen.getByText('1 monitor selected')).toBeInTheDocument()
+    const add = screen.getByRole('button', { name: 'Add' })
+    expect(add).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Tag to add'), { target: { value: 't2' } })
+    fireEvent.click(add)
+    fireEvent.change(screen.getByLabelText('Check every (minutes)'), { target: { value: '10' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set interval' }))
+    expect(onRun.mock.calls).toEqual([['add_tags', { tag_ids: ['t2'] }], ['set_interval', { check_interval_seconds: 600 }]])
+  })
+
+  it('hides tag actions when the organization has no tags', () => {
+    render(<BulkBar count={2} tags={[]} minMinutes={5} onRun={() => undefined} onClear={() => undefined} />)
+    expect(screen.queryByLabelText('Tag to add')).not.toBeInTheDocument()
+  })
+})
 
 const free = { code: 'free', name: 'Free', monthly_price_cents: 0, max_monitors: 5, minimum_check_interval_seconds: 300, history_retention_days: 7 } satisfies Plan
 const pro = { code: 'pro', name: 'Pro', monthly_price_cents: 1900, max_monitors: 50, minimum_check_interval_seconds: 60, history_retention_days: 90 } satisfies Plan

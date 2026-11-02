@@ -154,7 +154,7 @@ func TestSlackMessageForDomainExpiry(t *testing.T) {
 }
 
 func TestTelegramURL(t *testing.T) {
-	const token = "123456789:AAEhBP0av28MapQ3a_Bb-cDeFgHiJkLmNoP"
+	const token = "123:test-token-not-a-real-secret"
 	cases := []struct {
 		token, chat, field string
 	}{

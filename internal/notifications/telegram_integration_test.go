@@ -16,7 +16,7 @@ import (
 	"hawkeye/internal/testutil"
 )
 
-const botToken = "123456789:AAEhBP0av28MapQ3a_Bb-cDeFgHiJkLmNoP"
+const botToken = "123:test-token-not-a-real-secret"
 
 // readyBot is HawkEye's bot after a successful Setup against a fake Bot API that knows it as @HawkEyeObserverBot.
 func readyBot(t *testing.T) *notifications.TelegramBot {

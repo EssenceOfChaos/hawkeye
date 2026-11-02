@@ -305,7 +305,7 @@ func TestWebhookAndSlackDestinationsAreValidatedBeforeAnythingIsSent(t *testing.
 		"not discord":       {"channel": "discord", "destination": "https://example.com/api/webhooks/1/x"},
 		"not teams":         {"channel": "teams", "destination": "https://example.com/workflows/abc"},
 		"telegram no token": {"channel": "telegram", "destination": "-1001234567890"},
-		"telegram bad chat": {"channel": "telegram", "destination": "not a chat", "bot_token": "123456789:AAEhBP0av28MapQ3a_Bb-cDeFgHiJkLmNoP"},
+		"telegram bad chat": {"channel": "telegram", "destination": "not a chat", "bot_token": "123:test-token-not-a-real-secret"},
 		"missing":           {"channel": "webhook", "destination": ""},
 		"unsupported kind":  {"channel": "sms", "destination": "+15555550100"},
 		"email not allowed": {"channel": "webhook", "destination": "a@example.com"},

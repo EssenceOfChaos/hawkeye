@@ -173,7 +173,7 @@ func TestCreateTelegramSealsTheTokenAndShowsOnlyTheChat(t *testing.T) {
 	e := newEnv(t, 5)
 	rcv := newReceiver(t, 200)
 	svc := newService(t, e, rcv)
-	const token = "123456789:AAEhBP0av28MapQ3a_Bb-cDeFgHiJkLmNoP"
+	const token = "123:test-token-not-a-real-secret"
 
 	st, secret, err := svc.CreateURL(t.Context(), e.org, "telegram", "-1001234567890", token)
 	if err != nil || !st.Verified || st.Channel != "telegram" || st.Destination != "chat -1001234567890" || secret != "" {
@@ -185,7 +185,7 @@ func TestCreateTelegramSealsTheTokenAndShowsOnlyTheChat(t *testing.T) {
 	}
 	var dest string
 	e.pool.QueryRow(t.Context(), `SELECT destination FROM notification_settings WHERE id = $1`, st.ID).Scan(&dest)
-	if !strings.HasPrefix(dest, "enc:v1:") || strings.Contains(dest, "AAEh") {
+	if !strings.HasPrefix(dest, "enc:v1:") || strings.Contains(dest, "not-a-real-secret") {
 		t.Fatalf("the bot token must be stored sealed: %q", dest)
 	}
 	if _, _, err := svc.CreateURL(t.Context(), e.org, "telegram", "-1001234567890", token); !errors.Is(err, notifications.ErrDuplicate) {
@@ -196,8 +196,8 @@ func TestCreateTelegramSealsTheTokenAndShowsOnlyTheChat(t *testing.T) {
 func TestATelegramTestFailureNamesTheLikelyMistake(t *testing.T) {
 	e := newEnv(t, 5)
 	svc := newService(t, e, newReceiver(t, 403))
-	_, _, err := svc.CreateURL(t.Context(), e.org, "telegram", "42", "123456789:AAEhBP0av28MapQ3a_Bb-cDeFgHiJkLmNoP")
-	if err == nil || !strings.Contains(err.Error(), "403") || !strings.Contains(err.Error(), "not allowed to post") || strings.Contains(err.Error(), "AAEh") {
+	_, _, err := svc.CreateURL(t.Context(), e.org, "telegram", "42", "123:test-token-not-a-real-secret")
+	if err == nil || !strings.Contains(err.Error(), "403") || !strings.Contains(err.Error(), "not allowed to post") || strings.Contains(err.Error(), "not-a-real-secret") {
 		t.Fatalf("%v", err)
 	}
 }

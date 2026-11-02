@@ -344,7 +344,7 @@ func TestMonthlyReportsAreOnByDefaultAndConfigurable(t *testing.T) {
 }
 
 func TestTelegramBotIsOptionalButBothOrNeither(t *testing.T) {
-	const token, secret = "123456789:AAEhBP0av28MapQ3a_Bb-cDeFgHiJkLmNoP", "0123456789abcdef0123456789abcdef"
+	const token, secret = "123:test-token-not-a-real-secret", "0123456789abcdef0123456789abcdef"
 	for name, c := range map[string]struct {
 		token, secret, wantErr string
 	}{
@@ -360,7 +360,7 @@ func TestTelegramBotIsOptionalButBothOrNeither(t *testing.T) {
 		if (err == nil) != (c.wantErr == "") || (err != nil && !strings.Contains(err.Error(), c.wantErr)) {
 			t.Errorf("%s: %v", name, err)
 		}
-		if err != nil && strings.Contains(err.Error(), "AAEh") {
+		if err != nil && strings.Contains(err.Error(), "not-a-real-secret") {
 			t.Errorf("%s: the token must never appear in an error", name)
 		}
 	}

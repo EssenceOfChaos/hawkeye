@@ -103,6 +103,7 @@ type Monitor struct {
 	SlowSince       *time.Time `json:"slow_since"` // set while a slowdown is open: responses are confirmed slow
 	// BadgeToken addresses the monitor's public uptime badge (/badge/<token>.svg); nil while the badge is off.
 	BadgeToken *string   `json:"badge_token"`
+	Tags       []Tag     `json:"tags"` // sorted by name
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
@@ -167,6 +168,7 @@ type CreateInput struct {
 	Regions              []string           `json:"regions"`
 	SlowThresholdMs      *int               `json:"slow_threshold_ms"`
 	SlowChecks           *int               `json:"slow_checks"`
+	TagIDs               []uuid.UUID        `json:"tag_ids"`
 }
 
 type UpdateInput struct {
@@ -183,12 +185,14 @@ type UpdateInput struct {
 	Regions              *[]string           `json:"regions"`
 	SlowThresholdMs      Nullable[int]       `json:"slow_threshold_ms"`
 	SlowChecks           *int                `json:"slow_checks"`
+	TagIDs               *[]uuid.UUID        `json:"tag_ids"` // replaces the monitor's tags
 }
 
 type ListFilter struct {
 	Status  string // unknown|up|down, or empty
 	Enabled *bool
 	Query   string
+	TagID   *uuid.UUID // only monitors with this tag
 	Limit   int
 	Offset  int
 }
@@ -283,7 +287,7 @@ const cols = `id, organization_id, name, url, method, expected_status_code, chec
 	enabled, current_status, last_checked_at, last_success_at, consecutive_failures, consecutive_successes, created_at, updated_at,
 	request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), auth_secret IS NOT NULL,
 	assertions, ssl_expires_at, ssl_checked_at, in_maintenance(organization_id, id, now()), regions,
-	slow_threshold_ms, slow_checks, (SELECT started_at FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'), badge_token`
+	slow_threshold_ms, slow_checks, (SELECT started_at FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'), badge_token, ` + tagsCol
 
 func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	var m Monitor
@@ -292,7 +296,7 @@ func scan(row pgx.Row, minInterval int) (Monitor, error) {
 		&m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.LastCheckedAt, &m.LastSuccessAt, &m.ConsecutiveFailures,
 		&m.ConsecutiveSuccesses, &m.CreatedAt, &m.UpdatedAt, &m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username,
 		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked, &m.InMaintenance, &m.Regions,
-		&m.SlowThresholdMs, &m.SlowChecks, &m.SlowSince, &m.BadgeToken)
+		&m.SlowThresholdMs, &m.SlowChecks, &m.SlowSince, &m.BadgeToken, &m.Tags)
 	m.EffectiveCheckIntervalSeconds = max(m.CheckIntervalSeconds, minInterval)
 	if sslExpires != nil {
 		now := time.Now()
@@ -603,6 +607,13 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		if err := s.plans.CheckRegions(ctx, tx, orgID, len(f.regions)); err != nil {
 			return err
 		}
+		tagIDs, err := resolveTags(ctx, tx, orgID, in.TagIDs)
+		if err != nil {
+			return err
+		}
+		if len(tagIDs) > MaxTagsPerMonitor {
+			return validation.New("tag_ids", fmt.Sprintf("at most %d tags per monitor", MaxTagsPerMonitor))
+		}
 		id := uuid.New() // chosen here so the credential can be encrypted for exactly this monitor
 		sealed, err := s.sealSecret(f.auth.Secret, id)
 		if err != nil {
@@ -616,6 +627,15 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, sealed, f.assertions, id, f.regions, f.slowThreshold, f.slowChecks), minInterval)
 		if err != nil {
 			return err
+		}
+		if len(tagIDs) > 0 {
+			// The row had to exist before it could be tagged, so its tags are read back separately.
+			if err := setTags(ctx, tx, id, tagIDs); err != nil {
+				return err
+			}
+			if err := tx.QueryRow(ctx, `SELECT `+tagsCol+` FROM monitors WHERE id = $1`, id).Scan(&out.Tags); err != nil {
+				return err
+			}
 		}
 		return s.syncDomains(ctx, tx, orgID)
 	})
@@ -656,6 +676,9 @@ func (s *Service) List(ctx context.Context, orgID uuid.UUID, f ListFilter) ([]Mo
 	if q := strings.TrimSpace(f.Query); q != "" {
 		esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q)
 		add(`(name ILIKE $%[1]d OR url ILIKE $%[1]d)`, "%"+esc+"%")
+	}
+	if f.TagID != nil {
+		add("EXISTS (SELECT 1 FROM monitor_tags mt WHERE mt.monitor_id = monitors.id AND mt.tag_id = $%d)", *f.TagID)
 	}
 
 	var total int
@@ -771,6 +794,16 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 				return err
 			}
 		}
+		// Written before the UPDATE below, so its RETURNING sees the new tags.
+		if in.TagIDs != nil {
+			tagIDs, err := resolveTags(ctx, tx, orgID, *in.TagIDs)
+			if err != nil {
+				return err
+			}
+			if err := setTags(ctx, tx, id, tagIDs); err != nil {
+				return err
+			}
+		}
 		out, err = scan(tx.QueryRow(ctx, `UPDATE monitors SET name=$3, url=$4, method=$5, expected_status_code=$6,
 			check_interval_seconds=$7, timeout_seconds=$8,
 			next_check_at = CASE WHEN $9 THEN now() ELSE next_check_at END,
@@ -840,23 +873,35 @@ func (s *Service) SetEnabled(ctx context.Context, orgID, id uuid.UUID, enabled b
 // An open incident is closed without notifications: nobody needs a recovery email for a monitor they removed.
 func (s *Service) Delete(ctx context.Context, orgID, id uuid.UUID) error {
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		// A deleted monitor keeps its history for a while, but never its credentials, headers or request body.
-		tag, err := tx.Exec(ctx, `UPDATE monitors SET deleted_at = now(), enabled = false,
-			auth_type = 'none', auth_secret = NULL, auth_username = NULL, auth_header_name = NULL,
-			request_headers = '[]', request_body = NULL
-			WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL`, id, orgID)
+		n, err := deleteTx(ctx, tx, orgID, []uuid.UUID{id})
 		if err != nil {
 			return err
 		}
-		if tag.RowsAffected() == 0 {
+		if n == 0 {
 			return ErrNotFound
-		}
-		if _, err = tx.Exec(ctx, `UPDATE incidents SET status = 'resolved', resolved_at = GREATEST(started_at, now())
-			WHERE monitor_id = $1 AND status = 'open'`, id); err != nil {
-			return err
 		}
 		return s.lockedDomainSync(ctx, tx, orgID)
 	})
+}
+
+// deleteTx soft-deletes the listed monitors of the organization and returns how many it deleted.
+func deleteTx(ctx context.Context, tx pgx.Tx, orgID uuid.UUID, ids []uuid.UUID) (int64, error) {
+	// A deleted monitor keeps its history for a while, but never its credentials, headers, request body or tags.
+	tag, err := tx.Exec(ctx, `UPDATE monitors SET deleted_at = now(), enabled = false,
+		auth_type = 'none', auth_secret = NULL, auth_username = NULL, auth_header_name = NULL,
+		request_headers = '[]', request_body = NULL
+		WHERE id = ANY($1) AND organization_id = $2 AND deleted_at IS NULL`, ids, orgID)
+	if err != nil || tag.RowsAffected() == 0 {
+		return 0, err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM monitor_tags WHERE monitor_id = ANY($1)`, ids); err != nil {
+		return 0, err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE incidents SET status = 'resolved', resolved_at = GREATEST(started_at, now())
+		WHERE monitor_id = ANY($1) AND status = 'open'`, ids); err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }
 
 // lockedDomainSync is syncDomains for changes that did not already hold the organization row lock.

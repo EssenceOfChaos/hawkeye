@@ -153,7 +153,27 @@ export interface Monitor {
   slow_since: string | null
   /** The public uptime badge's token (/badge/<token>.svg); null while the badge is off. */
   badge_token: string | null
+  /** Sorted by name. */
+  tags: Tag[]
 }
+
+/** Groups monitors, for example by client or project. */
+export interface Tag {
+  id: string
+  name: string
+  /** #rrggbb, or null for the default look. */
+  color: string | null
+}
+
+export interface TagSummary extends Tag {
+  monitor_count: number
+}
+
+/** The server's limits (monitors.MaxTagsPerMonitor, MaxTagNameChars, MaxBulkMonitors). */
+export const MAX_TAGS_PER_MONITOR = 10
+export const MAX_TAG_NAME = 40
+
+export type BulkAction = 'pause' | 'resume' | 'delete' | 'set_interval' | 'add_tags' | 'remove_tags'
 
 export interface SSLInfo {
   expires_at: string
@@ -368,6 +388,8 @@ export interface MonitorInput {
   regions?: string[]
   slow_threshold_ms?: number | null
   slow_checks?: number
+  /** Replaces the monitor's tags. */
+  tag_ids?: string[]
 }
 
 /** An error response from the API, using the common `{error: {code, message, details}}` envelope. */

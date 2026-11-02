@@ -19,7 +19,7 @@ func telegramEnv(t *testing.T) *env {
 		_, _ = w.Write([]byte(`{"ok":true,"result":{"username":"HawkEyeObserverBot"}}`))
 	}))
 	t.Cleanup(api.Close)
-	bot := notifications.NewTelegramBot("123456789:AAEhBP0av28MapQ3a_Bb-cDeFgHiJkLmNoP", telegramSecret, api.URL, api.Client())
+	bot := notifications.NewTelegramBot("123:test-token-not-a-real-secret", telegramSecret, api.URL, api.Client())
 	if err := bot.Setup(t.Context(), ""); err != nil {
 		t.Fatal(err)
 	}

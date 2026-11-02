@@ -96,6 +96,8 @@ type ExportMonitor struct {
 	// Slow-response alert settings: a threshold in ms (null: off) and how many checks in a row confirm it.
 	SlowThresholdMs *int `json:"slow_threshold_ms"`
 	SlowChecks      int  `json:"slow_checks"`
+	// The names of the monitor's tags, sorted.
+	Tags []string `json:"tags"`
 }
 
 // ExportAuth names a monitor's authentication method and its non-secret settings.
@@ -208,7 +210,8 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 	o.Monitors, o.Incidents, o.AlertRecipients = []ExportMonitor{}, []ExportIncident{}, []ExportRecipient{}
 	rows, err := s.pool.Query(ctx, `SELECT id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds, enabled, current_status, created_at,
 		request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), assertions, regions,
-		slow_threshold_ms, slow_checks
+		slow_threshold_ms, slow_checks,
+		COALESCE((SELECT array_agg(t.name ORDER BY lower(t.name)) FROM monitor_tags mt JOIN tags t ON t.id = mt.tag_id WHERE mt.monitor_id = monitors.id), '{}')
 		FROM monitors WHERE organization_id = $1 AND deleted_at IS NULL ORDER BY created_at, id`, o.ID)
 	if err != nil {
 		return err
@@ -217,7 +220,7 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 		var m ExportMonitor
 		if err := rows.Scan(&m.ID, &m.Name, &m.URL, &m.Method, &m.ExpectedStatusCode, &m.CheckIntervalSeconds, &m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.CreatedAt,
 			&m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username, &m.Auth.HeaderName, &m.Assertions, &m.Regions,
-			&m.SlowThresholdMs, &m.SlowChecks); err != nil {
+			&m.SlowThresholdMs, &m.SlowChecks, &m.Tags); err != nil {
 			rows.Close()
 			return err
 		}
