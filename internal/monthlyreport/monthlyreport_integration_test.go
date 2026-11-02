@@ -67,6 +67,20 @@ func (e *env) org(t *testing.T, name, plan string) uuid.UUID {
 	return id
 }
 
+// orgWithID is org with a chosen id, for tests that depend on the order organizations are processed in (by id).
+func (e *env) orgWithID(t *testing.T, id, name, plan string) uuid.UUID {
+	t.Helper()
+	if _, err := e.pool.Exec(t.Context(), `INSERT INTO organizations (id, name) VALUES ($1, $2)`, id, name); err != nil {
+		t.Fatal(err)
+	}
+	org := uuid.MustParse(id)
+	e.setPlan(t, org, plan)
+	if err := e.br.SetMonthlyEmail(t.Context(), org, true); err != nil {
+		t.Fatal(err)
+	}
+	return org
+}
+
 func (e *env) setPlan(t *testing.T, org uuid.UUID, plan string) {
 	t.Helper()
 	if _, err := e.pool.Exec(t.Context(), `INSERT INTO subscriptions (organization_id, plan_id, status) SELECT $1, id, 'active' FROM plans WHERE code = $2
@@ -132,14 +146,20 @@ func (e *env) to(addr string) []email.Message {
 
 func TestEachOwnerGetsOneEmailWithAPDFPerWebsiteThatHadChecks(t *testing.T) {
 	e := newEnv(t)
+	// Each organization has one owner. Members never get the email, and neither does an owner whose address is not confirmed.
 	org := e.org(t, "Acme Agency", "pro")
 	e.member(t, org, "owner1@example.com", "owner", true)
-	e.member(t, org, "owner2@example.com", "owner", true)
-	e.member(t, org, "unverified@example.com", "owner", false)
 	e.member(t, org, "staff@example.com", "member", true)
 	e.site(t, org, "Client A", 100)
 	e.site(t, org, "Client B", 200)
 	e.site(t, org, "Paused all month", 0)
+	other := e.org(t, "Beta Studio", "pro")
+	e.member(t, other, "owner2@example.com", "owner", true)
+	e.site(t, other, "Client A", 100)
+	e.site(t, other, "Client B", 200)
+	unconfirmed := e.org(t, "Gamma", "pro")
+	e.member(t, unconfirmed, "unverified@example.com", "owner", false)
+	e.site(t, unconfirmed, "Site", 100)
 
 	if st := e.run(t, e.mail, 20, oct2); st.Emails != 2 {
 		t.Fatalf("emails = %d, want 2 (one per verified owner)", st.Emails)
@@ -279,10 +299,13 @@ func (f flaky) Send(ctx context.Context, m email.Message) error {
 
 func TestATemporaryFailureIsRetriedWithoutResendingToThoseAlreadyServed(t *testing.T) {
 	e := newEnv(t)
-	org := e.org(t, "Acme", "pro")
-	e.member(t, org, "first@example.com", "owner", true)
-	e.member(t, org, "second@example.com", "owner", true)
-	e.site(t, org, "A", 50)
+	// Organizations are processed in id order, so the first is served before the second fails.
+	first := e.orgWithID(t, "00000000-0000-0000-0000-000000000001", "First", "pro")
+	e.member(t, first, "first@example.com", "owner", true)
+	e.site(t, first, "A", 50)
+	second := e.orgWithID(t, "00000000-0000-0000-0000-000000000002", "Second", "pro")
+	e.member(t, second, "second@example.com", "owner", true)
+	e.site(t, second, "A", 50)
 
 	down := flaky{failFor: map[string]error{"second@example.com": errors.New("connection reset")}, inner: e.mail}
 	if _, err := e.job(down, 20, oct2).RunOnce(context.Background()); err == nil {
@@ -302,10 +325,12 @@ func TestATemporaryFailureIsRetriedWithoutResendingToThoseAlreadyServed(t *testi
 
 func TestARefusedAddressIsNotRetried(t *testing.T) {
 	e := newEnv(t)
-	org := e.org(t, "Acme", "pro")
-	e.member(t, org, "gone@example.com", "owner", true)
-	e.member(t, org, "ok@example.com", "owner", true)
-	e.site(t, org, "A", 50)
+	gone := e.org(t, "Gone", "pro")
+	e.member(t, gone, "gone@example.com", "owner", true)
+	e.site(t, gone, "A", 50)
+	ok := e.org(t, "OK", "pro")
+	e.member(t, ok, "ok@example.com", "owner", true)
+	e.site(t, ok, "A", 50)
 	refuse := flaky{failFor: map[string]error{"gone@example.com": fmt.Errorf("%w: mailbox does not exist", email.ErrPermanent)}, inner: e.mail}
 	if _, err := e.job(refuse, 20, oct2).RunOnce(context.Background()); err != nil {
 		t.Fatal(err)

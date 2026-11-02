@@ -39,6 +39,15 @@ func (p *StripeProvider) CreateCustomer(ctx context.Context, email string, orgID
 	return c.ID, nil
 }
 
+func (p *StripeProvider) UpdateCustomerEmail(ctx context.Context, customerID, email string) error {
+	ctx, cancel := context.WithTimeout(ctx, apiTimeout)
+	defer cancel()
+	if _, err := p.client.V1Customers.Update(ctx, customerID, &stripe.CustomerUpdateParams{Email: stripe.String(email)}); err != nil {
+		return fmt.Errorf("update customer email: %w", err)
+	}
+	return nil
+}
+
 func (p *StripeProvider) DeleteCustomer(ctx context.Context, customerID string) error {
 	ctx, cancel := context.WithTimeout(ctx, apiTimeout)
 	defer cancel()

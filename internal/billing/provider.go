@@ -35,6 +35,8 @@ type Provider interface {
 	// DeleteCustomer permanently deletes the provider customer (used when an account is deleted). Per Stripe's API, this also immediately cancels the
 	// customer's active subscriptions. A customer that no longer exists counts as success so a retried deletion can finish.
 	DeleteCustomer(ctx context.Context, customerID string) error
+	// UpdateCustomerEmail changes where the provider sends receipts and invoices (used when an organization's ownership is transferred).
+	UpdateCustomerEmail(ctx context.Context, customerID, email string) error
 	// CreateCheckoutSession returns the hosted-page URL. It grants nothing: access follows verified subscription events.
 	CreateCheckoutSession(ctx context.Context, p CheckoutParams) (url string, err error)
 	// CreatePortalSession returns a customer-portal URL for managing payment method, plan and cancellation.

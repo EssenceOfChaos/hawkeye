@@ -81,11 +81,19 @@ describe('NotificationsPage', () => {
     expect(await screen.findByText('must be a valid email address')).toBeInTheDocument()
   })
 
-  it('lets members view but not change recipients', async () => {
-    setup({ role: 'member', items: [mk('1', 'me@example.com', { user_id: 'u' })] })
-    expect(await screen.findByText('me@example.com')).toBeInTheDocument()
+  it('lets members view recipients, and change only their own address', async () => {
+    const calls = setup({ role: 'member', items: [mk('1', 'owner@example.com', { user_id: 'owner' }), mk('2', 'me@example.com', { user_id: 'u' })] })
+    expect(await screen.findByText('owner@example.com')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText(/Only the organization owner/)).toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: /Remove/ })).not.toBeInTheDocument()
+    const owners = screen.getByText('owner@example.com').closest('tr')!
+    expect(within(owners).getByText(/team member/)).toBeInTheDocument()
+    expect(within(owners).queryByRole('button')).not.toBeInTheDocument()
+    const mine = screen.getByText('me@example.com').closest('tr')!
+    expect(within(mine).getByText(/\(you\)/)).toBeInTheDocument()
+    expect(within(mine).queryByRole('button', { name: 'Send test alert' })).not.toBeInTheDocument()
+    await userEvent.click(within(mine).getByRole('button', { name: 'Turn off' }))
+    await waitFor(() => expect(calls).toContain('PATCH /api/v1/notification-settings/2'))
+    expect(screen.queryByLabelText('Email address')).not.toBeInTheDocument() // adding recipients stays the owner's
   })
 
   it('asks for confirmation before removing a recipient', async () => {

@@ -69,7 +69,7 @@ function setup(o: Opts = {}) {
 describe('TeamPage for the owner', () => {
   it('lists the team and the invitations still waiting, and counts both against the seats', async () => {
     setup()
-    expect(await screen.findByText('bob@example.com')).toBeInTheDocument()
+    expect(await screen.findByRole('cell', { name: 'bob@example.com' })).toBeInTheDocument()
     expect(screen.getByText('owner@example.com')).toBeInTheDocument()
     expect(screen.getByText('(you)')).toBeInTheDocument()
     expect(screen.getByText('Owner')).toBeInTheDocument()
@@ -104,7 +104,7 @@ describe('TeamPage for the owner', () => {
 
   it('turns the form off when every seat is taken', async () => {
     setup({ seats: 3 })
-    expect(await screen.findByText('bob@example.com')).toBeInTheDocument()
+    expect(await screen.findByRole('cell', { name: 'bob@example.com' })).toBeInTheDocument()
     expect(screen.getByLabelText('Email address')).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Send invitation' })).toBeDisabled()
     expect(screen.getByText(/All 3 seats are taken/)).toBeInTheDocument()
@@ -113,7 +113,7 @@ describe('TeamPage for the owner', () => {
   it('removes a member only after confirming, and never offers to remove the owner', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     const calls = setup()
-    await screen.findByText('bob@example.com')
+    await screen.findByRole('cell', { name: 'bob@example.com' })
     expect(screen.queryByRole('button', { name: 'Remove owner@example.com' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Remove bob@example.com' }))
     expect(calls.some((c) => c.m === 'DELETE')).toBe(false)
@@ -164,5 +164,24 @@ describe('TeamPage for a member', () => {
     const calls = setup({ role: 'member', me: { id: 'u-bob', email: 'bob@example.com' }, extraOrg: true })
     await userEvent.click(await screen.findByRole('button', { name: 'Leave Acme' }))
     await vi.waitFor(() => expect(calls.some((c) => c.m === 'POST' && c.url === '/api/v1/organizations/org-1/leave')).toBe(true))
+  })
+
+  it('transfers ownership to a member only after the organization’s name is typed', async () => {
+    const calls = setup()
+    await screen.findByRole('cell', { name: 'bob@example.com' })
+    const button = screen.getByRole('button', { name: 'Transfer ownership' })
+    await userEvent.selectOptions(screen.getByLabelText('New owner'), 'u-bob')
+    expect(button).toBeDisabled()
+    await userEvent.type(screen.getByLabelText('Type “Acme” to confirm'), 'Acme')
+    expect(button).toBeEnabled()
+    await userEvent.click(button)
+    expect(await screen.findByText(/bob@example.com is now the owner of Acme/)).toBeInTheDocument()
+    expect(calls.find((c) => c.m === 'POST' && c.url.endsWith('/organizations/org-1/transfer'))?.body).toEqual({ user_id: 'u-bob', confirm_name: 'Acme' })
+  })
+
+  it('offers no transfer when the owner is alone, nor to members', async () => {
+    setup({ members: [OWNER] })
+    await screen.findByRole('cell', { name: /owner@example.com/ })
+    expect(screen.queryByRole('heading', { name: 'Transfer ownership' })).not.toBeInTheDocument()
   })
 })

@@ -1,9 +1,11 @@
-// Package invitations lets an organization's owner bring colleagues in. An invitation is an emailed link bound to one address: whoever follows it must
-// be signed in with a verified account that has that address, and joins the organization as a member.
+// Package invitations manages an organization's team: the owner brings colleagues in, and can hand the organization over to one of them. An invitation
+// is an emailed link bound to one address: whoever follows it must be signed in with a verified account that has that address, and joins the
+// organization as a member (optionally also receiving its alerts). The owner is told when someone joins.
 //
 // A row exists only while an invitation is pending. Accepting or revoking it deletes the row, and one past its expiry is ignored (and replaced if the same
 // address is invited again), so there is no status to keep in step. A pending invitation holds a seat, so an owner cannot send more invitations than the
-// plan has seats. Owners cannot be invited or demoted: an organization has the one owner it was created with.
+// plan has seats. Nobody is invited as an owner: an organization has exactly one (enforced by the database), and the only way to change it is for the
+// owner to transfer ownership to a member.
 package invitations
 
 import (
@@ -22,6 +24,7 @@ import (
 
 	"hawkeye/internal/auth"
 	"hawkeye/internal/email"
+	"hawkeye/internal/notifications"
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
 )
@@ -42,7 +45,24 @@ var (
 	ErrEmailNotVerified = errors.New("email address not verified")
 	// ErrSendFailed: the invitation was not saved because the email could not be handed to the mail server.
 	ErrSendFailed = errors.New("invitation email could not be sent")
+	// ErrConfirmMismatch: the organization name typed to confirm a transfer does not match.
+	ErrConfirmMismatch = errors.New("type the organization's name exactly to confirm")
+	// ErrNewOwnerNotVerified: ownership can only go to someone whose email address is confirmed, since billing email will go there.
+	ErrNewOwnerNotVerified = errors.New("the new owner must confirm their email address first")
 )
+
+// Alert sign-up outcomes when accepting with "send me alerts".
+const (
+	AlertsAdded   = "added"   // the member's address now receives the organization's alerts
+	AlertsAlready = "already" // it already did
+	AlertsFull    = "full"    // the organization has no room for another recipient; the owner can make room
+)
+
+// Accepted is the result of accepting an invitation.
+type Accepted struct {
+	Organization organizations.Organization `json:"organization"`
+	Alerts       string                     `json:"alerts,omitempty"` // set when the member asked for alerts: added, already or full
+}
 
 // Invitation is a pending invitation as the organization's owner sees it.
 type Invitation struct {
@@ -227,8 +247,13 @@ func (s *Service) Preview(ctx context.Context, token string) (Preview, error) {
 
 // Accept makes user a member of the invited organization and uses up the invitation. The account must have the invited address, and must have
 // verified it: otherwise anyone who registered that address first, without owning the mailbox, could use a link that leaked.
-func (s *Service) Accept(ctx context.Context, user auth.User, token string) (organizations.Organization, error) {
+//
+// With alerts, the member's own address (already verified: it is their account's) is added to the organization's alert recipients, linked to their
+// membership so it goes when they do. If the owner had already added that address, it is linked and confirmed instead.
+func (s *Service) Accept(ctx context.Context, user auth.User, token string, alerts bool) (Accepted, error) {
 	var org organizations.Organization
+	var outcome string
+	joined := false
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		var (
 			id    uuid.UUID
@@ -264,16 +289,155 @@ func (s *Service) Accept(ctx context.Context, user auth.User, token string) (org
 			if _, err := tx.Exec(ctx, `INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, $3)`, orgID, user.ID, organizations.RoleMember); err != nil {
 				return err
 			}
+			joined = true
 		}
 		if _, err := tx.Exec(ctx, `DELETE FROM organization_invitations WHERE id = $1`, id); err != nil {
 			return err
+		}
+		if alerts {
+			if outcome, err = addAlertRecipient(ctx, tx, orgID, user); err != nil {
+				return err
+			}
 		}
 		return tx.QueryRow(ctx, `SELECT o.id, o.name, m.role, o.created_at FROM organizations o
 			JOIN organization_members m ON m.organization_id = o.id WHERE o.id = $1 AND m.user_id = $2`, orgID, user.ID).
 			Scan(&org.ID, &org.Name, &org.Role, &org.CreatedAt)
 	})
 	if err != nil {
-		return organizations.Organization{}, err
+		return Accepted{}, err
 	}
-	return org, nil
+	if joined {
+		s.notifyOwnerOfJoin(ctx, org, user.Email, outcome)
+	}
+	return Accepted{Organization: org, Alerts: outcome}, nil
+}
+
+// addAlertRecipient adds the joining member's own address to the organization's alert recipients (the caller holds the organization lock).
+func addAlertRecipient(ctx context.Context, tx pgx.Tx, orgID uuid.UUID, user auth.User) (string, error) {
+	// The owner may already have added this address (perhaps still waiting for confirmation): joining with "send me alerts" confirms and links it.
+	tag, err := tx.Exec(ctx, `UPDATE notification_settings SET user_id = $3, verified_at = COALESCE(verified_at, now())
+		WHERE organization_id = $1 AND channel = 'email' AND destination = $2`, orgID, user.Email, user.ID)
+	if err != nil {
+		return "", err
+	}
+	if tag.RowsAffected() > 0 {
+		return AlertsAlready, nil
+	}
+	var n int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM notification_settings WHERE organization_id = $1`, orgID).Scan(&n); err != nil {
+		return "", err
+	}
+	if n >= notifications.MaxSettingsPerOrganization {
+		return AlertsFull, nil
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO notification_settings (organization_id, user_id, channel, destination, verified_at)
+		VALUES ($1, $2, 'email', $3, now())`, orgID, user.ID, user.Email); err != nil {
+		return "", err
+	}
+	return AlertsAdded, nil
+}
+
+// ownerOf returns the organization's owner (there is exactly one).
+func (s *Service) ownerOf(ctx context.Context, db interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, orgID uuid.UUID) (id uuid.UUID, address string, err error) {
+	err = db.QueryRow(ctx, `SELECT u.id, u.email FROM organization_members m JOIN users u ON u.id = m.user_id
+		WHERE m.organization_id = $1 AND m.role = 'owner'`, orgID).Scan(&id, &address)
+	return id, address, err
+}
+
+// notifyOwnerOfJoin tells the owner that someone accepted their invitation. Best effort: the person has joined whatever happens to this email.
+func (s *Service) notifyOwnerOfJoin(ctx context.Context, org organizations.Organization, joiner, alerts string) {
+	_, owner, err := s.ownerOf(ctx, s.pool, org.ID)
+	if err != nil {
+		s.log.ErrorContext(ctx, "find owner for join notice failed", "error", err)
+		return
+	}
+	paragraphs := []string{joiner + " accepted your invitation and joined " + org.Name + " on HawkEye. They can now see its websites, incidents and uptime, and add or change monitors."}
+	switch alerts {
+	case AlertsAdded, AlertsAlready:
+		paragraphs = append(paragraphs, "They also asked to receive this team's alerts, so their address is now on your alert recipients list.")
+	case AlertsFull:
+		paragraphs = append(paragraphs, "They asked to receive this team's alerts, but your alert recipients list is full. Remove a recipient if you want them to receive alerts too.")
+	}
+	c := email.Content{
+		Preheader: joiner + " joined " + org.Name + " on HawkEye.", Heading: joiner + " joined your team",
+		Paragraphs: paragraphs, ButtonLabel: "View your team", ButtonURL: s.baseURL + "/team", AppBaseURL: s.baseURL,
+		Note: "If you did not expect this, you can remove them from your team at any time.",
+	}
+	if err := s.mail.Send(ctx, c.Message("", owner, joiner+" joined "+org.Name+" on HawkEye")); err != nil {
+		s.log.ErrorContext(ctx, "send join notice failed", "error", err)
+	}
+}
+
+// Transfer makes a member the organization's owner, and the current owner a member. Only the owner may do it (the caller has checked), only to a
+// current member whose email address is confirmed, and only after typing the organization's name. Both people are emailed, so a transfer made from
+// a stolen session cannot pass unnoticed. It returns the new owner's address (for billing).
+func (s *Service) Transfer(ctx context.Context, orgID uuid.UUID, owner auth.User, newOwnerID uuid.UUID, confirmName string) (string, error) {
+	var orgName, newOwner string
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		var err error
+		if orgName, err = lockOrganization(ctx, tx, orgID); err != nil {
+			return err
+		}
+		if !strings.EqualFold(strings.TrimSpace(confirmName), strings.TrimSpace(orgName)) {
+			return ErrConfirmMismatch
+		}
+		curID, _, err := s.ownerOf(ctx, tx, orgID)
+		if err != nil {
+			return err
+		}
+		if curID != owner.ID {
+			return organizations.ErrForbidden // ownership moved since the page was loaded
+		}
+		var role string
+		var verified bool
+		err = tx.QueryRow(ctx, `SELECT m.role, u.email, u.email_verified_at IS NOT NULL FROM organization_members m JOIN users u ON u.id = m.user_id
+			WHERE m.organization_id = $1 AND m.user_id = $2`, orgID, newOwnerID).Scan(&role, &newOwner, &verified)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return organizations.ErrMemberNotFound
+		case err != nil:
+			return err
+		case role == organizations.RoleOwner:
+			return organizations.ErrMemberNotFound // already the owner: there is no one else to hand it to
+		case !verified:
+			return ErrNewOwnerNotVerified
+		}
+		// Demote first: the database allows only one owner at a time.
+		if _, err := tx.Exec(ctx, `UPDATE organization_members SET role = 'member' WHERE organization_id = $1 AND user_id = $2`, orgID, owner.ID); err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `UPDATE organization_members SET role = 'owner' WHERE organization_id = $1 AND user_id = $2`, orgID, newOwnerID)
+		return err
+	})
+	if err != nil {
+		return "", err
+	}
+	s.notifyTransfer(ctx, orgName, owner.Email, newOwner)
+	return newOwner, nil
+}
+
+func (s *Service) notifyTransfer(ctx context.Context, orgName, from, to string) {
+	send := func(addr, subject string, c email.Content) {
+		if err := s.mail.Send(ctx, c.Message("", addr, subject)); err != nil {
+			s.log.ErrorContext(ctx, "send ownership transfer notice failed", "error", err)
+		}
+	}
+	send(to, "You are now the owner of "+orgName+" on HawkEye", email.Content{
+		Preheader: from + " made you the owner of " + orgName + ".", Heading: "You now own " + orgName,
+		Paragraphs: []string{
+			from + " transferred ownership of " + orgName + " on HawkEye to you.",
+			"You now manage its billing, alert recipients, status pages, domains, maintenance windows and team. Receipts and invoices for its subscription will be sent to this address.",
+		},
+		ButtonLabel: "Open HawkEye", ButtonURL: s.baseURL + "/team", AppBaseURL: s.baseURL,
+	})
+	send(from, "You transferred ownership of "+orgName+" on HawkEye", email.Content{
+		Preheader: to + " is now the owner of " + orgName + ".", Heading: "Ownership of " + orgName + " transferred",
+		Paragraphs: []string{
+			"You transferred ownership of " + orgName + " on HawkEye to " + to + ". You are still a member of the team; the new owner manages billing and its settings from now on.",
+		},
+		Note:       "If you did not do this, change your password straight away and contact us: someone may have used your account.",
+		AppBaseURL: s.baseURL,
+	})
 }

@@ -126,7 +126,8 @@ func (s *Service) Members(ctx context.Context, userID, orgID uuid.UUID) ([]Membe
 }
 
 // RemoveMember takes a member out of the organization. Only the owner may, and the owner cannot be removed. The person keeps their own account and
-// their own organization; they simply stop seeing this one, from their next request on, because every request checks membership.
+// their own organization; they simply stop seeing this one, from their next request on, because every request checks membership, and stop receiving
+// its alerts at their own address.
 func (s *Service) RemoveMember(ctx context.Context, actorID, orgID, memberID uuid.UUID) error {
 	o, err := s.Get(ctx, actorID, orgID)
 	if err != nil {
@@ -158,6 +159,12 @@ func (s *Service) remove(ctx context.Context, orgID, memberID uuid.UUID) error {
 	if role == RoleOwner {
 		return ErrOwnerProtected
 	}
-	_, err = s.pool.Exec(ctx, `DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND role <> $3`, orgID, memberID, RoleOwner)
-	return err
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND role <> $3`, orgID, memberID, RoleOwner); err != nil {
+			return err
+		}
+		// Someone who leaves the team stops receiving its alerts: their own address, added when they joined, goes with them.
+		_, err := tx.Exec(ctx, `DELETE FROM notification_settings WHERE organization_id = $1 AND user_id = $2`, orgID, memberID)
+		return err
+	})
 }

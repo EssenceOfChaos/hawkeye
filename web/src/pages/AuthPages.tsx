@@ -270,6 +270,8 @@ export function AcceptInvitePage() {
   const [loaded, setLoaded] = useState(!token)
   const [error, setError] = useState<ApiError | string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [alerts, setAlerts] = useState(true) // also receive the team's alerts at this address
+  const [full, setFull] = useState(false) // joined, but the team's alert list had no room
 
   useEffect(() => {
     if (!token) return
@@ -287,8 +289,13 @@ export function AcceptInvitePage() {
     setBusy(true)
     setError(null)
     try {
-      const r = await api<{ organization: { id: string } }>('POST', '/invitations/accept', { token })
+      const r = await api<{ organization: { id: string }; alerts?: 'added' | 'already' | 'full' }>('POST', '/invitations/accept', { token, alerts })
       await refresh(r.organization.id)
+      if (r.alerts === 'full') {
+        setFull(true)
+        setBusy(false)
+        return
+      }
       navigate('/dashboard', { replace: true })
     } catch (e) {
       setError(e instanceof ApiError ? e : 'That did not work. Try again.')
@@ -331,7 +338,25 @@ export function AcceptInvitePage() {
               {user && !user.email_verified_at && (
                 <Alert tone="warning">Confirm your email address first, using the link we emailed you. Then come back to this page and accept.</Alert>
               )}
-              <button type="button" onClick={() => void accept()} disabled={busy}>{busy ? 'Joining…' : 'Accept invitation'}</button>
+              {full ? (
+                <>
+                  <Alert tone="info" role="status">
+                    You joined {invite.organization_name}. Its alert list is full, so we could not add your address; the owner has been told and can make room.
+                  </Alert>
+                  <Link className="button primary" to="/dashboard">Go to the dashboard</Link>
+                </>
+              ) : (
+                <>
+                  <p>
+                    <label>
+                      <input type="checkbox" checked={alerts} onChange={(e) => setAlerts(e.target.checked)} /> Also email me this team’s alerts (outages, recoveries,
+                      certificate and domain expiry) at {invite.email}
+                    </label>
+                  </p>
+                  <p className="hint">You can turn these off at any time under Alerts.</p>
+                  <button type="button" onClick={() => void accept()} disabled={busy}>{busy ? 'Joining…' : 'Accept invitation'}</button>
+                </>
+              )}
             </>
           )}
         </>

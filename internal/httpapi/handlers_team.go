@@ -142,7 +142,8 @@ func (h *handlers) previewInvitation(c echo.Context) error {
 
 func (h *handlers) acceptInvitation(c echo.Context) error {
 	var in struct {
-		Token string `json:"token"`
+		Token  string `json:"token"`
+		Alerts bool   `json:"alerts"` // also receive the organization's alerts at the account's own address
 	}
 	if err := bind(c, &in); err != nil {
 		return err
@@ -150,9 +151,36 @@ func (h *handlers) acceptInvitation(c echo.Context) error {
 	if in.Token == "" {
 		return mapError(validation.New("token", "is required"))
 	}
-	o, err := h.invitations.Accept(c.Request().Context(), currentUser(c), in.Token)
+	res, err := h.invitations.Accept(c.Request().Context(), currentUser(c), in.Token, in.Alerts)
 	if err != nil {
 		return mapError(err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"organization": o})
+	return c.JSON(http.StatusOK, res)
+}
+
+// transferOwnership hands the organization to one of its members. The old owner stays as a member. Billing email follows the new owner; if the payment
+// provider cannot be reached the transfer still stands, and the address can be changed in the billing portal.
+func (h *handlers) transferOwnership(c echo.Context) error {
+	id, err := h.ownedOrg(c)
+	if err != nil {
+		return err
+	}
+	var in struct {
+		UserID      uuid.UUID `json:"user_id"`
+		ConfirmName string    `json:"confirm_name"`
+	}
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	ctx := c.Request().Context()
+	newOwner, err := h.invitations.Transfer(ctx, id, currentUser(c), in.UserID, in.ConfirmName)
+	if err != nil {
+		return mapError(err)
+	}
+	if h.billing != nil {
+		if err := h.billing.UpdateCustomerEmail(ctx, id, newOwner); err != nil {
+			h.log.ErrorContext(ctx, "update billing email after ownership transfer failed", "organization_id", id, "error", err)
+		}
+	}
+	return c.NoContent(http.StatusNoContent)
 }

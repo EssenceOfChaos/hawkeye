@@ -12,6 +12,7 @@ import (
 type FakeProvider struct {
 	mu               sync.Mutex
 	CustomersCreated []string
+	CustomerEmails   map[string]string // customer ID -> email set by UpdateCustomerEmail
 	CustomersDeleted []string
 	Checkouts        []CheckoutParams
 	PortalCustomers  []string
@@ -31,6 +32,19 @@ func (f *FakeProvider) CreateCustomer(_ context.Context, email string, orgID uui
 	}
 	f.CustomersCreated = append(f.CustomersCreated, email)
 	return fmt.Sprintf("cus_fake_%s_%d", orgID.String()[:8], len(f.CustomersCreated)), nil
+}
+
+func (f *FakeProvider) UpdateCustomerEmail(_ context.Context, customerID, email string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return f.Err
+	}
+	if f.CustomerEmails == nil {
+		f.CustomerEmails = map[string]string{}
+	}
+	f.CustomerEmails[customerID] = email
+	return nil
 }
 
 func (f *FakeProvider) DeleteCustomer(_ context.Context, customerID string) error {

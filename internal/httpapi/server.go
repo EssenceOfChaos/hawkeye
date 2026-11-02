@@ -347,8 +347,9 @@ func registerAPI(e *echo.Echo, o Options) {
 	scoped.GET("/notification-settings", h.listSettings)
 	scoped.POST("/notification-settings", h.createSetting, requireOwner, requireVerifiedEmail, limit("create-alert"))
 	scoped.POST("/notification-settings/telegram-link", h.telegramLink, requireOwner, requireVerifiedEmail, limit("create-alert"))
-	scoped.PATCH("/notification-settings/:settingID", h.updateSetting, requireOwner)
-	scoped.DELETE("/notification-settings/:settingID", h.deleteSetting, requireOwner)
+	// A member may turn off or remove their own address (the handlers restrict them to it); everything else about recipients is the owner's.
+	scoped.PATCH("/notification-settings/:settingID", h.updateSetting)
+	scoped.DELETE("/notification-settings/:settingID", h.deleteSetting)
 	scoped.POST("/notification-settings/:settingID/test", h.testSetting, requireOwner, requireVerifiedEmail, limit("create-alert"))
 	scoped.POST("/notification-settings/:settingID/resend-confirmation", h.resendSettingConfirmation, requireOwner, requireVerifiedEmail, limit("resend-alert"))
 
@@ -366,6 +367,7 @@ func registerAPI(e *echo.Echo, o Options) {
 		org.POST("/:organizationID/invitations", h.createInvitation, requireVerifiedEmail, limit("invite"))
 		org.POST("/:organizationID/invitations/:invitationID/resend", h.resendInvitation, requireVerifiedEmail, limit("invite-resend"))
 		org.DELETE("/:organizationID/invitations/:invitationID", h.revokeInvitation)
+		org.POST("/:organizationID/transfer", h.transferOwnership, requireVerifiedEmail, limit("transfer"))
 		v1.POST("/invitations/preview", h.previewInvitation, limit("invite-preview"))
 		v1.POST("/invitations/accept", h.acceptInvitation, h.requireAuth, limit("invite-accept"))
 	}

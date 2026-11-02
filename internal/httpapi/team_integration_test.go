@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"hawkeye/internal/billing"
 )
 
 // callIn sends a protected request on behalf of one organization, as the SPA does once someone has more than one.
@@ -437,4 +439,88 @@ func TestMembersExportDoesNotIncludeTheTeamsData(t *testing.T) {
 	if got["role"] != "member" || len(got["monitors"].([]any)) != 0 || len(got["alert_recipients"].([]any)) != 0 || got["status_page"] != nil {
 		t.Fatalf("a member's export must name the team and nothing more: %v", got)
 	}
+}
+
+func TestAcceptingWithAlertsOverHTTP(t *testing.T) {
+	e, owner, org := teamEnv(t)
+	token := e.invite(t, owner, org, "ann@example.com")
+	ann, _ := e.register(t, "ann@example.com")
+	e.verify(t, ann, "ann@example.com")
+	r := ann.call("POST", "/api/v1/invitations/accept", map[string]any{"token": token, "alerts": true})
+	if r.Status != 200 || r.Body["alerts"] != "added" || r.Body["organization"].(map[string]any)["role"] != "member" {
+		t.Fatalf("%d %v", r.Status, r.Body)
+	}
+	list := owner.callIn(org, "GET", "/api/v1/notification-settings", nil).Body["notification_settings"].([]any)
+	found := false
+	for _, s := range list {
+		if m := s.(map[string]any); m["destination"] == "ann@example.com" && m["verified"] == true {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("Ann receives alerts: %v", list)
+	}
+	joined := false
+	for _, m := range e.mail.Messages() {
+		if m.To == "owner@example.com" && m.Subject == "ann@example.com joined "+orgName(t, owner, org)+" on HawkEye" {
+			joined = true
+		}
+	}
+	if !joined {
+		t.Fatal("the owner is told who joined")
+	}
+}
+
+func orgName(t *testing.T, c *client, org string) string {
+	t.Helper()
+	for _, o := range c.call("GET", "/api/v1/organizations", nil).Body["organizations"].([]any) {
+		if m := o.(map[string]any); m["id"] == org {
+			return m["name"].(string)
+		}
+	}
+	t.Fatalf("no organization %s", org)
+	return ""
+}
+
+func TestTransferringOwnershipOverHTTP(t *testing.T) {
+	e := newEnvOpts(t, 1000, envOpts{billingCfg: billingCfg, provider: &billing.FakeProvider{Subscriptions: map[string]billing.SubscriptionState{}}})
+	owner, org := e.register(t, "owner@example.com")
+	e.verify(t, owner, "owner@example.com")
+	e.pool.Exec(t.Context(), `UPDATE subscriptions SET plan_id = (SELECT id FROM plans WHERE code = 'agency'), provider = 'stripe', provider_customer_id = 'cus_123'
+		WHERE organization_id = $1`, org)
+	ann, _ := e.join(t, "ann@example.com", e.invite(t, owner, org, "ann@example.com"))
+	var annID string
+	e.pool.QueryRow(t.Context(), `SELECT id FROM users WHERE email = 'ann@example.com'`).Scan(&annID)
+	name := orgName(t, owner, org)
+	path := "/api/v1/organizations/" + org + "/transfer"
+
+	if r := ann.callIn(org, "POST", path, map[string]any{"user_id": annID, "confirm_name": name}); r.Status != 403 {
+		t.Fatalf("a member cannot transfer: %d %v", r.Status, r.Body)
+	}
+	if r := owner.call("POST", path, map[string]any{"user_id": annID, "confirm_name": "nope"}); r.Status != 400 || errCode(r) != "VALIDATION_ERROR" {
+		t.Fatalf("%d %v", r.Status, r.Body)
+	}
+	if r := owner.call("POST", path, map[string]any{"user_id": annID, "confirm_name": name}); r.Status != 204 {
+		t.Fatalf("%d %v", r.Status, r.Body)
+	}
+	if e.fake.CustomerEmails["cus_123"] != "ann@example.com" {
+		t.Fatalf("receipts go to the new owner: %v", e.fake.CustomerEmails)
+	}
+	if orgRole(t, ann, org) != "owner" || orgRole(t, owner, org) != "member" {
+		t.Fatal("roles swapped")
+	}
+	// The former owner can no longer manage billing.
+	if r := owner.callIn(org, "POST", "/api/v1/billing/portal-session", nil); r.Status != 403 {
+		t.Fatalf("%d", r.Status)
+	}
+}
+
+func orgRole(t *testing.T, c *client, org string) string {
+	t.Helper()
+	for _, o := range c.call("GET", "/api/v1/organizations", nil).Body["organizations"].([]any) {
+		if m := o.(map[string]any); m["id"] == org {
+			return m["role"].(string)
+		}
+	}
+	return ""
 }

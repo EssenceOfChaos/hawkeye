@@ -187,6 +187,23 @@ func (s *Service) ensureCustomer(ctx context.Context, orgID uuid.UUID, email str
 }
 
 // CreatePortal opens the provider's customer portal (payment method, plan changes, cancellation).
+// UpdateCustomerEmail points the provider's receipts and invoices at a new address, for an organization that already has a provider customer (after an
+// ownership transfer). An organization that has never been to checkout has no customer yet, and its first checkout uses the new owner's address anyway.
+func (s *Service) UpdateCustomerEmail(ctx context.Context, orgID uuid.UUID, email string) error {
+	if !s.Enabled() {
+		return nil
+	}
+	var customer *string
+	err := s.pool.QueryRow(ctx, `SELECT provider_customer_id FROM subscriptions WHERE organization_id = $1`, orgID).Scan(&customer)
+	if errors.Is(err, pgx.ErrNoRows) || err == nil && customer == nil {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.provider.UpdateCustomerEmail(ctx, *customer, email)
+}
+
 func (s *Service) CreatePortal(ctx context.Context, orgID uuid.UUID) (string, error) {
 	if !s.Enabled() {
 		return "", ErrNotConfigured

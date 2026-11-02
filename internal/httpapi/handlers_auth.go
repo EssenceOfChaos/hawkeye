@@ -85,7 +85,7 @@ func mapError(err error) error {
 		return &APIError{Status: http.StatusForbidden, Code: "WRONG_PASSWORD", Message: "That password is not correct."}
 	case errors.Is(err, account.ErrSharedOrganization):
 		return &APIError{Status: http.StatusConflict, Code: "OWNS_SHARED_ORGANIZATION",
-			Message: "You own an organization that has other members. Remove them first, so their data is not deleted with your account."}
+			Message: "You own an organization that has other members. Transfer ownership to one of them on the Team page (or remove them), so their data is not deleted with your account."}
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		return &APIError{Status: http.StatusUnauthorized, Code: "INVALID_CREDENTIALS", Message: "Invalid email or password."}
 	case errors.Is(err, auth.ErrEmailTaken):
@@ -126,6 +126,10 @@ func mapError(err error) error {
 		return &APIError{Status: http.StatusForbidden, Code: "NOTIFICATION_SETTINGS_LIMIT",
 			Message: "You can have at most 10 alert destinations. Remove one to add another.",
 			Details: map[string]any{"limit": notifications.MaxSettingsPerOrganization}}
+	case errors.Is(err, invitations.ErrConfirmMismatch):
+		return mapError(validation.New("confirm_name", "must be the organization's name, exactly"))
+	case errors.Is(err, invitations.ErrNewOwnerNotVerified):
+		return &APIError{Status: http.StatusConflict, Code: "NEW_OWNER_NOT_VERIFIED", Message: "That member has not confirmed their email address yet. Ask them to confirm it, then try again."}
 	case errors.Is(err, notifications.ErrTelegramUnavailable):
 		return &APIError{Status: http.StatusServiceUnavailable, Code: "TELEGRAM_UNAVAILABLE", Message: "Connecting Telegram is not available right now. Try again in a few minutes, or use your own bot."}
 	case errors.Is(err, notifications.ErrInvalidToken):

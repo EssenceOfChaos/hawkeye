@@ -1,0 +1,1 @@
+DROP INDEX organization_members_one_owner;

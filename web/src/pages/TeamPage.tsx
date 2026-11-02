@@ -23,6 +23,9 @@ export function TeamPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [address, setAddress] = useState('')
+  const [newOwner, setNewOwner] = useState('') // user id of the member to hand the organization to
+  const [confirmName, setConfirmName] = useState('')
+  const [confirmError, setConfirmError] = useState<string | undefined>()
 
   const load = useCallback(async () => {
     if (!orgId) return
@@ -82,6 +85,28 @@ export function TeamPage() {
     void run(() => api('DELETE', `/organizations/${orgId}/members/${m.user_id}`), `${m.email} was removed.`)
   }
 
+  async function transfer(e: FormEvent) {
+    e.preventDefault()
+    const to = members?.find((m) => m.user_id === newOwner)
+    if (!to || !orgId) return
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    setConfirmError(undefined)
+    try {
+      await api('POST', `/organizations/${orgId}/transfer`, { user_id: to.user_id, confirm_name: confirmName })
+      setNewOwner('')
+      setConfirmName('')
+      setNotice(`${to.email} is now the owner of ${organization?.name}. You are a member of the team. We emailed you both.`)
+      await refresh(orgId) // your role here has changed
+    } catch (err) {
+      if (err instanceof ApiError && err.fields.confirm_name) setConfirmError(err.fields.confirm_name)
+      else setError(err instanceof ApiError ? err : 'That did not work. Try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function leave() {
     if (!window.confirm(`Leave ${organization?.name}? You will no longer see its websites. You can only come back if the owner invites you again.`)) return
     try {
@@ -105,8 +130,8 @@ export function TeamPage() {
         <h1>Team</h1>
       </div>
       <p>
-        People you invite see this organization’s websites, incidents and uptime, and can add or change monitors. Only you, as the owner, manage billing, alert recipients, the
-        status page and who is on the team.
+        People you invite see this organization’s websites, incidents and uptime, and can add or change monitors. When they join they can choose to receive its alerts.
+        The owner manages billing, alert recipients, status pages and who is on the team.
       </p>
 
       {error && (
@@ -182,6 +207,30 @@ export function TeamPage() {
               </tbody>
             </table>
           </div>
+        </section>
+      )}
+
+      {isOwner && members && members.some((m) => m.role !== 'owner') && (
+        <section className="card narrow-left" aria-labelledby="transfer-h">
+          <h2 id="transfer-h">Transfer ownership</h2>
+          <p>
+            Hand {organization?.name} to a member of your team, for example if you are leaving the company. They will manage billing, alert recipients, status pages
+            and the team; receipts and invoices will go to their address. You stay on the team as a member, and only the new owner can undo this.
+          </p>
+          <form onSubmit={transfer}>
+            <div className="field">
+              <label htmlFor="new-owner">New owner</label>
+              <select id="new-owner" required value={newOwner} onChange={(e) => setNewOwner(e.target.value)}>
+                <option value="">Choose a member…</option>
+                {members.filter((m) => m.role !== 'owner').map((m) => <option key={m.user_id} value={m.user_id}>{m.email}</option>)}
+              </select>
+            </div>
+            <Field label={`Type “${organization?.name}” to confirm`} required value={confirmName} onChange={(e) => setConfirmName(e.target.value)} error={confirmError}
+              autoComplete="off" />
+            <button type="submit" className="danger" disabled={busy || !verified || !newOwner || confirmName.trim().toLowerCase() !== (organization?.name ?? '').trim().toLowerCase()}>
+              Transfer ownership
+            </button>
+          </form>
         </section>
       )}
 

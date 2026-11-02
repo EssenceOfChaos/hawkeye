@@ -167,10 +167,11 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, actor Actor, dest
 	return st, nil
 }
 
-// SetEnabled turns alerts to a destination on or off.
-func (s *Service) SetEnabled(ctx context.Context, orgID, id uuid.UUID, enabled bool) (Setting, error) {
+// SetEnabled turns alerts to a destination on or off. With onlyUser set (a member rather than the owner), only that person's own address may be changed;
+// any other destination is ErrNotFound.
+func (s *Service) SetEnabled(ctx context.Context, orgID, id uuid.UUID, enabled bool, onlyUser *uuid.UUID) (Setting, error) {
 	st, err := scan(s.pool.QueryRow(ctx, `UPDATE notification_settings SET enabled = $3
-		WHERE id = $1 AND organization_id = $2 RETURNING `+cols, id, orgID, enabled))
+		WHERE id = $1 AND organization_id = $2 AND ($4::uuid IS NULL OR user_id = $4) RETURNING `+cols, id, orgID, enabled, onlyUser))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Setting{}, ErrNotFound
 	}
@@ -313,8 +314,9 @@ func testReason(channel string, err error) string {
 	return reason
 }
 
-func (s *Service) Delete(ctx context.Context, orgID, id uuid.UUID) error {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM notification_settings WHERE id = $1 AND organization_id = $2`, id, orgID)
+// Delete removes a destination. With onlyUser set (a member rather than the owner), only that person's own address may be removed.
+func (s *Service) Delete(ctx context.Context, orgID, id uuid.UUID, onlyUser *uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM notification_settings WHERE id = $1 AND organization_id = $2 AND ($3::uuid IS NULL OR user_id = $3)`, id, orgID, onlyUser)
 	if err != nil {
 		return err
 	}

@@ -28,6 +28,15 @@ func requireOwner(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
+// ownOnly is nil for the owner, who manages every recipient, and the caller's own id for a member, who may only turn off or remove their own address.
+func ownOnly(c echo.Context) *uuid.UUID {
+	if c.Get(roleKey) == organizations.RoleOwner {
+		return nil
+	}
+	id := currentUser(c).ID
+	return &id
+}
+
 func actor(c echo.Context) notifications.Actor {
 	u := currentUser(c)
 	return notifications.Actor{ID: u.ID, Email: u.Email}
@@ -154,7 +163,7 @@ func (h *handlers) updateSetting(c echo.Context) error {
 	if in.Enabled == nil {
 		return mapError(validation.New("enabled", "is required"))
 	}
-	s, err := h.notifications.SetEnabled(c.Request().Context(), currentOrg(c), id, *in.Enabled)
+	s, err := h.notifications.SetEnabled(c.Request().Context(), currentOrg(c), id, *in.Enabled, ownOnly(c))
 	if err != nil {
 		return mapError(err)
 	}
@@ -166,7 +175,7 @@ func (h *handlers) deleteSetting(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.notifications.Delete(c.Request().Context(), currentOrg(c), id); err != nil {
+	if err := h.notifications.Delete(c.Request().Context(), currentOrg(c), id, ownOnly(c)); err != nil {
 		return mapError(err)
 	}
 	return c.NoContent(http.StatusNoContent)

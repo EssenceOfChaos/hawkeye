@@ -75,8 +75,25 @@ describe('AcceptInvitePage', () => {
     const calls = mount({ signedInAs: { email: 'Bob@example.com' } })
     await userEvent.click(await screen.findByRole('button', { name: 'Accept invitation' }))
     expect(await screen.findByText('dashboard')).toBeInTheDocument()
-    expect(calls.find((c) => c.url.endsWith('/invitations/accept'))?.body).toEqual({ token: 'INVITE-1' })
+    expect(calls.find((c) => c.url.endsWith('/invitations/accept'))?.body).toEqual({ token: 'INVITE-1', alerts: true })
     expect(window.localStorage.getItem('hawkeye_organization')).toBe('team')
+  })
+
+  it('lets the person join without receiving the team’s alerts', async () => {
+    const calls = mount({ signedInAs: { email: 'bob@example.com' } })
+    const box = await screen.findByLabelText(/Also email me this team’s alerts/)
+    expect(box).toBeChecked()
+    await userEvent.click(box)
+    await userEvent.click(screen.getByRole('button', { name: 'Accept invitation' }))
+    expect(await screen.findByText('dashboard')).toBeInTheDocument()
+    expect(calls.find((c) => c.url.endsWith('/invitations/accept'))?.body).toEqual({ token: 'INVITE-1', alerts: false })
+  })
+
+  it('says so when the team’s alert list was full, instead of leaving silently', async () => {
+    mount({ signedInAs: { email: 'bob@example.com' }, accept: json(200, { organization: { id: 'team', name: 'Acme', role: 'member' }, alerts: 'full' }) })
+    await userEvent.click(await screen.findByRole('button', { name: 'Accept invitation' }))
+    expect(await screen.findByText(/alert list is full/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Go to the dashboard' })).toHaveAttribute('href', '/dashboard')
   })
 
   it('does not offer to accept as the wrong account, and lets the person log out', async () => {

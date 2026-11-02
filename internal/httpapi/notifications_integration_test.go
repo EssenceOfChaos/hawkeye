@@ -193,21 +193,35 @@ func TestSettingsTenantIsolationAndRoles(t *testing.T) {
 		t.Fatal("alice's setting was changed")
 	}
 
-	// A plain member of Alice's organization can view but not change recipients.
+	// A plain member of Alice's organization can view recipients, and change only their own address (added when they joined), not anyone else's.
 	e.pool.Exec(t.Context(), `INSERT INTO organization_members (organization_id, user_id, role)
 		SELECT $1, id, 'member' FROM users WHERE email='bob@example.com'`, aliceOrg)
+	var bobSetting string
+	e.pool.QueryRow(t.Context(), `INSERT INTO notification_settings (organization_id, user_id, channel, destination, verified_at)
+		SELECT $1, id, 'email', email, now() FROM users WHERE email='bob@example.com' RETURNING id`, aliceOrg).Scan(&bobSetting)
 	hdr := func(method, path string, body string) int { return bob.doWithHeaderBody(method, path, aliceOrg, body) }
 	if hdr("GET", "/api/v1/notification-settings", "") != 200 {
 		t.Fatal("members may view recipients")
 	}
+	if st := hdr("POST", "/api/v1/notification-settings", `{"destination":"evil@example.com"}`); st != 403 {
+		t.Errorf("member create: want 403, got %d", st)
+	}
 	for name, st := range map[string]int{
-		"create": hdr("POST", "/api/v1/notification-settings", `{"destination":"evil@example.com"}`),
 		"patch":  hdr("PATCH", "/api/v1/notification-settings/"+aliceSetting, `{"enabled":false}`),
 		"delete": hdr("DELETE", "/api/v1/notification-settings/"+aliceSetting, ""),
 	} {
-		if st != 403 {
-			t.Errorf("member %s: want 403, got %d", name, st)
+		if st != 404 {
+			t.Errorf("member %s of the owner's address: want 404, got %d", name, st)
 		}
+	}
+	if s := settings(t, alice); s[0]["enabled"] != true {
+		t.Fatal("the owner's address was changed by a member")
+	}
+	if st := hdr("PATCH", "/api/v1/notification-settings/"+bobSetting, `{"enabled":false}`); st != 200 {
+		t.Errorf("a member turns off their own alerts: %d", st)
+	}
+	if st := hdr("DELETE", "/api/v1/notification-settings/"+bobSetting, ""); st != 204 {
+		t.Errorf("a member removes their own address: %d", st)
 	}
 }
 

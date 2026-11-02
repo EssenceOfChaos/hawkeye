@@ -122,6 +122,7 @@ function StatusLabel({ s }: { s: NotificationSetting }) {
 export function NotificationsPage() {
   const { user, organization } = useAuth()
   const isOwner = organization?.role === 'owner'
+  const mine = (s: NotificationSetting) => s.user_id !== null && s.user_id === user?.id
   const verified = Boolean(user?.email_verified_at)
 
   const [items, setItems] = useState<NotificationSetting[] | null>(null)
@@ -253,7 +254,7 @@ export function NotificationsPage() {
           <table>
             <caption className="sr-only">Alert recipients</caption>
             <thead>
-              <tr><th>Destination</th><th>Status</th>{isOwner && <th>Actions</th>}</tr>
+              <tr><th>Destination</th><th>Status</th>{(isOwner || items.some(mine)) && <th>Actions</th>}</tr>
             </thead>
             <tbody>
               {items.map((s) => (
@@ -261,9 +262,22 @@ export function NotificationsPage() {
                   <td>
                     {s.channel !== 'email' && <span className="hint">{channelNames[s.channel]}: </span>}
                     {s.destination}
-                    {s.user_id && <span className="hint"> (you)</span>}
+                    {mine(s) ? <span className="hint"> (you)</span> : s.user_id && <span className="hint"> (team member)</span>}
                   </td>
                   <td><StatusLabel s={s} /></td>
+                  {!isOwner && items.some(mine) && (
+                    // A member may turn off or remove only their own address, added when they joined.
+                    <td className="actions">
+                      {mine(s) && (
+                        <>
+                          <button onClick={() => void run(() => api('PATCH', `/notification-settings/${s.id}`, { enabled: !s.enabled }))}>
+                            {s.enabled ? 'Turn off' : 'Turn on'}
+                          </button>
+                          <button className="danger" onClick={() => remove(s)} aria-label={`Remove ${s.destination}`}>Remove</button>
+                        </>
+                      )}
+                    </td>
+                  )}
                   {isOwner && (
                     <td className="actions">
                       {s.verified && (
@@ -339,7 +353,7 @@ export function NotificationsPage() {
           </form>
         </section>
       ) : (
-        <p className="hint">Only the organization owner can change alert recipients.</p>
+        <p className="hint">Only the organization owner can add or change alert recipients. You can turn off or remove your own address.</p>
       )}
     </>
   )
