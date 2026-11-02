@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../auth'
@@ -16,11 +16,11 @@ const json = (status: number, body: unknown) =>
 
 const free = { code: 'free', name: 'Free', monthly_price_cents: 0, max_monitors: 5, minimum_check_interval_seconds: 300, history_retention_days: 7, max_domains: 3, max_team_members: 1, max_regions: 1 }
 const pro = {
-  code: 'pro', name: 'Pro', monthly_price_cents: 1900, max_monitors: 50, minimum_check_interval_seconds: 60, history_retention_days: 90,
+  code: 'pro', name: 'Pro', monthly_price_cents: 1900, annual_price_cents: 19000, max_monitors: 50, minimum_check_interval_seconds: 60, history_retention_days: 90,
   max_domains: 25, max_team_members: 1, max_regions: 3, maintenance_enabled: true, reports_enabled: true,
 }
 const agency = {
-  code: 'agency', name: 'Agency', monthly_price_cents: 5900, max_monitors: 200, minimum_check_interval_seconds: 60, history_retention_days: 365,
+  code: 'agency', name: 'Agency', monthly_price_cents: 5900, annual_price_cents: 59000, max_monitors: 200, minimum_check_interval_seconds: 60, history_retention_days: 365,
   max_domains: 100, max_team_members: 5, max_regions: 3, maintenance_enabled: true, reports_enabled: true, branded_reports_enabled: true,
 }
 const plans = [free, pro, agency]
@@ -29,14 +29,17 @@ const user = { id: 'u', email: 'me@example.com', email_verified_at: '2026-01-01T
 const subscription = { billing_enabled: true, plan: free, status: 'active', paid_access: false, cancel_at_period_end: false, current_period_end: null, can_manage: false, has_subscription: false }
 const usage = { plan: free, monitors_used: 1, monitor_limit: 5, over_limit: false, next_plan: null }
 
-function stubApi(signedIn: boolean) {
-  vi.stubGlobal('fetch', vi.fn((url: string) => {
-    if (url.includes('/plans')) return json(200, { plans, billing_enabled: true })
+function stubApi(signedIn: boolean, annual = false) {
+  const fetch = vi.fn((url: string, _init?: RequestInit) => {
+    if (url.includes('/plans')) return json(200, { plans, billing_enabled: true, annual_billing_enabled: annual })
     if (!signedIn) return json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } })
     if (url.includes('/auth/me')) return json(200, { user, organizations: [{ id: 'o', name: 'Org', role: 'owner' }] })
-    if (url.includes('/billing/subscription')) return json(200, { subscription, usage })
+    if (url.includes('/billing/subscription')) return json(200, { subscription: { ...subscription, annual_billing_enabled: annual }, usage })
+    if (url.includes('/billing/checkout-session')) return json(400, { error: { code: 'VALIDATION_ERROR', message: 'stop here' } })
     return json(404, {})
-  }))
+  })
+  vi.stubGlobal('fetch', fetch)
+  return fetch
 }
 
 /** What a visitor reads on each plan card: the tagline, price and every feature line, in order, by plan name. */
@@ -53,10 +56,11 @@ function readCards(): Record<string, string[]> {
   return cards
 }
 
-async function cardsOn(ui: React.ReactElement, signedIn: boolean) {
-  stubApi(signedIn)
+async function cardsOn(ui: React.ReactElement, signedIn: boolean, yearly = false) {
+  stubApi(signedIn, yearly)
   const { unmount } = render(<MemoryRouter><AuthProvider>{ui}</AuthProvider></MemoryRouter>)
   await screen.findAllByText('200 website monitors')
+  if (yearly) fireEvent.click(await screen.findByRole('radio', { name: 'Yearly · 2 months free' }))
   const cards = readCards()
   unmount()
   return cards
@@ -82,5 +86,36 @@ describe('pricing cards stay in sync', () => {
       ]))
       expect(cards.Free).not.toContain('Branded Reports with name and logo')
     }
+  })
+
+  it('show the same yearly prices on all three pages when yearly billing is offered', async () => {
+    const landing = await cardsOn(<LandingPage />, false, true)
+    const monitoring = await cardsOn(<MonitoringLandingPage />, false, true)
+    const billing = await cardsOn(<BillingPage />, true, true)
+    expect(landing.Pro[1]).toBe('$190 / year')
+    expect(landing.Agency[1]).toBe('$590 / year')
+    expect(landing.Free[1]).toBe('$0')
+    expect(monitoring).toEqual(landing)
+    expect(billing).toEqual(landing)
+  })
+
+  it('offers no yearly option when the server does not', async () => {
+    stubApi(false, false)
+    const { unmount } = render(<MemoryRouter><AuthProvider><LandingPage /></AuthProvider></MemoryRouter>)
+    await screen.findAllByText('200 website monitors')
+    expect(screen.queryByRole('radiogroup', { name: 'Billing period' })).not.toBeInTheDocument()
+    unmount()
+  })
+})
+
+describe('yearly checkout', () => {
+  it('asks the server for the yearly price of the chosen plan', async () => {
+    const fetch = stubApi(true, true)
+    render(<MemoryRouter><AuthProvider><BillingPage /></AuthProvider></MemoryRouter>)
+    fireEvent.click(await screen.findByRole('radio', { name: 'Yearly · 2 months free' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose Agency' }))
+    await waitFor(() => expect(fetch.mock.calls.some(([u]) => String(u).includes('/billing/checkout-session'))).toBe(true))
+    const call = fetch.mock.calls.find(([u]) => String(u).includes('/billing/checkout-session'))!
+    expect(JSON.parse(String(call[1]?.body))).toEqual({ plan: 'agency', interval: 'year' })
   })
 })

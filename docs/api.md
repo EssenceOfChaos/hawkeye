@@ -187,12 +187,13 @@ the retention cutoff. Every response echoes the effective window: `range: {from,
 
 ## Plans and billing
 
-`GET /plans` (public) → `{plans, billing_enabled}`. Billing details and the Stripe setup are in `docs/billing.md`.
+`GET /plans` (public) → `{plans, billing_enabled, annual_billing_enabled}`. Each plan has `monthly_price_cents` and `annual_price_cents` (the price of a year paid at once,
+or null when the plan is not sold yearly); `annual_billing_enabled` says whether yearly checkout is available on this server. Billing details and the Stripe setup are in `docs/billing.md`.
 
 | Method & path | Who | Notes |
 |---|---|---|
-| `GET /billing/subscription` | any member | `{subscription: {billing_enabled, plan, status, paid_access, cancel_at_period_end, current_period_end, can_manage, has_subscription}, usage}`. `plan` is the plan whose limits apply now; `status` is `active`, `trialing`, `past_due`, `canceled` or `incomplete` |
-| `POST /billing/checkout-session` | owner, verified email | `{plan: "pro"\|"agency"}` → `{url}` (Stripe-hosted Checkout). Only the plan name is read; price and organization come from the server. Grants nothing. 409 `ALREADY_SUBSCRIBED`, 400 validation, 503 `BILLING_NOT_CONFIGURED` |
+| `GET /billing/subscription` | any member | `{subscription: {billing_enabled, annual_billing_enabled, plan, status, paid_access, billing_interval, cancel_at_period_end, current_period_end, can_manage, has_subscription}, usage}`. `billing_interval` is `month` or `year` while the plan is paid for, else null. `plan` is the plan whose limits apply now; `status` is `active`, `trialing`, `past_due`, `canceled` or `incomplete` |
+| `POST /billing/checkout-session` | owner, verified email | `{plan: "pro"\|"agency", interval?: "month"\|"year"}` → `{url}` (Stripe-hosted Checkout). Only the plan name and interval (default `month`) are read; price and organization come from the server. Grants nothing. 409 `ALREADY_SUBSCRIBED`, 400 validation (including `interval: "year"` while yearly billing is not configured), 503 `PLAN_UNAVAILABLE` while that price disagrees with the plans table, 503 `BILLING_NOT_CONFIGURED` |
 | `POST /billing/portal-session` | owner, verified email | → `{url}` (customer portal). 409 `NO_BILLING_ACCOUNT` before a first checkout |
 | `POST /billing/cancel-subscription` | owner, verified email | schedules cancellation at period end; access continues until then. 409 `NO_ACTIVE_SUBSCRIPTION` |
 | `POST /billing/sync` | owner | re-reads the subscription from the provider (repair after missed webhooks) |

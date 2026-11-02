@@ -23,12 +23,12 @@ function Shell({ title, children, draft = true }: { title: string; children: Rea
   )
 }
 
-const SUPPORT = 'support@hawkeye.observer'
+const SUPPORT = 'customer_support@hawkeye.observer'
 
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 1, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 2, 2026</p>
       <p>
         HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -105,7 +105,7 @@ export function PrivacyPage() {
         We use <strong>Google Analytics</strong> (provided by Google LLC) to understand how people use our website, for example which pages are visited and from what kind of device. Google receives the
         page address (without any query string or fragment, so one-time links and tokens are not shared; the one exception is campaign tags such as <code>utm_source</code> and advertising click identifiers, which tell us which of our ads or links brought you here and contain no personal information), the page title, whether you created an account (an event with no name or email attached), your IP address, browser and device information, and an identifier stored in a cookie, and it processes
         them for us under its own terms. We turn off Google’s advertising features and ad personalization, and we do not send your name, email address, or monitoring data to Google. You can turn analytics off at any time (see Section E), and we also treat a Global Privacy Control signal from your browser as a choice to opt out. When analytics is off, no Google script is loaded and nothing is sent to Google. We also use <strong>Google Ads</strong> conversion measurement, which tells us whether a visit that began with one of our ads ended in a paid subscription. When a payment is confirmed, Google receives a
-        “purchase” event with the plan’s monthly price and a timestamp that identifies the purchase, together with the same technical information described above; it contains no name, email address, or card details. We use this only to measure our own advertising, not to build audiences or show you ads elsewhere. Google Ads conversion measurement is covered by the same opt-out: when analytics is off, nothing is sent to Google Ads either. We do not use any other advertising or
+        “purchase” event with the price you paid (the plan’s monthly or yearly price) and a timestamp that identifies the purchase, together with the same technical information described above; it contains no name, email address, or card details. We use this only to measure our own advertising, not to build audiences or show you ads elsewhere. Google Ads conversion measurement is covered by the same opt-out: when analytics is off, nothing is sent to Google Ads either. We do not use any other advertising or
         error-tracking service. If that changes, we will update this Policy first.
       </p>
 
@@ -349,7 +349,7 @@ export function PrivacyPage() {
 export function TermsPage() {
   return (
     <Shell title="HawkEye Terms and Conditions" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 1, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 2, 2026</p>
       <p>
         These Terms and Conditions (“Terms”) govern access to and use of the HawkEye website, applications, and website-monitoring services (together, the “Service”).
       </p>
@@ -471,8 +471,9 @@ export function TermsPage() {
 
       <h3>A. Prices and billing periods</h3>
       <p>
-        The applicable price, billing interval, currency, taxes, and subscription terms are displayed before you complete your purchase. Current prices, in US dollars, are $19 per month for Pro and $59 per month for
-        Agency. Subscriptions are currently billed monthly. We do not currently offer annual plans or free trials of paid plans.
+        The applicable price, billing interval, currency, taxes, and subscription terms are displayed before you complete your purchase. Current prices, in US dollars, are $19 per month or $190 per year for Pro, and $59 per month or
+        $590 per year for Agency. You choose monthly or yearly billing at checkout; a yearly subscription is paid in advance for the whole year. We do not currently offer free
+        trials of paid plans.
       </p>
 
       <h3>B. Recurring payments</h3>
@@ -510,19 +511,44 @@ export function TermsPage() {
 
       <h3>A. Cancellation</h3>
       <p>
-        You may cancel your subscription at any time from the <Link to="/billing">Billing</Link> page in your account, or by contacting <a href={`mailto:${SUPPORT}`}>{SUPPORT}</a> if that is unavailable.
-        Unless the checkout terms or applicable law provide otherwise, cancellation stops future renewals and paid access continues through the end of the current paid billing period.
+        You may cancel your subscription at any time from the <Link to="/billing">Billing</Link> page in your account, or by contacting <a href={`mailto:${SUPPORT}`}>{SUPPORT}</a>.
+        When you cancel, your subscription remains active until the end of your current billing period (for an annual subscription, the end of your prepaid subscription term), it
+        does not renew, and you will not be charged for subsequent periods.
       </p>
 
-      <h3>B. Automatic renewal notices</h3>
+      <h3>B. Automatic renewal</h3>
       <p>
-        HawkEye will provide the disclosures, acknowledgments, renewal reminders, and other notices required by applicable law, within the applicable time frame and through a permitted communication method.
+        Monthly subscriptions renew automatically each month, and annual subscriptions renew automatically each year, unless canceled before the renewal date. HawkEye will provide
+        the disclosures, acknowledgments, renewal reminders, and other notices required by applicable law, within the applicable time frame and through a permitted communication
+        method.
       </p>
 
       <h3>C. Refunds</h3>
       <p>
-        Unless required by law or expressly stated in the offer, payments are not refundable for partially used billing periods after a subscription has begun. This policy does not limit any non-waivable statutory rights,
-        mandatory refund entitlements, or rights arising from a billing error or unauthorized transaction. If you believe you were charged in error, contact us at <a href={`mailto:${SUPPORT}`}>{SUPPORT}</a>.
+        <strong>Monthly subscriptions.</strong> HawkEye monthly subscriptions are billed in advance and are generally non-refundable.
+      </p>
+      <p>
+        <strong>Annual subscriptions: 14-day money-back guarantee.</strong> We want you to feel confident choosing HawkEye. New customers purchasing a HawkEye Pro Annual or HawkEye
+        Agency Annual subscription are eligible for a full refund if they request cancellation within 14 calendar days of their initial annual purchase. To request a refund, contact{' '}
+        <a href={`mailto:${SUPPORT}`}>{SUPPORT}</a> within 14 days of your purchase date. After the 14-day guarantee period, annual subscription payments are generally
+        non-refundable, and no prorated refunds will be provided for unused subscription time.
+      </p>
+      <p>
+        <strong>Annual renewals.</strong> If your annual subscription renews unintentionally, you may request a refund within seven calendar days of the renewal charge. We will
+        generally approve eligible requests where there has been no material use of the paid service following renewal.
+      </p>
+      <p>
+        <strong>Billing errors and service issues.</strong> HawkEye will correct duplicate or erroneous charges. We may also provide refunds or account credits at our discretion
+        when significant service issues prevent customers from using the platform as intended. If you believe you were charged in error, contact us at{' '}
+        <a href={`mailto:${SUPPORT}`}>{SUPPORT}</a>.
+      </p>
+      <p>
+        When a refund is granted for a subscription, the subscription ends and your account returns to the Free plan: your existing monitors and data are kept, subject to the Free
+        plan’s limits and retention period. Nothing in this policy limits refund, cancellation, or other rights available under applicable law, including any non-waivable statutory
+        rights or mandatory refund entitlements.
+      </p>
+      <p>
+        For billing questions, cancellations, or refund requests, contact <a href={`mailto:${SUPPORT}`}>{SUPPORT}</a>.
       </p>
 
       <h3>D. Cancellation confirmation</h3>

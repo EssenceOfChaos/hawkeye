@@ -127,6 +127,9 @@ type Config struct {
 	StripeWebhookSecret string
 	StripePricePro      string
 	StripePriceAgency   string
+	// Yearly prices (both or neither); named in the secret manager as billing.EnvPriceProAnnual and billing.EnvPriceAgencyAnnual.
+	StripePriceProAnnual    string
+	StripePriceAgencyAnnual string
 
 	// HawkEye's own Telegram bot (from @BotFather), which customers add to a chat to receive alerts there. Both or neither: without them only the
 	// "use your own bot" option is offered. The webhook secret is what Telegram sends back on every update, so the endpoint knows the caller.
@@ -209,7 +212,8 @@ func (c Config) SecretBox() (*secrets.Box, error) {
 
 func (c Config) Billing() billing.Config {
 	return billing.Config{SecretKey: c.StripeSecretKey, WebhookSecret: c.StripeWebhookSecret,
-		PricePro: c.StripePricePro, PriceAgency: c.StripePriceAgency, AppBaseURL: c.AppBaseURL}
+		PricePro: c.StripePricePro, PriceAgency: c.StripePriceAgency,
+		PriceProAnnual: c.StripePriceProAnnual, PriceAgencyAnnual: c.StripePriceAgencyAnnual, AppBaseURL: c.AppBaseURL}
 }
 
 // Load reads configuration from the process environment and validates it.
@@ -329,10 +333,12 @@ func load(get func(string) string) (Config, error) {
 		RunMonthlyReports:     !boolean("DISABLE_MONTHLY_REPORTS"),
 		MonthlyReportInterval: duration("MONTHLY_REPORT_INTERVAL", time.Hour),
 
-		StripeSecretKey:     str("STRIPE_SECRET_KEY", ""),
-		StripeWebhookSecret: str("STRIPE_WEBHOOK_SECRET", ""),
-		StripePricePro:      str("STRIPE_PRICE_PRO_ID", ""),
-		StripePriceAgency:   str("STRIPE_PRICE_AGENCY_ID", ""),
+		StripeSecretKey:         str("STRIPE_SECRET_KEY", ""),
+		StripeWebhookSecret:     str("STRIPE_WEBHOOK_SECRET", ""),
+		StripePricePro:          str("STRIPE_PRICE_PRO_ID", ""),
+		StripePriceAgency:       str("STRIPE_PRICE_AGENCY_ID", ""),
+		StripePriceProAnnual:    str(billing.EnvPriceProAnnual, ""),
+		StripePriceAgencyAnnual: str(billing.EnvPriceAgencyAnnual, ""),
 
 		TelegramBotToken:      str("TELEGRAM_BOT_TOKEN", ""),
 		TelegramWebhookSecret: str("TELEGRAM_WEBHOOK_SECRET", ""),

@@ -50,12 +50,13 @@ func (h *handlers) billingSubscription(c echo.Context) error {
 
 func (h *handlers) billingCheckout(c echo.Context) error {
 	var in struct {
-		Plan string `json:"plan"`
+		Plan     string `json:"plan"`
+		Interval string `json:"interval"` // month (default) or year
 	}
 	if err := bind(c, &in); err != nil {
 		return err
 	}
-	url, err := h.billing.CreateCheckout(c.Request().Context(), currentOrg(c), currentUser(c).Email, in.Plan)
+	url, err := h.billing.CreateCheckout(c.Request().Context(), currentOrg(c), currentUser(c).Email, in.Plan, in.Interval)
 	if err != nil {
 		return h.billingError(c, err)
 	}

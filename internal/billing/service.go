@@ -54,12 +54,18 @@ func (s *Service) WithReporter(r errtrack.Reporter) *Service {
 // Enabled reports whether Checkout and the portal can be offered.
 func (s *Service) Enabled() bool { return s.provider != nil && s.cfg.Enabled() }
 
+// AnnualEnabled reports whether plans can also be bought for a year at a time.
+func (s *Service) AnnualEnabled() bool { return s.provider != nil && s.cfg.AnnualEnabled() }
+
 // View is the billing summary for an organization.
 type View struct {
-	BillingEnabled    bool       `json:"billing_enabled"`
-	Plan              plans.Plan `json:"plan"` // the plan whose limits apply right now
-	Status            string     `json:"status"`
-	PaidAccess        bool       `json:"paid_access"`
+	BillingEnabled       bool       `json:"billing_enabled"`
+	AnnualBillingEnabled bool       `json:"annual_billing_enabled"`
+	Plan                 plans.Plan `json:"plan"` // the plan whose limits apply right now
+	Status               string     `json:"status"`
+	PaidAccess           bool       `json:"paid_access"`
+	// BillingInterval is "month" or "year" while the organization pays for its plan, else null.
+	BillingInterval   *string    `json:"billing_interval"`
 	CancelAtPeriodEnd bool       `json:"cancel_at_period_end"`
 	CurrentPeriodEnd  *time.Time `json:"current_period_end"`
 	CanManage         bool       `json:"can_manage"` // a billing account exists, so the portal can be opened
@@ -71,6 +77,7 @@ type row struct {
 	customerID, subscriptionID *string
 	periodEnd                  *time.Time
 	cancelAtPeriodEnd          bool
+	interval                   *string
 	lastEventAt                *time.Time
 }
 
@@ -78,12 +85,12 @@ func loadRow(ctx context.Context, q interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }, orgID uuid.UUID, lock bool) (row, error) {
 	var r row
-	sql := `SELECT p.code, s.status, s.provider_customer_id, s.provider_subscription_id, s.current_period_end, s.cancel_at_period_end
+	sql := `SELECT p.code, s.status, s.provider_customer_id, s.provider_subscription_id, s.current_period_end, s.cancel_at_period_end, s.billing_interval
 		FROM subscriptions s JOIN plans p ON p.id = s.plan_id WHERE s.organization_id = $1`
 	if lock {
 		sql += ` FOR UPDATE OF s`
 	}
-	err := q.QueryRow(ctx, sql, orgID).Scan(&r.planCode, &r.status, &r.customerID, &r.subscriptionID, &r.periodEnd, &r.cancelAtPeriodEnd)
+	err := q.QueryRow(ctx, sql, orgID).Scan(&r.planCode, &r.status, &r.customerID, &r.subscriptionID, &r.periodEnd, &r.cancelAtPeriodEnd, &r.interval)
 	return r, err
 }
 
@@ -93,7 +100,7 @@ func (r row) hasPaidAccess() bool {
 
 // Subscription returns the billing summary shown on the billing page.
 func (s *Service) Subscription(ctx context.Context, orgID uuid.UUID) (View, error) {
-	v := View{BillingEnabled: s.Enabled()}
+	v := View{BillingEnabled: s.Enabled(), AnnualBillingEnabled: s.AnnualEnabled()}
 	p, err := plans.EffectivePlan(ctx, s.pool, orgID)
 	if err != nil {
 		return v, err
@@ -111,27 +118,38 @@ func (s *Service) Subscription(ctx context.Context, orgID uuid.UUID) (View, erro
 	v.CancelAtPeriodEnd, v.CurrentPeriodEnd = r.cancelAtPeriodEnd, r.periodEnd
 	v.CanManage = r.customerID != nil && v.BillingEnabled
 	v.HasSubscription = r.subscriptionID != nil && r.planCode != plans.FreeCode
-	if !v.PaidAccess {
+	if v.PaidAccess {
+		v.BillingInterval = r.interval
+	} else {
 		v.CancelAtPeriodEnd, v.CurrentPeriodEnd = false, nil // stale paid-period details are not shown for a free organization
 	}
 	return v, nil
 }
 
-// CreateCheckout starts a hosted Checkout for a plan. The price comes from configuration, never from the caller.
-// Nothing is granted here: entitlements change only when the provider reports an active subscription.
-func (s *Service) CreateCheckout(ctx context.Context, orgID uuid.UUID, userEmail, planCode string) (string, error) {
+// CreateCheckout starts a hosted Checkout for a plan, billed monthly or yearly (interval "" means monthly). The price comes from configuration,
+// never from the caller. Nothing is granted here: entitlements change only when the provider reports an active subscription.
+func (s *Service) CreateCheckout(ctx context.Context, orgID uuid.UUID, userEmail, planCode, interval string) (string, error) {
 	if !s.Enabled() {
 		return "", ErrNotConfigured
 	}
-	price, ok := s.cfg.PriceForPlan(planCode)
-	if !ok {
+	if interval == "" {
+		interval = IntervalMonth
+	}
+	if interval != IntervalMonth && interval != IntervalYear {
+		return "", validation.New("interval", "must be month or year")
+	}
+	if planCode != "pro" && planCode != "agency" {
 		return "", validation.New("plan", "must be pro or agency")
+	}
+	price, ok := s.cfg.PriceForPlan(planCode, interval)
+	if !ok {
+		return "", validation.New("interval", "yearly billing is not available yet")
 	}
 	var active bool
 	if err := s.pool.QueryRow(ctx, `SELECT active FROM plans WHERE code = $1`, planCode).Scan(&active); err != nil || !active {
 		return "", validation.New("plan", "must be pro or agency")
 	}
-	if s.priceProblem(planCode) != "" {
+	if s.priceProblem(priceKey(planCode, interval)) != "" {
 		return "", ErrPriceMismatch // never charge something other than the price shown (the details were logged and reported when it was detected)
 	}
 	cur, err := plans.EffectivePlan(ctx, s.pool, orgID)
@@ -295,17 +313,17 @@ func (s *Service) apply(ctx context.Context, tx pgx.Tx, orgID uuid.UUID, st Subs
 		return outcomeIgnored, nil // an unrelated, non-paying subscription changed; the current one is untouched
 	}
 
-	planCode := cur.planCode
-	var mappedPlan string
+	planCode, interval := cur.planCode, cur.interval
+	var mappedPlan, mappedInterval string
 	for _, pid := range st.PriceIDs {
-		if code, ok := s.cfg.PlanForPrice(pid); ok {
-			mappedPlan = code
+		if code, iv, ok := s.cfg.PlanForPrice(pid); ok {
+			mappedPlan, mappedInterval = code, iv
 			break
 		}
 	}
 	switch {
 	case mappedPlan != "":
-		planCode = mappedPlan
+		planCode, interval = mappedPlan, &mappedInterval
 	case plans.GrantsPaidAccess(mapped):
 		return "", fmt.Errorf("%w (prices %v)", ErrUnknownPrice, st.PriceIDs)
 	}
@@ -313,9 +331,9 @@ func (s *Service) apply(ctx context.Context, tx pgx.Tx, orgID uuid.UUID, st Subs
 	_, err = tx.Exec(ctx, `UPDATE subscriptions SET
 			plan_id = (SELECT id FROM plans WHERE code = $2), provider = 'stripe',
 			provider_customer_id = COALESCE(NULLIF($3, ''), provider_customer_id), provider_subscription_id = $4,
-			status = $5, current_period_start = $6, current_period_end = $7, cancel_at_period_end = $8, last_synced_at = now()
+			status = $5, current_period_start = $6, current_period_end = $7, cancel_at_period_end = $8, billing_interval = $9, last_synced_at = now()
 		WHERE organization_id = $1`,
-		orgID, planCode, st.CustomerID, st.ID, mapped, st.PeriodStart, st.PeriodEnd, st.CancelAtPeriodEnd)
+		orgID, planCode, st.CustomerID, st.ID, mapped, st.PeriodStart, st.PeriodEnd, st.CancelAtPeriodEnd, interval)
 	if err != nil {
 		return "", err
 	}

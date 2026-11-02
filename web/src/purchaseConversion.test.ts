@@ -27,6 +27,12 @@ describe('purchase conversion', () => {
     expect(hasPendingPurchase()).toBe(false)
   })
 
+  it('reports a yearly purchase at the yearly price', () => {
+    markCheckoutReturn()
+    reportPurchaseIfPaid(sub({ plan: { ...pro, annual_price_cents: 19000 }, billing_interval: 'year' }))
+    expect(trackPurchase).toHaveBeenCalledWith(190, '2026-11-30T00:00:00Z')
+  })
+
   it('waits for the provider: nothing is sent while the subscription is unpaid, and it is sent when it later becomes paid', () => {
     markCheckoutReturn()
     reportPurchaseIfPaid(sub({ paid_access: false, status: 'incomplete' }))

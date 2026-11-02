@@ -105,8 +105,8 @@ func newOn(r *prometheus.Registry) *Metrics {
 		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.CanaryUp, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.DomainLookups, m.LifecycleEmails, m.MonthlyReportEmails, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed, m.BillingPriceMismatch} {
 		f(c)
 	}
-	m.CanaryUp.Set(1) // no verdict yet counts as healthy
-	for _, plan := range []string{"pro", "agency"} {
+	m.CanaryUp.Set(1)                                                               // no verdict yet counts as healthy
+	for _, plan := range []string{"pro", "agency", "pro_annual", "agency_annual"} { // billing.PriceKeys (not imported: billing depends on metrics)
 		m.BillingPriceMismatch.WithLabelValues(plan).Set(0) // a labelled gauge is not exported until it has a value; the alert rule needs it to exist
 	}
 	return m

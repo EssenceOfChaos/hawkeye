@@ -16,8 +16,10 @@ import (
 
 func goodPrices() map[string]billing.PriceInfo {
 	return map[string]billing.PriceInfo{
-		"price_pro":    {ID: "price_pro", UnitAmount: 1900, Currency: "usd", Recurring: true, Interval: "month", IntervalCount: 1, Active: true},
-		"price_agency": {ID: "price_agency", UnitAmount: 5900, Currency: "usd", Recurring: true, Interval: "month", IntervalCount: 1, Active: true},
+		"price_pro":         {ID: "price_pro", UnitAmount: 1900, Currency: "usd", Recurring: true, Interval: "month", IntervalCount: 1, Active: true},
+		"price_agency":      {ID: "price_agency", UnitAmount: 5900, Currency: "usd", Recurring: true, Interval: "month", IntervalCount: 1, Active: true},
+		"price_pro_year":    {ID: "price_pro_year", UnitAmount: 19000, Currency: "usd", Recurring: true, Interval: "year", IntervalCount: 1, Active: true},
+		"price_agency_year": {ID: "price_agency_year", UnitAmount: 59000, Currency: "usd", Recurring: true, Interval: "year", IntervalCount: 1, Active: true},
 	}
 }
 
@@ -53,7 +55,7 @@ func TestPricesThatMatchLeaveCheckoutOpen(t *testing.T) {
 		t.Fatalf("matching prices reported a problem: %+v", got)
 	}
 	for _, plan := range []string{"pro", "agency"} {
-		if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", plan); err != nil {
+		if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", plan, ""); err != nil {
 			t.Fatalf("%s checkout should be open: %v", plan, err)
 		}
 	}
@@ -73,13 +75,13 @@ func TestAWrongStripeAmountRefusesThatPlanOnlyAndClearsWhenFixed(t *testing.T) {
 		t.Fatalf("expected one problem for pro, got %+v", got)
 	}
 	t.Log(got[0].Message)
-	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro"); !errors.Is(err, billing.ErrPriceMismatch) {
+	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro", ""); !errors.Is(err, billing.ErrPriceMismatch) {
 		t.Fatalf("pro checkout must be refused, got %v", err)
 	}
 	if len(e.fake.Checkouts) != 0 {
 		t.Fatal("a Checkout session was created for a mismatched price")
 	}
-	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "agency"); err != nil {
+	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "agency", ""); err != nil {
 		t.Fatalf("agency matches and must stay open: %v", err)
 	}
 	if e.priceGauge(t, "pro") != 1 || e.priceGauge(t, "agency") != 0 {
@@ -96,7 +98,7 @@ func TestAWrongStripeAmountRefusesThatPlanOnlyAndClearsWhenFixed(t *testing.T) {
 	if got := e.svc.VerifyPrices(t.Context()); len(got) != 0 {
 		t.Fatalf("still reported after the fix: %+v", got)
 	}
-	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro"); err != nil {
+	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro", ""); err != nil {
 		t.Fatalf("checkout must reopen after the fix: %v", err)
 	}
 	if e.priceGauge(t, "pro") != 0 {
@@ -123,7 +125,7 @@ func TestOtherWaysAPriceCanBeWrongAreCaughtToo(t *testing.T) {
 			if len(got) != 1 || got[0].Plan != "agency" {
 				t.Fatalf("expected an agency problem, got %+v", got)
 			}
-			if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "agency"); !errors.Is(err, billing.ErrPriceMismatch) {
+			if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "agency", ""); !errors.Is(err, billing.ErrPriceMismatch) {
 				t.Fatalf("checkout must be refused: %v", err)
 			}
 		})
@@ -138,7 +140,7 @@ func TestAnUnreachableStripeNeverBlocksAndNeverHidesAKnownProblem(t *testing.T) 
 		t.Fatalf("a failed lookup must not invent a problem: %+v", got)
 	}
 	e.fake.Err = nil // let the checkout itself work
-	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro"); err != nil {
+	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro", ""); err != nil {
 		t.Fatalf("an unverified price must not block checkout: %v", err)
 	}
 
@@ -150,22 +152,31 @@ func TestAnUnreachableStripeNeverBlocksAndNeverHidesAKnownProblem(t *testing.T) 
 	e.fake.Err = errors.New("stripe is unreachable")
 	e.svc.VerifyPrices(t.Context())
 	e.fake.Err = nil
-	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro"); !errors.Is(err, billing.ErrPriceMismatch) {
+	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro", ""); !errors.Is(err, billing.ErrPriceMismatch) {
 		t.Fatalf("a failed lookup cleared a known problem: %v", err)
 	}
 }
 
 // STRIPE_LIVE_PRICE_CHECK=1 STRIPE_SECRET_KEY=... STRIPE_PRICE_PRO_ID=... STRIPE_PRICE_AGENCY_ID=... go test ./internal/billing -run LivePrices -v
-// Read-only: it only retrieves the two prices from Stripe (works with live or test keys) and compares them with the plans table, exactly as the API does at
+// Add HAWKEYE_PRO_ANNUAL_SUBSCRIPTION=... HAWKEYE_AGENCY_ANNUAL_SUBSCRIPTION=... to check the yearly prices too.
+// Read-only: it only retrieves the prices from Stripe (works with live or test keys) and compares them with the plans table, exactly as the API does at
 // startup and hourly. Run it after creating or changing prices in Stripe.
 func TestLivePricesMatchThePlansTable(t *testing.T) {
 	if os.Getenv("STRIPE_LIVE_PRICE_CHECK") != "1" {
 		t.Skip("set STRIPE_LIVE_PRICE_CHECK=1 with STRIPE_SECRET_KEY, STRIPE_PRICE_PRO_ID and STRIPE_PRICE_AGENCY_ID to compare the real Stripe prices")
 	}
-	c := billing.Config{SecretKey: os.Getenv("STRIPE_SECRET_KEY"), WebhookSecret: "whsec_unused", PricePro: os.Getenv("STRIPE_PRICE_PRO_ID"), PriceAgency: os.Getenv("STRIPE_PRICE_AGENCY_ID")}
+	c := billing.Config{SecretKey: os.Getenv("STRIPE_SECRET_KEY"), WebhookSecret: "whsec_unused", PricePro: os.Getenv("STRIPE_PRICE_PRO_ID"), PriceAgency: os.Getenv("STRIPE_PRICE_AGENCY_ID"),
+		PriceProAnnual: os.Getenv(billing.EnvPriceProAnnual), PriceAgencyAnnual: os.Getenv(billing.EnvPriceAgencyAnnual)}
+	if err := c.Validate(true); err != nil {
+		t.Fatal(err)
+	}
 	svc := billing.NewService(testutil.NewPoolSize(t, 5), billing.NewStripeProvider(c.SecretKey), c, metrics.New(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if problems := svc.VerifyPrices(t.Context()); len(problems) != 0 {
 		t.Fatalf("Stripe and the plans table disagree: %+v", problems)
 	}
-	t.Log("Stripe's Pro and Agency prices match the plans table (USD, monthly, active)")
+	if c.AnnualEnabled() {
+		t.Log("Stripe's Pro and Agency prices, monthly and yearly, match the plans table (USD, active)")
+	} else {
+		t.Log("Stripe's Pro and Agency monthly prices match the plans table (USD, active); yearly prices were not given, so not checked")
+	}
 }

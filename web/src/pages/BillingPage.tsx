@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { api, ApiError, type BillingSubscription, type Plan, type Usage } from '../api'
-import { PlanDetails } from '../components/PlanDetails'
+import { api, ApiError, type BillingInterval, type BillingSubscription, type Plan, type Usage } from '../api'
+import { IntervalToggle, PlanDetails } from '../components/PlanDetails'
 import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
@@ -33,6 +33,8 @@ export function BillingPage() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [waiting, setWaiting] = useState(checkout === 'success')
+  // Arriving from a yearly pricing card (/billing?interval=year) keeps yearly selected.
+  const [period, setPeriod] = useState<BillingInterval>(params.get('interval') === 'year' ? 'year' : 'month')
   const polls = useRef(0)
 
   const load = useCallback(async () => {
@@ -102,6 +104,9 @@ export function BillingPage() {
   }
 
   const status = sub ? statusText(sub) : null
+  const annual = Boolean(sub?.billing_enabled && sub.annual_billing_enabled)
+  // A paying organization sees its plans priced the way it pays; otherwise the chosen period (monthly unless yearly is offered and picked).
+  const shown: BillingInterval = sub?.paid_access ? (sub.billing_interval ?? 'month') : annual ? period : 'month'
   const canBuy = Boolean(sub?.billing_enabled && isOwner && verified && !sub?.paid_access)
   const whyNot = !sub
     ? ''
@@ -143,6 +148,7 @@ export function BillingPage() {
           </p>
           {sub.paid_access && sub.current_period_end && (
             <p>
+              {sub.billing_interval && <>Billed {sub.billing_interval === 'year' ? 'yearly' : 'monthly'} · </>}
               {sub.cancel_at_period_end
                 ? <>Your plan ends on <strong>{new Date(sub.current_period_end).toLocaleDateString()}</strong>. You keep full access until then.</>
                 : <>Renews on <strong>{new Date(sub.current_period_end).toLocaleDateString()}</strong>.</>}
@@ -180,16 +186,17 @@ export function BillingPage() {
         <section aria-labelledby="plans-h">
           <h2 id="plans-h">Plans</h2>
           {whyNot && !sub.paid_access && <p className="hint">{whyNot}</p>}
+          {annual && !sub.paid_access && <IntervalToggle value={period} onChange={setPeriod} plans={plans} />}
           <ul className="plans app-plans">
             {plans.map((p) => {
               const current = p.code === sub.plan.code
               return (
                 <li key={p.code} className={`plan${current ? ' featured' : ''}`}>
                   <h3>{p.name}{current && <span className="soon">Current plan</span>}</h3>
-                  <PlanDetails plan={p} />
+                  <PlanDetails plan={p} interval={shown} />
                   {!current && p.monthly_price_cents > 0 && !sub.paid_access && (
                     <button className="primary" disabled={!canBuy || busy !== null}
-                      onClick={() => void go(p.code, '/billing/checkout-session', { plan: p.code })}>
+                      onClick={() => void go(p.code, '/billing/checkout-session', shown === 'year' ? { plan: p.code, interval: 'year' } : { plan: p.code })}>
                       {busy === p.code ? 'Redirecting…' : `Choose ${p.name}`}
                     </button>
                   )}

@@ -1,8 +1,12 @@
 package billing
 
 import (
+	"slices"
+	"strings"
 	"testing"
 	"time"
+
+	"hawkeye/internal/metrics"
 )
 
 func TestMapStatus(t *testing.T) {
@@ -89,26 +93,91 @@ func TestConfigValidation(t *testing.T) {
 	}
 }
 
-func TestPriceMapping(t *testing.T) {
-	c := Config{PricePro: "price_p", PriceAgency: "price_a"}
-	if p, ok := c.PriceForPlan("pro"); !ok || p != "price_p" {
-		t.Fatal("pro price")
+func TestAnnualConfigValidation(t *testing.T) {
+	base := func() Config {
+		return Config{SecretKey: "sk_test_x", WebhookSecret: "whsec_x", PricePro: "price_1", PriceAgency: "price_2"}
 	}
-	if _, ok := c.PriceForPlan("free"); ok {
-		t.Fatal("free has no price")
+	both := base()
+	both.PriceProAnnual, both.PriceAgencyAnnual = "price_3", "price_4"
+	if err := both.Validate(false); err != nil || !both.AnnualEnabled() {
+		t.Fatalf("both yearly prices: %v", err)
 	}
-	if _, ok := c.PriceForPlan("enterprise"); ok {
-		t.Fatal("unknown plan")
+	if base().AnnualEnabled() {
+		t.Fatal("yearly billing must be off without yearly prices")
 	}
-	for price, want := range map[string]string{"price_p": "pro", "price_a": "agency"} {
-		if got, ok := c.PlanForPrice(price); !ok || got != want {
-			t.Errorf("%s -> %s", price, got)
+	for name, mutate := range map[string]func(*Config){
+		"pro only":              func(c *Config) { c.PriceProAnnual = "price_3" },
+		"agency only":           func(c *Config) { c.PriceAgencyAnnual = "price_4" },
+		"bad prefix":            func(c *Config) { c.PriceProAnnual, c.PriceAgencyAnnual = "prod_3", "price_4" },
+		"yearly equals monthly": func(c *Config) { c.PriceProAnnual, c.PriceAgencyAnnual = "price_1", "price_4" },
+		"yearly prices equal":   func(c *Config) { c.PriceProAnnual, c.PriceAgencyAnnual = "price_3", "price_3" },
+	} {
+		c := base()
+		mutate(&c)
+		err := c.Validate(false)
+		if err == nil {
+			t.Errorf("%s: expected an error", name)
+			continue
+		}
+		if name == "pro only" && !strings.Contains(err.Error(), EnvPriceAgencyAnnual) {
+			t.Errorf("%s: the error should name the setting: %v", name, err)
 		}
 	}
-	if _, ok := c.PlanForPrice("price_other"); ok {
+}
+
+// The mismatch gauge is exported for every price key from startup (the alert rule needs it to exist), and metrics cannot import billing to ask.
+func TestEveryPriceKeyHasAGauge(t *testing.T) {
+	m := metrics.New()
+	mfs, err := m.Registry.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var have []string
+	for _, mf := range mfs {
+		if mf.GetName() == "hawkeye_billing_price_mismatch" {
+			for _, mm := range mf.GetMetric() {
+				have = append(have, mm.GetLabel()[0].GetValue())
+			}
+		}
+	}
+	for _, k := range PriceKeys() {
+		if !slices.Contains(have, k) {
+			t.Errorf("no hawkeye_billing_price_mismatch{plan=%q} at startup (have %v)", k, have)
+		}
+	}
+}
+
+func TestPriceMapping(t *testing.T) {
+	c := Config{PricePro: "price_p", PriceAgency: "price_a", PriceProAnnual: "price_py", PriceAgencyAnnual: "price_ay"}
+	if p, ok := c.PriceForPlan("pro", IntervalMonth); !ok || p != "price_p" {
+		t.Fatal("pro price")
+	}
+	if p, ok := c.PriceForPlan("agency", IntervalYear); !ok || p != "price_ay" {
+		t.Fatal("agency yearly price")
+	}
+	if _, ok := c.PriceForPlan("free", IntervalMonth); ok {
+		t.Fatal("free has no price")
+	}
+	if _, ok := c.PriceForPlan("enterprise", IntervalMonth); ok {
+		t.Fatal("unknown plan")
+	}
+	if _, ok := c.PriceForPlan("pro", "week"); ok {
+		t.Fatal("unknown interval")
+	}
+	if _, ok := (Config{PricePro: "price_p"}).PriceForPlan("pro", IntervalYear); ok {
+		t.Fatal("no yearly price configured")
+	}
+	for price, want := range map[string][2]string{
+		"price_p": {"pro", "month"}, "price_a": {"agency", "month"}, "price_py": {"pro", "year"}, "price_ay": {"agency", "year"},
+	} {
+		if code, interval, ok := c.PlanForPrice(price); !ok || code != want[0] || interval != want[1] {
+			t.Errorf("%s -> %s %s", price, code, interval)
+		}
+	}
+	if _, _, ok := c.PlanForPrice("price_other"); ok {
 		t.Fatal("unmapped price must not map")
 	}
-	if _, ok := (Config{}).PlanForPrice(""); ok {
+	if _, _, ok := (Config{}).PlanForPrice(""); ok {
 		t.Fatal("empty price must not map even when prices are unset")
 	}
 }

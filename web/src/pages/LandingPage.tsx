@@ -1,11 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { type Plan } from '../api'
+import { type BillingInterval, type Plan } from '../api'
 import { usePlans } from '../hooks'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { CookieSettingsButton } from '../components/CookieBanner'
-import { PlanDetails } from '../components/PlanDetails'
+import { IntervalToggle, PlanDetails } from '../components/PlanDetails'
 import { ProductShots } from '../components/ProductShots'
 import { Reveal } from '../components/Reveal'
 import { inScope, parallax, prefersReducedMotion, rotateScramble } from '../motion'
@@ -132,15 +132,17 @@ const FAQ = [
   { q: 'What happens if I downgrade?', a: 'Your existing monitors are never deleted automatically. You may not be able to add new ones until you are within the new plan’s limits, and history older than the new plan’s retention period is removed. Maintenance windows you already created keep working, but you cannot create new ones until you are on a paid plan. Domains beyond the new plan’s limit stay in your list but are no longer looked up.' },
 ]
 
-export function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: Plan; featured: boolean; billingEnabled: boolean; signedIn: boolean }) {
+export function PlanCard({ plan, featured, billingEnabled, signedIn, interval = 'month' }: {
+  plan: Plan; featured: boolean; billingEnabled: boolean; signedIn: boolean; interval?: BillingInterval
+}) {
   const card = (
     <div className={`plan${featured ? ' featured' : ''}`}>
       <h3>{plan.name}</h3>
-      <PlanDetails plan={plan} />
+      <PlanDetails plan={plan} interval={interval} />
       {plan.monthly_price_cents === 0 ? (
         <Link className="button primary" to="/register">Start free</Link>
       ) : billingEnabled ? (
-        <Link className="button primary" to={signedIn ? '/billing' : '/register'}>{signedIn ? `Choose ${plan.name}` : `Start free, upgrade to ${plan.name}`}</Link>
+        <Link className="button primary" to={signedIn ? (interval === 'year' ? '/billing?interval=year' : '/billing') : '/register'}>{signedIn ? `Choose ${plan.name}` : `Start free, upgrade to ${plan.name}`}</Link>
       ) : (
         <button disabled>Paid plans open soon</button>
       )}
@@ -152,7 +154,8 @@ export function PlanCard({ plan, featured, billingEnabled, signedIn }: { plan: P
 
 export function LandingPage() {
   const { status } = useAuth()
-  const { plans, billingEnabled } = usePlans()
+  const { plans, billingEnabled, annualEnabled } = usePlans()
+  const [period, setPeriod] = useState<BillingInterval>('month')
   const multiLocation = plans?.some((p) => (p.max_regions ?? 1) > 1) ?? false
   const multiSeat = plans?.some((p) => (p.max_team_members ?? 1) > 1) ?? false
   // What paid plans add over Free, in words with no numbers (the cards carry those). Keep it in step with PlanDetails when a plan feature is added.
@@ -322,10 +325,11 @@ export function LandingPage() {
           </div>
         )}
         {plans?.length === 0 && <p>Pricing is temporarily unavailable. You can still <Link to="/register">start for free</Link>.</p>}
+        {plans && plans.length > 0 && billingEnabled && annualEnabled && <IntervalToggle value={period} onChange={setPeriod} plans={plans} />}
         {plans && plans.length > 0 && (
           <Reveal as="ul" className="plans">
             {plans.map((p) => (
-              <PlanCard key={p.code} plan={p} featured={p.code === 'pro'} billingEnabled={billingEnabled} signedIn={signedIn} />
+              <PlanCard key={p.code} plan={p} featured={p.code === 'pro'} billingEnabled={billingEnabled} signedIn={signedIn} interval={period} />
             ))}
           </Reveal>
         )}

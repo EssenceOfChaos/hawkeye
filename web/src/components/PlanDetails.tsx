@@ -1,21 +1,60 @@
-import { type Plan } from '../api'
+import { type BillingInterval, type Plan } from '../api'
 import { formatMoney } from '../format'
 import { planTagline } from '../planCopy'
+
+/** Whole months a year paid at once saves against twelve monthly payments (2 for "two months free"); 0 when it saves nothing or is not sold yearly. */
+export function monthsFree(plan: Plan): number {
+  if (!plan.annual_price_cents || plan.monthly_price_cents <= 0) return 0
+  return Math.max(0, Math.round((plan.monthly_price_cents * 12 - plan.annual_price_cents) / plan.monthly_price_cents))
+}
+
+/**
+ * Monthly or yearly prices on the pricing cards. Only shown when the server offers yearly billing. The saving named on the yearly option is the
+ * smallest any paid plan gives, so it never promises more than every plan delivers.
+ */
+export function IntervalToggle({ value, onChange, plans }: { value: BillingInterval; onChange: (v: BillingInterval) => void; plans: Plan[] }) {
+  const savings = plans.filter((p) => p.monthly_price_cents > 0 && p.annual_price_cents != null).map(monthsFree)
+  const least = savings.length ? Math.min(...savings) : 0
+  return (
+    <div className="filters interval-toggle" role="radiogroup" aria-label="Billing period">
+      {(['month', 'year'] as const).map((v) => (
+        <label key={v} className={`chip${value === v ? ' selected' : ''}`}>
+          <input type="radio" name="billing-interval" value={v} checked={value === v} onChange={() => onChange(v)} />
+          {v === 'month' ? 'Monthly' : least > 0 ? `Yearly · ${least} month${least === 1 ? '' : 's'} free` : 'Yearly'}
+        </label>
+      ))}
+    </div>
+  )
+}
 
 /**
  * Everything on a pricing card below the plan's name: the tagline, the price and the feature list. The landing page, the monitoring landing page and the
  * billing page all render this, so a new plan feature is added in one place and the three can never disagree (PlanCardsInSync.test.tsx guards it).
  */
-export function PlanDetails({ plan }: { plan: Plan }) {
+export function PlanDetails({ plan, interval = 'month' }: { plan: Plan; interval?: BillingInterval }) {
   const mins = Math.round(plan.minimum_check_interval_seconds / 60)
   const tagline = planTagline(plan.code)
+  const yearly = interval === 'year' && plan.annual_price_cents != null && plan.monthly_price_cents > 0
+  const free = monthsFree(plan)
   return (
     <>
       {tagline && <p className="plan-tagline">{tagline}</p>}
-      <p className="price">
-        <strong>{formatMoney(plan.monthly_price_cents)}</strong>
-        {plan.monthly_price_cents > 0 && <span> / month</span>}
-      </p>
+      {yearly ? (
+        <>
+          <p className="price">
+            <strong>{formatMoney(plan.annual_price_cents!)}</strong>
+            <span> / year</span>
+          </p>
+          <p className="hint price-note">
+            {free > 0 ? `${free} month${free === 1 ? '' : 's'} free · ` : ''}billed once a year instead of {formatMoney(plan.monthly_price_cents)} a month
+          </p>
+        </>
+      ) : (
+        <p className="price">
+          <strong>{formatMoney(plan.monthly_price_cents)}</strong>
+          {plan.monthly_price_cents > 0 && <span> / month</span>}
+        </p>
+      )}
       <ul>
         <li>{plan.max_monitors} website monitors</li>
         <li>Checks every {mins} minute{mins === 1 ? '' : 's'}</li>

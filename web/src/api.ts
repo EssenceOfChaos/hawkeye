@@ -14,6 +14,8 @@ export interface Plan {
   code: string
   name: string
   monthly_price_cents: number
+  /** The price of a year paid at once; null when the plan is not sold yearly. */
+  annual_price_cents?: number | null
   max_monitors: number
   minimum_check_interval_seconds: number
   history_retention_days: number
@@ -299,8 +301,14 @@ export interface Incident {
   duration_seconds: number
 }
 
+export type BillingInterval = 'month' | 'year'
+
 export interface BillingSubscription {
   billing_enabled: boolean
+  /** Plans can also be bought for a year at a time. */
+  annual_billing_enabled?: boolean
+  /** How the current paid plan is billed; null while not paying. */
+  billing_interval?: BillingInterval | null
   plan: Plan
   status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'incomplete'
   paid_access: boolean

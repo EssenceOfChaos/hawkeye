@@ -34,39 +34,65 @@ func (s *Service) VerifyPrices(ctx context.Context) []PriceProblem {
 	}
 	var found []PriceProblem
 	for _, plan := range paidPlans {
-		priceID, ok := s.cfg.PriceForPlan(plan)
-		if !ok {
-			continue
-		}
-		var cents int64
-		if err := s.pool.QueryRow(ctx, `SELECT monthly_price_cents FROM plans WHERE code = $1`, plan).Scan(&cents); err != nil {
-			s.log.WarnContext(ctx, "price check skipped: cannot read the plan", "plan", plan, "error", err)
-			continue
-		}
-		got, err := s.provider.GetPrice(ctx, priceID)
-		if err != nil {
-			s.log.WarnContext(ctx, "price check skipped: cannot read the price from the payment provider", "plan", plan, "error", err)
-			continue
-		}
-		s.setPriceProblem(ctx, plan, mismatch(plan, cents, got))
-		if msg := s.priceProblem(plan); msg != "" {
-			found = append(found, PriceProblem{Plan: plan, Message: msg})
+		for _, interval := range []string{IntervalMonth, IntervalYear} {
+			priceID, ok := s.cfg.PriceForPlan(plan, interval)
+			if !ok {
+				continue
+			}
+			key := priceKey(plan, interval)
+			var cents *int64
+			col := map[string]string{IntervalMonth: "monthly_price_cents", IntervalYear: "annual_price_cents"}[interval]
+			if err := s.pool.QueryRow(ctx, `SELECT `+col+` FROM plans WHERE code = $1`, plan).Scan(&cents); err != nil {
+				s.log.WarnContext(ctx, "price check skipped: cannot read the plan", "plan", key, "error", err)
+				continue
+			}
+			got, err := s.provider.GetPrice(ctx, priceID)
+			if err != nil {
+				s.log.WarnContext(ctx, "price check skipped: cannot read the price from the payment provider", "plan", key, "error", err)
+				continue
+			}
+			s.setPriceProblem(ctx, key, mismatch(plan, interval, cents, got))
+			if msg := s.priceProblem(key); msg != "" {
+				found = append(found, PriceProblem{Plan: key, Message: msg})
+			}
 		}
 	}
 	return found
 }
 
-// mismatch returns why the provider price is not the advertised one, or "" when it is.
-func mismatch(plan string, advertisedCents int64, got PriceInfo) string {
+// priceKey names one plan and interval in price problems and the mismatch gauge: "pro" for monthly (as before yearly billing existed), "pro_annual"
+// for yearly.
+func priceKey(plan, interval string) string {
+	if interval == IntervalYear {
+		return plan + "_annual"
+	}
+	return plan
+}
+
+// PriceKeys lists every key priceKey can return, so the mismatch gauge can be exported before the first check.
+func PriceKeys() []string {
+	var out []string
+	for _, plan := range paidPlans {
+		out = append(out, priceKey(plan, IntervalMonth), priceKey(plan, IntervalYear))
+	}
+	return out
+}
+
+// mismatch returns why the provider price is not the advertised one, or "" when it is. advertisedCents is nil when the plans table does not
+// advertise the plan at that interval at all.
+func mismatch(plan, interval string, advertisedCents *int64, got PriceInfo) string {
+	period := map[string]string{IntervalMonth: "monthly", IntervalYear: "yearly"}[interval]
 	switch {
+	case advertisedCents == nil:
+		return fmt.Sprintf("a %s %s price is configured but the site does not advertise one (plans table)", period, plan)
 	case !got.Active:
-		return fmt.Sprintf("the %s price in Stripe is archived (inactive), so Checkout would refuse it", plan)
-	case !got.Recurring || got.Interval != "month" || got.IntervalCount != 1:
-		return fmt.Sprintf("the %s price in Stripe is not a monthly recurring price (it is %s)", plan, describeInterval(got))
+		return fmt.Sprintf("the %s %s price in Stripe is archived (inactive), so Checkout would refuse it", period, plan)
+	case !got.Recurring || got.Interval != interval || got.IntervalCount != 1:
+		return fmt.Sprintf("the %s %s price in Stripe is not a %s recurring price (it is %s)", period, plan, period, describeInterval(got))
 	case got.Currency != expectedCurrency:
-		return fmt.Sprintf("the %s price in Stripe is in %s but the site advertises US dollars", plan, got.Currency)
-	case got.UnitAmount != advertisedCents:
-		return fmt.Sprintf("the %s plan is advertised at %s a month but Stripe charges %s", plan, dollars(advertisedCents), dollars(got.UnitAmount))
+		return fmt.Sprintf("the %s %s price in Stripe is in %s but the site advertises US dollars", period, plan, got.Currency)
+	case got.UnitAmount != *advertisedCents:
+		return fmt.Sprintf("the %s plan is advertised at %s a %s but Stripe charges %s", plan, dollars(*advertisedCents), interval, dollars(got.UnitAmount))
 	}
 	return ""
 }
@@ -86,7 +112,8 @@ func (s *Service) priceProblem(plan string) string {
 	return s.priceProblems[plan]
 }
 
-// setPriceProblem records the latest verdict for a plan, and reports a problem to the error tracker once when it first appears (not every hour).
+// setPriceProblem records the latest verdict for a plan and interval (a priceKey), and reports a problem to the error tracker once when it first
+// appears (not every hour).
 func (s *Service) setPriceProblem(ctx context.Context, plan, msg string) {
 	s.priceMu.Lock()
 	if s.priceProblems == nil {

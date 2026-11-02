@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { Link } from 'react-router'
+import { type BillingInterval } from '../api'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { CookieSettingsButton } from '../components/CookieBanner'
+import { IntervalToggle } from '../components/PlanDetails'
 import { ProductShots } from '../components/ProductShots'
 import { Reveal } from '../components/Reveal'
 import { usePlans } from '../hooks'
@@ -25,7 +28,8 @@ const AUDIENCES = [
 
 export function MonitoringLandingPage() {
   const { status } = useAuth()
-  const { plans, billingEnabled } = usePlans()
+  const { plans, billingEnabled, annualEnabled } = usePlans()
+  const [period, setPeriod] = useState<BillingInterval>('month')
   const signedIn = status === 'authenticated'
   const multiLocation = plans?.some((p) => (p.max_regions ?? 1) > 1) ?? false
   const cta = signedIn ? 'Open dashboard' : 'Start Monitoring Free'
@@ -121,10 +125,11 @@ export function MonitoringLandingPage() {
           </div>
         )}
         {plans?.length === 0 && <p>Pricing is temporarily unavailable. You can still <Link to="/register">start for free</Link>.</p>}
+        {plans && plans.length > 0 && billingEnabled && annualEnabled && <IntervalToggle value={period} onChange={setPeriod} plans={plans} />}
         {plans && plans.length > 0 && (
           <Reveal as="ul" className="plans">
             {plans.map((p) => (
-              <PlanCard key={p.code} plan={p} featured={p.code === 'pro'} billingEnabled={billingEnabled} signedIn={signedIn} />
+              <PlanCard key={p.code} plan={p} featured={p.code === 'pro'} billingEnabled={billingEnabled} signedIn={signedIn} interval={period} />
             ))}
           </Reveal>
         )}

@@ -63,13 +63,13 @@ Use a Resend key restricted to **sending access** for the domain, and keep it on
 
 The public form at `/contact` emails `CONTACT_TO_ADDRESS` (production refuses the placeholder). Each message is tagged by topic (`[Billing or subscription] Charged twice (HK-7F3A2C)`), carries a priority, the sender's details and, if they were signed in, their account id and plan. **Reply-To is the visitor**, so replying from your mailbox answers them directly. The visitor also gets a short acknowledgement with the same reference.
 
-HawkEye only _sends_; receiving at `support@hawkeye.observer` and forwarding it to your own mailbox is done with Cloudflare Email Routing (free):
+HawkEye only _sends_; receiving at `customer_support@hawkeye.observer` and forwarding it to your own mailbox is done with Cloudflare Email Routing (free):
 
 1. Cloudflare dashboard → your domain → **Email → Email Routing**. Enable it and accept the MX/TXT records Cloudflare proposes for the root domain. These do not interfere with Resend, whose records are on the `mail.hawkeye.observer` subdomain.
-2. **Routes → Create address**: `support@hawkeye.observer` → destination `sendhere@example.com`. Cloudflare emails the destination a verification link; click it.
+2. **Routes → Create address**: `customer_support@hawkeye.observer` → destination `sendhere@example.com`. Cloudflare emails the destination a verification link; click it.
 3. Test: send a mail to the address from another account, then submit the form on the live site.
 
-Set `CONTACT_TO_ADDRESS=support@hawkeye.observer` in `.env.production`. (Messages are _sent_ from `alerts@mail.hawkeye.observer` through Resend; the support address only receives. If you ever need a subdomain inbox instead, Email Routing also supports subdomains, but then do not add Resend's "receiving" MX record for the same name.)
+Set `CONTACT_TO_ADDRESS=customer_support@hawkeye.observer` in `.env.production`. (Messages are _sent_ from `alerts@mail.hawkeye.observer` through Resend; the support address only receives. If you ever need a subdomain inbox instead, Email Routing also supports subdomains, but then do not add Resend's "receiving" MX record for the same name.)
 
 To _reply as_ the support address, add it in Gmail → Settings → Accounts → "Send mail as", with SMTP `smtp.resend.com`, port 587, user `resend`, password = a Resend key. Replies then come from the support address, not your personal one. Delivery problems with the form show in the API log as `contact form delivery failed`; the visitor sees an error and nothing is claimed as sent.
 

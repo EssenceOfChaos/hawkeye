@@ -132,6 +132,50 @@ func TestPlansEndpointReportsWhetherBillingIsAvailable(t *testing.T) {
 	}
 }
 
+func TestYearlyBillingOverHTTP(t *testing.T) {
+	yearly := billingCfg
+	yearly.PriceProAnnual, yearly.PriceAgencyAnnual = "price_pro_year", "price_agency_year"
+	e := newEnvOpts(t, 1000, envOpts{billingCfg: yearly, provider: &billing.FakeProvider{Subscriptions: map[string]billing.SubscriptionState{}}})
+	monthlyOnly := newBillingEnv(t)
+
+	r := e.newClient(t).call("GET", "/api/v1/plans", nil)
+	if r.Body["annual_billing_enabled"] != true {
+		t.Fatalf("annual_billing_enabled: %v", r.Body)
+	}
+	prices := map[string]any{}
+	for _, p := range r.Body["plans"].([]any) {
+		p := p.(map[string]any)
+		prices[p["code"].(string)] = p["annual_price_cents"]
+	}
+	if prices["pro"] != float64(19000) || prices["agency"] != float64(59000) || prices["free"] != nil {
+		t.Fatalf("advertised yearly prices: %v", prices)
+	}
+	if r := monthlyOnly.newClient(t).call("GET", "/api/v1/plans", nil); r.Body["annual_billing_enabled"] != false {
+		t.Fatalf("monthly-only server: %v", r.Body["annual_billing_enabled"])
+	}
+
+	c, _ := e.register(t, "yearly@example.com")
+	e.verify(t, c, "yearly@example.com")
+	if v := subView(t, c); v["annual_billing_enabled"] != true || v["billing_interval"] != nil {
+		t.Fatalf("subscription view: %v", v)
+	}
+	if r := c.call("POST", "/api/v1/billing/checkout-session", map[string]string{"plan": "agency", "interval": "year"}); r.Status != 200 {
+		t.Fatalf("yearly checkout: %d %v", r.Status, r.Body)
+	}
+	if r := c.call("POST", "/api/v1/billing/checkout-session", map[string]string{"plan": "pro", "interval": "fortnight"}); r.Status != 400 || errCode(r) != "VALIDATION_ERROR" {
+		t.Fatalf("bad interval: %d %v", r.Status, r.Body)
+	}
+	if len(e.fake.Checkouts) != 1 || e.fake.Checkouts[0].PriceID != "price_agency_year" {
+		t.Fatalf("checkouts: %+v", e.fake.Checkouts)
+	}
+
+	m, _ := monthlyOnly.register(t, "monthly@example.com")
+	monthlyOnly.verify(t, m, "monthly@example.com")
+	if r := m.call("POST", "/api/v1/billing/checkout-session", map[string]string{"plan": "pro", "interval": "year"}); r.Status != 400 || errCode(r) != "VALIDATION_ERROR" {
+		t.Fatalf("yearly checkout without yearly prices: %d %v", r.Status, r.Body)
+	}
+}
+
 func TestBillingEndpointsRequireOwnerAndVerifiedEmail(t *testing.T) {
 	e := newBillingEnv(t)
 	anon := e.newClient(t)

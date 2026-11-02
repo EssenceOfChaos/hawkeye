@@ -41,5 +41,7 @@ export function reportPurchaseIfPaid(sub: BillingSubscription) {
     s.removeItem(PENDING_KEY)
     return true
   }, false)
-  if (first) trackPurchase(sub.plan.monthly_price_cents / 100, sub.current_period_end)
+  // The value is what was actually paid: a year's price for a yearly subscription.
+  const cents = sub.billing_interval === 'year' && sub.plan.annual_price_cents != null ? sub.plan.annual_price_cents : sub.plan.monthly_price_cents
+  if (first) trackPurchase(cents / 100, sub.current_period_end)
 }

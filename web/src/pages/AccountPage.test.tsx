@@ -189,7 +189,7 @@ describe('legal pages', () => {
     expect(text).not.toMatch(/\[(INSERT|CONFIRM|IDENTIFY|LIST|ATTORNEY)/i)
     expect(text).not.toMatch(/PLACEHOLDER/)
     for (const days of ['7 days', '90 days', '365 days']) expect(text).toContain(days)
-    expect(screen.getAllByRole('link', { name: 'support@hawkeye.observer' })[0]).toHaveAttribute('href', 'mailto:support@hawkeye.observer')
+    expect(screen.getAllByRole('link', { name: 'customer_support@hawkeye.observer' })[0]).toHaveAttribute('href', 'mailto:customer_support@hawkeye.observer')
     expect(screen.getAllByRole('link', { name: 'Terms of service' }).length).toBeGreaterThan(0)
   })
 
@@ -213,6 +213,20 @@ describe('legal pages', () => {
     expect(text).toContain('Commonwealth of Pennsylvania')
   })
 
+  it('terms state the refund policy: monthly non-refundable, 14 days on a first annual purchase, 7 days after an annual renewal', () => {
+    const { container } = render(<MemoryRouter><TermsPage /></MemoryRouter>)
+    const text = (container.textContent ?? '').replace(/\s+/g, ' ')
+    expect(text).toMatch(/monthly subscriptions are billed in advance and are generally non-refundable/)
+    expect(text).toMatch(/full refund if they request cancellation within 14 calendar days of their initial annual purchase/)
+    expect(text).toMatch(/no prorated refunds will be provided for unused subscription time/)
+    expect(text).toMatch(/within seven calendar days of the renewal charge/)
+    expect(text).toMatch(/Nothing in this policy limits refund, cancellation, or other rights available under applicable law/)
+    expect(text).not.toMatch(/We do not currently offer annual plans/)
+    // Every support address on the page is the one that actually receives mail.
+    const addresses = new Set([...container.querySelectorAll('a[href^="mailto:"]')].map((a) => a.getAttribute('href')))
+    expect([...addresses]).toEqual(['mailto:customer_support@hawkeye.observer'])
+  })
+
   it('terms only promise what the product does today', () => {
     const { container } = render(<MemoryRouter><TermsPage /></MemoryRouter>)
     const text = container.textContent ?? ''
@@ -224,6 +238,6 @@ describe('legal pages', () => {
     expect(text).not.toMatch(/SMS alerts|priority support/i)
     // Reports are built, and the Terms describe them as they work: monthly, owners only, informational.
     for (const want of ['Monthly PDF uptime reports', 'put your own name and logo on them', 'not a guarantee, warranty, or certification', 'emailed only to the owners of your workspace']) expect(text).toContain(want)
-    expect(screen.getAllByRole('link', { name: 'support@hawkeye.observer' })[0]).toHaveAttribute('href', 'mailto:support@hawkeye.observer')
+    expect(screen.getAllByRole('link', { name: 'customer_support@hawkeye.observer' })[0]).toHaveAttribute('href', 'mailto:customer_support@hawkeye.observer')
   })
 })

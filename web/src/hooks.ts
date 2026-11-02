@@ -61,18 +61,20 @@ export function useApi<T>(path: string | null): State<T> {
 export function usePlans() {
   const [plans, setPlans] = useState<Plan[] | null>(null)
   const [billingEnabled, setBillingEnabled] = useState(false)
+  const [annualEnabled, setAnnualEnabled] = useState(false)
   useEffect(() => {
     let cancelled = false
-    api<{ plans: Plan[]; billing_enabled?: boolean }>('GET', '/plans')
+    api<{ plans: Plan[]; billing_enabled?: boolean; annual_billing_enabled?: boolean }>('GET', '/plans')
       .then((r) => {
         if (cancelled) return
         setPlans(r.plans)
         setBillingEnabled(Boolean(r.billing_enabled))
+        setAnnualEnabled(Boolean(r.annual_billing_enabled))
       })
       .catch(() => !cancelled && setPlans([]))
     return () => {
       cancelled = true
     }
   }, [])
-  return { plans, billingEnabled }
+  return { plans, billingEnabled, annualEnabled }
 }

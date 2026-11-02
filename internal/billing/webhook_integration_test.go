@@ -22,6 +22,7 @@ import (
 
 var cfg = billing.Config{
 	SecretKey: "sk_test_x", WebhookSecret: billingtest.Secret, PricePro: "price_pro", PriceAgency: "price_agency",
+	PriceProAnnual: "price_pro_year", PriceAgencyAnnual: "price_agency_year",
 	AppBaseURL: "https://app.example.test", MaxEventAttempts: 3,
 }
 
@@ -535,7 +536,7 @@ func TestCancellationDowngradePreservesMonitors(t *testing.T) {
 
 func TestCreateCheckoutUsesServerSidePriceAndOrganization(t *testing.T) {
 	e := newEnv(t)
-	url, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "agency")
+	url, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "agency", "")
 	if err != nil || url == "" {
 		t.Fatalf("%q %v", url, err)
 	}
@@ -555,7 +556,7 @@ func TestCreateCheckoutUsesServerSidePriceAndOrganization(t *testing.T) {
 		t.Fatal("creating a checkout session must not change the plan")
 	}
 	// An organization with a stored customer reuses it instead of creating a duplicate.
-	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro"); err != nil {
+	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro", ""); err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("checkout reused the stored customer: %v", e.fake.Checkouts[1].CustomerID)
@@ -565,7 +566,7 @@ func TestCreateCheckoutRejectsBadPlansAndExistingSubscribers(t *testing.T) {
 	e := newEnv(t)
 	for _, plan := range []string{"", "free", "enterprise", "price_pro", "../pro"} {
 		var ve *validation.Error
-		if _, err := e.svc.CreateCheckout(t.Context(), e.org, "a@b.co", plan); !errors.As(err, &ve) {
+		if _, err := e.svc.CreateCheckout(t.Context(), e.org, "a@b.co", plan, ""); !errors.As(err, &ve) {
 			t.Errorf("plan %q: want validation error, got %v", plan, err)
 		}
 	}
@@ -573,12 +574,12 @@ func TestCreateCheckoutRejectsBadPlansAndExistingSubscribers(t *testing.T) {
 		t.Fatal("no session should have been created")
 	}
 	e.deliver(t, billingtest.SubscriptionEvent("evt_1", "customer.subscription.created", at(0), e.sub("active", "price_pro")))
-	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "a@b.co", "agency"); !errors.Is(err, billing.ErrAlreadySubscribed) {
+	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "a@b.co", "agency", ""); !errors.Is(err, billing.ErrAlreadySubscribed) {
 		t.Fatalf("got %v", err)
 	}
 	// Past due still counts as subscribed (fix the payment in the portal instead of starting a second subscription).
 	e.deliver(t, billingtest.SubscriptionEvent("evt_2", "customer.subscription.updated", at(10), e.sub("past_due", "price_pro")))
-	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "a@b.co", "pro"); !errors.Is(err, billing.ErrAlreadySubscribed) {
+	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "a@b.co", "pro", ""); !errors.Is(err, billing.ErrAlreadySubscribed) {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -589,7 +590,7 @@ func TestBillingDisabledWithoutCredentials(t *testing.T) {
 	if off.Enabled() {
 		t.Fatal("must be disabled")
 	}
-	if _, err := off.CreateCheckout(t.Context(), e.org, "a@b.co", "pro"); !errors.Is(err, billing.ErrNotConfigured) {
+	if _, err := off.CreateCheckout(t.Context(), e.org, "a@b.co", "pro", ""); !errors.Is(err, billing.ErrNotConfigured) {
 		t.Fatal(err)
 	}
 	if _, err := off.CreatePortal(t.Context(), e.org); !errors.Is(err, billing.ErrNotConfigured) {
@@ -709,7 +710,7 @@ func TestCheckoutCreatesOneCustomerPerOrganizationEvenUnderRaces(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro"); err != nil {
+			if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro", ""); err != nil {
 				t.Error(err)
 			}
 		}()
@@ -728,7 +729,7 @@ func TestCheckoutCreatesOneCustomerPerOrganizationEvenUnderRaces(t *testing.T) {
 	}
 	// A later call creates nothing new.
 	before := len(e.fake.CustomersCreated)
-	e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "agency")
+	e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "agency", "")
 	if len(e.fake.CustomersCreated) != before {
 		t.Fatal("an existing customer must be reused")
 	}
@@ -736,7 +737,7 @@ func TestCheckoutCreatesOneCustomerPerOrganizationEvenUnderRaces(t *testing.T) {
 
 func TestSubscriptionsAreAttributedThroughTheStoredCustomerNotMetadata(t *testing.T) {
 	e := newEnv(t)
-	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro"); err != nil {
+	if _, err := e.svc.CreateCheckout(t.Context(), e.org, "owner@example.com", "pro", ""); err != nil {
 		t.Fatal(err)
 	}
 	var cust string

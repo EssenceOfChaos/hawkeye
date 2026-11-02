@@ -90,7 +90,8 @@ func (h *handlers) listPlans(c echo.Context) error {
 	for i := range list {
 		list[i].MaxRegions = min(list[i].MaxRegions, installed)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"plans": list, "billing_enabled": h.billing != nil && h.billing.Enabled()})
+	return c.JSON(http.StatusOK, map[string]any{"plans": list, "billing_enabled": h.billing != nil && h.billing.Enabled(),
+		"annual_billing_enabled": h.billing != nil && h.billing.AnnualEnabled()})
 }
 
 func (h *handlers) usage(c echo.Context) error {
