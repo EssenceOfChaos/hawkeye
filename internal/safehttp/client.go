@@ -29,7 +29,7 @@ type Resolver interface {
 // DialFunc opens a connection to an already-validated "ip:port" address.
 type DialFunc func(ctx context.Context, network, address string) (net.Conn, error)
 
-// Config customises the client. The zero value is the strict production policy; the hooks exist so
+// Config customizes the client. The zero value is the strict production policy; the hooks exist so
 // tests can use fake DNS and local servers while keeping every other control active.
 type Config struct {
 	Resolver     Resolver

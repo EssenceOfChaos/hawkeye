@@ -68,7 +68,7 @@ func TestFlappingNeverConfirmsOutage(t *testing.T) {
 	}
 }
 
-func TestThresholdsAreConfigurableAndSanitised(t *testing.T) {
+func TestThresholdsAreConfigurableAndSanitized(t *testing.T) {
 	s, ts := Apply(State{Status: StatusUp}, false, Thresholds{Failure: 1, Recovery: 1})
 	if s.Status != StatusDown || ts != WentDown {
 		t.Fatal("threshold 1 should confirm immediately")

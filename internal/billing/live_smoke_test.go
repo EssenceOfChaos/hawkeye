@@ -76,7 +76,7 @@ func TestLiveStripeSandboxSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create customer: %v", err)
 	}
-	// t.Context() is already cancelled when cleanups run, so use a fresh context or nothing would be deleted.
+	// t.Context() is already canceled when cleanups run, so use a fresh context or nothing would be deleted.
 	cleanupCtx := func() (context.Context, context.CancelFunc) {
 		return context.WithTimeout(context.Background(), 20*time.Second)
 	}
@@ -306,7 +306,7 @@ func TestLiveStripeLifecycleThroughOurWebhookPipeline(t *testing.T) {
 	t.Log("real deleted event applied: access ended, organization is back on the Free plan")
 }
 
-// TestLiveStripeDeletingACustomerCancelsItsSubscription verifies, against real Stripe, the behaviour account deletion relies on:
+// TestLiveStripeDeletingACustomerCancelsItsSubscription verifies, against real Stripe, the behavior account deletion relies on:
 // deleting a customer immediately cancels its subscriptions, and deleting it again is not an error.
 func TestLiveStripeDeletingACustomerCancelsItsSubscription(t *testing.T) {
 	key, price := os.Getenv("STRIPE_SECRET_KEY"), os.Getenv("STRIPE_PRICE_PRO_ID")
@@ -351,7 +351,7 @@ func TestLiveStripeDeletingACustomerCancelsItsSubscription(t *testing.T) {
 	deleted = true
 	st, err := p.GetSubscription(ctx, sub.ID)
 	if err != nil {
-		t.Fatalf("a cancelled subscription should still be retrievable: %v", err)
+		t.Fatalf("a canceled subscription should still be retrievable: %v", err)
 	}
 	if billing.MapStatus(st.Status) != "canceled" {
 		t.Fatalf("deleting the customer left the subscription %q: paying customers must not be left billed", st.Status)

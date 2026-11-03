@@ -24,6 +24,7 @@ import (
 	"hawkeye/internal/email"
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/healthcheck"
+	"hawkeye/internal/heartbeats"
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/logging"
@@ -115,6 +116,12 @@ func run() error {
 	if cfg.RunScheduler {
 		sched := scheduler.New(pool, scheduler.Config{Interval: cfg.SchedulerInterval, Batch: cfg.SchedulerBatch, MaxQueueDepth: cfg.QueueMaxDepth}, m, log).WithReporter(reporter).WithRegions(cfg.Regions())
 		spawn(func() { sched.Run(ctx) })
+	}
+	if cfg.RunScheduler {
+		// Heartbeat monitors whose job has not pinged in time. It runs wherever the scheduler does; several sweepers share the work safely.
+		store := checks.NewStore(pool, heartbeats.Thresholds, incidents.Engine{}).WithRegions(cfg.Regions())
+		sweeper := heartbeats.NewSweeper(pool, store, heartbeats.SweeperConfig{}, log).WithReporter(reporter)
+		spawn(func() { sweeper.Run(ctx) })
 	}
 	if cfg.RunRetention {
 		job := retention.New(pool, retention.Config{Interval: cfg.RetentionInterval, Batch: cfg.RetentionBatch, Pause: 50 * time.Millisecond}, m, log).WithReporter(reporter)

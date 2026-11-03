@@ -76,7 +76,7 @@ func RegisterPool(r *prometheus.Registry, pool *pgxpool.Pool) {
 		waiting:         d("constructing_connections", "Connections being established."),
 		acquireCount:    d("acquires_total", "Total connection acquisitions."),
 		emptyAcquire:    d("empty_acquires_total", "Acquisitions that had to wait because no idle connection existed (pool pressure)."),
-		canceledAcquire: d("canceled_acquires_total", "Acquisitions cancelled while waiting."),
+		canceledAcquire: d("canceled_acquires_total", "Acquisitions canceled while waiting."),
 		acquireS:        d("acquire_wait_seconds_total", "Total time spent waiting for a connection."),
 	})
 }

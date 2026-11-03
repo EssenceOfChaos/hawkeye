@@ -65,16 +65,18 @@ malformed ID gives 404) or, if absent, the organization the caller **owns** (the
 | `GET /plans` | public price list (active plans, cheapest first) |
 | `GET /usage` | `{usage: {plan, monitors_used, monitor_limit, over_limit, next_plan}}` |
 | `GET /monitors` | filters `status` (unknown/up/down), `enabled`, `q` (name/URL substring), `tag` (a tag id); pagination `limit` (1–100, default 25) and `offset`; returns `{monitors, total, limit, offset}`, newest first |
-| `POST /monitors` | `{name, url, method?, expected_status_code?, check_interval_seconds?, timeout_seconds?, headers?, body?, auth?, assertions?, slow_threshold_ms?, slow_checks?, tag_ids?}` → 201 |
+| `POST /monitors` | `{name, url, method?, expected_status_code?, check_interval_seconds?, timeout_seconds?, headers?, body?, auth?, assertions?, slow_threshold_ms?, slow_checks?, tag_ids?}` → 201. For a heartbeat (cron job) monitor: `{type: "heartbeat", name, check_interval_seconds?, grace_seconds?, tag_ids?, alert_delay_minutes?, quiet_hours?}`; see *Heartbeat monitors* |
 | `GET/PATCH/DELETE /monitors/:id` | PATCH is partial; `expected_status_code: null`, `body: null` and `slow_threshold_ms: null` clear them, `headers`, `assertions` and `tag_ids` replace the whole list. DELETE is a soft delete (204) and frees a plan slot |
 | `POST /monitors/:id/pause`, `/resume` | toggles `enabled`; allowed even when over the plan limit |
 | `POST /monitors/bulk` | `{monitor_ids, action, check_interval_seconds?, tag_ids?}` → `{updated}`. See *Tags and bulk actions* |
+| `GET /monitors/:id/pings` | heartbeats only: the latest pings, newest first (`?limit=` 1–100, default 50) → `{pings: [{id, received_at, kind, exit_status, method, source_ip, user_agent, body, ignored}]}`; 404 for a website monitor |
+| `POST /monitors/:id/ping-token` | heartbeats only: a new ping address → `{monitor}`; the old one stops working at once |
 | `GET /tags` | `{tags: [{id, name, color, monitor_count}]}`, sorted by name |
 | `POST /tags` | `{name, color?}` → 201 `{tag}` |
 | `PATCH /tags/:id` | `{name?, color?}`; `color: null` clears it |
 | `DELETE /tags/:id` | 204; the tag's monitors are kept |
 
-**Monitor fields.** Editable: `name` (1–100), `url`, `method` (`GET` default, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`), `expected_status_code`
+**Monitor fields.** `type` is `http` (a website or API, the default) or `heartbeat`, set on create and fixed after that. Editable: `name` (1–100), `url`, `method` (`GET` default, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`), `expected_status_code`
 (100–599 or null; null means any response below 400 is up), `check_interval_seconds` (60–86400, default = plan minimum),
 `timeout_seconds` (1–30, default 10), `slow_threshold_ms` (100–60000 and below the timeout, or null = off; see *Slow-response alerts*) and `slow_checks` (2–10, default 3), `tag_ids`, `alert_delay_minutes` (0–1440, default 0) and `quiet_hours` (`{start, end, timezone}` or null; see *Alert routing, alert delay and quiet hours*). Read-only and ignored if sent: `slow_since`, `current_status`, `consecutive_*`, `last_*`,
 `enabled` (use pause/resume), `organization_id`. `effective_check_interval_seconds` is what the scheduler will use: the stored
@@ -104,7 +106,7 @@ interval raised to the plan minimum, so a downgrade takes effect without rewriti
 Validation errors for list items name the item, for example `headers[0].name` or `assertions[2].path`.
 
 **URL rules.** `http`/`https` only, no credentials, ports 80/443 only, no `localhost`/`.local`/`.internal`/single-label hosts,
-no literal private/loopback/link-local/metadata IPs. This is early feedback only; the real SSRF defence (DNS resolution and
+no literal private/loopback/link-local/metadata IPs. This is early feedback only; the real SSRF defense (DNS resolution and
 dial-time validation) is in the checker (`internal/safehttp`). Editing the URL, method, headers, body or authentication resets health state to `unknown`.
 
 ### Tags and bulk actions
@@ -119,14 +121,14 @@ each monitor's tag names.
 `check_interval_seconds`), `add_tags` or `remove_tags` (with `tag_ids`), or `set_alert_timing` (with `alert_delay_minutes`, `quiet_hours`, or both: whichever is left out stays as it is on each monitor, and `quiet_hours: null` turns quiet hours off; validated like the single-monitor fields). It is **all or nothing**: if any listed monitor is missing, deleted or in
 another organization the result is 404 and nothing changes, and if the action is not allowed for any of them (an interval below the plan's minimum,
 403 `PLAN_LIMIT_REACHED`; below 5 minutes for a monitor using a state-changing method, or a monitor left with more than 10 tags, 400) nothing
-changes either. Repeated ids count once; `updated` is how many monitors were changed. The same rules as the single-monitor endpoints apply
+changes either. `set_interval` changes website monitors only: a heartbeat's period follows its job's schedule, so heartbeats in the selection keep theirs. Repeated ids count once; `updated` is how many monitors were changed. The same rules as the single-monitor endpoints apply
 (resume makes a monitor due at once; delete erases credentials, closes open incidents without alerts and frees plan slots).
 
 ## Team
 
 An owner can invite colleagues to the organization, up to the plan's seats (`max_team_members`: Free and Pro 1, Agency 5). An invitation is an emailed link, valid for 7 days, bound to one address. Whoever follows it signs in (or creates an account) with **that** address, which must be **verified**, and joins as a `member`. A member can see and manage monitors and incidents like any member; owner-only actions (billing, alert recipients, status page, maintenance, domains, branding, and the team itself) stay with the owner. An organization has exactly one owner, who cannot be removed and cannot leave.
 
-A pending invitation holds a seat, so an owner cannot send more invitations than there are seats. Accepting, cancelling or letting one expire frees or uses the seat. If the plan shrinks (a downgrade) after an invitation was sent, nobody new can join until there is room; existing members are never removed automatically.
+A pending invitation holds a seat, so an owner cannot send more invitations than there are seats. Accepting, canceling or letting one expire frees or uses the seat. If the plan shrinks (a downgrade) after an invitation was sent, nobody new can join until there is room; existing members are never removed automatically.
 
 | Method & path | Who | Notes |
 |---|---|---|
@@ -140,7 +142,7 @@ A pending invitation holds a seat, so an owner cannot send more invitations than
 
 **Roles.** Every organization has exactly **one owner** (a unique index enforces it); ownership changes only by transfer. Members see everything and may add or change monitors; billing, alert recipients, status pages, domains, maintenance windows and the team are the owner's. A member may turn off or remove **their own** alert address (`PATCH`/`DELETE /notification-settings/:id` on the entry linked to their account; any other entry is a 404 for them). When a member is removed or leaves, their linked alert address is deleted with the membership, so they stop receiving the organization's alerts.
 
-Only a SHA-256 hash of each link's token is stored. The link is the only thing that authorises a preview; accepting needs the token, a session, the matching address, and a verified address, so a leaked link is useless to anyone who does not own the mailbox.
+Only a SHA-256 hash of each link's token is stored. The link is the only thing that authorizes a preview; accepting needs the token, a session, the matching address, and a verified address, so a leaked link is useless to anyone who does not own the mailbox.
 
 ## Incidents
 
@@ -180,7 +182,7 @@ the retention cutoff. Every response echoes the effective window: `range: {from,
 > uptime % = successful checks ÷ completed checks × 100, over the window
 
 - It is *check-based*, not continuous: only completed checks are counted. Periods when a monitor was paused, or when a check was late, never ran or was
-  cancelled by a shutdown, produce no result and are therefore outside the denominator.
+  canceled by a shutdown, produce no result and are therefore outside the denominator.
 - The percentage is **truncated** to three decimals, never rounded up, so it reads 100 only when every completed check succeeded.
 - With fewer than 5 completed checks (`min_checks`), `uptime_percent` is `null` and `insufficient_data` is true.
 - Organization-wide figures use only live (non-deleted) monitors. A failed check of any kind counts as a failure, including `blocked` and `timeout`.
@@ -231,9 +233,9 @@ destination left with no tags receives nothing until it is changed.
 **Alert delay** (`alert_delay_minutes` on a monitor, 0–1440, default 0): an outage alert is sent only once the outage has lasted that long, counted from its
 first failed check. **Quiet hours** (`quiet_hours: {start: "HH:MM", end: "HH:MM", timezone}` or null; `end` before `start` crosses midnight; an IANA time
 zone; start and end must differ): every day in that window the monitor's outage, recovery, slow-response and certificate alerts are held and sent when it
-ends. Slow-response and certificate alerts ignore the delay. If the problem ends while its alert is still held, the alert is cancelled
+ends. Slow-response and certificate alerts ignore the delay. If the problem ends while its alert is still held, the alert is canceled
 (`status: skipped`, `suppressed: ended_while_held`) and that destination gets no "recovered" or "back to normal" either. An alert that was never held but is
-simply late (a stopped dispatcher) is never cancelled. Held alerts keep the schedule they were given; changing the settings affects later alerts only.
+simply late (a stopped dispatcher) is never canceled. Held alerts keep the schedule they were given; changing the settings affects later alerts only.
 
 ## Check locations
 
@@ -261,7 +263,7 @@ Public pages at `/status/<slug>`. An organization may have as many as its plan i
 | `DELETE /status-pages/:id/logo` | owner | → 200 `{status_page}`; allowed on every plan |
 | `GET /public/status/:slug/logo` | **no login** | A published page's logo, only while its plan includes branding (else 404, so drafts and logos kept after a downgrade reveal nothing). `Cache-Control: public, max-age=3600` (the public page links to it with `?v=<version>`), `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'` |
 
-**Branding.** `accent_color` is `#rrggbb` (stored lower-case) or `""`; the public header uses it as its background with black or white text, whichever reads better (always at least 4.5:1). `website_url` is an `https://` address (no credentials) or `""`, shown as "← Back to example.com". `hide_powered_by` removes "Powered by HawkEye". A logo, colour and link need `plans.status_page_branding` (Pro, Agency); hiding "Powered by" needs `plans.status_page_white_label` (Agency); otherwise 403 `PLAN_LIMIT_REACHED` with `limit_type` `status_page_branding` or `status_page_white_label`. Only a *change* is checked: clearing is always allowed, and values stored before a downgrade may be saved again unchanged (they are kept but not shown). The public view carries `branding: {logo_url?, accent_color?, website_url?, powered_by}` with only what the plan currently allows.
+**Branding.** `accent_color` is `#rrggbb` (stored lower-case) or `""`; the public header uses it as its background with black or white text, whichever reads better (always at least 4.5:1). `website_url` is an `https://` address (no credentials) or `""`, shown as "← Back to example.com". `hide_powered_by` removes "Powered by HawkEye". A logo, color and link need `plans.status_page_branding` (Pro, Agency); hiding "Powered by" needs `plans.status_page_white_label` (Agency); otherwise 403 `PLAN_LIMIT_REACHED` with `limit_type` `status_page_branding` or `status_page_white_label`. Only a *change* is checked: clearing is always allowed, and values stored before a downgrade may be saved again unchanged (they are kept but not shown). The public view carries `branding: {logo_url?, accent_color?, website_url?, powered_by}` with only what the plan currently allows.
 
 ## Maintenance windows
 
@@ -286,6 +288,40 @@ With `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET` set, the API learns the 
 
 Alerts to these chats are sent by the worker with the token from configuration, so rotating the token (`/revoke` in @BotFather) never touches stored destinations. A customer's own bot (`POST /notification-settings` with `bot_token`) is unaffected and always available.
 
+### Heartbeat monitors
+
+A heartbeat (`type: "heartbeat"`) monitors a cron job or scheduled task: HawkEye checks nothing, and the job requests its ping address each time it
+runs. Available on every plan; a heartbeat counts toward the monitor limit like any monitor. `check_interval_seconds` is the **period**, the expected
+time between pings (default 86400; from the plan's minimum interval up to 2592000, 30 days), and `grace_seconds` how late a ping may be before it
+counts as missed (60–604800, default 3600). `url` is `""`, and the website-only fields (`url`, `regions`, `slow_threshold_ms`, `headers`, `body`,
+`auth`, `assertions`, `expected_status_code`) must be left out (400 otherwise); `grace_seconds` on a website monitor is a 400 too. Heartbeats carry
+`heartbeat: {ping_token, grace_seconds, last_ping_at, due_by}` (null for website monitors).
+
+| Method & path | Who | Notes |
+|---|---|---|
+| `GET`, `HEAD` or `POST /ping/<token>` | **no login** (outside `/api`, no CSRF) | The job ran successfully. Plain-text `200 OK` |
+| `… /ping/<token>/fail` | no login | The job failed |
+| `… /ping/<token>/<0–255>` | no login | The job's exit status: 0 is success, anything else a failure. Other suffixes are 404 |
+
+The first 1,000 characters of a `POST` body (for example the end of the job's output) are kept with the ping, with the time, method, source IP and
+user agent; the last 100 pings per monitor are kept (`GET /monitors/:id/pings`). An unknown, malformed, rotated or deleted token is a plain-text 404.
+Limits are in memory per API process: about one ping a second per address (burst 30) and a generous per-IP budget; over them, 429 with `Retry-After`.
+
+**Timing.** A new heartbeat is `unknown` (waiting) with `due_by: null` until its first ping, and never alerts before then. Each ping sets
+`last_ping_at` and `due_by` = ping + period (raised to the plan minimum, as for checks) + grace. When `due_by` passes, the sweeper
+(`internal/heartbeats`, in the scheduler's worker) records a failed result (`error_category: "missed_ping"`, dated at the deadline) and the next
+deadline a period later. A failure ping records one with `error_category: "job_failed"`. Heartbeats confirm on the first result (no streak): a miss
+or a failure opens an incident at once (subject to the alert delay, quiet hours and maintenance windows, as for any monitor) and the next successful
+ping resolves it. Uptime is therefore the share of expected runs that pinged successfully. A paused heartbeat logs pings (`ignored: true`) but changes
+nothing; resuming it, or changing the period or grace time, restarts the deadline from now (resume) or from the last ping (edit).
+
+**HawkEye's own downtime is never the customer's missed run.** Every API process marks `ping_intake` every 15 s. While no process has marked it for
+90 s the sweeper decides nothing; when marking resumes after such a gap, the gap's end is recorded, and a heartbeat whose last ping is older than it
+gets a full period plus grace after the gap before it can be called missed, because its ping may have been sent while HawkEye could not receive it.
+
+Alerts for heartbeats say the job "did not check in on time" or "reported a failure" and "is checking in again"; webhook payloads carry
+`monitor.type` (`http` or `heartbeat`) and an empty `monitor.url` for heartbeats.
+
 ### Webhook and chat alerts
 
 Every enabled, verified destination receives outage, recovery, certificate-expiry and domain-expiry alerts through the same durable queue as email (retries with backoff, at-least-once). A 2xx is success; 408, 429, 5xx and network errors are retried; any other 4xx (for example 404/410 for a revoked URL) fails the delivery permanently. Requests go through the SSRF-safe client, so private addresses are refused.
@@ -294,7 +330,7 @@ Webhook requests are `POST` with `Content-Type: application/json` and these head
 
 ```json
 {"event": "outage", "sent_at": "2026-10-12T15:00:00Z", "url": "https://app.example.com/incidents",
- "monitor": {"id": "…", "name": "Site", "url": "https://example.com"},
+ "monitor": {"id": "…", "name": "Site", "type": "http", "url": "https://example.com"},
  "incident": {"started_at": "…", "resolved_at": null, "cause": "Received HTTP 503"}}
 ```
 

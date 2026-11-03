@@ -12,11 +12,11 @@ with ChatGPT and then cut out, cropped and resized outside the repository. **The
   `public/email/hawkeye-logo.png`. The art is glossy and shaded, so it is PNG only (it turns muddy if traced to SVG). Backgrounds were removed by flood fill from the edges,
   so white feathers inside the artwork survive.
 - **Feature and page icons** (`icon-websites`, `-email`, `-analytics`, `-history`, `-settings`, `-shield`, `-notifications`, `-ssl`, `-dashboard`, `-maintenance`, `-billing`, `-team`, `-status-page`, `-reports`, `-monitors`): glossy
-  gold-ringed navy round badges, 256x256, transparent background, each centred on its own bounding box so all read at the same size. The Billing, Team, Status page, Reports and Monitors badges (`-billing`, `-team`, `-status-page`, `-reports`, `-monitors`) came from larger originals: isolated specks outside the ring and pixels of alpha 12 or less were removed, then they were centred and resized to 256x256. Each app page heading has its own badge (Domains uses `-websites`, Account `-settings`). They were hand-cropped (an automatic
+  gold-ringed navy round badges, 256x256, transparent background, each centered on its own bounding box so all read at the same size. The Billing, Team, Status page, Reports and Monitors badges (`-billing`, `-team`, `-status-page`, `-reports`, `-monitors`) came from larger originals: isolated specks outside the ring and pixels of alpha 12 or less were removed, then they were centered and resized to 256x256. Each app page heading has its own badge (Domains uses `-websites`, Account `-settings`). They were hand-cropped (an automatic
   cut-out left a white halo outside the ring). Each badge carries its own navy, so it works on any background.
 - **Audience icons** (`audience-freelancer`, `-agency`, `-business`: one person, a group, a storefront): free-standing gold-edged navy glyphs, 256x256, transparent
-  background, trimmed to their outline and centred with a 6% margin so the three read at a similar size (about 70 KB each; the originals were about 1 MB). Near-transparent
-  pixels (alpha 12 or less) were removed: they show as coloured specks against pure black and as nothing on the page.
+  background, trimmed to their outline and centered with a 6% margin so the three read at a similar size (about 70 KB each; the originals were about 1 MB). Near-transparent
+  pixels (alpha 12 or less) were removed: they show as colored specks against pure black and as nothing on the page.
 - **`dashboard-laptop.webp`:** the hero laptop on the landing page, 1100px wide lossy WebP with alpha (145 KB). It is an illustration (alt text says so): its sidebar
   labels (Reports, Settings) and "Online" wording are not the app's exact ones.
 - **`monitoring-hawk-eye.webp`, `monitoring-earth-network.webp`:** the /monitoring page's background art (a gold hawk's eye on navy; the night Earth with connection arcs),
@@ -36,7 +36,7 @@ The old blue icons, `alert-bell.png`, `cloud-security.png`, `website-magnifier.p
 Every image's alt text says "sample data"; keep that if you change them.
 
 The in-app wordmark is HTML text with a
-gold "Eye". The brand blue is still the UI accent colour; gold appears in the logo, the app wordmark and the Pro plan's aura.
+gold "Eye". The brand blue is still the UI accent color; gold appears in the logo, the app wordmark and the Pro plan's aura.
 
 The rest of this file describes the earlier blue brand pack, whose icons (analytics, email, shield, etc.) are still used.
 
@@ -63,7 +63,7 @@ Not used: `10_speedometer_icon.png` (its artwork is cropped flat at the bottom),
 
 ## Cleanup
 
-Four crops contained fragments of neighbouring artwork (a blue circle beside the laptop, a laptop corner under the cloud server,
+Four crops contained fragments of neighboring artwork (a blue circle beside the laptop, a laptop corner under the cloud server,
 bell pieces beside the magnifier, a speck on the bell). were removed once, when the pack was first prepared (the script that did it is no longer kept).
 The laptop image is cut off at its right edge in the original; the landing page fades that edge with a CSS mask.
 

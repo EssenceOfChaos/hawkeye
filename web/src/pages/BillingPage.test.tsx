@@ -105,7 +105,7 @@ describe('BillingPage', () => {
     expect(redirectTo).toHaveBeenCalled()
   })
 
-  it('confirms before cancelling and says access continues', async () => {
+  it('confirms before canceling and says access continues', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     const posts = setup({ subscription: sub({ plan: pro, paid_access: true, can_manage: true, has_subscription: true, current_period_end: '2026-12-01T00:00:00Z' }) })
     const btn = await screen.findByRole('button', { name: 'Cancel subscription' })
@@ -159,7 +159,7 @@ describe('BillingPage', () => {
     expect(trackPurchase).not.toHaveBeenCalled()
   })
 
-  it('acknowledges a cancelled checkout', async () => {
+  it('acknowledges a canceled checkout', async () => {
     setup({ path: '/billing?checkout=canceled' })
     expect(await screen.findByText(/You haven’t been charged/)).toBeInTheDocument()
   })

@@ -49,7 +49,7 @@ func TestSubmitSendsTriagedMessageToSupportWithReplyTo(t *testing.T) {
 	}
 }
 
-func TestAnonymousSenderIsLabelled(t *testing.T) {
+func TestAnonymousSenderIsLabeled(t *testing.T) {
 	s, m := newSvc()
 	if _, err := s.Submit(context.Background(), valid()); err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestEmailMustBeABareAddress(t *testing.T) {
 	}
 }
 
-func TestHeaderInjectionIsNeutralised(t *testing.T) {
+func TestHeaderInjectionIsNeutralized(t *testing.T) {
 	s, m := newSvc()
 	in := valid()
 	in.Subject = "Hello\r\nBcc: evil@example.com"
@@ -124,7 +124,7 @@ func TestInvalidSubmissionSendsNothing(t *testing.T) {
 	}
 }
 
-func TestAcknowledgementGoesToTheSender(t *testing.T) {
+func TestAcknowledgmentGoesToTheSender(t *testing.T) {
 	s, m := newSvc()
 	s.Acknowledge(context.Background(), valid(), "HK-ABC123")
 	got := m.Messages()[0]
@@ -133,7 +133,7 @@ func TestAcknowledgementGoesToTheSender(t *testing.T) {
 	}
 }
 
-func TestAcknowledgementEchoesNothingTheVisitorWrote(t *testing.T) {
+func TestAcknowledgmentEchoesNothingTheVisitorWrote(t *testing.T) {
 	s, m := newSvc()
 	in := valid()
 	in.Name = "Your account is locked, visit https://evil.example now"
@@ -142,12 +142,12 @@ func TestAcknowledgementEchoesNothingTheVisitorWrote(t *testing.T) {
 	got := m.Messages()[0]
 	for _, bad := range []string{"evil.example", "account is locked", "Urgent"} {
 		if strings.Contains(got.Text, bad) || strings.Contains(got.HTML, bad) || strings.Contains(got.Subject, bad) {
-			t.Fatalf("visitor text %q reached the acknowledgement:\n%s", bad, got.Text)
+			t.Fatalf("visitor text %q reached the acknowledgment:\n%s", bad, got.Text)
 		}
 	}
 }
 
-func TestAcknowledgementRefusesAnAddressThatCouldInjectHeaders(t *testing.T) {
+func TestAcknowledgmentRefusesAnAddressThatCouldInjectHeaders(t *testing.T) {
 	s, m := newSvc()
 	in := valid()
 	in.Email = "ada@example.org\r\nBcc: evil@example.com"

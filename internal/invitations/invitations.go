@@ -99,7 +99,7 @@ func newToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// lockOrganization serialises changes to an organization's seats, so two owners' tabs cannot both take the last one.
+// lockOrganization serializes changes to an organization's seats, so two owners' tabs cannot both take the last one.
 func lockOrganization(ctx context.Context, tx pgx.Tx, orgID uuid.UUID) (name string, err error) {
 	err = tx.QueryRow(ctx, `SELECT name FROM organizations WHERE id = $1 FOR UPDATE`, orgID).Scan(&name)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -234,7 +234,7 @@ func (s *Service) Revoke(ctx context.Context, orgID, id uuid.UUID) error {
 }
 
 // Preview says which organization a link is for and which address it was sent to, so the person can sign in or register with the right one.
-// It changes nothing; holding the token is what authorises it.
+// It changes nothing; holding the token is what authorizes it.
 func (s *Service) Preview(ctx context.Context, token string) (Preview, error) {
 	var p Preview
 	err := s.pool.QueryRow(ctx, `SELECT o.name, i.email FROM organization_invitations i JOIN organizations o ON o.id = i.organization_id

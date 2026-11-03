@@ -220,7 +220,7 @@ func TestStripeProviderReadsAPriceAsTheSDKReportsIt(t *testing.T) {
 		t.Fatalf("a price lookup must be a plain GET: %+v", r)
 	}
 	once, err := p.GetPrice(t.Context(), "price_once")
-	if err != nil || once.Recurring || once.Active || once.Currency != "eur" { // currency is normalised to lower case
+	if err != nil || once.Recurring || once.Active || once.Currency != "eur" { // currency is normalized to lower case
 		t.Fatalf("%+v %v", once, err)
 	}
 	if _, err := p.GetPrice(t.Context(), "price_missing"); err == nil {

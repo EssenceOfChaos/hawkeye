@@ -218,7 +218,7 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, actor Actor, dest
 	var st Setting
 	var rawToken string
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		// Serialise per organization so the count check cannot be raced.
+		// Serialize per organization so the count check cannot be raced.
 		if _, err := tx.Exec(ctx, `SELECT 1 FROM organizations WHERE id = $1 FOR UPDATE`, orgID); err != nil {
 			return err
 		}

@@ -13,7 +13,7 @@ function stubMotion({ reduce }: { reduce: boolean }) {
 }
 
 describe('ProductShots', () => {
-  it('always shows the three screens, labelled as sample data, whatever the motion setting', () => {
+  it('always shows the three screens, labeled as sample data, whatever the motion setting', () => {
     const { container } = render(<ProductShots />)
     expect(screen.getByRole('heading', { name: 'See it in action.' })).toBeInTheDocument()
     expect(screen.getByText(/shown with sample data/)).toBeInTheDocument()

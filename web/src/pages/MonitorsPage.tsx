@@ -9,6 +9,7 @@ import { CertBadge } from '../components/Certificate'
 import { StatusBadge } from '../components/StatusBadge'
 import { TagList } from '../components/Tags'
 import { BulkAlertTiming, type AlertTimingChange } from '../components/AlertTiming'
+import { formatPeriod } from '../components/Heartbeat'
 
 const PAGE_SIZE = 25
 
@@ -84,7 +85,7 @@ export function BulkBar({ count, tags, minMinutes, onRun, onClear }: {
           <button type="button" disabled={!removeTag} onClick={() => onRun('remove_tags', { tag_ids: [removeTag] })}>Remove</button>
         </>
       )}
-      <input type="number" aria-label="Check every (minutes)" placeholder="min" min={minMinutes} max={1440} value={minutes}
+      <input type="number" aria-label="Check every (minutes)" title="Website monitors only: a heartbeat's period follows its job's schedule" placeholder="min" min={minMinutes} max={1440} value={minutes}
         onChange={(e) => setMinutes(e.target.value)} />
       <button type="button" disabled={minutes === ''} onClick={() => onRun('set_interval', { check_interval_seconds: Number(minutes) * 60 })}>
         Set interval
@@ -103,7 +104,7 @@ export function BulkBar({ count, tags, minMinutes, onRun, onClear }: {
   )
 }
 
-/** Rename, recolour and delete the organization's tags. */
+/** Rename, recolor and delete the organization's tags. */
 function TagManager({ tags, onChanged }: { tags: TagSummary[]; onChanged: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [name, setName] = useState('')
@@ -126,7 +127,7 @@ function TagManager({ tags, onChanged }: { tags: TagSummary[]; onChanged: () => 
       <ul>
         {tags.map((t) => (
           <li key={t.id}>
-            <input type="color" aria-label={`Colour of ${t.name}`} defaultValue={t.color ?? '#888888'}
+            <input type="color" aria-label={`Color of ${t.name}`} defaultValue={t.color ?? '#888888'}
               onBlur={(e) => {
                 const v = e.target.value
                 if (v !== (t.color ?? '#888888')) void run(() => api('PATCH', `/tags/${t.id}`, { color: v }))
@@ -139,7 +140,7 @@ function TagManager({ tags, onChanged }: { tags: TagSummary[]; onChanged: () => 
             <span className="hint">{plural(t.monitor_count)}</span>
             {t.color && (
               <button type="button" className="linklike" onClick={() => void run(() => api('PATCH', `/tags/${t.id}`, { color: null }))}>
-                Reset colour
+                Reset color
               </button>
             )}
             <span className="spacer" />
@@ -272,7 +273,10 @@ export function MonitorsPage() {
         <h1>Monitors</h1>
         <span className="spacer" />
         {canAdd ? (
-          <Link className="button" to="/monitors/new">Add monitor</Link>
+          <>
+            <Link className="button" to="/monitors/new">Add monitor</Link>
+            <Link to="/monitors/new?type=heartbeat">Monitor a cron job</Link>
+          </>
         ) : (
           <button disabled aria-describedby="limit-reason">Add monitor</button>
         )}
@@ -312,6 +316,7 @@ export function MonitorsPage() {
           <h2>Add your first website</h2>
           <p>Your watch starts here. HawkEye will check it regularly and alert you when an outage is confirmed.</p>
           <Link className="button" to="/monitors/new">Add your first website</Link>
+          <p className="hint">Or <Link to="/monitors/new?type=heartbeat">monitor a cron job or scheduled task</Link>: backups, reports, queue workers.</p>
         </section>
       )}
       {monitors?.length === 0 && filtered && <p>No monitors match these filters.</p>}
@@ -341,13 +346,15 @@ export function MonitorsPage() {
                   </td>
                   <td>
                     <Link to={`/monitors/${m.id}`}>{m.name}</Link>
-                    <div className="hint mono">{m.url}</div>
+                    {m.type === 'heartbeat' ? <div className="hint">Cron job heartbeat</div> : <div className="hint mono">{m.url}</div>}
                     <TagList tags={m.tags ?? []} />
                   </td>
                   <td><StatusBadge monitor={m} /></td>
                   <td><CertBadge monitor={m} /></td>
-                  <td>every {Math.round(m.effective_check_interval_seconds / 60)} min</td>
-                  <td>{m.last_checked_at ? new Date(m.last_checked_at).toLocaleString() : 'Not yet'}</td>
+                  <td>{m.type === 'heartbeat' ? `expected every ${formatPeriod(m.effective_check_interval_seconds)}` : `every ${Math.round(m.effective_check_interval_seconds / 60)} min`}</td>
+                  <td>{m.type === 'heartbeat' && m.heartbeat
+                    ? m.heartbeat.last_ping_at ? `pinged ${new Date(m.heartbeat.last_ping_at).toLocaleString()}` : 'No ping yet'
+                    : m.last_checked_at ? new Date(m.last_checked_at).toLocaleString() : 'Not yet'}</td>
                   <td className="actions">
                     <button onClick={() => void act(() => api('POST', `/monitors/${m.id}/${m.enabled ? 'pause' : 'resume'}`))}>
                       {m.enabled ? 'Pause' : 'Resume'}

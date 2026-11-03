@@ -34,7 +34,7 @@ func TestAnyoneCanContactSupport(t *testing.T) {
 		t.Fatalf("%d %v", r.Status, r.Body)
 	}
 	if e.mailsTo("support@test.example") != 1 || e.mailsTo("visitor@example.org") != 1 {
-		t.Fatalf("expected one message to support and one acknowledgement, got %d / %d", e.mailsTo("support@test.example"), e.mailsTo("visitor@example.org"))
+		t.Fatalf("expected one message to support and one acknowledgment, got %d / %d", e.mailsTo("support@test.example"), e.mailsTo("visitor@example.org"))
 	}
 	for _, m := range e.mail.Messages() {
 		if m.To == "support@test.example" && m.ReplyTo != "visitor@example.org" {
@@ -98,7 +98,7 @@ func TestContactIsRateLimitedPerIPAndAckPerAddress(t *testing.T) {
 	if ok != 5 || limited != 2 {
 		t.Fatalf("per-IP hourly cap of 5 not enforced: %v", codes)
 	}
-	// Support receives every accepted message, but the visitor's address gets at most its hourly budget of acknowledgements.
+	// Support receives every accepted message, but the visitor's address gets at most its hourly budget of acknowledgments.
 	if e.mailsTo("support@test.example") != 5 || e.mailsTo("visitor@example.org") != 2 {
 		t.Fatalf("support=%d acks=%d", e.mailsTo("support@test.example"), e.mailsTo("visitor@example.org"))
 	}

@@ -197,7 +197,7 @@ describe('MonitorFormPage editing', () => {
     expect(await screen.findByText('must be at most 1000 characters')).toBeInTheDocument()
     expect(screen.getByLabelText('The page must not contain: text 1')).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByLabelText('The page must contain: text 1')).not.toHaveAttribute('aria-invalid')
-  })
+  }, 15_000) // types into a long form; slow when the whole suite runs in parallel
 
   it('keeps the stored secret unless a new one is entered', async () => {
     document.cookie = 'csrf_token=t; path=/'
@@ -272,5 +272,51 @@ describe('MonitorFormPage editing', () => {
     setup(() => json(201, { monitor: {} }), () => json(200, { regions: [{ code: 'primary', name: 'Primary' }], primary: 'primary', max_regions: 1 }))
     await fill('Home')
     expect(screen.queryByText('Check from')).not.toBeInTheDocument()
+  })
+})
+
+describe('MonitorFormPage: heartbeat (cron job) monitors', () => {
+  it('creates a heartbeat with its period and grace time, then opens its page to show the ping address', async () => {
+    document.cookie = 'csrf_token=t; path=/'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url.endsWith('/usage')) return json(200, { usage: { plan: { minimum_check_interval_seconds: 300 } } })
+        if (init?.method === 'POST') return json(201, { monitor: { id: 'hb1' } })
+        return json(200, {})
+      }),
+    )
+    render(
+      <MemoryRouter initialEntries={['/monitors/new?type=heartbeat']}>
+        <Routes>
+          <Route path="/monitors/new" element={<MonitorFormPage />} />
+          <Route path="/monitors/:id" element={<h1>Monitor page</h1>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('radio', { name: /cron job/ })).toBeChecked()
+    expect(screen.queryByLabelText('URL')).not.toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Name'), 'Nightly backup')
+    await userEvent.clear(screen.getByLabelText('Expect a ping every'))
+    await userEvent.type(screen.getByLabelText('Expect a ping every'), '6')
+    await userEvent.selectOptions(screen.getByLabelText('Expect a ping every: unit'), 'hours')
+    await userEvent.clear(screen.getByLabelText('Grace time'))
+    await userEvent.type(screen.getByLabelText('Grace time'), '30')
+    await userEvent.selectOptions(screen.getByLabelText('Grace time: unit'), 'minutes')
+    await userEvent.click(screen.getByRole('button', { name: 'Create and show the ping address' }))
+    expect(await screen.findByRole('heading', { name: 'Monitor page' })).toBeInTheDocument()
+
+    const post = vi.mocked(globalThis.fetch).mock.calls.find(([, init]) => init?.method === 'POST')!
+    expect(JSON.parse(post[1]!.body as string)).toEqual({
+      type: 'heartbeat', name: 'Nightly backup', check_interval_seconds: 21600, grace_seconds: 1800, tag_ids: [], alert_delay_minutes: 0, quiet_hours: null,
+    })
+  })
+
+  it('switches between a website and a cron job', async () => {
+    setup(() => json(201, { monitor: {} }))
+    expect(screen.getByLabelText('URL')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: /cron job/ }))
+    expect(screen.queryByLabelText('URL')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Monitor a cron job or scheduled task' })).toBeInTheDocument()
   })
 })

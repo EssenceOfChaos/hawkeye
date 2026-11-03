@@ -1,5 +1,5 @@
 -- Maintenance windows: while one is active for a monitor, its checks still run and are recorded, but they do not
--- change its status, open or resolve incidents, send alerts, or count towards uptime.
+-- change its status, open or resolve incidents, send alerts, or count toward uptime.
 ALTER TABLE plans ADD COLUMN maintenance_enabled boolean NOT NULL DEFAULT false;
 UPDATE plans SET maintenance_enabled = true WHERE code IN ('pro', 'agency');
 

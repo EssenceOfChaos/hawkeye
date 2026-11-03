@@ -10,6 +10,7 @@ import { afterLoginPath } from './navigation'
 import { AcceptInvitePage, ConfirmAlertAddressPage, ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage, UnsubscribePage, VerifyEmailPage } from './pages/AuthPages'
 import { AccountPage } from './pages/AccountPage'
 import { ContactPage } from './pages/ContactPage'
+import { DocPage, DocsIndexPage } from './pages/docs/DocsPages'
 import { ReportsPage } from './pages/ReportsPage'
 import { BillingPage } from './pages/BillingPage'
 import { IncidentsPage } from './pages/IncidentsPage'
@@ -77,6 +78,10 @@ export function AppRoutes() {
       <Route path="/tools/ssl-certificate-checker" element={<SslCheckerPage />} />
       <Route path="/tools/uptime-sla-calculator" element={<UptimeSlaCalculatorPage />} />
       <Route path="/tools/downtime-cost-calculator" element={<DowntimeCostCalculatorPage />} />
+      <Route path="/docs" element={<DocsIndexPage />} />
+      <Route path="/docs/getting-started" element={<DocPage path="/docs/getting-started" />} />
+      <Route path="/docs/cron-job-monitoring" element={<DocPage path="/docs/cron-job-monitoring" />} />
+      <Route path="/docs/alerts" element={<DocPage path="/docs/alerts" />} />
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />

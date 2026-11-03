@@ -34,7 +34,7 @@ const (
 	Small = "small"
 )
 
-// States, which pick the icon and colours.
+// States, which pick the icon and colors.
 const (
 	StateUp      = "up"
 	StateDown    = "down"

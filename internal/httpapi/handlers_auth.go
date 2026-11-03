@@ -16,6 +16,7 @@ import (
 	"hawkeye/internal/branding"
 	"hawkeye/internal/contact"
 	"hawkeye/internal/domains"
+	"hawkeye/internal/heartbeats"
 	"hawkeye/internal/invitations"
 	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/maintenance"
@@ -43,6 +44,7 @@ type handlers struct {
 	domains       *domains.Service
 	statusPages   *statuspage.Service
 	badges        *badges.Service
+	heartbeats    *heartbeats.Service
 	regions       regions.Set
 	billing       *billing.Service
 	account       *account.Service
@@ -71,7 +73,7 @@ func bind(c echo.Context, dst any) error {
 	return nil
 }
 
-// mapError converts domain errors into API errors; anything unrecognised stays internal.
+// mapError converts domain errors into API errors; anything unrecognized stays internal.
 func mapError(err error) error {
 	var ve *validation.Error
 	var le *plans.LimitError

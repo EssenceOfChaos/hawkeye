@@ -164,7 +164,7 @@ func TestWhenBothFailTheHTTPSFailureIsReported(t *testing.T) {
 	}
 }
 
-func TestAnExplicitSchemeOrPortIsHonouredWithoutFallback(t *testing.T) {
+func TestAnExplicitSchemeOrPortIsHonoredWithoutFallback(t *testing.T) {
 	for in, want := range map[string]string{
 		"http://example.com":  "http://example.com/",
 		"https://example.com": "https://example.com/",
@@ -219,7 +219,7 @@ func TestInvalidInputNeverReachesTheChecker(t *testing.T) {
 	}
 }
 
-func TestBlockedAndCancelledAreErrorsNotVerdicts(t *testing.T) {
+func TestBlockedAndCanceledAreErrorsNotVerdicts(t *testing.T) {
 	f := &fakeChecker{answers: map[string]checks.Result{"https://example.com/": failed(checks.CatBlocked)}}
 	if _, err := svc(f).Inspect(context.Background(), "example.com"); !errors.Is(err, ErrBlocked) {
 		t.Errorf("err = %v", err)

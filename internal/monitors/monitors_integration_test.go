@@ -80,7 +80,7 @@ func TestConcurrentCreatesNeverExceedLimit(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			<-start // release all requests together to maximise contention
+			<-start // release all requests together to maximize contention
 			_, err := svc.Create(t.Context(), org, newIn("m"))
 			mu.Lock()
 			defer mu.Unlock()

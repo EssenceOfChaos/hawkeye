@@ -17,7 +17,7 @@ function renderNotFound(entries: string[], index?: number) {
 }
 
 describe('404 page', () => {
-  it('shows the approved copy with one heading and a labelled main landmark', () => {
+  it('shows the approved copy with one heading and a labeled main landmark', () => {
     renderNotFound(['/nope'])
     expect(screen.getByRole('heading', { level: 1, name: /Beyond our field of view\./ })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Error 404: page not found.')

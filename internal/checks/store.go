@@ -69,7 +69,18 @@ func (s *Store) WithRegions(r regions.Set) *Store {
 // row is locked, so concurrent results for one monitor are applied one at a time.
 func (s *Store) Record(ctx context.Context, monitorID uuid.UUID, r Result) (Outcome, error) {
 	var out Outcome
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) (err error) {
+		out, err = s.RecordTx(ctx, tx, monitorID, r)
+		return err
+	})
+	return out, err
+}
+
+// RecordTx is Record inside the caller's transaction, for callers that change the monitor row in the same transaction (heartbeat pings and missed
+// deadlines). ErrDiscarded leaves the transaction usable.
+func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r Result) (Outcome, error) {
+	var out Outcome
+	err := func() error {
 		var enabled, maintenance bool
 		var orgID uuid.UUID
 		var chosen []string
@@ -159,7 +170,7 @@ func (s *Store) Record(ctx context.Context, monitorID uuid.UUID, r Result) (Outc
 			return s.incidents.Resolved(ctx, tx, monitorID, out.After.Successes)
 		}
 		return nil
-	})
+	}()
 	return out, err
 }
 

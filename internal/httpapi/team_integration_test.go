@@ -55,7 +55,7 @@ func (e *env) invite(t *testing.T, owner *client, org, to string) string {
 	if r := owner.call("POST", "/api/v1/organizations/"+org+"/invitations", map[string]string{"email": to}); r.Status != 201 {
 		t.Fatalf("invite %s: %d %v", to, r.Status, r.Body)
 	}
-	return e.lastToken(t, strings.ToLower(to), "invited you") // the email goes to the normalised address
+	return e.lastToken(t, strings.ToLower(to), "invited you") // the email goes to the normalized address
 }
 
 // join registers (or signs in) the invitee, verifies the address and accepts the invitation.
@@ -72,7 +72,7 @@ func (e *env) join(t *testing.T, to, token string) (*client, string) {
 
 func TestOwnerInvitesAndInviteeJoinsAsMember(t *testing.T) {
 	e, owner, org := teamEnv(t)
-	token := e.invite(t, owner, org, "Colleague@Example.com") // the address is normalised
+	token := e.invite(t, owner, org, "Colleague@Example.com") // the address is normalized
 
 	// The email goes to that address and says who invited them and to what.
 	var found bool

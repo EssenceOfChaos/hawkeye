@@ -67,8 +67,8 @@ export function PlanDetails({ plan, interval = 'month' }: { plan: Plan; interval
         <li>Email, Slack, Teams, Discord, Telegram and webhook alerts</li>
         <li>{(plan.max_status_pages ?? 1) > 1 ? `${plan.max_status_pages} public status pages` : 'Public status page'}</li>
         {plan.status_page_white_label
-          ? <li>White-label status pages: your clients’ logos and colours, no HawkEye branding</li>
-          : plan.status_page_branding && <li>Status pages with your clients’ logos and colours</li>}
+          ? <li>White-label status pages: your clients’ logos and colors, no HawkEye branding</li>
+          : plan.status_page_branding && <li>Status pages with your clients’ logos and colors</li>}
         {plan.maintenance_enabled && <li>Maintenance windows</li>}
         {plan.reports_enabled && <li>Monthly PDF uptime reports</li>}
         {plan.branded_reports_enabled && <li>Branded Reports with name and logo</li>}

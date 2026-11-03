@@ -1,17 +1,18 @@
 # HawkEye
 
-> HawkEye is a website and API monitoring service. It checks your websites and APIs on a schedule, opens an incident only after consecutive failures, and alerts you by email, Slack, Microsoft Teams, Discord, Telegram or webhook. It also warns you before SSL certificates and domain registrations expire.
+> HawkEye is a website, API and cron job monitoring service. It checks your websites and APIs on a schedule, opens an incident only after consecutive failures, notices when a scheduled job stops pinging or reports a failure, and alerts you by email, Slack, Microsoft Teams, Discord, Telegram or webhook. It also warns you before SSL certificates and domain registrations expire.
 
 HawkEye is for freelancers, web agencies, small businesses and small development teams. There is a free plan (not a trial) and paid plans; the home page shows current prices and limits.
 
 ## What it does
 
 - Website and API monitoring: custom request methods, headers, bodies, Basic/bearer/API-key authentication, and checks of the status code and response content.
+- Cron job (heartbeat) monitoring, on every plan: a job requests its private ping address each time it runs; a late ping, a failure ping or a non-zero exit status opens an incident and alerts you.
 - Response-time tracking, uptime reports and incident history.
 - Keyword monitoring: alert when a page stops containing a phrase or starts showing one (with one-click checks for common failures such as a WordPress database error or a parked domain).
 - Embeddable uptime badges for a website or a GitHub README, opt-in per monitor.
 - Slow-response alerts: an alert when a site stays slower than a threshold you choose for several checks in a row, and another when it is back to normal.
-- Alerts by email, Slack, Microsoft Teams, Discord or Telegram, or signed JSON webhook.
+- Alerts by email, Slack, Microsoft Teams, Discord or Telegram, or signed JSON webhook, routed per client by tag, with optional alert delays and quiet hours per monitor.
 - Public status pages for your customers: one on the Free plan, several on paid plans (one per client or product).
 - Maintenance windows that pause alerts during planned work (paid plans).
 - SSL certificate expiry warnings 30, 14, 7 and 1 days before expiry, on every plan.
@@ -23,6 +24,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 - [Home, features and pricing](https://hawkeye.observer/)
 - [Sign up](https://hawkeye.observer/register)
 - [Free tools](https://hawkeye.observer/tools): [Is My Website Down?](https://hawkeye.observer/tools/is-website-down) (whether a public site answers, its status code and response time), [SSL Certificate Checker](https://hawkeye.observer/tools/ssl-certificate-checker) (certificate expiry, issuer and trust for any public domain), [Uptime SLA Calculator](https://hawkeye.observer/tools/uptime-sla-calculator) (allowed downtime for an uptime percentage) and [Downtime Cost Calculator](https://hawkeye.observer/tools/downtime-cost-calculator) (revenue at risk from an outage)
+- [Documentation](https://hawkeye.observer/docs): [Getting started](https://hawkeye.observer/docs/getting-started), [Heartbeat (cron job) monitoring](https://hawkeye.observer/docs/cron-job-monitoring) and [Alerts](https://hawkeye.observer/docs/alerts)
 - [Contact](https://hawkeye.observer/contact)
 - [Privacy Policy](https://hawkeye.observer/privacy)
 - [Terms and Conditions](https://hawkeye.observer/terms)

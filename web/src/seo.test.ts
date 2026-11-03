@@ -13,7 +13,7 @@ const shareImages = Object.keys(import.meta.glob('../public/share/*.jpg')).map((
 
 const appRoutes = [...app.matchAll(/<Route[^>]*\spath="([^"]+)"/g)].map((m) => m[1]).filter((p) => p !== '*')
 const caddyPattern = new RegExp(caddy.match(/@app path_regexp app (\S+)/)![1].replace('(?i)', ''), 'i')
-// A status page names itself (it has the organisation's title), so it is the one route that is not in the map.
+// A status page names itself (it has the organization's title), so it is the one route that is not in the map.
 const selfTitled = ['/status/:slug']
 
 describe('page map', () => {
@@ -38,7 +38,7 @@ describe('page map', () => {
     for (const p of PAGES.filter((p) => p.index)) {
       expect(disallowed.some((d) => p.path.startsWith(d)), `${p.path} is indexable but robots.txt blocks it`).toBe(false)
     }
-    expect(PAGES.filter((p) => p.index).map((p) => p.path)).toEqual(['/', '/tools', '/tools/is-website-down', '/tools/ssl-certificate-checker', '/tools/uptime-sla-calculator', '/tools/downtime-cost-calculator', '/contact', '/privacy', '/terms'])
+    expect(PAGES.filter((p) => p.index).map((p) => p.path)).toEqual(['/', '/tools', '/tools/is-website-down', '/tools/ssl-certificate-checker', '/tools/uptime-sla-calculator', '/tools/downtime-cost-calculator', '/docs', '/docs/getting-started', '/docs/cron-job-monitoring', '/docs/alerts', '/contact', '/privacy', '/terms'])
   })
 
   it('reaches every prerendered page through the web server (a page the Caddyfile calls unknown would 404)', () => {

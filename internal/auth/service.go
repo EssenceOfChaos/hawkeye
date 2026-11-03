@@ -66,7 +66,7 @@ type Service struct {
 	mail      email.Sender
 	log       *slog.Logger
 	cfg       Config
-	dummyHash string // verified when the account is unknown, to equalise login timing
+	dummyHash string // verified when the account is unknown, to equalize login timing
 }
 
 func NewService(pool *pgxpool.Pool, mail email.Sender, log *slog.Logger, cfg Config) (*Service, error) {

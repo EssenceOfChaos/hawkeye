@@ -11,11 +11,20 @@ const LOOK: Record<Kind, { text: string; tip: string; dot: string }> = {
   unknown: { text: 'Pending first check', tip: 'Active · Waiting for the first check', dot: 'd-status-neutral' },
 }
 
+/** A heartbeat (cron job) has no website to be online or offline: it is on time, or late or failing. */
+const HEARTBEAT: Partial<Record<Kind, { text: string; tip: string }>> = {
+  up: { text: 'On time', tip: 'Active · The job is pinging on schedule' },
+  down: { text: 'Failing', tip: 'Active · A ping was missed, or the job reported a failure' },
+  unknown: { text: 'Waiting for first ping', tip: 'Active · Add the ping to your job; no alerts until the first ping' },
+}
+
 /**
  * A daisyUI status dot (green = online, yellow = paused/inactive, red = offline and pulsing) with a hover tooltip.
- * The text beside the dot always carries the meaning, so colour and motion are never the only signal.
+ * The text beside the dot always carries the meaning, so color and motion are never the only signal.
  */
-export function StatusBadge({ monitor }: { monitor: Pick<Monitor, 'enabled' | 'current_status'> & { in_maintenance?: boolean; slow_since?: string | null } }) {
+export function StatusBadge({ monitor }: {
+  monitor: Pick<Monitor, 'enabled' | 'current_status'> & { in_maintenance?: boolean; slow_since?: string | null; type?: Monitor['type'] }
+}) {
   const kind: Kind = !monitor.enabled
     ? 'paused'
     : monitor.in_maintenance
@@ -23,7 +32,7 @@ export function StatusBadge({ monitor }: { monitor: Pick<Monitor, 'enabled' | 'c
       : monitor.current_status === 'up'
         ? monitor.slow_since ? 'slow' : 'up'
         : monitor.current_status === 'down' ? 'down' : 'unknown'
-  const look = LOOK[kind]
+  const look = { ...LOOK[kind], ...(monitor.type === 'heartbeat' ? HEARTBEAT[kind] : undefined) }
   return (
     <span className={`badge ${kind}`}>
       <span className="d-tooltip" data-tip={look.tip}>

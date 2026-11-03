@@ -229,7 +229,7 @@ func TestExpiredCredentialsAreTidied(t *testing.T) {
 	}
 }
 
-func TestCancelledPassStopsPromptly(t *testing.T) {
+func TestCanceledPassStopsPromptly(t *testing.T) {
 	e := newEnv(t)
 	m := e.monitor(t, e.org(t, "free", "active"))
 	e.results(t, m, 300, 30)
@@ -241,7 +241,7 @@ func TestCancelledPassStopsPromptly(t *testing.T) {
 	start := time.Now()
 	j.RunOnce(c2)
 	if time.Since(start) > 2*time.Second {
-		t.Fatal("cancellation not honoured")
+		t.Fatal("cancellation not honored")
 	}
 	if e.resultsOf(t, m) == 0 {
 		t.Fatal("the pass should have been interrupted before finishing")

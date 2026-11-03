@@ -8,7 +8,7 @@ import (
 
 const maxURLLen = 2048
 
-// NormalizeURL validates and canonicalises a monitor URL. It returns a human-readable reason on failure.
+// NormalizeURL validates and canonicalizes a monitor URL. It returns a human-readable reason on failure.
 //
 // This is input hygiene and early feedback only. It is NOT the SSRF control: hostnames are resolved
 // and every dialed address is validated by the safe HTTP transport at check time (Phase 4).

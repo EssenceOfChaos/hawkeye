@@ -16,7 +16,7 @@ const ssl = (n: number): SSLInfo => ({ expires_at: days(n), checked_at: NOW.toIS
 const https = 'https://example.com'
 
 describe('CertBadge', () => {
-  it('shows days left with a tone, and never colour alone', () => {
+  it('shows days left with a tone, and never color alone', () => {
     const { container, rerender } = render(<CertBadge monitor={{ url: https, ssl: ssl(45) }} />)
     expect(container).toHaveTextContent('45 days')
     expect(container.querySelector('.cert-ok')).toBeTruthy()

@@ -29,7 +29,7 @@ type Plan struct {
 	MaxRegions                  int       `json:"max_regions"`
 	MaxDomains                  int       `json:"max_domains"`
 	MaxStatusPages              int       `json:"max_status_pages"`
-	StatusPageBranding          bool      `json:"status_page_branding"`    // a logo, accent colour and website link on status pages
+	StatusPageBranding          bool      `json:"status_page_branding"`    // a logo, accent color and website link on status pages
 	StatusPageWhiteLabel        bool      `json:"status_page_white_label"` // hide "Powered by HawkEye" on status pages
 	Active                      bool      `json:"-"`
 }

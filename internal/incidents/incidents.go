@@ -62,7 +62,7 @@ func (Engine) CertificateExpiring(ctx context.Context, tx pgx.Tx, monitorID uuid
 }
 
 // Resolved closes the monitor's open incident, if any, and enqueues recovery notifications. An outage alert still held (alert delay or quiet hours)
-// is cancelled instead, and its destinations get no recovery alert. successes is the length of the current success streak; the incident ends at its
+// is canceled instead, and its destinations get no recovery alert. successes is the length of the current success streak; the incident ends at its
 // first check.
 func (Engine) Resolved(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, successes int) error {
 	var id, orgID uuid.UUID

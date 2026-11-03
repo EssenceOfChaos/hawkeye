@@ -63,17 +63,17 @@ export function usePlans() {
   const [billingEnabled, setBillingEnabled] = useState(false)
   const [annualEnabled, setAnnualEnabled] = useState(false)
   useEffect(() => {
-    let cancelled = false
+    let canceled = false
     api<{ plans: Plan[]; billing_enabled?: boolean; annual_billing_enabled?: boolean }>('GET', '/plans')
       .then((r) => {
-        if (cancelled) return
+        if (canceled) return
         setPlans(r.plans)
         setBillingEnabled(Boolean(r.billing_enabled))
         setAnnualEnabled(Boolean(r.annual_billing_enabled))
       })
-      .catch(() => !cancelled && setPlans([]))
+      .catch(() => !canceled && setPlans([]))
     return () => {
-      cancelled = true
+      canceled = true
     }
   }, [])
   return { plans, billingEnabled, annualEnabled }

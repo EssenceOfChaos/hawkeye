@@ -20,6 +20,7 @@ import (
 	"hawkeye/internal/contact"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/errtrack"
+	"hawkeye/internal/heartbeats"
 	"hawkeye/internal/invitations"
 	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/maintenance"
@@ -57,7 +58,8 @@ type Options struct {
 	Domains       *domains.Service
 	Regions       regions.Set
 	StatusPages   *statuspage.Service
-	Badges        *badges.Service // public uptime badges; nil turns them off
+	Badges        *badges.Service     // public uptime badges; nil turns them off
+	Heartbeats    *heartbeats.Service // heartbeat pings (/ping/<token>) and ping logs; nil turns them off
 	Billing       *billing.Service
 	Account       *account.Service
 	Contact       *contact.Service
@@ -176,11 +178,11 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies}
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
-		// session, and the unguessable token in the URL is the only thing that authorises it (and all it can do is unsubscribe).
+		// session, and the unguessable token in the URL is the only thing that authorizes it (and all it can do is unsubscribe).
 		Skipper:        func(c echo.Context) bool { return c.Path() == "/api/v1/lifecycle/unsubscribe" },
 		TokenLookup:    "header:X-CSRF-Token",
 		CookieName:     "csrf_token",
@@ -272,7 +274,29 @@ func registerAPI(e *echo.Echo, o Options) {
 			DenyHandler:         func(echo.Context, string, error) error { return errRateLimited },
 		}))
 	}
-	// Public contact form: per-IP burst and hourly caps, a spam trap, and per-address limits on the acknowledgement email.
+	if h.heartbeats != nil {
+		// Heartbeat pings come from customers' scheduled jobs, so like the badges they live at a short address outside /api, its CSRF check and its
+		// global limit. Many jobs may share one server (and one address), so the per-IP budget is generous; one ping address may not be hit more than
+		// about once a second, which no real schedule needs. Both are kept in memory so a ping never costs a rate-limiter query.
+		deny := func(c echo.Context, _ string, _ error) error {
+			c.Response().Header().Set("Retry-After", "10")
+			return c.String(http.StatusTooManyRequests, "Too many pings\n")
+		}
+		perIP := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+			Store:               middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(20), Burst: 600, ExpiresIn: time.Hour}),
+			IdentifierExtractor: func(c echo.Context) (string, error) { return c.RealIP(), nil },
+			DenyHandler:         deny,
+		})
+		perToken := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+			Store:               middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(1), Burst: 30, ExpiresIn: time.Hour}),
+			IdentifierExtractor: func(c echo.Context) (string, error) { return c.Param("token"), nil },
+			DenyHandler:         deny,
+		})
+		methods := []string{http.MethodGet, http.MethodHead, http.MethodPost}
+		e.Match(methods, "/ping/:token", h.ping, perIP, perToken)
+		e.Match(methods, "/ping/:token/:status", h.ping, perIP, perToken)
+	}
+	// Public contact form: per-IP burst and hourly caps, a spam trap, and per-address limits on the acknowledgment email.
 	contactLimits := []echo.MiddlewareFunc{limit("contact")}
 	if h.limits.l != nil {
 		contactLimits = append(contactLimits, h.limits.byIP("contact:hour", 5, time.Hour))
@@ -325,6 +349,10 @@ func registerAPI(e *echo.Echo, o Options) {
 	if h.badges != nil {
 		scoped.POST("/monitors/:monitorID/badge", h.enableBadge, requireOwner)
 		scoped.DELETE("/monitors/:monitorID/badge", h.disableBadge, requireOwner)
+	}
+	if h.heartbeats != nil {
+		scoped.GET("/monitors/:monitorID/pings", h.heartbeatPings)
+		scoped.POST("/monitors/:monitorID/ping-token", h.rotatePingToken)
 	}
 	scoped.GET("/monitors/:monitorID/incidents", h.listMonitorIncidents)
 	scoped.GET("/incidents", h.listIncidents)

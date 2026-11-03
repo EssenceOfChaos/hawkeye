@@ -115,7 +115,7 @@ this is not one, but mention it to counsel with the other open items (`docs/lega
 ## Tests
 
 `python3 -m unittest discover -s scripts -p 'test_*.py' -v` (runs in CI). They cover the fetch and validation against a fake Infisical, that what is written reads back
-identically in bash and in docker compose, the deploy script's behaviour in a throwaway git repository (including every rollback), the heartbeat and backup scripts, and the
+identically in bash and in docker compose, the deploy script's behavior in a throwaway git repository (including every rollback), the heartbeat and backup scripts, and the
 `credentials` command. The tests that need `flock` run on Linux only. **They cannot prove the real Infisical API answers as the fake does**: the one-time rehearsal in
 step 8 is that proof. If a call is rejected there, `scripts/fetch-secrets.py` prints the endpoint and status, and the two calls it makes (login, list secrets) are all that
 would need adjusting.

@@ -79,7 +79,7 @@ type Checker struct {
 func NewChecker(cfg safehttp.Config) *Checker { return &Checker{cfg: cfg, now: time.Now} }
 
 // Check performs a check. A check that fails because the target is down, slow or prohibited returns a
-// Result with Success=false. The error is non-nil only when ctx itself was cancelled, in which case the
+// Result with Success=false. The error is non-nil only when ctx itself was canceled, in which case the
 // check did not complete and must not be recorded.
 //
 // Success rule: with an expected status code, the final status (after redirects) must equal it;
@@ -272,7 +272,7 @@ func truncate(s string, n int) string {
 	return string(r[:n-1]) + "…"
 }
 
-// Classify maps a transport error to a stable category and a fixed, sanitised summary. Raw error
+// Classify maps a transport error to a stable category and a fixed, sanitized summary. Raw error
 // text is never stored because it can contain resolved internal addresses.
 func Classify(err error) (category, summary string) {
 	var (

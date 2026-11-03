@@ -1,10 +1,12 @@
 // Package monitors manages monitor definitions. Every query is scoped by organization ID, which
-// callers must have authorised; a monitor in another organization is indistinguishable from a missing one.
+// callers must have authorized; a monitor in another organization is indistinguishable from a missing one.
 package monitors
 
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,10 +40,23 @@ const (
 	MaxIntervalSeconds = 86400
 	MinIntervalSeconds = 60
 
+	// Heartbeat monitors: the expected time between pings (stored as the check interval, so the plan's minimum applies) and the grace time.
+	MaxPeriodSeconds     = 30 * 86400
+	DefaultPeriodSeconds = 86400
+	MinGraceSeconds      = 60
+	MaxGraceSeconds      = 7 * 86400
+	DefaultGraceSeconds  = 3600
+
 	MaxHeaders     = 20
 	MaxAssertions  = 10
 	MaxBodyBytes   = 64 << 10
 	maxSecretChars = 2048
+)
+
+// Monitor types. A website (HTTP) monitor is checked by HawkEye; a heartbeat monitor waits for the customer's job to ping it.
+const (
+	TypeHTTP      = "http"
+	TypeHeartbeat = "heartbeat"
 )
 
 // Methods lists the accepted request methods. Only some of them may carry a body.
@@ -75,6 +90,7 @@ var reservedHeaders = map[string]bool{
 type Monitor struct {
 	ID                   uuid.UUID `json:"id"`
 	OrganizationID       uuid.UUID `json:"organization_id"`
+	Type                 string    `json:"type"` // http or heartbeat; fixed when the monitor is created
 	Name                 string    `json:"name"`
 	URL                  string    `json:"url"`
 	Method               string    `json:"method"`
@@ -108,8 +124,20 @@ type Monitor struct {
 	// quiet hours (nil: none).
 	AlertDelayMinutes int         `json:"alert_delay_minutes"`
 	QuietHours        *QuietHours `json:"quiet_hours"`
-	CreatedAt         time.Time   `json:"created_at"`
-	UpdatedAt         time.Time   `json:"updated_at"`
+	// Heartbeat is set for heartbeat monitors only. For them check_interval_seconds is the expected time between pings, and URL and the request
+	// fields are unused.
+	Heartbeat *Heartbeat `json:"heartbeat"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+}
+
+// Heartbeat is the state of a heartbeat monitor. The job pings /ping/<PingToken> each time it runs; DueBy is when HawkEye will call the job missed
+// (the last ping, plus the period, plus the grace time), and is null until the first ping.
+type Heartbeat struct {
+	PingToken    string     `json:"ping_token"`
+	GraceSeconds int        `json:"grace_seconds"`
+	LastPingAt   *time.Time `json:"last_ping_at"`
+	DueBy        *time.Time `json:"due_by"`
 }
 
 // QuietHours is a daily window, in local time, during which a monitor's alerts are held until it ends. Start and End are "HH:MM"; a window whose end
@@ -202,6 +230,8 @@ func (n *Nullable[T]) UnmarshalJSON(b []byte) error {
 
 // Only client-editable fields exist here; state fields (status, counters, timestamps) cannot be set.
 type CreateInput struct {
+	Type                 string             `json:"type"` // http (the default) or heartbeat
+	GraceSeconds         *int               `json:"grace_seconds"`
 	Name                 string             `json:"name"`
 	URL                  string             `json:"url"`
 	Method               *string            `json:"method"`
@@ -237,6 +267,7 @@ type UpdateInput struct {
 	TagIDs               *[]uuid.UUID         `json:"tag_ids"` // replaces the monitor's tags
 	AlertDelayMinutes    *int                 `json:"alert_delay_minutes"`
 	QuietHours           Nullable[QuietHours] `json:"quiet_hours"` // null turns quiet hours off
+	GraceSeconds         *int                 `json:"grace_seconds"`
 }
 
 type ListFilter struct {
@@ -339,20 +370,25 @@ const cols = `id, organization_id, name, url, method, expected_status_code, chec
 	request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), auth_secret IS NOT NULL,
 	assertions, ssl_expires_at, ssl_checked_at, in_maintenance(organization_id, id, now()), regions,
 	slow_threshold_ms, slow_checks, (SELECT started_at FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'), badge_token, ` + tagsCol + `,
-	alert_delay_minutes, quiet_start, quiet_end, quiet_timezone`
+	alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, COALESCE(ping_token, ''), COALESCE(heartbeat_grace_seconds, 0), last_ping_at, ping_deadline`
 
 func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	var m Monitor
 	var sslExpires, sslChecked *time.Time
 	var quietStart, quietEnd *int
 	var quietTZ *string
+	var hb Heartbeat
 	err := row.Scan(&m.ID, &m.OrganizationID, &m.Name, &m.URL, &m.Method, &m.ExpectedStatusCode, &m.CheckIntervalSeconds,
 		&m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.LastCheckedAt, &m.LastSuccessAt, &m.ConsecutiveFailures,
 		&m.ConsecutiveSuccesses, &m.CreatedAt, &m.UpdatedAt, &m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username,
 		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked, &m.InMaintenance, &m.Regions,
-		&m.SlowThresholdMs, &m.SlowChecks, &m.SlowSince, &m.BadgeToken, &m.Tags, &m.AlertDelayMinutes, &quietStart, &quietEnd, &quietTZ)
+		&m.SlowThresholdMs, &m.SlowChecks, &m.SlowSince, &m.BadgeToken, &m.Tags, &m.AlertDelayMinutes, &quietStart, &quietEnd, &quietTZ,
+		&m.Type, &hb.PingToken, &hb.GraceSeconds, &hb.LastPingAt, &hb.DueBy)
 	if quietStart != nil && quietEnd != nil && quietTZ != nil {
 		m.QuietHours = &QuietHours{Start: formatClock(*quietStart), End: formatClock(*quietEnd), Timezone: *quietTZ}
+	}
+	if m.Type == TypeHeartbeat {
+		m.Heartbeat = &hb
 	}
 	m.EffectiveCheckIntervalSeconds = max(m.CheckIntervalSeconds, minInterval)
 	if sslExpires != nil {
@@ -365,8 +401,10 @@ func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	return m, err
 }
 
-// fields are the validated, normalised editable values of a monitor.
+// fields are the validated, normalized editable values of a monitor.
 type fields struct {
+	kind              string // TypeHTTP or TypeHeartbeat
+	grace             int    // heartbeats: seconds allowed after the period before a ping counts as missed
 	name, url, method string
 	expected          *int
 	interval, timeout int
@@ -553,6 +591,46 @@ func (f *fields) validate() error {
 	if n := utf8.RuneCountInString(f.name); n < 1 || n > 100 {
 		bad["name"] = "must be between 1 and 100 characters"
 	}
+	if f.alertDelay < 0 || f.alertDelay > MaxAlertDelayMinutes {
+		bad["alert_delay_minutes"] = fmt.Sprintf("must be between 0 and %d minutes", MaxAlertDelayMinutes)
+	}
+	f.quietStart, f.quietEnd, f.quietTZ = cleanQuiet(f.quiet, bad)
+	if f.kind == TypeHeartbeat {
+		f.validateHeartbeat(bad)
+	} else {
+		f.validateHTTP(bad)
+	}
+	if len(bad) > 0 {
+		return &validation.Error{Fields: bad}
+	}
+	return nil
+}
+
+// validateHeartbeat checks a heartbeat's period (the interval) and grace time. A heartbeat makes no request, so the website fields must be left out.
+func (f *fields) validateHeartbeat(bad map[string]string) {
+	if f.interval < MinIntervalSeconds || f.interval > MaxPeriodSeconds {
+		bad["check_interval_seconds"] = fmt.Sprintf("must be between %d seconds and %d days", MinIntervalSeconds, MaxPeriodSeconds/86400)
+	}
+	if f.grace < MinGraceSeconds || f.grace > MaxGraceSeconds {
+		bad["grace_seconds"] = fmt.Sprintf("must be between %d seconds and %d days", MinGraceSeconds, MaxGraceSeconds/86400)
+	}
+	notUsed := "is not used by heartbeat monitors"
+	if strings.TrimSpace(f.url) != "" {
+		bad["url"] = notUsed
+	}
+	if len(f.regions) > 0 {
+		bad["regions"] = notUsed
+	}
+	if f.slowThreshold != nil {
+		bad["slow_threshold_ms"] = notUsed
+	}
+	if len(f.headers) > 0 || f.body != nil && *f.body != "" || len(f.assertions) > 0 || f.auth.Type != checks.AuthNone || f.expected != nil {
+		bad["type"] = "heartbeat monitors make no request: leave out the headers, body, authentication, assertions and expected status"
+	}
+	f.url, f.method, f.headers, f.body, f.assertions, f.regions = "", "GET", []checks.Header{}, nil, []checks.Assertion{}, []string{}
+}
+
+func (f *fields) validateHTTP(bad map[string]string) {
 	if u, reason := NormalizeURL(f.url); reason != "" {
 		bad["url"] = reason
 	} else {
@@ -583,21 +661,13 @@ func (f *fields) validate() error {
 	if f.slowChecks < MinSlowChecks || f.slowChecks > MaxSlowChecks {
 		bad["slow_checks"] = fmt.Sprintf("must be between %d and %d", MinSlowChecks, MaxSlowChecks)
 	}
-	if f.alertDelay < 0 || f.alertDelay > MaxAlertDelayMinutes {
-		bad["alert_delay_minutes"] = fmt.Sprintf("must be between 0 and %d minutes", MaxAlertDelayMinutes)
-	}
-	f.quietStart, f.quietEnd, f.quietTZ = cleanQuiet(f.quiet, bad)
 	if IsWriteMethod(f.method) && f.interval < MinWriteIntervalSeconds {
 		bad["check_interval_seconds"] = fmt.Sprintf("must be at least %d minutes for %s, because the request is repeated on every check", MinWriteIntervalSeconds/60, f.method)
 	}
 	f.validateRequest(bad)
-	if len(bad) > 0 {
-		return &validation.Error{Fields: bad}
-	}
-	return nil
 }
 
-// lockOrg serialises monitor creation per organization so concurrent requests cannot both
+// lockOrg serializes monitor creation per organization so concurrent requests cannot both
 // pass the limit check.
 func lockOrg(ctx context.Context, tx pgx.Tx, orgID uuid.UUID) error {
 	var one int
@@ -634,8 +704,18 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		if err != nil {
 			return err
 		}
-		f := fields{name: in.Name, url: in.URL, method: "GET", expected: in.ExpectedStatusCode,
+		f := fields{kind: TypeHTTP, name: in.Name, url: in.URL, method: "GET", expected: in.ExpectedStatusCode,
 			interval: minInterval, timeout: DefaultTimeoutSeconds}
+		switch strings.TrimSpace(in.Type) {
+		case "", TypeHTTP:
+		case TypeHeartbeat:
+			f.kind, f.interval, f.grace = TypeHeartbeat, max(DefaultPeriodSeconds, minInterval), DefaultGraceSeconds
+			if in.GraceSeconds != nil {
+				f.grace = *in.GraceSeconds
+			}
+		default:
+			return validation.New("type", "must be http or heartbeat")
+		}
 		if in.Method != nil {
 			f.method = *in.Method
 		}
@@ -689,14 +769,19 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		if err != nil {
 			return fmt.Errorf("protect credentials: %w", err)
 		}
+		var pingToken, grace any // NULL for website monitors
+		if f.kind == TypeHeartbeat {
+			pingToken, grace = NewPingToken(), f.grace
+		}
 		out, err = scan(tx.QueryRow(ctx, `INSERT INTO monitors
 			(id, organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
 			 request_headers, request_body, auth_type, auth_username, auth_header_name, auth_secret, assertions, regions, slow_threshold_ms, slow_checks,
-			 alert_delay_minutes, quiet_start, quiet_end, quiet_timezone)
-			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16,$17,$18,$19,$20,$21,$22) RETURNING `+cols,
+			 alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, ping_token, heartbeat_grace_seconds, next_check_at)
+			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,
+				CASE WHEN $23 = 'heartbeat' THEN 'infinity'::timestamptz ELSE now() END) RETURNING `+cols,
 			orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout,
 			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, sealed, f.assertions, id, f.regions, f.slowThreshold, f.slowChecks,
-			f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ), minInterval)
+			f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, f.kind, pingToken, grace), minInterval)
 		if err != nil {
 			return err
 		}
@@ -790,7 +875,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		if err != nil {
 			return err
 		}
-		f := fields{name: cur.Name, url: cur.URL, method: cur.Method, expected: cur.ExpectedStatusCode,
+		f := fields{kind: cur.Type, name: cur.Name, url: cur.URL, method: cur.Method, expected: cur.ExpectedStatusCode,
 			interval: cur.CheckIntervalSeconds, timeout: cur.TimeoutSeconds, headers: slices.Clone(cur.Headers),
 			body: cur.Body, assertions: slices.Clone(cur.Assertions), regions: slices.Clone(cur.Regions),
 			slowThreshold: cur.SlowThresholdMs, slowChecks: cur.SlowChecks, alertDelay: cur.AlertDelayMinutes, quiet: cur.QuietHours,
@@ -839,6 +924,16 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		}
 		if in.QuietHours.Set {
 			f.quiet = in.QuietHours.Value
+		}
+		var grace any // NULL for website monitors
+		if cur.Heartbeat != nil {
+			f.grace = cur.Heartbeat.GraceSeconds
+			if in.GraceSeconds != nil {
+				f.grace = *in.GraceSeconds
+			}
+			grace = f.grace
+		} else if in.GraceSeconds != nil {
+			return validation.New("grace_seconds", "is only used by heartbeat monitors")
 		}
 		if err := f.validate(); err != nil {
 			return err
@@ -892,13 +987,15 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			auth_header_name=NULLIF($14,''),
 			auth_secret = CASE WHEN $12 = 'none' THEN NULL WHEN $15 THEN auth_secret ELSE NULLIF($16,'') END,
 			assertions=$17, regions=$19, slow_threshold_ms=$20, slow_checks=$21,
-			alert_delay_minutes=$22, quiet_start=$23, quiet_end=$24, quiet_timezone=$25,
+			alert_delay_minutes=$22, quiet_start=$23, quiet_end=$24, quiet_timezone=$25, heartbeat_grace_seconds=$26,
+			ping_deadline = CASE WHEN ping_deadline IS NOT NULL AND last_ping_at IS NOT NULL AND (check_interval_seconds <> $7 OR heartbeat_grace_seconds <> $26)
+				THEN last_ping_at + make_interval(secs => GREATEST($7::int, $27::int) + $26::int) ELSE ping_deadline END,
 			ssl_expires_at = CASE WHEN $18 THEN NULL ELSE ssl_expires_at END, ssl_checked_at = CASE WHEN $18 THEN NULL ELSE ssl_checked_at END,
 			ssl_notified_bucket = CASE WHEN $18 THEN NULL ELSE ssl_notified_bucket END, ssl_notified_for = CASE WHEN $18 THEN NULL ELSE ssl_notified_for END
 			WHERE id = $1 AND organization_id = $2 RETURNING `+cols,
 			id, orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout, reset,
 			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.keepSecret, sealed, f.assertions, f.url != cur.URL, f.regions,
-			f.slowThreshold, f.slowChecks, f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ), minInterval)
+			f.slowThreshold, f.slowChecks, f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, grace, minInterval), minInterval)
 		if err != nil {
 			return err
 		}
@@ -932,16 +1029,44 @@ func equalPtr[T comparable](a, b *T) bool {
 	return a == nil && b == nil || a != nil && b != nil && *a == *b
 }
 
+// resumeDeadline is the SET clause that restarts a heartbeat's clock when it is resumed ($3: the new enabled value, $4: the plan's minimum interval).
+// A heartbeat that has never been pinged keeps waiting for its first ping.
+const resumeDeadline = `ping_deadline = CASE WHEN $3 AND NOT enabled AND last_ping_at IS NOT NULL
+	THEN now() + make_interval(secs => GREATEST(check_interval_seconds, $4::int) + heartbeat_grace_seconds) ELSE ping_deadline END`
+
+// NewPingToken returns a new random heartbeat ping token (128 bits, URL-safe).
+func NewPingToken() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		panic(err) // the system CSPRNG failing is unrecoverable
+	}
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// RotatePingToken gives a heartbeat monitor a new ping address. The old one stops working at once, so the job must be updated to the new one.
+func (s *Service) RotatePingToken(ctx context.Context, orgID, id uuid.UUID) (Monitor, error) {
+	min, err := s.plans.GetMinimumCheckInterval(ctx, s.pool, orgID)
+	if err != nil {
+		return Monitor{}, err
+	}
+	m, err := scan(s.pool.QueryRow(ctx, `UPDATE monitors SET ping_token = $3
+		WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL AND kind = 'heartbeat' RETURNING `+cols, id, orgID, NewPingToken()), min)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Monitor{}, ErrNotFound
+	}
+	return m, err
+}
+
 // SetEnabled pauses or resumes a monitor.
 func (s *Service) SetEnabled(ctx context.Context, orgID, id uuid.UUID, enabled bool) (Monitor, error) {
 	min, err := s.plans.GetMinimumCheckInterval(ctx, s.pool, orgID)
 	if err != nil {
 		return Monitor{}, err
 	}
-	// Resuming makes the monitor due immediately instead of waiting out a stale schedule.
+	// Resuming makes the monitor due immediately instead of waiting out a stale schedule; a heartbeat gets a full period (and its grace time) to ping.
 	m, err := scan(s.pool.QueryRow(ctx, `UPDATE monitors SET enabled = $3,
-		next_check_at = CASE WHEN $3 AND NOT enabled THEN now() ELSE next_check_at END
-		WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL RETURNING `+cols, id, orgID, enabled), min)
+		next_check_at = CASE WHEN $3 AND NOT enabled AND kind = 'http' THEN now() ELSE next_check_at END, `+resumeDeadline+`
+		WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL RETURNING `+cols, id, orgID, enabled, min), min)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Monitor{}, ErrNotFound
 	}
@@ -965,10 +1090,10 @@ func (s *Service) Delete(ctx context.Context, orgID, id uuid.UUID) error {
 
 // deleteTx soft-deletes the listed monitors of the organization and returns how many it deleted.
 func deleteTx(ctx context.Context, tx pgx.Tx, orgID uuid.UUID, ids []uuid.UUID) (int64, error) {
-	// A deleted monitor keeps its history for a while, but never its credentials, headers, request body or tags.
+	// A deleted monitor keeps its history for a while, but never its credentials, headers, request body, tags or a working ping address.
 	tag, err := tx.Exec(ctx, `UPDATE monitors SET deleted_at = now(), enabled = false,
 		auth_type = 'none', auth_secret = NULL, auth_username = NULL, auth_header_name = NULL,
-		request_headers = '[]', request_body = NULL
+		request_headers = '[]', request_body = NULL, ping_token = NULL
 		WHERE id = ANY($1) AND organization_id = $2 AND deleted_at IS NULL`, ids, orgID)
 	if err != nil || tag.RowsAffected() == 0 {
 		return 0, err

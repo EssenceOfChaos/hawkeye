@@ -49,7 +49,7 @@ func (h *handlers) publicBadge(c echo.Context) error {
 		return err
 	}
 	hdr := c.Response().Header()
-	// Five minutes: fresh enough for a status badge, and image proxies such as GitHub's (camo) honour it.
+	// Five minutes: fresh enough for a status badge, and image proxies such as GitHub's (camo) honor it.
 	hdr.Set("Cache-Control", "public, max-age=300")
 	hdr.Set("X-Content-Type-Options", "nosniff")
 	hdr.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")

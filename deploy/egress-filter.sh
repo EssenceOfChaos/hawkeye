@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Egress firewall for the check workers (Linux hosts running Docker). DEFENCE IN DEPTH for SSRF: the application already refuses private
+# Egress firewall for the check workers (Linux hosts running Docker). DEFENSE IN DEPTH for SSRF: the application already refuses private
 # destinations (internal/safehttp), this makes the network refuse them too, so a bug in one layer is not a breach.
 #
 # What it enforces for containers on the worker network (default 172.30.10.0/24, see `checks` in docker-compose.prod.yml):

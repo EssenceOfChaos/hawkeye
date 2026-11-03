@@ -92,16 +92,16 @@ func TestAFreshVerdictIsReusedAndAStaleOneIsRefreshed(t *testing.T) {
 	}
 }
 
-func TestACancelledContextNeverClaimsAnImpairment(t *testing.T) {
+func TestACanceledContextNeverClaimsAnImpairment(t *testing.T) {
 	urls, _, _ := endpoints(t, 3, 204)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	c := newCanary(urls)
 	if c.Impaired(ctx) {
-		t.Fatal("a cancelled context must not be reported as a broken network")
+		t.Fatal("a canceled context must not be reported as a broken network")
 	}
 	if c.have {
-		t.Fatal("a cancelled round must not be remembered as a verdict")
+		t.Fatal("a canceled round must not be remembered as a verdict")
 	}
 }
 

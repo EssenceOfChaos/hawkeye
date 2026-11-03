@@ -149,7 +149,7 @@ func TestCertificateWarningEmailIsDeliveredAndBranded(t *testing.T) {
 		}
 	}
 	if !strings.Contains(m.HTML, "#ff8a80") {
-		t.Error("a warning inside 7 days should use the alert colour")
+		t.Error("a warning inside 7 days should use the alert color")
 	}
 	if n := e.count(t, `SELECT count(*) FROM notification_deliveries WHERE event_type='ssl_expiry' AND status='sent'`); n != 1 {
 		t.Fatalf("delivery not marked sent (%d)", n)

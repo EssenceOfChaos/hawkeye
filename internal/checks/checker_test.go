@@ -187,7 +187,7 @@ func TestProhibitedDestinationsUnderProductionPolicy(t *testing.T) {
 	}
 }
 
-func TestCancelledCheckIsNotARecordableResult(t *testing.T) {
+func TestCanceledCheckIsNotARecordableResult(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
 	defer srv.Close()
 	ctx, cancel := context.WithCancel(t.Context())

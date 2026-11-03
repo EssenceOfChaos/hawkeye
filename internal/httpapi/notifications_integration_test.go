@@ -514,7 +514,7 @@ func TestStatusPageBrandingOverHTTP(t *testing.T) {
 	cfg := map[string]any{"slug": "client-a", "title": "Client A", "published": true, "monitors": []map[string]any{{"monitor_id": id}}}
 	page := "/api/v1/status-pages/" + owner.call("POST", "/api/v1/status-pages", cfg).Body["status_page"].(map[string]any)["id"].(string)
 
-	// Free: no logo, no colour.
+	// Free: no logo, no color.
 	if status, _, _ := owner.raw("PUT", page+"/logo", logoPNG(t, 60, 20), map[string]string{"Content-Type": "image/png"}); status != 403 {
 		t.Fatalf("Free uploads no page logo: %d", status)
 	}

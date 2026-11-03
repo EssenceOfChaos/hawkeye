@@ -22,11 +22,14 @@ import (
 	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/branding"
+	"hawkeye/internal/checks"
 	"hawkeye/internal/contact"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/email"
 	"hawkeye/internal/errtrack"
+	"hawkeye/internal/heartbeats"
 	"hawkeye/internal/httpapi"
+	"hawkeye/internal/incidents"
 	"hawkeye/internal/invitations"
 	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/maintenance"
@@ -89,6 +92,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 		Domains:       domains.NewService(pool, planSvc),
 		StatusPages:   statuspage.NewService(pool, planSvc),
 		Badges:        badges.NewService(pool),
+		Heartbeats:    heartbeats.NewService(pool, checks.NewStore(pool, heartbeats.Thresholds, incidents.Engine{})),
 		Billing:       billing.NewService(pool, o.provider, o.billingCfg, metrics.New(), log),
 		Account:       account.NewService(pool, svc, o.provider, mail, log, "https://app.example.com"),
 		Contact:       contact.NewService(mail, log, "support@test.example", "alerts@test.example", "https://app.example.com"),

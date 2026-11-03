@@ -157,7 +157,7 @@ describe('AccountPage', () => {
     await userEvent.type(screen.getByLabelText('Type me@example.com to confirm'), 'me@example.com')
     const btn = screen.getByRole('button', { name: 'Delete my account' })
     await userEvent.click(btn)
-    expect(posts).toHaveLength(0) // cancelled at the confirm dialog
+    expect(posts).toHaveLength(0) // canceled at the confirm dialog
     await userEvent.click(btn)
     expect(confirm).toHaveBeenCalledTimes(2)
     expect(posts[0]).toEqual({ url: '/api/v1/account/delete', body: { password: 'my-password-123', confirm_email: 'me@example.com' } })
@@ -174,9 +174,9 @@ describe('AccountPage', () => {
     expect(screen.queryByRole('heading', { name: 'Home page' })).not.toBeInTheDocument()
   })
 
-  it('warns that a paid subscription is cancelled immediately without refund', async () => {
+  it('warns that a paid subscription is canceled immediately without refund', async () => {
     setup()
-    expect(await screen.findByText(/cancelled immediately and is not refunded/)).toBeInTheDocument()
+    expect(await screen.findByText(/canceled immediately and is not refunded/)).toBeInTheDocument()
   })
 })
 

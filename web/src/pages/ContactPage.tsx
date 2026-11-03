@@ -35,12 +35,12 @@ export function ContactPage() {
   const [reference, setReference] = useState<string | null>(null)
 
   useEffect(() => {
-    let cancelled = false
+    let canceled = false
     api<{ categories: Category[] }>('GET', '/contact/categories')
-      .then((r) => !cancelled && setCategories(r.categories))
-      .catch(() => !cancelled && setLoadFailed(true))
+      .then((r) => !canceled && setCategories(r.categories))
+      .catch(() => !canceled && setLoadFailed(true))
     return () => {
-      cancelled = true
+      canceled = true
     }
   }, [])
 

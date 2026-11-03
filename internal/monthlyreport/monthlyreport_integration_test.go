@@ -186,7 +186,7 @@ func TestEachOwnerGetsOneEmailWithAPDFPerWebsiteThatHadChecks(t *testing.T) {
 			}
 		}
 		if !strings.Contains(m.Text, "Client A") || !strings.Contains(m.Text, "Client B") || strings.Contains(m.Text, "Paused all month") {
-			t.Fatalf("the email should summarise each attached site:\n%s", m.Text)
+			t.Fatalf("the email should summarize each attached site:\n%s", m.Text)
 		}
 		if err := email.ValidateAttachments(m.Attachments); err != nil {
 			t.Fatalf("the sender would refuse this email: %v", err)

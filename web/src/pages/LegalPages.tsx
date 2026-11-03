@@ -28,7 +28,7 @@ const SUPPORT = 'customer_support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 2, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 3, 2026</p>
       <p>
         HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -56,7 +56,7 @@ export function PrivacyPage() {
         <li>Alert destinations you add: email addresses you ask us to notify and their confirmation status, Slack, Discord, Microsoft Teams or webhook URLs, and Telegram bot tokens and chat IDs. We store those URLs, tokens and any webhook signing secret encrypted, and show you only the host name (or, for Telegram, the chat ID) afterwards. If you connect a Telegram chat through our bot, we store that chat’s ID and its name (for a private chat, the person’s Telegram username or first name) so we can deliver alerts there and show you which chat it is.</li>
         <li>If you use PDF reports on the Agency plan: the name and logo image you add to put on them. We check the image and store a cleaned copy, and print it on your reports.</li>
         <li>If you join a team and choose to receive its alerts: your email address is added to that team’s alert recipients, and its owner can see it. It is removed when you leave the team or are removed from it, and you can turn it off or remove it yourself at any time.</li>
-        <li>If you brand a status page: the logo image, accent colour and website address you add to it. We check the image and store a cleaned copy, and show these on that page while it is published.</li>
+        <li>If you brand a status page: the logo image, accent color and website address you add to it. We check the image and store a cleaned copy, and show these on that page while it is published.</li>
         <li>Communications you send to us. If you use our contact form we receive the name, email address, subject, message, and optional website address you enter and, if you are signed in, your account identifier and plan.</li>
       </ul>
       <p>
@@ -70,6 +70,7 @@ export function PrivacyPage() {
         <li>Monitor name and URL, and your monitoring settings (such as check interval and accepted status codes).</li>
         <li>For API checks, the request you configure: the request method, custom headers, a request body, authentication credentials (a username and password, a bearer token, or an API key), and the response checks you define.</li>
         <li>For each check: the time, the HTTP status code, the response time, whether your response checks passed, and a short error category if it failed. To evaluate response checks we read the response (up to the first 1 MB) while the check runs; we do not store its content.</li>
+        <li>For heartbeat (cron job) monitors, each ping your job sends to its private ping address: the time, the request method, the IP address and user agent it came from, whether it reported success or failure (and any exit status), and the first 1,000 characters of anything your job sends with it. We keep the last 100 pings of each heartbeat monitor, show them only to your organization, and delete them with the monitor. Do not send passwords or other secrets in a ping.</li>
         <li>Incident and recovery records, alert settings, and records of the notifications we sent.</li>
         <li>Maintenance windows you schedule: their names, times, repeat settings, and the monitors they cover. Checks made during a window are recorded and marked as such.</li>
         <li>For HTTPS monitors, the expiry date of the SSL certificate your website presents, and when we last read it. We do not store the certificate itself or any other detail from it.</li>
@@ -85,7 +86,7 @@ export function PrivacyPage() {
 
       <h3>Information you choose to publish</h3>
       <p>
-        If you create a public status page, anyone who has its address can see the page title and description you enter, any logo, accent colour and website link you add to it, the names you give the monitors you add to it, each one’s current state (up, down, or under maintenance),
+        If you create a public status page, anyone who has its address can see the page title and description you enter, any logo, accent color and website link you add to it, the names you give the monitors you add to it, each one’s current state (up, down, or under maintenance),
         daily and overall uptime percentages, and the start and end times of recent incidents. We do not show monitored web addresses, error messages, or the causes of incidents on the page. The page is not visible until you
         publish it, and you can unpublish or delete it at any time. Likewise, if you turn on a public uptime badge for a monitor, anyone with the badge’s address can see that monitor’s uptime percentage, the period it covers and whether it is currently up, but never its name or web address; turning the badge off makes its address stop working. Do not put personal or confidential information in the title, description, or monitor names. Public status pages may be cached by us for a short time (under a minute)
         and, once published, may be copied or indexed by others, which we cannot control.
@@ -247,7 +248,7 @@ export function PrivacyPage() {
       </ul>
       <p>
         <strong>Closing your account.</strong> You can delete your account at any time under <Link to="/account">Account</Link>. Deletion is immediate: your account, your workspaces and monitoring history, your alert destinations (including stored Slack and webhook addresses), maintenance windows and
-        status page are removed, and your subscription is cancelled and your Stripe customer record deleted. You can download your data first using the export on the same page. If you own a workspace that has other members, you must remove them or
+        status page are removed, and your subscription is canceled and your Stripe customer record deleted. You can download your data first using the export on the same page. If you own a workspace that has other members, you must remove them or
         transfer it before you can delete your account.
       </p>
       <p>
@@ -462,7 +463,7 @@ export function TermsPage() {
       </p>
       <p>
         On plans with more than one seat, the owner can invite colleagues by email. People you invite can see and change your workspace’s monitors and see its incidents and uptime data; only the owner manages
-        billing, alert recipients, the status page, and the team itself. You are responsible for whom you invite and for what they do in your workspace, and you can remove anyone at any time. An invitation holds a seat until it is accepted or cancelled.
+        billing, alert recipients, the status page, and the team itself. You are responsible for whom you invite and for what they do in your workspace, and you can remove anyone at any time. An invitation holds a seat until it is accepted or canceled.
         If you move to a plan with fewer seats, existing members keep their access, but you cannot invite anyone new until there is room.
       </p>
       <p>

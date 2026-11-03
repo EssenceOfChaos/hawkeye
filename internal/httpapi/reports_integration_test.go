@@ -55,7 +55,7 @@ func TestMonitorUptimeEndpoint(t *testing.T) {
 	}
 }
 
-func TestFreePlanRangeIsClampedAndLabelled(t *testing.T) {
+func TestFreePlanRangeIsClampedAndLabeled(t *testing.T) {
 	e := newEnv(t, 1000)
 	c, _ := e.register(t, "f@example.com")
 	m := newMonitorID(t, c, "Site")

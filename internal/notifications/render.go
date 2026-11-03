@@ -15,6 +15,7 @@ type Alert struct {
 	MonitorID   string // for links to the monitor page
 	MonitorName string
 	MonitorURL  string
+	MonitorType string // http or heartbeat; empty is treated as http
 	Cause       string
 	StartedAt   time.Time
 	ResolvedAt  *time.Time
@@ -38,6 +39,24 @@ type Alert struct {
 	// Slow-response alerts (EventSlow, EventSlowRecovery): the threshold and the slowest response seen. StartedAt and ResolvedAt are the slowdown's.
 	SlowThresholdMs int
 	SlowPeakMs      int
+}
+
+// IsHeartbeat reports whether the alert is about a heartbeat (cron job) monitor, which has no website to name.
+func (a Alert) IsHeartbeat() bool { return a.MonitorType == "heartbeat" }
+
+func (a Alert) monitorType() string {
+	if a.IsHeartbeat() {
+		return "heartbeat"
+	}
+	return "http"
+}
+
+// heartbeatProblem completes "<job> …" for an outage alert from the result that opened it: a missed ping or a failure the job reported itself.
+func heartbeatProblem(cause string) string {
+	if strings.HasPrefix(cause, "The job ") {
+		return "reported a failure"
+	}
+	return "did not check in on time"
 }
 
 // clean removes control characters (so values cannot inject email headers or fake lines) and bounds the length.
@@ -84,6 +103,9 @@ func Render(a Alert) email.Message {
 	if a.Event == EventSlow || a.Event == EventSlowRecovery {
 		return renderSlow(a, name, url)
 	}
+	if a.IsHeartbeat() {
+		return renderHeartbeat(a, name)
+	}
 	started := a.StartedAt.UTC().Format("2006-01-02 15:04 UTC")
 	c := email.Content{
 		ButtonLabel: "View incidents", ButtonURL: a.AppBaseURL + "/incidents", AppBaseURL: a.AppBaseURL,
@@ -122,6 +144,47 @@ func Render(a Alert) email.Message {
 	return c.Message(a.From, a.To, subject)
 }
 
+// renderHeartbeat is the outage and recovery alert of a heartbeat (cron job) monitor: the job stopped checking in, or said it failed.
+func renderHeartbeat(a Alert, name string) email.Message {
+	started := a.StartedAt.UTC().Format("2006-01-02 15:04 UTC")
+	c := email.Content{
+		ButtonLabel: "View the ping log", ButtonURL: a.AppBaseURL + "/monitors/" + a.MonitorID, AppBaseURL: a.AppBaseURL,
+		Note: "Manage who receives alerts: " + a.AppBaseURL + "/notifications",
+	}
+	var subject string
+	if a.Event == EventRecovery {
+		subject = "HawkEye recovery: " + name + " is checking in again"
+		c.Tone = email.ToneSuccess
+		c.Preheader = name + " is checking in again."
+		c.Heading = name + " is checking in again"
+		c.Paragraphs = []string{"Good news. HawkEye has received a successful ping from " + name + ", so the incident is resolved."}
+		c.Facts = []email.Fact{{Label: "Problem began", Value: started}}
+		if a.ResolvedAt != nil {
+			c.Facts = append(c.Facts,
+				email.Fact{Label: "Successful ping", Value: a.ResolvedAt.UTC().Format("2006-01-02 15:04 UTC")},
+				email.Fact{Label: "Incident duration", Value: Duration(a.ResolvedAt.Sub(a.StartedAt))})
+		}
+		return c.Message(a.From, a.To, subject)
+	}
+	problem := heartbeatProblem(a.Cause)
+	subject = "HawkEye alert: " + name + " " + problem
+	c.Tone = email.ToneAlert
+	c.Heading = name + " " + problem
+	c.Preheader = c.Heading + "."
+	if problem == "reported a failure" {
+		c.Paragraphs = []string{"The scheduled job " + name + " told HawkEye that its last run failed."}
+	} else {
+		c.Paragraphs = []string{"HawkEye expected a ping from the scheduled job " + name + " and none arrived in time, including the grace time. The job may not have run, may have failed before pinging, or may be unable to reach HawkEye."}
+	}
+	c.Paragraphs = append(c.Paragraphs, "Check the job's logs and the ping log in HawkEye. You will get one more message when the job pings successfully again.")
+	c.Facts = []email.Fact{{Label: "Detected at", Value: started}}
+	if a.Cause != "" {
+		c.Facts = append(c.Facts, email.Fact{Label: "Latest result", Value: clean(a.Cause)})
+	}
+	c.Facts = append(c.Facts, email.Fact{Label: "Incident status", Value: "Open"})
+	return c.Message(a.From, a.To, subject)
+}
+
 // renderTest is the email sent by "Send test" on the alert recipients page. It must be unmistakably a test, never something that looks like an outage:
 // no monitor, no red, and it says outright that nothing is wrong.
 func renderTest(a Alert) email.Message {
@@ -157,7 +220,7 @@ func Milliseconds(ms int) string {
 }
 
 // renderSlow is the slow-response alert and its "back to normal" follow-up. Slowness is a warning, not an outage, so the alert is in the brand
-// colour rather than red, and it says plainly that the website is still online.
+// color rather than red, and it says plainly that the website is still online.
 func renderSlow(a Alert, name, url string) email.Message {
 	threshold, since := Milliseconds(a.SlowThresholdMs), a.StartedAt.UTC().Format("2006-01-02 15:04 UTC")
 	c := email.Content{

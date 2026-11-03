@@ -60,7 +60,7 @@ func TestWhatEachPlanMayBrand(t *testing.T) {
 	pro := newEnv(t, "pro")
 	c := pro.page(t, branded)
 	if c.AccentColor != "#1a73e8" || c.WebsiteURL != "https://acme.example.com" {
-		t.Fatalf("Pro brands a page (colour stored lower-case): %+v", c)
+		t.Fatalf("Pro brands a page (color stored lower-case): %+v", c)
 	}
 	c.HidePoweredBy = true
 	if _, err := pro.svc.Update(t.Context(), pro.org, c.ID, *c); limitKind(err) != plans.LimitWhiteLabel {
@@ -108,7 +108,7 @@ func TestBrandingIsKeptButHiddenAfterADowngrade(t *testing.T) {
 	}
 	cur.AccentColor = "#445566"
 	if _, err := e.svc.Update(t.Context(), e.org, c.ID, *cur); limitKind(err) != plans.LimitPageBranding {
-		t.Fatalf("a new colour needs the plan again: %v", err)
+		t.Fatalf("a new color needs the plan again: %v", err)
 	}
 	cur.AccentColor, cur.WebsiteURL, cur.HidePoweredBy = "", "", false
 	if _, err := e.svc.Update(t.Context(), e.org, c.ID, *cur); err != nil {

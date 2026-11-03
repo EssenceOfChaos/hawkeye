@@ -4,7 +4,7 @@
  *  - Tailwind generates CSS only for classes found in the @source files below (source(none) + one @source), so the bundle stays small,
  *  - Tailwind's preflight reset is NOT imported, so the rest of the app is unaffected,
  *  - the app's own unlayered CSS always wins over these layered rules.
- * Colours come from the theme on the nearest [data-theme] element (the landing page sets data-theme="light").
+ * Colors come from the theme on the nearest [data-theme] element (the landing page sets data-theme="light").
  */
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);

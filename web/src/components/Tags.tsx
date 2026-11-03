@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { api, ApiError, MAX_TAG_NAME, MAX_TAGS_PER_MONITOR, type Tag, type TagSummary } from '../api'
 
-/** A tag's name with a dot in its colour. The name always carries the meaning; the colour only helps scanning. */
+/** A tag's name with a dot in its color. The name always carries the meaning; the color only helps scanning. */
 export function TagChip({ tag }: { tag: Tag }) {
   return (
     <span className="tag">

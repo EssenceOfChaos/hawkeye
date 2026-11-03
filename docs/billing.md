@@ -11,7 +11,7 @@ Verified **against the real Stripe sandbox** (`internal/billing/live_smoke_test.
   a real `customer.subscription.created` moves an organization Free → Pro, and a real `customer.subscription.deleted` moves it back, with nothing deleted.
 
 Verified with fakes/fixtures (no network): signature verification (signed with Stripe's own SDK helper, and independently with `openssl` against the running API),
-duplicates/replay/ordering, status mapping, downgrade behaviour, role/email gating, server-side pricing.
+duplicates/replay/ordering, status mapping, downgrade behavior, role/email gating, server-side pricing.
 
 **Not yet verified:** Stripe's *own* delivery of a webhook to our endpoint with *its* signature (needs `stripe listen` or a registered endpoint; step 4 below), and Checkout page completion by a browser.
 The replay tests sign real payloads with a local test secret instead.
@@ -132,7 +132,7 @@ and a switch made in the customer portal shows up with the next event. Entitleme
 
 "No paid access" means the organization falls back to the Free plan's limits. **Nothing is deleted:** monitors and history stay; creating more monitors is blocked while over the
 Free limit, the dashboard explains how many to delete or that the owner can upgrade, and the retention job later trims history to the Free window (documented in `architecture.md`).
-Cancelling from the app (or the portal) sets *cancel at period end*: the owner keeps paid access until the period ends, then Stripe deletes the subscription and access ends.
+Canceling from the app (or the portal) sets *cancel at period end*: the owner keeps paid access until the period ends, then Stripe deletes the subscription and access ends.
 
 ## Price check
 
@@ -178,7 +178,7 @@ Stripe Dashboard.
    event and changes nothing by itself.
 5. Reply to the customer from `customer_support@hawkeye.observer`.
 
-A refund **without** cancelling (a duplicate charge, a goodwill credit) leaves the plan as it is: `charge.refunded` never changes entitlements, by design.
+A refund **without** canceling (a duplicate charge, a goodwill credit) leaves the plan as it is: `charge.refunded` never changes entitlements, by design.
 
 **Renewal reminders.** The Terms promise the renewal reminders the law requires, and the 7-day renewal refund assumes customers had a chance to cancel. Turn on Stripe's
 upcoming-renewal emails for annual subscriptions: Dashboard → Settings → Billing → Subscriptions and emails → *Send emails about upcoming renewals*, **30 days**
@@ -192,8 +192,8 @@ refund receipts (Settings → Customer emails → *Refunds*) so customers get a 
 - **Customer first.** The Stripe customer is created (idempotency key per organization) and its ID stored *before* Checkout, so later events are attributed through the customer ID,
   with checkout/subscription metadata only as a fallback.
 - **One subscription per organization.** A second paid subscription is reported as a conflict (event retried then `failed`) rather than overwriting the first; a stray non-paying
-  duplicate being cancelled is ignored. Choosing a plan while subscribed returns `ALREADY_SUBSCRIBED` (use the portal). One Stripe customer maps to exactly one organization (unique index).
-- **Unknown prices never grant access.** A subscription whose price isn't one of the configured monthly or yearly price IDs is rejected (and a cancellation of one is still honoured).
+  duplicate being canceled is ignored. Choosing a plan while subscribed returns `ALREADY_SUBSCRIBED` (use the portal). One Stripe customer maps to exactly one organization (unique index).
+- **Unknown prices never grant access.** A subscription whose price isn't one of the configured monthly or yearly price IDs is rejected (and a cancellation of one is still honored).
 - **Webhook endpoint**: signature checked on the raw body before anything is stored (5-minute replay tolerance); invalid → 400 and nothing stored; valid → stored durably
   and acknowledged; duplicates acknowledged without a second effect; no session or CSRF token needed (registered outside the CSRF-protected group). Body limit 1 MB.
 - Provider errors are logged in full and returned to users as a generic `BILLING_PROVIDER_ERROR`; secrets are never logged. Test keys only outside production.

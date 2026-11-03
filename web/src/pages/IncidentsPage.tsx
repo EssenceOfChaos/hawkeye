@@ -26,6 +26,8 @@ const CAUSES: Record<string, string> = {
   http_status: 'Unexpected HTTP status',
   assertion: 'Response check failed',
   other: 'Request failed',
+  missed_ping: 'Missed ping',
+  job_failed: 'Job reported a failure',
 }
 
 export function IncidentStatus({ status }: { status: Incident['status'] }) {

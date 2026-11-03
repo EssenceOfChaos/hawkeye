@@ -1,6 +1,6 @@
 import { Alert } from '../components/Alert'
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import {
   api,
   ApiError,
@@ -10,10 +10,12 @@ import {
   WRITE_MIN_MINUTES,
   type Assertion,
   type AuthType,
+  type HeartbeatInput,
   type HttpMethod,
   type JsonOperator,
   type Monitor,
   type MonitorInput,
+  type MonitorType,
   type RegionInfo,
   type RequestHeader,
   type QuietHours,
@@ -23,6 +25,7 @@ import { Field } from '../components/Field'
 import { KeywordChecks } from '../components/KeywordChecks'
 import { TagPicker } from '../components/Tags'
 import { AlertTiming } from '../components/AlertTiming'
+import { DurationField } from '../components/Heartbeat'
 
 /** The server allows this many checks in total: text checks and JSON checks together. */
 const MAX_CHECKS = 10
@@ -61,6 +64,10 @@ export function MonitorFormPage() {
   const { monitorID } = useParams()
   const editing = Boolean(monitorID)
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const [kind, setKind] = useState<MonitorType>(params.get('type') === 'heartbeat' ? 'heartbeat' : 'http')
+  const [period, setPeriod] = useState(86400) // heartbeats: expected time between pings, in seconds
+  const [grace, setGrace] = useState(3600)
   const [loaded, setLoaded] = useState(!editing)
   const [name, setName] = useState('')
   const [url, setUrl] = useState('https://')
@@ -110,6 +117,11 @@ export function MonitorFormPage() {
     if (!monitorID) return
     api<{ monitor: Monitor }>('GET', `/monitors/${monitorID}`)
       .then(({ monitor: m }) => {
+        setKind(m.type ?? 'http')
+        if (m.heartbeat) {
+          setPeriod(m.check_interval_seconds)
+          setGrace(m.heartbeat.grace_seconds)
+        }
         setName(m.name)
         setUrl(m.url)
         setMethod(m.method)
@@ -149,10 +161,29 @@ export function MonitorFormPage() {
   const assertionsAllowed = method !== 'HEAD'
   const keepsSecret = storedAuthType === authType
 
+  async function onSubmitHeartbeat() {
+    const payload: HeartbeatInput = { name, check_interval_seconds: period, grace_seconds: grace, tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet }
+    try {
+      if (editing) {
+        await api('PATCH', `/monitors/${monitorID}`, payload)
+        navigate(`/monitors/${monitorID}`)
+      } else {
+        // The new monitor's page shows its ping address, which the job needs next.
+        const r = await api<{ monitor: Monitor }>('POST', '/monitors', { ...payload, type: 'heartbeat' })
+        navigate(`/monitors/${r.monitor.id}`)
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err : new ApiError(0, 'NETWORK', 'Could not reach the server. Try again.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)
+    if (kind === 'heartbeat') return onSubmitHeartbeat()
     // Text checks first, then JSON checks. Empty text rows are dropped rather than refused.
     const checks: { assertion: Assertion; origin: Origin }[] = [
       ...contains.map((v, row) => ({ v, row })).filter((x) => x.v.trim() !== '')
@@ -211,13 +242,42 @@ export function MonitorFormPage() {
   const secretLabel = authType === 'basic' ? 'Password' : authType === 'bearer' ? 'Token' : 'Header value'
   return (
     <section className="card narrow">
-      <h1>{editing ? 'Edit monitor' : 'Add a website or API to monitor'}</h1>
-      {!editing && <p>Give your monitor a recognizable name and enter the website or API URL you want HawkEye to check.</p>}
+      <h1>{editing ? 'Edit monitor' : kind === 'heartbeat' ? 'Monitor a cron job or scheduled task' : 'Add a website or API to monitor'}</h1>
+      {!editing && (
+        <fieldset className="field monitor-kind">
+          <legend>What do you want to monitor?</legend>
+          <label>
+            <input type="radio" name="kind" checked={kind === 'http'} onChange={() => setKind('http')} /> A website or API
+            <small className="hint"> HawkEye checks it on a schedule.</small>
+          </label>
+          <label>
+            <input type="radio" name="kind" checked={kind === 'heartbeat'} onChange={() => setKind('heartbeat')} /> A cron job or scheduled task (heartbeat)
+            <small className="hint"> Your job pings HawkEye each time it runs; you are alerted when a ping is late or reports a failure.</small>
+          </label>
+        </fieldset>
+      )}
+      {!editing && kind === 'http' && <p>Give your monitor a recognizable name and enter the website or API URL you want HawkEye to check.</p>}
       {!loaded && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>}
       {generic && (
         <Alert>{error.code === 'PLAN_LIMIT_REACHED' ? limitMessage(error) : error.message}</Alert>
       )}
-      {loaded && (
+      {loaded && kind === 'heartbeat' && (
+        <form onSubmit={onSubmit}>
+          <Field label="Name" required maxLength={100} value={name} placeholder="Nightly database backup" onChange={(e) => setName(e.target.value)} error={f.name} />
+          <TagPicker tags={allTags} selected={tagIDs} onChange={setTagIDs} error={f.tag_ids}
+            onCreated={(t) => setAllTags((ts) => [...ts, t].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())))} />
+          <DurationField id="period" label="Expect a ping every" seconds={period} onChange={setPeriod} error={f.check_interval_seconds}
+            hint={`How often the job runs: 1 day for a nightly job, 1 hour for an hourly one. Your plan allows ${minAllowed} minute(s) or more, up to 30 days.`} />
+          <DurationField id="grace" label="Grace time" seconds={grace} onChange={setGrace} error={f.grace_seconds}
+            hint="How late a ping may be before it counts as missed: allow for the job's usual run time and a little more (1 minute to 7 days)." />
+          <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f} />
+          <div className="row">
+            <button type="submit" disabled={busy}>{editing ? 'Save changes' : 'Create and show the ping address'}</button>
+            <Link to={editing ? `/monitors/${monitorID}` : '/monitors'}>Cancel</Link>
+          </div>
+        </form>
+      )}
+      {loaded && kind === 'http' && (
         <form onSubmit={onSubmit}>
           <Field label="Name" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} error={f.name} />
           <Field label="URL" type="url" required value={url} onChange={(e) => setUrl(e.target.value)} error={f.url}

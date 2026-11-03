@@ -12,7 +12,7 @@ const tags: TagSummary[] = [
 ]
 
 describe('TagList', () => {
-  it('shows each tag by name, so colour is never the only signal', () => {
+  it('shows each tag by name, so color is never the only signal', () => {
     render(<TagList tags={tags} />)
     expect(screen.getByRole('list', { name: 'Tags' })).toHaveTextContent(/Acme.*Beta/)
   })
@@ -101,7 +101,7 @@ describe('UsagePanel', () => {
 })
 
 describe('StatusBadge', () => {
-  it('uses text, not colour alone', () => {
+  it('uses text, not color alone', () => {
     render(
       <MemoryRouter>
         <StatusBadge monitor={{ enabled: true, current_status: 'down' }} />

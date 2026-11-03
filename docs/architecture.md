@@ -13,7 +13,7 @@ cmd/migrate    applies embedded SQL migrations
 internal/auth          register/login/sessions/password reset/email verification (Argon2id, hashed tokens)
 internal/organizations tenant access; every query scoped by membership; removing members and leaving
 internal/invitations   team invitations: an emailed, single-address link that adds a member (seats are held by pending invitations)
-internal/plans         plan catalogue + the entitlement service (all limit decisions live here)
+internal/plans         plan catalog + the entitlement service (all limit decisions live here)
 internal/monitors      monitor CRUD, validation, soft delete, per-organization scoping
 cmd/worker             monitoring engine process: scheduler + check workers + metrics endpoint (:9090)
 internal/safehttp      SSRF-safe HTTP client (see docs/security.md)
@@ -23,13 +23,14 @@ internal/scheduler     finds due monitors, enqueues jobs, jitter, backpressure
 internal/worker        bounded-concurrency polling loops, metrics sampler
 internal/metrics       Prometheus metrics
 internal/incidents     incident engine (opened/resolved inside the result transaction) and incident queries
+internal/heartbeats    heartbeat (cron job) monitors: records pings from /ping/<token> as check results (`checks.Store.RecordTx`), and a sweeper in the worker records missed deadlines; never schedules a check
 internal/statuspage public status pages (`/status/<slug>`; migration `000014`, several per organization up to `plans.max_status_pages` since `000022`; 30 s cache; exposes only owner-chosen monitor names, states, daily uptime and incident times), internal/maintenance windows (rule in SQL: `in_maintenance`, migration `000013`; `checks.Store.Record` skips state changes and incidents while one applies), internal/notifications recipients + confirmation, enqueue (idempotent), email rendering, webhook/Slack channels (`channels.go`: sealed URLs, signing, SSRF-safe delivery; migration `000012`), retrying dispatcher
 internal/reports       range resolution (plan-clamped), check-based uptime, bucketed series, check history, dashboard summary
 internal/retention     batched per-plan data retention + credential housekeeping (runs inside cmd/worker)
 internal/billing       Stripe: provider interface (+ SDK implementation and fake), checkout/portal/cancel/resync, signed webhook intake, event processing
 internal/email         Sender interface (console, in-memory and SMTP senders)
 internal/account       data export, account deletion, change password
-internal/contact       the public contact form (triage topics, support email, acknowledgement)
+internal/contact       the public contact form (triage topics, support email, acknowledgment)
 internal/domains       domain registration expiry: RDAP + WHOIS lookup, warnings, per-plan limits (see Domain expiry below)
 internal/regions       the configured check locations (CHECK_REGIONS)
 internal/ratelimit     shared PostgreSQL fixed-window rate limiter
@@ -96,7 +97,7 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
   The window is resolved through `plans.EffectivePlan`, the same function that governs every other entitlement.
 - **Charts:** Recharts, lazy-loaded with the dashboard/monitor pages (main bundle ≈ 294 kB). Design rules applied: single-series line (2px) with a
   10 % area wash, hairline solid horizontal grid, no legend for one series, hover/keyboard readout, a table view of every value, held-frame dimming on
-  refetch, honest gaps, and status shown by icon + text rather than colour alone.
+  refetch, honest gaps, and status shown by icon + text rather than color alone.
 - **Billing (Phase 7):** `internal/billing`. Webhooks are verified on the raw body, stored in `billing_webhook_events` (UNIQUE provider+event id), acknowledged, and processed
   inline once and then by the worker with retry/backoff. A subscription event only identifies *which* subscription changed; the applied state is **re-read from Stripe**
   (Stripe does not guarantee order and says not to use `created` for ordering). `apply` locks the organization's subscription row, maps the status (`docs/billing.md`),

@@ -28,7 +28,7 @@ const UptimeMethod = "check_based"
 //
 //	uptime % = successful checks / completed checks x 100
 //
-// Only completed checks count. Paused periods, checks cancelled by a shutdown, and periods when a check was
+// Only completed checks count. Paused periods, checks canceled by a shutdown, and periods when a check was
 // late or never ran produce no result, so they are outside the denominator. The percentage is truncated
 // (never rounded up) to three decimals so a window with failures cannot display as 100%. Below
 // MinChecksForUptime completed checks no percentage is given.
@@ -169,7 +169,7 @@ func Results(ctx context.Context, db DB, orgID, monitorID uuid.UUID, r Range, li
 	return out, total, rows.Err()
 }
 
-// MonitorCounts summarises current monitor states.
+// MonitorCounts summarizes current monitor states.
 type MonitorCounts struct {
 	Total   int `json:"total"`
 	Up      int `json:"up"`

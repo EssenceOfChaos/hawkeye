@@ -49,7 +49,7 @@ func (h *handlers) submitContact(c echo.Context) error {
 		return &APIError{Status: http.StatusServiceUnavailable, Code: "CONTACT_UNAVAILABLE",
 			Message: "We couldn't send your message just now. Please try again in a few minutes."}
 	}
-	// The acknowledgement goes to an address the visitor typed, so it has its own hourly budget (no mail-bombing a third party).
+	// The acknowledgment goes to an address the visitor typed, so it has its own hourly budget (no mail-bombing a third party).
 	if h.emailBudget(c, "contact-ack", sub.Email) {
 		h.contact.Acknowledge(ctx, sub, ref)
 	}

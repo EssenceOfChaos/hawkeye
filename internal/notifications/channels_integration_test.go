@@ -355,7 +355,7 @@ func TestAConfirmedEmailRecipientCanBeSentATestAlert(t *testing.T) {
 		}
 	}
 	if strings.Contains(m.HTML, "#ff8a80") {
-		t.Error("a test alert must never use the red outage colour")
+		t.Error("a test alert must never use the red outage color")
 	}
 }
 

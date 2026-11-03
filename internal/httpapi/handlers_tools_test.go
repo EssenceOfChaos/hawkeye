@@ -32,7 +32,7 @@ func TestToolErrorMapping(t *testing.T) {
 		{sslcheck.ErrNoTLS, 422, "NO_TLS"},
 		{sslcheck.ErrTimeout, 504, "HOST_TIMEOUT"},
 		{context.DeadlineExceeded, 504, "HOST_TIMEOUT"},
-		{context.Canceled, 408, "REQUEST_CANCELLED"},
+		{context.Canceled, 408, "REQUEST_CANCELED"},
 		{sslcheck.ErrBusy, 503, "BUSY"},
 		{sitecheck.ErrBusy, 503, "BUSY"},
 	}

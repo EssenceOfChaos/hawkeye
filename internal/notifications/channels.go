@@ -200,7 +200,8 @@ type WebhookPayload struct {
 type PayloadTarget struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	URL  string `json:"url"`
+	Type string `json:"type"` // http, or heartbeat for a cron job monitor
+	URL  string `json:"url"`  // empty for heartbeats
 }
 
 type PayloadIncident struct {
@@ -238,7 +239,7 @@ func buildWebhook(a Alert, now time.Time) WebhookPayload {
 		p.Domain = &PayloadDomain{Name: a.DomainName, ExpiresAt: a.DomainExpiresAt.UTC(), Bucket: a.DomainBucket}
 		return p
 	}
-	p.Monitor = &PayloadTarget{ID: a.MonitorID, Name: a.MonitorName, URL: a.MonitorURL}
+	p.Monitor = &PayloadTarget{ID: a.MonitorID, Name: a.MonitorName, Type: a.monitorType(), URL: a.MonitorURL}
 	switch a.Event {
 	case EventSSLExpiry:
 		p.URL = a.AppBaseURL + "/monitors/" + a.MonitorID
@@ -260,7 +261,7 @@ func buildWebhook(a Alert, now time.Time) WebhookPayload {
 	return p
 }
 
-// tone is how serious a chat message looks (its colour, where the chat app has one).
+// tone is how serious a chat message looks (its color, where the chat app has one).
 type tone int
 
 const (
@@ -298,8 +299,14 @@ func chatContent(a Alert, now time.Time) chatMessage {
 			Link: a.AppBaseURL + "/notifications", Tone: toneGood}
 	case EventRecovery:
 		m.Title, m.Tone = "✅ "+name+" is back online", toneGood
+		if a.IsHeartbeat() {
+			m.Title = "✅ " + name + " is checking in again"
+		}
 		if a.ResolvedAt != nil {
 			m.Lines = []string{"Offline for " + Duration(a.ResolvedAt.Sub(a.StartedAt))}
+			if a.IsHeartbeat() {
+				m.Lines = []string{"Overdue or failing for " + Duration(a.ResolvedAt.Sub(a.StartedAt))}
+			}
 		}
 	case EventSlow:
 		m.Title, m.Tone = "🐢 "+name+" is responding slowly", toneWarning
@@ -321,6 +328,9 @@ func chatContent(a Alert, now time.Time) chatMessage {
 		m.Link = a.AppBaseURL + "/monitors/" + a.MonitorID
 	default:
 		m.Title, m.Tone = "🔴 "+name+" may be offline", toneBad
+		if a.IsHeartbeat() {
+			m.Title = "🔴 " + name + " " + heartbeatProblem(a.Cause)
+		}
 		m.Lines = []string{"Detected " + a.StartedAt.UTC().Format("2006-01-02 15:04 UTC")}
 		if a.Cause != "" {
 			m.Lines = append(m.Lines, clean(a.Cause))
@@ -341,7 +351,7 @@ func (m chatMessage) details(esc func(string) string) []string {
 	return out
 }
 
-// slackEscape neutralises the three characters Slack treats as markup.
+// slackEscape neutralizes the three characters Slack treats as markup.
 func slackEscape(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)
 }
@@ -362,7 +372,7 @@ var discordEscape = strings.NewReplacer(`\`, `\\`, "*", `\*`, "_", `\_`, "~", `\
 
 var discordColors = map[tone]int{toneGood: 0x2e7d32, toneBad: 0xc62828, toneWarning: 0xe0a800}
 
-// discordMessage renders an alert as a Discord webhook payload: one embed in the alert's colour. Mentions are switched off,
+// discordMessage renders an alert as a Discord webhook payload: one embed in the alert's color. Mentions are switched off,
 // so text such as @everyone in a monitor name never pings anyone.
 func discordMessage(m chatMessage) map[string]any {
 	// The target stays unescaped so Discord links it; a validated URL has no spaces, so it is matched whole as a link.
@@ -371,7 +381,7 @@ func discordMessage(m chatMessage) map[string]any {
 		lines[0] = m.Target
 	}
 	lines = append(lines, "[Open in HawkEye]("+m.Link+")")
-	// Embed titles cannot hold links and may not honour backslash escapes, so the title is only shortened to Discord's limit.
+	// Embed titles cannot hold links and may not honor backslash escapes, so the title is only shortened to Discord's limit.
 	title := []rune(m.Title)
 	if len(title) > 256 {
 		title = title[:256]

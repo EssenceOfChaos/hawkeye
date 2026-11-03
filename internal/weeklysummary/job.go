@@ -86,7 +86,7 @@ func (j *Job) WithClock(now func() time.Time) *Job {
 	return j
 }
 
-// Run does a pass immediately and then every Interval until ctx is cancelled.
+// Run does a pass immediately and then every Interval until ctx is canceled.
 func (j *Job) Run(ctx context.Context) {
 	t := time.NewTicker(j.cfg.Interval)
 	defer t.Stop()
@@ -143,7 +143,7 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 		s, ok := summaries[r.orgID]
 		if !ok {
 			if s, err = Build(ctx, j.pool, r.orgID, r.orgName, from, to, now); err != nil {
-				return st, fmt.Errorf("summarise organization %s: %w", r.orgID, err)
+				return st, fmt.Errorf("summarize organization %s: %w", r.orgID, err)
 			}
 			summaries[r.orgID] = s
 		}

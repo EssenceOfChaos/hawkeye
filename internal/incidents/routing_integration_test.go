@@ -168,7 +168,7 @@ func TestAnOutageLongerThanTheDelayIsAnnouncedAsUsual(t *testing.T) {
 	}
 }
 
-func TestALateButUnheldAlertIsNeverCancelled(t *testing.T) {
+func TestALateButUnheldAlertIsNeverCanceled(t *testing.T) {
 	// No delay, no quiet hours, and the dispatcher has not sent the outage alert yet (for example it was down) when the site recovers: both alerts go.
 	e := newEnv(t, 5)
 	e.recipient(t, "ops@example.com", true, true)

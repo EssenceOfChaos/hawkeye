@@ -34,7 +34,7 @@ func hold(at time.Time) *time.Time {
 // worker, can never create a second notification for the same event and destination. `at` is the earliest time it may be sent (an alert delay or the
 // end of quiet hours); the dispatcher leaves it alone until then.
 
-// Enqueue queues an incident's outage or recovery alert. A recovery is not sent to a destination whose outage alert was held and then cancelled because
+// Enqueue queues an incident's outage or recovery alert. A recovery is not sent to a destination whose outage alert was held and then canceled because
 // the monitor recovered first: that destination never heard about the outage.
 func Enqueue(ctx context.Context, tx pgx.Tx, orgID, monitorID, incidentID uuid.UUID, event string, at time.Time) (int, error) {
 	tag, err := tx.Exec(ctx, routedRecipients+`
@@ -78,7 +78,7 @@ func EnqueueDomain(ctx context.Context, tx pgx.Tx, orgID, domainID uuid.UUID, ex
 }
 
 // EnqueueSlowdown queues a slow-response alert (EventSlow or EventSlowRecovery). Like a recovery, "back to normal" skips a destination whose slow alert
-// was held and cancelled because responses recovered first. It is idempotent per slowdown, recipient and event.
+// was held and canceled because responses recovered first. It is idempotent per slowdown, recipient and event.
 func EnqueueSlowdown(ctx context.Context, tx pgx.Tx, orgID, monitorID, slowdownID uuid.UUID, event string, at time.Time) (int, error) {
 	tag, err := tx.Exec(ctx, routedRecipients+`
 		INSERT INTO notification_deliveries (slowdown_id, notification_setting_id, event_type, next_attempt_at)

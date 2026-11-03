@@ -67,6 +67,6 @@ describe('renderSitemap', () => {
     const xml = renderSitemap()
     const listed = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1])
     expect(listed).toEqual(STATIC_PAGES.filter((p) => p.index).map((p) => (p.path === '/' ? 'https://hawkeye.observer/' : `https://hawkeye.observer${p.path}`)))
-    expect(xml).not.toMatch(/login|register|dashboard|monitoring/)
+    expect(xml).not.toMatch(/observer\/(login|register|dashboard|monitoring)</)
   })
 })

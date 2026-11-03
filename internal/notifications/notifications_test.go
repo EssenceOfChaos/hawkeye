@@ -138,7 +138,7 @@ func TestRenderDomainExpiry(t *testing.T) {
 		}
 	}
 	if strings.Contains(m.HTML, "#ff8a80") {
-		t.Error("a 30-day warning is not urgent enough for the alert colour")
+		t.Error("a 30-day warning is not urgent enough for the alert color")
 	}
 
 	a.DomainBucket = 1
@@ -219,5 +219,42 @@ func TestMilliseconds(t *testing.T) {
 		if got := Milliseconds(ms); got != want {
 			t.Errorf("%d: %q", ms, got)
 		}
+	}
+}
+
+func TestRenderHeartbeatAlerts(t *testing.T) {
+	start := time.Date(2026, 11, 3, 2, 0, 0, 0, time.UTC)
+	end := start.Add(25 * time.Minute)
+	base := Alert{MonitorType: "heartbeat", MonitorID: "m1", MonitorName: "Nightly backup", StartedAt: start, AppBaseURL: "https://app"}
+
+	missed := base
+	missed.Event, missed.Cause = EventOutage, "No ping since 2026-11-02 02:00 UTC"
+	m := Render(missed)
+	if m.Subject != "HawkEye alert: Nightly backup did not check in on time" || !strings.Contains(m.Text, "none arrived in time") ||
+		!strings.Contains(m.Text, "https://app/monitors/m1") || strings.Contains(m.Text, "Website") {
+		t.Fatalf("missed: %s\n%s", m.Subject, m.Text)
+	}
+	failed := base
+	failed.Event, failed.Cause = EventOutage, "The job exited with status 3"
+	if m := Render(failed); m.Subject != "HawkEye alert: Nightly backup reported a failure" || !strings.Contains(m.Text, "status 3") {
+		t.Fatalf("failed: %s\n%s", m.Subject, m.Text)
+	}
+	rec := base
+	rec.Event, rec.ResolvedAt = EventRecovery, &end
+	if m := Render(rec); m.Subject != "HawkEye recovery: Nightly backup is checking in again" || !strings.Contains(m.Text, "25m") {
+		t.Fatalf("recovery: %s\n%s", m.Subject, m.Text)
+	}
+
+	if c := chatContent(failed, end); c.Title != "🔴 Nightly backup reported a failure" || c.Target != "" {
+		t.Fatalf("chat: %+v", c)
+	}
+	if c := chatContent(rec, end); !strings.Contains(c.Title, "checking in again") {
+		t.Fatalf("chat recovery: %+v", c)
+	}
+	if p := buildWebhook(missed, end); p.Monitor.Type != "heartbeat" || p.Monitor.URL != "" {
+		t.Fatalf("webhook: %+v", p.Monitor)
+	}
+	if p := buildWebhook(Alert{Event: EventOutage, MonitorName: "Site", MonitorURL: "https://x"}, end); p.Monitor.Type != "http" {
+		t.Fatalf("website webhook type: %+v", p.Monitor)
 	}
 }

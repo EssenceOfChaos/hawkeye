@@ -77,7 +77,7 @@ func (j *Job) WithReporter(r errtrack.Reporter) *Job {
 	return j
 }
 
-// Run executes a pass immediately and then every Interval until ctx is cancelled.
+// Run executes a pass immediately and then every Interval until ctx is canceled.
 func (j *Job) Run(ctx context.Context) {
 	t := time.NewTicker(j.cfg.Interval)
 	defer t.Stop()
@@ -220,7 +220,7 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 	return st, firstErr
 }
 
-// batches runs a parameterised DELETE ($1 organization, $2 cutoff, $3 limit) until fewer than Batch rows go.
+// batches runs a parameterized DELETE ($1 organization, $2 cutoff, $3 limit) until fewer than Batch rows go.
 func (j *Job) batches(ctx context.Context, sql string, org uuid.UUID, cutoff time.Time) (int, error) {
 	return j.loop(ctx, func() (int64, error) {
 		tag, err := j.pool.Exec(ctx, sql, org, cutoff, j.cfg.Batch)

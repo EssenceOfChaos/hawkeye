@@ -61,7 +61,7 @@ Use a Resend key restricted to **sending access** for the domain, and keep it on
 
 ## Support inbox and the contact form
 
-The public form at `/contact` emails `CONTACT_TO_ADDRESS` (production refuses the placeholder). Each message is tagged by topic (`[Billing or subscription] Charged twice (HK-7F3A2C)`), carries a priority, the sender's details and, if they were signed in, their account id and plan. **Reply-To is the visitor**, so replying from your mailbox answers them directly. The visitor also gets a short acknowledgement with the same reference.
+The public form at `/contact` emails `CONTACT_TO_ADDRESS` (production refuses the placeholder). Each message is tagged by topic (`[Billing or subscription] Charged twice (HK-7F3A2C)`), carries a priority, the sender's details and, if they were signed in, their account id and plan. **Reply-To is the visitor**, so replying from your mailbox answers them directly. The visitor also gets a short acknowledgment with the same reference.
 
 HawkEye only _sends_; receiving at `customer_support@hawkeye.observer` and forwarding it to your own mailbox is done with Cloudflare Email Routing (free):
 
@@ -75,7 +75,7 @@ To _reply as_ the support address, add it in Gmail → Settings → Accounts →
 
 ## Email design
 
-Every system email (verification, password reset/changed, account deleted, alert-address confirmation, outage, recovery, contact) is built from one branded layout in `internal/email/content.go`: the white-wordmark logo on the deep-navy backdrop, a card with a gold top edge and a gold button with navy text (red for outages and security notices, green for recoveries), a copy-paste link, and a footer with Privacy, Terms and Contact. It matches the sign-in pages. The layout is table-based with solid colours set both as `bgcolor` attributes and CSS, and declares itself dark-only so mail clients do not invert it. Each is sent as multipart plain text + HTML from the same content, so the two cannot drift, and all dynamic values are HTML-escaped. The logo is loaded from `https://<your domain>/email/hawkeye-logo.png` (served by the web container from `web/public/email/`), so it appears once the site is deployed. To look at the emails without sending any: `EMAIL_PREVIEW_DIR=/tmp/mail go test ./internal/email -run TestWritePreviewFiles` writes sample .html files. Real mail clients (Gmail, Outlook, Apple Mail, phones) differ, so send yourself the real verification email after a change and look at it in the clients you use.
+Every system email (verification, password reset/changed, account deleted, alert-address confirmation, outage, recovery, contact) is built from one branded layout in `internal/email/content.go`: the white-wordmark logo on the deep-navy backdrop, a card with a gold top edge and a gold button with navy text (red for outages and security notices, green for recoveries), a copy-paste link, and a footer with Privacy, Terms and Contact. It matches the sign-in pages. The layout is table-based with solid colors set both as `bgcolor` attributes and CSS, and declares itself dark-only so mail clients do not invert it. Each is sent as multipart plain text + HTML from the same content, so the two cannot drift, and all dynamic values are HTML-escaped. The logo is loaded from `https://<your domain>/email/hawkeye-logo.png` (served by the web container from `web/public/email/`), so it appears once the site is deployed. To look at the emails without sending any: `EMAIL_PREVIEW_DIR=/tmp/mail go test ./internal/email -run TestWritePreviewFiles` writes sample .html files. Real mail clients (Gmail, Outlook, Apple Mail, phones) differ, so send yourself the real verification email after a change and look at it in the clients you use.
 
 Why not Resend's dashboard templates? They can only be used through Resend's HTTP API, not SMTP, and they live outside the repository. Keeping the templates in code means they are versioned, tested and work with any SMTP provider.
 
@@ -126,7 +126,7 @@ Migrations are **forward-only**. Make every schema change _expand/contract_: rel
 ## Rollback
 
 - **Application only** (no migration in the release, or the migration was additive): re-deploy the previous image tag/commit and `up -d`. Old code runs fine against an expanded schema.
-- **Bad migration/data damage**: stop `api` and `worker`, restore the pre-upgrade backup into a fresh database (`docs/backup-restore.md`), point `DATABASE_URL` at it, deploy the previous version. You lose writes since the backup; take the backup immediately before upgrading to minimise that.
+- **Bad migration/data damage**: stop `api` and `worker`, restore the pre-upgrade backup into a fresh database (`docs/backup-restore.md`), point `DATABASE_URL` at it, deploy the previous version. You lose writes since the backup; take the backup immediately before upgrading to minimize that.
 
 ## Scaling and availability
 
@@ -136,7 +136,7 @@ Migrations are **forward-only**. Make every schema change _expand/contract_: rel
 
 By default there is one location, `primary`, and nothing to configure. To offer more:
 
-1. Set the same `CHECK_REGIONS` on the API, the scheduler and every worker, for example `CHECK_REGIONS=us-east:US East,eu-west:Europe,ap-south:Asia`. The first entry is the primary: monitors that chose no location run there, so **do not rename or reorder it** once monitors exist (old results are labelled with its code).
+1. Set the same `CHECK_REGIONS` on the API, the scheduler and every worker, for example `CHECK_REGIONS=us-east:US East,eu-west:Europe,ap-south:Asia`. The first entry is the primary: monitors that chose no location run there, so **do not rename or reorder it** once monitors exist (old results are labeled with its code).
 2. Run at least one worker per location, started with `WORKER_REGION=<code>` (default: the primary). Workers claim only the jobs queued for their location. Exactly one or two workers (any location) should run the scheduler; set `DISABLE_SCHEDULER=true` on the rest.
 3. Plans decide how many locations one monitor may use (`plans.max_regions`: Free 1, Pro 3, Agency 5), never more than you have configured. With one location configured nobody sees any multi-location options.
 

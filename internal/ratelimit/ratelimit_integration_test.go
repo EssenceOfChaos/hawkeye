@@ -74,7 +74,7 @@ func TestWindowsReset(t *testing.T) {
 	}
 }
 
-func TestKeysAreHashedAndNormalised(t *testing.T) {
+func TestKeysAreHashedAndNormalized(t *testing.T) {
 	k := ratelimit.Key("auth:forgot", "  Victim@Example.COM ")
 	if strings.Contains(k, "victim") || strings.Contains(k, "example") || !strings.HasPrefix(k, "auth:forgot|") {
 		t.Fatalf("the subject must not be stored in clear: %s", k)

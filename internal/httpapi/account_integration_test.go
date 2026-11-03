@@ -283,7 +283,7 @@ func TestDeletingAPayingAccountDeletesTheStripeCustomerFirst(t *testing.T) {
 		t.Fatalf("%d %v", r.Status, r.Body)
 	}
 	if e.countRows(t, `SELECT count(*) FROM users`) != 1 {
-		t.Fatal("the account was deleted although the subscription could not be cancelled")
+		t.Fatal("the account was deleted although the subscription could not be canceled")
 	}
 
 	e.fake.Err = nil

@@ -3,14 +3,15 @@ import { api, ApiError, type Monitor, type Plan, type StatusPageConfig } from '.
 import { Alert } from './Alert'
 import { badgeLink, BADGE_SIZES as SIZES, snippets, type BadgeSize as Size } from '../badge'
 
-function CopyField({ label, value }: { label: string; value: string }) {
+/** A read-only value with a Copy button. */
+export function CopyField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   const [copied, setCopied] = useState(false)
-  const id = `copy-${label.toLowerCase()}`
+  const id = `copy-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
       <div className="kv-row">
-        <input id={id} readOnly value={value} onFocus={(e) => e.target.select()} />
+        <input id={id} readOnly value={value} className={mono ? 'mono' : undefined} onFocus={(e) => e.target.select()} />
         <button type="button" onClick={() => {
           void navigator.clipboard?.writeText(value).then(() => {
             setCopied(true)

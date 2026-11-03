@@ -107,7 +107,7 @@ func newOn(r *prometheus.Registry) *Metrics {
 	}
 	m.CanaryUp.Set(1)                                                               // no verdict yet counts as healthy
 	for _, plan := range []string{"pro", "agency", "pro_annual", "agency_annual"} { // billing.PriceKeys (not imported: billing depends on metrics)
-		m.BillingPriceMismatch.WithLabelValues(plan).Set(0) // a labelled gauge is not exported until it has a value; the alert rule needs it to exist
+		m.BillingPriceMismatch.WithLabelValues(plan).Set(0) // a labeled gauge is not exported until it has a value; the alert rule needs it to exist
 	}
 	return m
 }

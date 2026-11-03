@@ -5,6 +5,7 @@ import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { BadgeCard } from '../components/BadgeCard'
 import { CertificateCard } from '../components/Certificate'
+import { formatPeriod, PingLog, PingSetup } from '../components/Heartbeat'
 import { RangePicker } from '../components/RangePicker'
 import { ResponseChart } from '../components/ResponseChart'
 import { StatusBadge } from '../components/StatusBadge'
@@ -42,6 +43,7 @@ export function MonitorDetailPage() {
   const { organization } = useAuth()
   const [range, setRange] = useState('24h')
   const [offset, setOffset] = useState(0)
+  const [changed, setChanged] = useState<Monitor | null>(null) // after "Get a new ping address"
 
   const usage = useApi<{ usage: Usage }>('/usage')
   const monitor = useApi<{ monitor: Monitor }>(`/monitors/${monitorID}`)
@@ -60,7 +62,8 @@ export function MonitorDetailPage() {
       </section>
     )
   }
-  const m = monitor.data?.monitor
+  const m = changed?.id === monitorID ? changed : monitor.data?.monitor
+  const hb = m?.heartbeat ?? null
   const options = availableRanges(usage.data?.usage.plan.history_retention_days ?? 7)
   const loading = uptime.loading || series.loading
   const changeRange = (r: string) => {
@@ -81,11 +84,19 @@ export function MonitorDetailPage() {
             <span className="spacer" />
             <Link className="button" to={`/monitors/${m.id}/edit`}>Edit</Link>
           </div>
-          <p className="hint">
-            {m.method} {m.url} · every {Math.round(m.effective_check_interval_seconds / 60)} min ·{' '}
-            {m.last_checked_at ? `last checked ${formatDateTime(m.last_checked_at)}` : 'not checked yet'}
-            {m.slow_threshold_ms != null && ` · slow-response alert over ${m.slow_threshold_ms.toLocaleString()} ms`}
-          </p>
+          {hb ? (
+            <p className="hint">
+              Cron job heartbeat · expected every {formatPeriod(m.effective_check_interval_seconds)} · grace {formatPeriod(hb.grace_seconds)} ·{' '}
+              {hb.last_ping_at ? `last ping ${formatDateTime(hb.last_ping_at)}` : 'no ping yet'}
+              {hb.due_by && m.enabled && ` · next ping due by ${formatDateTime(hb.due_by)}`}
+            </p>
+          ) : (
+            <p className="hint">
+              {m.method} {m.url} · every {Math.round(m.effective_check_interval_seconds / 60)} min ·{' '}
+              {m.last_checked_at ? `last checked ${formatDateTime(m.last_checked_at)}` : 'not checked yet'}
+              {m.slow_threshold_ms != null && ` · slow-response alert over ${m.slow_threshold_ms.toLocaleString()} ms`}
+            </p>
+          )}
           {m.slow_since && m.current_status === 'up' && (
             <Alert tone="warning" role="status">
               Responding slowly since {formatDateTime(m.slow_since)}: responses have been over {m.slow_threshold_ms?.toLocaleString()} ms for{' '}
@@ -93,7 +104,7 @@ export function MonitorDetailPage() {
             </Alert>
           )}
 
-          <CertificateCard monitor={m} />
+          {hb ? <PingSetup monitor={m} onChanged={setChanged} /> : <CertificateCard monitor={m} />}
 
           <ReportDownload monitorID={m.id} plan={usage.data?.usage.plan} />
 
@@ -105,16 +116,23 @@ export function MonitorDetailPage() {
             {uptime.data && (
               <>
                 <UptimeHero uptime={uptime.data.uptime} label={RANGE_LABELS[range] ?? range} />
-                <div className="stats">
-                  <StatTile label="Checks completed" value={uptime.data.uptime.total_checks.toLocaleString()} />
-                  <StatTile label="Failed checks" value={uptime.data.uptime.failed_checks.toLocaleString()} />
-                  <AvgResponseTile uptime={uptime.data.uptime} />
-                </div>
+                {hb ? (
+                  <div className="stats">
+                    <StatTile label="Pings and missed runs" value={uptime.data.uptime.total_checks.toLocaleString()} />
+                    <StatTile label="Missed or failed" value={uptime.data.uptime.failed_checks.toLocaleString()} />
+                  </div>
+                ) : (
+                  <div className="stats">
+                    <StatTile label="Checks completed" value={uptime.data.uptime.total_checks.toLocaleString()} />
+                    <StatTile label="Failed checks" value={uptime.data.uptime.failed_checks.toLocaleString()} />
+                    <AvgResponseTile uptime={uptime.data.uptime} />
+                  </div>
+                )}
               </>
             )}
           </div>
 
-          {series.data && (
+          {series.data && !hb && (
             <ResponseChart
               title="Average response time"
               points={series.data.points}
@@ -130,7 +148,7 @@ export function MonitorDetailPage() {
               <span className="spacer" />
               <Link to="/incidents">All incidents</Link>
             </div>
-            {incidents.data?.incidents.length === 0 && <p>No incidents for this website.</p>}
+            {incidents.data?.incidents.length === 0 && <p>No incidents for this {hb ? 'job' : 'website'}.</p>}
             <ul className="plain-list">
               {incidents.data?.incidents.map((i) => (
                 <li key={i.id}>
@@ -171,15 +189,18 @@ export function MonitorDetailPage() {
             </section>
           )}
 
+          {hb && <PingLog monitorID={m.id} refresh={hb.last_ping_at ? Date.parse(hb.last_ping_at) : 0} />}
+
           <section aria-labelledby="hist-h" style={{ opacity: results.loading ? 0.55 : 1 }}>
-            <h2 id="hist-h">Check history</h2>
-            {results.data?.results.length === 0 && <p>No checks in this period yet.</p>}
+            <h2 id="hist-h">{hb ? 'Run history' : 'Check history'}</h2>
+            {hb && <p className="hint">Each ping and each missed run, which is what the uptime above is calculated from.</p>}
+            {results.data?.results.length === 0 && <p>No {hb ? 'pings' : 'checks'} in this period yet.</p>}
             {results.data && results.data.results.length > 0 && (
               <div className="table-wrap">
                 <table>
                   <caption className="sr-only">Individual checks, newest first</caption>
                   <thead>
-                    <tr><th>When</th>{several && <th>Location</th>}<th>Result</th><th className="num">HTTP</th><th className="num">Response</th><th>Details</th></tr>
+                    <tr><th>When</th>{several && <th>Location</th>}<th>Result</th>{!hb && <><th className="num">HTTP</th><th className="num">Response</th></>}<th>Details</th></tr>
                   </thead>
                   <tbody>
                     {results.data.results.map((r) => (
@@ -188,11 +209,15 @@ export function MonitorDetailPage() {
                         {several && <td>{locations.data?.regions.find((x) => x.region === r.region)?.name ?? r.region}</td>}
                         <td>
                           {r.success
-                            ? <span className="badge up"><span aria-hidden="true">✔</span> Success</span>
-                            : <span className="badge down"><span aria-hidden="true">✖</span> Failed</span>}
+                            ? <span className="badge up"><span aria-hidden="true">✔</span> {hb ? 'Ping' : 'Success'}</span>
+                            : <span className="badge down"><span aria-hidden="true">✖</span> {hb ? (r.error_category === 'missed_ping' ? 'Missed' : 'Failed') : 'Failed'}</span>}
                         </td>
-                        <td className="num">{r.http_status_code ?? '—'}</td>
-                        <td className="num">{formatMs(r.response_time_ms)}</td>
+                        {!hb && (
+                          <>
+                            <td className="num">{r.http_status_code ?? '—'}</td>
+                            <td className="num">{formatMs(r.response_time_ms)}</td>
+                          </>
+                        )}
                         <td>{r.error_summary ?? ''}</td>
                       </tr>
                     ))}

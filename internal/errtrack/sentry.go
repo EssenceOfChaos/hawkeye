@@ -141,7 +141,7 @@ func isProblem(lowerLine string) bool {
 	return false
 }
 
-// SendTest sends one clearly labelled test event and waits up to timeout for it to be delivered. It is for checking a new DSN: the normal Reporter sends
+// SendTest sends one clearly labeled test event and waits up to timeout for it to be delivered. It is for checking a new DSN: the normal Reporter sends
 // in the background and never says whether Sentry accepted anything.
 func SendTest(cfg Config, message string, timeout time.Duration) (TestReport, error) {
 	if cfg.DSN == "" {

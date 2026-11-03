@@ -271,7 +271,7 @@ func TestSMTPErrorClassification(t *testing.T) {
 	}{
 		"mailbox does not exist (550)": {&fakeSMTP{rcptCode: "550 5.1.1 no such user"}, true},
 		"content rejected (554)":       {&fakeSMTP{rcptCode: "554 5.7.1 rejected"}, true},
-		"greylisted / try later (451)": {&fakeSMTP{rcptCode: "451 4.7.1 try later"}, false},
+		"graylisted / try later (451)": {&fakeSMTP{rcptCode: "451 4.7.1 try later"}, false},
 		"mailbox full (452)":           {&fakeSMTP{rcptCode: "452 4.2.2 over quota"}, false},
 		"relay denied misconfig (554 is permanent but 530 auth is retryable)": {&fakeSMTP{user: "u", pass: "wrong"}, false},
 	}

@@ -89,8 +89,8 @@ func (w *Worker) WithReporter(r errtrack.Reporter) *Worker {
 	return w
 }
 
-// Run starts Concurrency polling loops and returns after ctx is cancelled and in-flight checks have
-// finished. In-flight checks are not cancelled by shutdown, so results are not lost.
+// Run starts Concurrency polling loops and returns after ctx is canceled and in-flight checks have
+// finished. In-flight checks are not canceled by shutdown, so results are not lost.
 func (w *Worker) Run(ctx context.Context) {
 	var wg sync.WaitGroup
 	for range w.cfg.Concurrency {
@@ -169,7 +169,7 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 	t.Timeout = time.Duration(timeoutSecs) * time.Second
 
 	res, err := w.checker.Check(ctx, t)
-	if err != nil { // only when ctx was cancelled
+	if err != nil { // only when ctx was canceled
 		w.retry(ctx, job)
 		return true, nil
 	}

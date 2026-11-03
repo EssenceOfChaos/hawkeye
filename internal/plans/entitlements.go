@@ -64,7 +64,7 @@ func (e *LimitError) Message() string {
 		}
 		return fmt.Sprintf("Your %s plan includes up to %d status pages and all of them are in use.", e.Plan.Name, e.Limit)
 	case LimitPageBranding:
-		return fmt.Sprintf("A logo, accent colour and website link on status pages are not included in your %s plan. Upgrade to give each page its client's look.", e.Plan.Name)
+		return fmt.Sprintf("A logo, accent color and website link on status pages are not included in your %s plan. Upgrade to give each page its client's look.", e.Plan.Name)
 	case LimitWhiteLabel:
 		return fmt.Sprintf("Hiding \"Powered by HawkEye\" is not included in your %s plan. Upgrade to show status pages under your clients' brands alone.", e.Plan.Name)
 	case LimitMaintenance:
@@ -203,7 +203,7 @@ func (s *Service) CanCreateStatusPage(ctx context.Context, db DB, orgID uuid.UUI
 	return nil
 }
 
-// CanBrandStatusPages returns a *LimitError when the plan does not include a logo, accent colour and website link on status pages.
+// CanBrandStatusPages returns a *LimitError when the plan does not include a logo, accent color and website link on status pages.
 func (s *Service) CanBrandStatusPages(ctx context.Context, db DB, orgID uuid.UUID) error {
 	p, err := EffectivePlan(ctx, db, orgID)
 	if err != nil {
@@ -290,7 +290,7 @@ func (s *Service) checkSeats(ctx context.Context, db DB, orgID uuid.UUID, countI
 	return nil
 }
 
-// Usage summarises consumption against the plan for the UI.
+// Usage summarizes consumption against the plan for the UI.
 type Usage struct {
 	Plan         Plan  `json:"plan"`
 	MonitorsUsed int   `json:"monitors_used"`

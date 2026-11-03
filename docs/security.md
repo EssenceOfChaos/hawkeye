@@ -27,7 +27,7 @@ Limits are enforced in the service layer inside the same transaction as the writ
 - **Entitlements change only from the payment provider's state**, read from Stripe after a *signed* webhook (or an explicit owner-triggered sync). A Checkout redirect, a created session
   or a client-supplied value never grants a plan; prices and the organization are chosen server-side (`TestCheckoutSessionUsesServerSidePrices`, `TestUpgradeAndDowngradeFlow`).
 - **Webhook endpoint:** HMAC-SHA256 signature over the raw body, 5-minute replay window (Stripe's library), constant-time comparison (library), nothing stored before verification, 1 MB body limit,
-  idempotent by event ID. Defence in depth (documented, infrastructure): allowlist Stripe's IPs. It is intentionally outside CSRF/session protection because it is signature-authenticated.
+  idempotent by event ID. Defense in depth (documented, infrastructure): allowlist Stripe's IPs. It is intentionally outside CSRF/session protection because it is signature-authenticated.
 - **Authorization:** only owners with a verified email can start checkout, open the portal, cancel or re-sync; every call is scoped to the caller's verified organization (tested across tenants).
 - **Secrets:** (prefer a restricted `rk_` key; see `docs/billing.md` → Keys) `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` come from the environment only, are validated at startup (shape, all-or-nothing, live keys refused outside production) and never logged. Provider error text is not returned to users.
 - **No card data** is handled or stored; Checkout and the portal are Stripe-hosted. Stored webhook payloads (customer IDs/emails) are retained 90 days (180 for failed).
@@ -36,7 +36,7 @@ Limits are enforced in the service layer inside the same transaction as the writ
 
 ## Data retention and privacy (Phase 6)
 
-- Stored per check: status, timings and a fixed sanitised error summary — never page content. Retention windows per plan: Free 7 days, Pro 90, Agency 365,
+- Stored per check: status, timings and a fixed sanitized error summary — never page content. Retention windows per plan: Free 7 days, Pro 90, Agency 365,
   applied by an hourly batched job (see `docs/architecture.md`). Monitors you delete are purged after 30 days; expired sessions and one-time tokens are removed.
 - Report endpoints are bounded (≤ 366-day windows, ≤ 150 chart points, ≤ 200 history rows per page) and tenant-scoped (`TestReportEndpointsAreTenantScoped`).
 - **Not yet implemented:** self-service account deletion/export (needed for GDPR-style requests) and a published privacy policy; both are Phase 8 items.
@@ -47,7 +47,7 @@ Limits are enforced in the service layer inside the same transaction as the writ
   anything, and adding one requires a verified account email and is rate-limited — so the product cannot be used to spam third parties.
 - Maximum 10 recipients per organization; only owners change recipients (members can view).
 - Email subjects/bodies are plain text built from monitor names and URLs with control characters stripped, so a malicious monitor name cannot inject headers or extra lines (`TestRenderCannotInjectHeadersOrLines`).
-- Stored delivery errors are truncated and sanitised; check results never contain response bodies.
+- Stored delivery errors are truncated and sanitized; check results never contain response bodies.
 - **Not yet implemented:** one-click unsubscribe links in alert emails (recipients can only be removed by an owner), and bounce/complaint handling (needs a real email provider).
 
 ## SSRF controls (Phase 4)
@@ -61,7 +61,7 @@ Users submit URLs that our servers fetch, so the check engine is an SSRF risk. T
 | IPv4 hidden in IPv6 | IPv4-mapped addresses are unmapped and judged as IPv4; NAT64 (`64:ff9b::/96`), 6to4 (`2002::/16`), Teredo, and IPv4-compatible (`::/96`) are blocked outright | `TestIsPublicIP` |
 | Hostnames that resolve internally | We resolve the name ourselves; **every** answer must be public (one private answer blocks the host, so mixed records cannot be used) | `TestHostnameResolving…`, `TestMixedAnswersAreBlocked` |
 | DNS rebinding | Resolution happens once per connection and we dial the **validated IP literal**, never the hostname, so a later different DNS answer cannot be used. Connections are not reused (`DisableKeepAlives`) | `TestDNSRebindingCannotChangeTheDialedAddress` |
-| Defence in depth at connect time | The default dialer's `Control` hook re-validates the actual remote address of every connection | `TestDefaultDialerControl…` |
+| Defense in depth at connect time | The default dialer's `Control` hook re-validates the actual remote address of every connection | `TestDefaultDialerControl…` |
 | Redirects to internal targets | Every redirect hop dials through the same validator; redirect scheme must be http/https, no credentials, max 5 hops | `TestRedirectToInternalTargetIsBlocked`, `TestRedirectLimitAndSchemes` |
 | Alternate IP spellings (`2130706433`, `0x7f.1`, `127.1`, octal) | They are treated as host names, resolved, and the resulting address is validated; also rejected earlier by monitor URL validation | `TestAlternateIPSpellingsNeverConnect` (asserts a local listener sees zero connections) |
 | Port abuse (SSH, databases, internal services) | Only ports 80 and 443, checked at monitor creation, at dial time and on redirects | `TestPortsOtherThan80And443AreBlocked` |
@@ -69,7 +69,7 @@ Users submit URLs that our servers fetch, so the check engine is an SSRF risk. T
 | Data exfiltration through responses | Bodies are never stored or interpreted (at most 64 KiB is drained); only status, timing and a fixed error summary are persisted. Raw network errors (which can contain internal IPs) are never stored | `TestProhibitedDestinationsUnderProductionPolicy` |
 | Resource exhaustion | Hard per-check timeout (1–30 s, covers DNS, connect, TLS, headers and redirects), 64 KiB response header limit, bounded worker concurrency | `TestTimeout` |
 
-Mutation checks performed while developing: removing the pre-dial validation fails six tests; honouring proxy
+Mutation checks performed while developing: removing the pre-dial validation fails six tests; honoring proxy
 environment variables fails `TestEnvironmentProxyIsIgnored`.
 
 **Infrastructure layer (required in production, not enforceable from application code):** run workers in a network
@@ -99,7 +99,7 @@ TLS roots; a malicious site can make us send a GET/HEAD with our fixed `User-Age
 - **Network:** workers sit on a dedicated network; `deploy/egress-filter.sh` drops private/metadata/host traffic at the firewall as a second layer behind `safehttp` (untested on Linux; verify with `scripts/verify-egress.sh`).
 - **Supply chain:** `govulncheck` and `npm audit` run in CI; images pinned by version, distroless runtime.
 
-- **Contact form:** public, so it is limited per IP (burst and 5/hour, shared across API processes), has a hidden spam-trap field, strict length limits, and rejects anything but a bare email address (no header injection through name/subject/email, all text escaped in HTML). The acknowledgement email goes to an address the visitor typed, so it has its own per-address hourly budget and support still receives every accepted message. Account context in the support email comes only from the server's own session lookup, never from the request body.
+- **Contact form:** public, so it is limited per IP (burst and 5/hour, shared across API processes), has a hidden spam-trap field, strict length limits, and rejects anything but a bare email address (no header injection through name/subject/email, all text escaped in HTML). The acknowledgment email goes to an address the visitor typed, so it has its own per-address hourly budget and support still receives every accepted message. Account context in the support email comes only from the server's own session lookup, never from the request body.
 
 See `docs/security-review.md` for the review and residual risks.
 
@@ -126,6 +126,27 @@ See `docs/security-review.md` for the review and residual risks.
 ### Website status checker ("is it down?")
 
 `POST /api/v1/tools/site-check` (`internal/sitecheck`) has the same protections plus the ones an HTTP request needs. It reuses the monitoring engine's `checks.Checker`, so every connection and every redirect hop goes through `safehttp` (public addresses only, ports 80 and 443, at most 5 redirects, no credentials in redirects). The visitor's input is reduced to a host (`internal/publichost`, shared with the SSL checker); the request is always `GET /` with no custom headers or body, so a pasted link containing a token is never sent and the tool cannot trigger an action on a site; the response body is read only to drain it, never returned or stored; the report holds the status code, timing, the final address without its query, and a verdict. A bare domain is tried over https, then over http only if https could not connect or negotiate TLS. The User-Agent is `HawkEye-StatusChecker/1.0 (+https://hawkeye.observer/tools/is-website-down)` so site owners can identify and block it. The shared limits live in `internal/toolguard` (concurrency 8, 5 fresh checks per host per 10 minutes, 30 s cache) and each tool has its own per-IP budget (10/minute, 40/hour). Tests: `internal/sitecheck`, `internal/toolguard`, `internal/httpapi/tools_integration_test.go`, `SITECHECK_LIVE=1` (on Linux).
+
+## Heartbeat pings (public, inbound)
+
+`/ping/<token>[/fail|/<exit status>]` (`internal/heartbeats`, `internal/httpapi/handlers_heartbeats.go`) is the only endpoint that records data
+without a session. It is called by customers' scheduled jobs, so it sits outside `/api`, its CSRF check and its global limit, like the badges.
+What protects it:
+
+- **The token is the only authority, and all it can do is record a ping** for that one monitor. Tokens are 128 random bits (22 URL-safe
+  characters, unique index), never derived from the monitor id; anything that is not 22 such characters is refused before the database is
+  touched. Deleting the monitor clears the token, and "Get a new ping address" (`POST /monitors/:id/ping-token`) replaces it at once.
+- **Inbound only.** A ping makes HawkEye contact nothing, so there is no SSRF surface; it cannot change settings, read data or create monitors.
+- **Bounded cost.** In-memory limits per API process: about one ping a second per token (burst 30) and 20/s per IP (burst 600, as many jobs may share
+  one server). Only the first 4 KiB of a POST body is read and 1,000 characters kept; user agent 200. Each ping is one short transaction, and the log keeps
+  the last 100 pings per monitor.
+- **Stored data.** The ping log holds the time, method, source IP, user agent and the start of the body: the customer's own data about their own
+  servers, shown only to their organization, deleted with the monitor. It is never included in alerts (incident summaries are fixed sentences such as
+  "The job exited with status 3"), status pages or badges.
+- **No false alarms from our own outages.** The sweeper decides nothing while no API process has marked `ping_intake` recently, and gives every
+  heartbeat a full period after such a gap (see `docs/api.md`, *Heartbeat monitors*).
+
+Tests: `internal/heartbeats/heartbeats_integration_test.go`, `internal/httpapi/heartbeats_integration_test.go`.
 
 ## Settings and secrets handling
 

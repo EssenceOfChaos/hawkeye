@@ -91,7 +91,7 @@ describe('LandingPage', () => {
   it('social icons link to the HawkEye accounts in a new tab', () => {
     renderLanding(() => json(200, { plans: [] }))
     const expected = {
-      X: 'https://x.com/HawkEyeObs',
+      X: 'https://x.com/HawkEyeOnX',
       Facebook: 'https://www.facebook.com/people/HawkEye/61595561066921/',
       LinkedIn: 'https://www.linkedin.com/company/hawkeye-observer/',
       Reddit: 'https://www.reddit.com/r/HawkEye_Observer/',
@@ -187,7 +187,7 @@ describe('LandingPage', () => {
     expect(taglines).not.toMatch(/team|branded|priority|sms|csv|export/i)
   })
 
-  it('shows real product screens, labelled as sample data, before the problem statement', () => {
+  it('shows real product screens, labeled as sample data, before the problem statement', () => {
     const { container } = renderLanding(() => json(200, { plans: [] }))
     const demo = screen.getByRole('heading', { name: 'See it in action.' })
     const problem = screen.getByRole('heading', { name: /Your website doesn’t clock out/ })

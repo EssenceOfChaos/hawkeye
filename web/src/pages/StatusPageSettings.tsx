@@ -258,7 +258,7 @@ export function StatusPageEditor() {
               <legend>Branding</legend>
               {!canBrand && (
                 <p className="hint">
-                  A logo, an accent colour and a link back to your client’s website are included in the Pro and Agency plans. <Link to="/billing">Upgrade</Link>
+                  A logo, an accent color and a link back to your client’s website are included in the Pro and Agency plans. <Link to="/billing">Upgrade</Link>
                   {(accent || website || hasLogo) && ' Branding saved earlier is kept, but not shown on your current plan.'}
                 </p>
               )}
@@ -288,15 +288,15 @@ export function StatusPageEditor() {
                   )}
                 </div>
                 <label>
-                  <input type="checkbox" checked={accent !== ''} onChange={(e) => setAccent(e.target.checked ? '#1a73e8' : '')} /> Use an accent colour for the header
+                  <input type="checkbox" checked={accent !== ''} onChange={(e) => setAccent(e.target.checked ? '#1a73e8' : '')} /> Use an accent color for the header
                 </label>
                 {accent !== '' && (
                   <div className="field">
-                    <label htmlFor="accent">Accent colour</label>
+                    <label htmlFor="accent">Accent color</label>
                     <input id="accent" type="color" value={accent} onChange={(e) => setAccent(e.target.value.toLowerCase())} />
                     {fields.accent_color && <small className="error">{fields.accent_color}</small>}
                     <div className="accent-preview" style={{ background: accent, color: readableTextOn(accent) }} aria-hidden="true">{title || 'Status'}</div>
-                    <small className="hint">The header text is set to black or white automatically, whichever is easier to read on this colour.</small>
+                    <small className="hint">The header text is set to black or white automatically, whichever is easier to read on this color.</small>
                   </div>
                 )}
                 <Field label="Link back to your client’s website (optional)" type="url" value={website} onChange={(e) => setWebsite(e.target.value)} error={fields.website_url}

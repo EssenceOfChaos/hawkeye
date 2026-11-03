@@ -59,7 +59,7 @@ describe('public StatusPage', () => {
     expect(document.querySelector('.status-logo')).toBeNull()
   })
 
-  it('shows the client’s logo, colour and link, readably, and hides Powered by when asked', async () => {
+  it('shows the client’s logo, color and link, readably, and hides Powered by when asked', async () => {
     renderPublic(() => json(200, page({
       branding: { logo_url: '/api/v1/public/status/acme/logo?v=1', accent_color: '#ffeb3b', website_url: 'https://www.acme.example.com/', powered_by: false },
     })))
@@ -162,7 +162,7 @@ describe('status page settings', () => {
     expect(calls.some((c) => c.m === 'PUT' && c.url.endsWith('/status-pages/p1'))).toBe(true)
   })
 
-  it('on Pro: sends the colour and website, uploads a logo at once, and keeps "Powered by" for Agency', async () => {
+  it('on Pro: sends the color and website, uploads a logo at once, and keeps "Powered by" for Agency', async () => {
     const calls = renderAt('/status-pages/p1', undefined, { status_page_branding: true, status_page_white_label: false })
     await screen.findByDisplayValue('client-a')
     expect(screen.getByLabelText(/Hide “Powered by HawkEye”/)).toBeDisabled()
@@ -173,8 +173,8 @@ describe('status page settings', () => {
     expect(screen.getByAltText('Current logo')).toHaveAttribute('src', '/api/v1/status-pages/p1/logo?v=7')
     expect(calls.find((c) => c.m === 'PUT' && c.url.endsWith('/logo'))).toBeTruthy()
 
-    await userEvent.click(screen.getByLabelText('Use an accent colour for the header'))
-    expect(screen.getByLabelText('Accent colour')).toHaveValue('#1a73e8')
+    await userEvent.click(screen.getByLabelText('Use an accent color for the header'))
+    expect(screen.getByLabelText('Accent color')).toHaveValue('#1a73e8')
     await userEvent.type(screen.getByLabelText(/Link back to your client’s website/), 'https://www.acme.example.com')
     await userEvent.click(screen.getByRole('button', { name: 'Save status page' }))
     expect(await screen.findByText(/Client A is public/)).toBeInTheDocument()
@@ -185,7 +185,7 @@ describe('status page settings', () => {
   it('on Free: offers branding as an upgrade and asks to create the page before adding a logo', async () => {
     renderAt('/status-pages/new')
     expect(await screen.findByText(/included in the Pro and Agency plans/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Use an accent colour for the header')).toBeDisabled()
+    expect(screen.getByLabelText('Use an accent color for the header')).toBeDisabled()
     expect(screen.getByText(/Create the page first/)).toBeInTheDocument()
   })
 })

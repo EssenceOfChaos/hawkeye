@@ -46,7 +46,7 @@ const telegramLink = {
 }
 
 describe('NotificationsPage', () => {
-  it('shows each recipient state in words, not colour alone', async () => {
+  it('shows each recipient state in words, not color alone', async () => {
     setup({ items: [mk('1', 'me@example.com', { user_id: 'u' }), mk('2', 'client@example.com', { verified: false }), mk('3', 'off@example.com', { enabled: false })] })
     expect(await screen.findByText('Receiving alerts')).toBeInTheDocument()
     expect(screen.getByText('Waiting for confirmation')).toBeInTheDocument()

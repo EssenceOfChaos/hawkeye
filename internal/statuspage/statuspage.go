@@ -207,7 +207,7 @@ func (s *Service) save(ctx context.Context, orgID uuid.UUID, id *uuid.UUID, in C
 	}
 	var pageID uuid.UUID
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		// Serialise per organization so two creations cannot both pass the limit check.
+		// Serialize per organization so two creations cannot both pass the limit check.
 		if _, err := tx.Exec(ctx, `SELECT 1 FROM organizations WHERE id = $1 FOR UPDATE`, orgID); err != nil {
 			return err
 		}
@@ -401,7 +401,7 @@ func validate(in Config) (Config, error) {
 	}
 	in.AccentColor = strings.ToLower(strings.TrimSpace(in.AccentColor))
 	if in.AccentColor != "" && !colorRE.MatchString(in.AccentColor) {
-		bad["accent_color"] = "must be a colour like #1a73e8"
+		bad["accent_color"] = "must be a color like #1a73e8"
 	}
 	in.WebsiteURL = strings.TrimSpace(in.WebsiteURL)
 	if in.WebsiteURL != "" {
@@ -453,7 +453,7 @@ func dayStatus(pct *float64) string {
 	return "down"
 }
 
-// overall summarises the monitors: maintenance only when every monitor is under maintenance.
+// overall summarizes the monitors: maintenance only when every monitor is under maintenance.
 func overall(states []string) string {
 	down, maint, known := 0, 0, 0
 	for _, st := range states {

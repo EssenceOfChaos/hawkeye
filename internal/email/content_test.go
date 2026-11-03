@@ -20,7 +20,7 @@ func sample() Content {
 	}
 }
 
-func TestBrandedHTMLUsesBrandColoursAndLogo(t *testing.T) {
+func TestBrandedHTMLUsesBrandColorsAndLogo(t *testing.T) {
 	h := sample().RenderHTML()
 	for _, want := range []string{"#e8b95e", "#091c33", "#0f2744", "https://app.example.com/email/hawkeye-logo.png", `href="https://app.example.com/verify-email?token=abc123"`, "Verify email", "Preview text", "/privacy", "/contact"} {
 		if !strings.Contains(h, want) {

@@ -77,7 +77,7 @@ func toolError(c echo.Context, err error) error {
 		return &APIError{Status: http.StatusGatewayTimeout, Code: "HOST_TIMEOUT", Message: "The server did not answer in time."}
 	case errors.Is(err, context.Canceled):
 		// The visitor left before the answer was ready: nothing will read this, and it is not an error worth reporting.
-		return &APIError{Status: http.StatusRequestTimeout, Code: "REQUEST_CANCELLED", Message: "The request was cancelled."}
+		return &APIError{Status: http.StatusRequestTimeout, Code: "REQUEST_CANCELED", Message: "The request was canceled."}
 	case errors.Is(err, sslcheck.ErrBusy):
 		c.Response().Header().Set("Retry-After", "5")
 		return &APIError{Status: http.StatusServiceUnavailable, Code: "BUSY", Message: "The checker is busy right now. Please try again in a few seconds."}

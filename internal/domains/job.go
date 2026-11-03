@@ -80,7 +80,7 @@ func (j *Job) WithReporter(r errtrack.Reporter) *Job {
 	return j
 }
 
-// Run does a pass immediately and then every Interval until ctx is cancelled.
+// Run does a pass immediately and then every Interval until ctx is canceled.
 func (j *Job) Run(ctx context.Context) {
 	t := time.NewTicker(j.cfg.Interval)
 	defer t.Stop()

@@ -328,7 +328,7 @@ func TestReorderedAndStaleEventsCannotRegressState(t *testing.T) {
 	e.deliverWithTruth(t, billingtest.SubscriptionEvent("evt_del", "customer.subscription.deleted", at(300), canceled), canceled)
 	e.deliverWithTruth(t, billingtest.SubscriptionEvent("evt_late", "customer.subscription.updated", at(250), active), canceled)
 	if e.effective(t).Code != "free" {
-		t.Fatal("a late event resurrected a cancelled subscription")
+		t.Fatal("a late event resurrected a canceled subscription")
 	}
 }
 
@@ -456,7 +456,7 @@ func TestSecondSubscriptionNeverOverwritesTheCurrentOne(t *testing.T) {
 	e := newEnv(t)
 	e.deliver(t, billingtest.SubscriptionEvent("evt_1", "customer.subscription.created", at(0), e.sub("active", "price_pro")))
 
-	// A stray duplicate subscription is cancelled/expired: must not downgrade the organization.
+	// A stray duplicate subscription is canceled/expired: must not downgrade the organization.
 	stray := e.sub("incomplete_expired", "price_pro")
 	stray.ID = "sub_stray"
 	e.deliver(t, billingtest.SubscriptionEvent("evt_2", "customer.subscription.updated", at(10), stray))
@@ -632,7 +632,7 @@ func TestCancelKeepsAccessUntilPeriodEnd(t *testing.T) {
 	}
 	v, _ := e.svc.Subscription(t.Context(), e.org)
 	if !v.CancelAtPeriodEnd || !v.PaidAccess || v.Plan.Code != "pro" || len(e.fake.CanceledSubs) != 1 {
-		t.Fatalf("cancelling must schedule the end but keep access: %+v", v)
+		t.Fatalf("canceling must schedule the end but keep access: %+v", v)
 	}
 	// The provider's later webhook for the same change is harmless.
 	canceling := sub

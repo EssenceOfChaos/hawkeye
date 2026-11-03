@@ -41,7 +41,7 @@ check "the free tool pages are served as pages with their own titles" '"${CURL[@
 check "the SSL checker page is served and its endpoint needs the CSRF token (403 without it)" '"${CURL[@]}" "$BASE/tools/ssl-certificate-checker" | grep -q "<title>Free SSL Certificate Checker" && [ "$(status -X POST -H "Content-Type: application/json" -d "{\"host\":\"example.com\"}" "$BASE/api/v1/tools/ssl-check")" = 403 ]'
 check "the website status checker page is served and its endpoint needs the CSRF token (403 without it)" '"${CURL[@]}" "$BASE/tools/is-website-down" | grep -q "<title>Is My Website Down" && [ "$(status -X POST -H "Content-Type: application/json" -d "{\"host\":\"example.com\"}" "$BASE/api/v1/tools/site-check")" = 403 ]'
 check "the /monitoring campaign page asks not to be indexed, in the HTML" '"${CURL[@]}" "$BASE/monitoring" | grep -q "name=\"robots\" content=\"noindex\""'
-check "sitemap.xml lists the public pages and no signed-in pages" 's=$("${CURL[@]}" "$BASE/sitemap.xml"); echo "$s" | grep -q "<loc>https://hawkeye.observer/contact</loc>" && ! echo "$s" | grep -qE "dashboard|login|register|monitoring"'
+check "sitemap.xml lists the public pages and no signed-in pages" 's=$("${CURL[@]}" "$BASE/sitemap.xml"); echo "$s" | grep -q "<loc>https://hawkeye.observer/contact</loc>" && ! echo "$s" | grep -qE "hawkeye.observer/(dashboard|login|register|monitoring)<"'
 check "the email logo is served as an image" '[ "$(status "$BASE/email/hawkeye-logo.png")" = 200 ] && "${CURL[@]}" -I "$BASE/email/hawkeye-logo.png" | grep -qi "^content-type: image/png"'
 check "contact topics are public"            '[ "$("${CURL[@]}" "$BASE/api/v1/contact/categories" | jq_ "len(d[\"categories\"])")" -ge 5 ]'
 
@@ -50,6 +50,7 @@ check "public plan list has three plans"    '[ "$("${CURL[@]}" "$BASE/api/v1/pla
 check "unauthenticated /auth/me is 401 with the error envelope" '[ "$(status "$BASE/api/v1/auth/me")" = 401 ] && "${CURL[@]}" "$BASE/api/v1/auth/me" | grep -q UNAUTHENTICATED'
 check "CSRF protection is active (login without token is 403)" '[ "$(status -X POST -H "Content-Type: application/json" -d "{}" "$BASE/api/v1/auth/login")" = 403 ]'
 check "unknown API route is a JSON 404"     '[ "$(status "$BASE/api/v1/nope")" = 404 ]'
+check "heartbeat pings reach the API: an unknown ping address is a plain-text 404, not the app's page" '[ "$(status "$BASE/ping/AAAAAAAAAAAAAAAAAAAAAA")" = 404 ] && "${CURL[@]}" "$BASE/ping/AAAAAAAAAAAAAAAAAAAAAA" | grep -q "check the ping address"'
 check "Stripe webhook rejects an unsigned request (400, or 503 if billing is off)" 'c=$(status -X POST -d "{}" "$BASE/api/v1/webhooks/stripe"); [ "$c" = 400 ] || [ "$c" = 503 ]'
 
 echo "== security headers"

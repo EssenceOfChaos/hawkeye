@@ -47,7 +47,7 @@ interface TipProps {
   payload?: { payload: Datum }[]
 }
 
-/** Values lead (strong), names follow. All text uses text tokens; the line key is a short stroke in the series colour. */
+/** Values lead (strong), names follow. All text uses text tokens; the line key is a short stroke in the series color. */
 function Tip({ active, payload }: TipProps) {
   const d = payload?.[0]?.payload
   if (!active || !d) return null

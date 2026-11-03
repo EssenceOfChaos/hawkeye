@@ -1,4 +1,4 @@
--- Branding per status page, so each client's page can carry that client's look: a logo, an accent colour and a link back to the client's own website
+-- Branding per status page, so each client's page can carry that client's look: a logo, an accent color and a link back to the client's own website
 -- (Pro and Agency), and on Agency the option to hide "Powered by HawkEye". Stored values are kept after a downgrade but only shown while the plan
 -- includes them.
 ALTER TABLE status_pages
@@ -15,7 +15,7 @@ ALTER TABLE status_pages
         AND (logo IS NULL) = (logo_height IS NULL) AND (logo IS NULL) = (logo_updated_at IS NULL));
 
 ALTER TABLE plans
-    ADD COLUMN status_page_branding    boolean NOT NULL DEFAULT false, -- logo, accent colour and website link
+    ADD COLUMN status_page_branding    boolean NOT NULL DEFAULT false, -- logo, accent color and website link
     ADD COLUMN status_page_white_label boolean NOT NULL DEFAULT false; -- hide "Powered by HawkEye"
 UPDATE plans SET status_page_branding = true WHERE code IN ('pro', 'agency');
 UPDATE plans SET status_page_white_label = true WHERE code = 'agency';

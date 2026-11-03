@@ -149,7 +149,7 @@ func TestWindowRuleOneOffDailyWeeklyAndScope(t *testing.T) {
 	}
 }
 
-func TestChecksDuringMaintenanceRaiseNoIncidentAndDoNotCountTowardsUptime(t *testing.T) {
+func TestChecksDuringMaintenanceRaiseNoIncidentAndDoNotCountTowardUptime(t *testing.T) {
 	e := newEnv(t, "pro")
 	base := time.Now().UTC().Add(-3 * time.Hour).Truncate(time.Minute)
 	e.pool.Exec(t.Context(), `INSERT INTO maintenance_windows (organization_id, name, starts_at, duration_minutes, all_monitors) VALUES ($1, 'deploy', $2, 30, true)`,

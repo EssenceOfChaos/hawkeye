@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Tone picks the accent colour of a branded email.
+// Tone picks the accent color of a branded email.
 type Tone string
 
 const (
@@ -16,12 +16,12 @@ const (
 	ToneSuccess Tone = "success" // green: a recovery
 )
 
-// Fact is one labelled line, such as "Website: https://example.com".
+// Fact is one labeled line, such as "Website: https://example.com".
 type Fact struct{ Label, Value string }
 
 // Content describes a transactional email once; it renders to both a plain-text and a branded HTML body so the two can never drift.
 type Content struct {
-	Preheader   string // the grey preview text shown by mail clients next to the subject
+	Preheader   string // the gray preview text shown by mail clients next to the subject
 	Heading     string
 	Paragraphs  []string
 	Facts       []Fact
@@ -58,7 +58,7 @@ func oneLine(s string) string {
 	}, s)), " ")
 }
 
-// multiLine keeps line breaks (normalised to \n) but drops every other control character.
+// multiLine keeps line breaks (normalized to \n) but drops every other control character.
 func multiLine(s string) string {
 	s = strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
 	return strings.Map(func(r rune) rune {
@@ -143,7 +143,7 @@ func (c Content) RenderText() string {
 	return b.String()
 }
 
-// Brand colours (kept in step with web/src/index.css): deep navy and champagne gold, like the sign-in pages. Solid hex only: many mail clients
+// Brand colors (kept in step with web/src/index.css): deep navy and champagne gold, like the sign-in pages. Solid hex only: many mail clients
 // ignore gradients, rgba() and CSS variables.
 const (
 	colPage   = "#091c33" // the page behind the card
@@ -177,7 +177,7 @@ type htmlData struct {
 }
 
 // The layout is a single-column, table-based, inline-styled design: the only approach that renders consistently in Gmail, Outlook and Apple Mail.
-// The dark colours are set with both bgcolor attributes and CSS so clients that ignore one still get them, and the page declares itself dark-only
+// The dark colors are set with both bgcolor attributes and CSS so clients that ignore one still get them, and the page declares itself dark-only
 // so clients do not invert it. Every value is escaped by html/template; URLs are filtered to safe schemes.
 var layout = template.Must(template.New("email").Parse(`<!doctype html>
 <html lang="en">

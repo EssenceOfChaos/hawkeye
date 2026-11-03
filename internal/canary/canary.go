@@ -60,7 +60,7 @@ func (c *Canary) WithObserver(fn func(ok, total int, impaired bool)) *Canary {
 }
 
 // Impaired reports whether this server's network looks broken right now: a majority of the endpoints did not answer. It is false when
-// unsure (no endpoints configured, or the caller's context was cancelled mid-probe), so real failures are never hidden by a canary fault.
+// unsure (no endpoints configured, or the caller's context was canceled mid-probe), so real failures are never hidden by a canary fault.
 func (c *Canary) Impaired(ctx context.Context) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -94,7 +94,7 @@ func (c *Canary) refresh(ctx context.Context) bool {
 	}
 	ok := c.round(ctx)
 	if ctx.Err() != nil {
-		return false // cancelled mid-round: say nothing rather than cry wolf
+		return false // canceled mid-round: say nothing rather than cry wolf
 	}
 	impaired := ok*2 <= total // a strict majority must answer: 2 of 3, and with 1 or 2 endpoints, all of them
 	switch {

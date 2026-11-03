@@ -38,7 +38,7 @@ describe('UptimeHero', () => {
 })
 
 describe('RangePicker', () => {
-  it('is a labelled radio group with the current range selected', async () => {
+  it('is a labeled radio group with the current range selected', async () => {
     const onChange = vi.fn()
     render(<RangePicker value="7d" options={['24h', '7d']} onChange={onChange} />)
     const group = screen.getByRole('radiogroup', { name: 'Time range' })
@@ -72,7 +72,7 @@ describe('ResponseChart', () => {
     expect(within(table).getAllByText('—').length).toBeGreaterThan(0) // the failed-only bucket has no response time
   })
 
-  it('summarises failures in text and the period granularity', () => {
+  it('summarizes failures in text and the period granularity', () => {
     render(<ResponseChart title="Average response time" points={points} bucketSeconds={900} range={range()} />)
     expect(screen.getByText(/averages per 15 min/)).toBeInTheDocument()
     expect(screen.getByText(/2 failed checks in this period/)).toBeInTheDocument()

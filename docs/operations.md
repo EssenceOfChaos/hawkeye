@@ -99,7 +99,7 @@ To apply a change now: `ssh deploy@<ip> 'cd hawkeye && scripts/deploy.sh secrets
 
 ### Email delivery failing
 
-Symptoms: `HawkEyeAlertEmailBacklog`/`HawkEyeAlertEmailFailing`. Delivery errors are in `notification_deliveries.last_error` (sanitised) and the worker log.
+Symptoms: `HawkEyeAlertEmailBacklog`/`HawkEyeAlertEmailFailing`. Delivery errors are in `notification_deliveries.last_error` (sanitized) and the worker log.
 `smtp auth` errors → wrong `SMTP_USERNAME/PASSWORD` (rotated key?); `starttls`/certificate errors → wrong `SMTP_TLS` mode/port or a private CA (`SMTP_CA_FILE`); `451/452` → provider throttling (retried automatically with backoff);
 `550/553` → bad recipient (marked failed, no retry). Deliveries retry for hours, so fixing the credential lets queued alerts go out; to push them now:
 `UPDATE notification_deliveries SET next_attempt_at = now() WHERE status = 'pending';`. Account emails (verification, reset) are sent by the API process; their failures are logged as `send ... email failed`.
@@ -110,7 +110,7 @@ New accounts that verify their address but never add a monitor get up to three e
 
 **Turning it on.** It is off until `LIFECYCLE_FROM_ADDRESS` is set on the worker (for example `HawkEye <customer_support@hawkeye.observer>`). Before that: verify the sender's domain with the email provider (Resend: add the domain, create its DNS records, wait for _Verified_), and make sure `LIFECYCLE_REPLY_TO` (default: the From address) is a mailbox someone reads, because the 7-day email asks people to reply. To keep alert deliverability separate from engagement-driven mail, use a different domain or subdomain than `EMAIL_FROM_ADDRESS`. `LIFECYCLE_POSTAL_ADDRESS` adds a postal address to the footer if you decide you need one. Turn it off again with `DISABLE_LIFECYCLE_EMAILS=true` or by emptying `LIFECYCLE_FROM_ADDRESS`; nothing already sent is affected.
 
-**Sending behaviour.** Passes run every `LIFECYCLE_INTERVAL` (10m), at most 20 people per email per pass, one send per second (so a batch cannot use the provider's rate limit that alerts need), and never two of these emails within 48 hours to the same person. A temporary send failure ends the pass and is retried next pass; a permanent refusal (bad address) is recorded and not retried. Metric: `hawkeye_lifecycle_emails_total{kind,result}` (`sent|refused|failed`). Every email carries `List-Unsubscribe` / `List-Unsubscribe-Post` headers (one-click, `POST /api/v1/lifecycle/unsubscribe?token=...`, no session or CSRF token) and a footer link to `/unsubscribe`. Unsubscribing sets `users.lifecycle_opt_out_at` and affects only these emails.
+**Sending behavior.** Passes run every `LIFECYCLE_INTERVAL` (10m), at most 20 people per email per pass, one send per second (so a batch cannot use the provider's rate limit that alerts need), and never two of these emails within 48 hours to the same person. A temporary send failure ends the pass and is retried next pass; a permanent refusal (bad address) is recorded and not retried. Metric: `hawkeye_lifecycle_emails_total{kind,result}` (`sent|refused|failed`). Every email carries `List-Unsubscribe` / `List-Unsubscribe-Post` headers (one-click, `POST /api/v1/lifecycle/unsubscribe?token=...`, no session or CSRF token) and a footer link to `/unsubscribe`. Unsubscribing sets `users.lifecycle_opt_out_at` and affects only these emails.
 
 **Measuring it.** Judge by what people do, not opens. Share of each signup week that added a first monitor within 7 days of verifying:
 
@@ -128,7 +128,7 @@ And who added a monitor after each email: join `lifecycle_emails` (`user_id`, `k
 
 Every Monday each verified member of an organization that has monitors gets a summary of the previous week (Monday to Monday, UTC): overall and per-site uptime (least available first, ten listed), incidents and downtime, the slowest sites, and certificates and domains expiring within 30 days (`internal/weeklysummary`). **On by default**; each person turns it off under Account → Email preferences or with the email's link (`/unsubscribe?token=…&list=weekly_summary`, which stops only this email). Someone in two organizations with monitors gets one email for each.
 
-**Sending behaviour.** Passes run every `WEEKLY_SUMMARY_INTERVAL` (15m) but send only from Monday 07:00 UTC until Wednesday 24:00 UTC: a worker that was down on Monday catches up, and nobody gets last week's summary at the end of the week. At most 200 per pass, one per second. A row in `weekly_summaries` (person, organization, week) is claimed before each send, so with several workers each email goes at most once; a temporary failure releases the claim and ends the pass, a permanent refusal is not retried. Sent from `LIFECYCLE_FROM_ADDRESS` (replies to `LIFECYCLE_REPLY_TO`) when set, so this bulk mail never affects the alert sender's reputation; otherwise from `EMAIL_FROM_ADDRESS`. `DISABLE_WEEKLY_SUMMARY=true` turns it off on a worker. Metric: `hawkeye_lifecycle_emails_total{kind="weekly_summary"}`.
+**Sending behavior.** Passes run every `WEEKLY_SUMMARY_INTERVAL` (15m) but send only from Monday 07:00 UTC until Wednesday 24:00 UTC: a worker that was down on Monday catches up, and nobody gets last week's summary at the end of the week. At most 200 per pass, one per second. A row in `weekly_summaries` (person, organization, week) is claimed before each send, so with several workers each email goes at most once; a temporary failure releases the claim and ends the pass, a permanent refusal is not retried. Sent from `LIFECYCLE_FROM_ADDRESS` (replies to `LIFECYCLE_REPLY_TO`) when set, so this bulk mail never affects the alert sender's reputation; otherwise from `EMAIL_FROM_ADDRESS`. `DISABLE_WEEKLY_SUMMARY=true` turns it off on a worker. Metric: `hawkeye_lifecycle_emails_total{kind="weekly_summary"}`.
 
 **Who turned it off:**
 
@@ -175,7 +175,7 @@ The one thing sent on purpose, errors or not, is a **start notice**, and it goes
 To check the setup, with the compose command used by `scripts/deploy.sh`:
 
 1. `... logs api worker | grep "error tracking"`: `error tracking enabled sentry_host=… sentry_project=…` shows where events go (the project number must be the one you are looking at in sentry.io); `error tracking disabled` means `SENTRY_DSN` is empty in `.env.production`; `does not look like a DSN` means it is mangled. The key part of the DSN is never logged.
-2. `... exec api /usr/local/bin/api sentry-test` sends one labelled test event and says whether Sentry accepted it. It exits 0 only when it was delivered, and prints the SDK's complaint otherwise (a wrong key or a deleted project gives a refusal, a blocked network a timeout). The event appears under Issues, tagged `component=sentry-test`, within a minute.
+2. `... exec api /usr/local/bin/api sentry-test` sends one labeled test event and says whether Sentry accepted it. It exits 0 only when it was delivered, and prints the SDK's complaint otherwise (a wrong key or a deleted project gives a refusal, a blocked network a timeout). The event appears under Issues, tagged `component=sentry-test`, within a minute.
 3. If the test is delivered but real errors never appear, that is usually good news. Also check the environment filter in Sentry (events are tagged with `APP_ENV`, normally `production`).
 
 ### Stored credentials cannot be opened
@@ -215,7 +215,7 @@ Fewer than 5 completed checks exist in the window (new monitor, paused monitor, 
 (1) Is the monitor's incident open? `SELECT * FROM incidents WHERE monitor_id = '…' ORDER BY started_at DESC LIMIT 3;`
 (2) Were deliveries created? `SELECT d.event_type, d.status, d.attempt_count, d.last_error, s.destination FROM notification_deliveries d JOIN notification_settings s ON s.id = d.notification_setting_id WHERE d.incident_id = '…';`
 No rows means no enabled, verified recipient existed when the incident opened (check `notification_settings.verified_at`/`enabled`).
-`pending` with a future `next_attempt_at` is a retry waiting for backoff; `failed` has the sanitised reason in `last_error`.
+`pending` with a future `next_attempt_at` is a retry waiting for backoff; `failed` has the sanitized reason in `last_error`.
 (3) Is a worker running (the dispatcher lives in `cmd/worker`)? In development the email provider is `console`, so mail appears in the worker log, not a mailbox.
 To retry a failed delivery now: `UPDATE notification_deliveries SET status='pending', attempt_count=0, next_attempt_at=now() WHERE id='…';`
 
@@ -261,7 +261,7 @@ and the job is completed so the monitor's next scheduled check counts normally. 
 - **Settings:** `CANARY_URLS` (comma-separated https URLs; empty = the three built-in ones; `off` disables the canary and logs a warning at startup) and `CANARY_INTERVAL` (at least 10 s). A strict majority of the
   endpoints must answer for the network to count as healthy. Using endpoints you do not control means they can change: if one is retired, replace it here.
 - **Limits:** a monitored site that is truly down at the same moment our network fails is noticed on its next check once the canary recovers. A canary outage never hides a real failure it cannot rule out: an
-  inconclusive canary (cancelled, or no endpoints configured) counts as healthy.
+  inconclusive canary (canceled, or no endpoints configured) counts as healthy.
 
 ### Wipe a poisoned queue
 

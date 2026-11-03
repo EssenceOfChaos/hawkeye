@@ -130,7 +130,7 @@ function DeleteAccount({ email }: { email: string }) {
       <h2 id="del-h">Delete account</h2>
       <p>
         This permanently deletes your account, your organization, all monitors, check history, incidents and alert recipients. If you have a paid
-        plan, the subscription is <strong>cancelled immediately and is not refunded</strong>. This cannot be undone — consider exporting your data first.
+        plan, the subscription is <strong>canceled immediately and is not refunded</strong>. This cannot be undone — consider exporting your data first.
       </p>
       <form onSubmit={submit}>
         <Field label="Your password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />

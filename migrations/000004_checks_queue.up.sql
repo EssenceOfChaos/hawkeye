@@ -12,7 +12,7 @@ CREATE TABLE check_results (
     response_time_ms integer CHECK (response_time_ms >= 0),
     error_category   text CHECK (error_category IN
         ('dns', 'connect', 'tls', 'timeout', 'redirect', 'blocked', 'http_status', 'other')),
-    -- Short, sanitised text only; never response bodies or raw network errors.
+    -- Short, sanitized text only; never response bodies or raw network errors.
     error_summary    text CHECK (char_length(error_summary) <= 200),
     CONSTRAINT check_results_success_has_no_error CHECK (NOT success OR error_category IS NULL)
 );

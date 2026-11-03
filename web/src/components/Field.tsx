@@ -6,7 +6,7 @@ interface Props extends InputHTMLAttributes<HTMLInputElement> {
   hint?: string
 }
 
-/** A labelled input whose error and hint are announced to assistive technology. */
+/** A labeled input whose error and hint are announced to assistive technology. */
 export function Field({ label, error, hint, ...input }: Props) {
   const id = useId()
   const describedBy = [error && `${id}-err`, hint && `${id}-hint`].filter(Boolean).join(' ') || undefined

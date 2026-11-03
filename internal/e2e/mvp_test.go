@@ -312,7 +312,7 @@ func TestMVPDefinitionOfDone(t *testing.T) {
 		t.Fatalf("over the Free limit: %d %v", r.Status, r.Body)
 	}
 	if r := me.do("GET", "/api/v1/auth/me", nil); r.Status != 200 {
-		t.Fatal("cancelling must not lock the user out")
+		t.Fatal("canceling must not lock the user out")
 	}
 
 	// 8. Privacy: export, then delete everything.

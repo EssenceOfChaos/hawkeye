@@ -17,7 +17,7 @@
   color: var(--text);
   background: var(--navy);
 }
-/* daisyUI reads its colours from --color-* variables; point them at the brand palette so every d- component matches. */
+/* daisyUI reads its colors from --color-* variables; point them at the brand palette so every d- component matches. */
 :root, .landing, [data-theme] {
   --color-base-100: var(--panel);
   --color-base-200: var(--panel-2);
@@ -30,7 +30,7 @@
   --color-success: var(--up);
   --color-error: var(--down);
   --color-warning: var(--warn);
-  --color-neutral: #b4c3d8;            /* light slate: neutral badges and dots draw in this colour, so it must read on the navy panels (it was the panel navy itself: unreadable) */
+  --color-neutral: #b4c3d8;            /* light slate: neutral badges and dots draw in this color, so it must read on the navy panels (it was the panel navy itself: unreadable) */
   --color-neutral-content: #091c33;
 }
 body { margin: 0; background: var(--navy); color: var(--text); }
@@ -51,8 +51,8 @@ a { color: var(--accent); }
 .who { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; box-sizing: border-box; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: transparent; color: var(--muted); text-decoration: none; cursor: pointer; }
 .who svg { width: 1.3rem; height: 1.3rem; }
 .who:hover, .who:focus-visible, .who[aria-expanded="true"] { color: var(--text); border-color: var(--gold); }
-/* The icon sits at the right edge of the page, so a tooltip centred on it would hang off the screen. Its right edge lines up with the icon's instead
-   (the arrow stays centred on the icon), and it is no wider than the room to the left of the icon (the page width less the menu button and the margins),
+/* The icon sits at the right edge of the page, so a tooltip centered on it would hang off the screen. Its right edge lines up with the icon's instead
+   (the arrow stays centered on the icon), and it is no wider than the room to the left of the icon (the page width less the menu button and the margins),
    so a very long address wraps instead of running off the screen. */
 .account-tip[data-tip]:before { --d-tt-trans: calc(-100% + 1.125rem); max-width: min(20rem, calc(100vw - 8.5rem)); overflow-wrap: anywhere; }
 .account-menu { position: relative; }
@@ -349,6 +349,18 @@ td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 .ssl-chain { margin: .5rem 0 0; padding-left: 1.2rem; }
 .tool-cta { margin-top: 2rem; border-color: var(--gold-lo); }
 .tool-list { list-style: none; padding: 0; }
+/* Docs (/docs): a contents list beside the article on wide screens, above it on narrow ones. */
+.docs { max-width: 64rem; width: 100%; box-sizing: border-box; }
+.docs-layout { display: grid; grid-template-columns: 13rem minmax(0, 1fr); gap: 2rem; align-items: start; }
+.docs-nav ul { list-style: none; padding: 0; margin: 0; position: sticky; top: 1rem; }
+.docs-nav li { margin: 0 0 .4rem; }
+.docs-nav a.active { font-weight: 600; color: var(--gold-hi); }
+.docs h2 { font-size: 1.3rem; margin-top: 2rem; }
+.docs h3 { font-size: 1.05rem; margin-top: 1.25rem; }
+.doc-code { background: #08172b; border: 1px solid var(--border); border-radius: .5rem; padding: .75rem 1rem; overflow-x: auto; font-size: .85rem; }
+.doc-table { border-collapse: collapse; }
+.doc-table th, .doc-table td { text-align: left; padding: .4rem .7rem; border-bottom: 1px solid var(--border); }
+@media (max-width: 48rem) { .docs-layout { grid-template-columns: 1fr; gap: 1rem; } .docs-nav ul { position: static; } }
 .tool-list h2 { margin: 0 0 .25rem; font-size: 1.2rem; }
 
 /* Type roles: Sora for headlines and brand moments, Inter for reading and UI, JetBrains Mono for data (URLs, figures, timestamps). */
@@ -405,7 +417,7 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 .topic:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
 .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 
-/* SSL certificate panel (daisyUI countdown + timeline, coloured with the app's own palette so dark mode works) */
+/* SSL certificate panel (daisyUI countdown + timeline, colored with the app's own palette so dark mode works) */
 .cert-layout { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); align-items: start; }
 .cert-status { font-weight: 700; margin: 0 0 .25rem; }
 .cert-ok { color: var(--up); } .cert-soon { color: var(--warn); } .cert-expired { color: var(--down); }
@@ -430,7 +442,7 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 .status-hero { justify-content: flex-start; }
 .status-hero .d-hero-content { padding-inline: 0; justify-content: flex-start; }
 .status-hero h1 { margin-bottom: .25rem; }
-/* A branded header: the page's accent colour, with black or white text chosen in code for contrast, so it overrides the theme's colours. */
+/* A branded header: the page's accent color, with black or white text chosen in code for contrast, so it overrides the theme's colors. */
 .status-hero.branded { border-radius: .75rem; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
 .status-hero.branded h1, .status-hero.branded p { color: inherit; }
 .status-hero .d-hero-content { gap: 1rem; align-items: center; }
@@ -438,6 +450,9 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 .status-back { margin: 0 0 .75rem; font-size: .9rem; }
 .status-logo.preview { display: block; margin: .25rem 0 .5rem; }
 .badge-preview { display: block; max-width: 100%; height: auto; }
+/* Heartbeat (cron job) monitors: the type choice on the form, and job output in the ping log. */
+.monitor-kind label { display: block; margin: .25rem 0; }
+.ping-body { margin: 0; max-width: 28rem; max-height: 6rem; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: smaller; font-family: var(--font-mono); }
 /* One-click keyword presets on the monitor form. */
 .presets { list-style: none; padding: 0; margin: .25rem 0; display: grid; gap: .35rem; }
 .presets button { font-size: .85rem; padding: .2rem .55rem; }
@@ -567,7 +582,7 @@ main.auth .card p a { font-weight: 600; }
    `.mon .audiences` loses to. */
 .mon .section .features.audiences { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 60rem) { .mon .mon-benefits { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-/* The three audience cards read as a centred row: icon, name and one line each, under a centred heading. (The four benefit cards above stay left-aligned.) */
+/* The three audience cards read as a centered row: icon, name and one line each, under a centered heading. (The four benefit cards above stay left-aligned.) */
 #mon-audience-h, .mon .section .features.audiences .feature { text-align: center; }
 @media (max-width: 40rem) { .mon .mon-benefits, .mon .section .features.audiences { grid-template-columns: 1fr; } }
 @media (min-width: 40.01rem) and (max-width: 52rem) { .mon .section .features.audiences { grid-template-columns: 1fr; } }

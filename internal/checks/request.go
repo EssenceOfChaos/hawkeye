@@ -39,7 +39,7 @@ type Header struct {
 	Value string `json:"value"`
 }
 
-// Auth holds the credentials sent with a check. It is never serialised to API clients.
+// Auth holds the credentials sent with a check. It is never serialized to API clients.
 type Auth struct {
 	Type       string
 	Username   string // basic

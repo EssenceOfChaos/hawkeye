@@ -31,7 +31,7 @@ type APIError struct {
 
 func (e *APIError) Error() string { return e.Code + ": " + e.Message }
 
-// errorHandler serialises every error into the common envelope. Internal errors are
+// errorHandler serializes every error into the common envelope. Internal errors are
 // logged but never exposed to the client.
 func errorHandler(log *slog.Logger, rep errtrack.Reporter) echo.HTTPErrorHandler {
 	return func(err error, c echo.Context) {

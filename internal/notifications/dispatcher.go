@@ -100,7 +100,7 @@ func (d *Dispatcher) WithReporter(r errtrack.Reporter) *Dispatcher {
 	return d
 }
 
-// Run polls until ctx is cancelled.
+// Run polls until ctx is canceled.
 func (d *Dispatcher) Run(ctx context.Context) {
 	for ctx.Err() == nil {
 		worked, err := d.ProcessOne(ctx)
@@ -141,7 +141,7 @@ func (d *Dispatcher) ProcessOne(ctx context.Context) (bool, error) {
 			RETURNING id, incident_id, monitor_id, domain_id, slowdown_id, notification_setting_id, event_type, attempt_count, ssl_expires_at, ssl_bucket,
 				domain_expires_at, domain_bucket)
 		SELECT p.id, s.id, s.channel, s.hawkeye_bot, COALESCE(s.signing_secret, ''), p.attempt_count, p.event_type, s.destination, s.enabled, s.verified_at IS NOT NULL,
-			COALESCE(i.started_at, sd.started_at, now()), COALESCE(i.resolved_at, sd.resolved_at), COALESCE(i.summary, ''), COALESCE(m.id::text, ''), COALESCE(m.name, ''), COALESCE(m.url, ''),
+			COALESCE(i.started_at, sd.started_at, now()), COALESCE(i.resolved_at, sd.resolved_at), COALESCE(i.summary, ''), COALESCE(m.id::text, ''), COALESCE(m.name, ''), COALESCE(m.url, ''), COALESCE(m.kind, 'http'),
 			COALESCE(p.ssl_expires_at, now()), COALESCE(p.ssl_bucket, 0),
 			COALESCE(dm.name, ''), COALESCE(p.domain_expires_at, now()), COALESCE(p.domain_bucket, 0),
 			COALESCE(sd.threshold_ms, 0), COALESCE(sd.peak_ms, 0)
@@ -153,7 +153,7 @@ func (d *Dispatcher) ProcessOne(ctx context.Context) (bool, error) {
 		LEFT JOIN domains dm ON dm.id = p.domain_id
 		WHERE COALESCE(m.id, dm.id) IS NOT NULL`, d.cfg.Lease).
 		Scan(&c.id, &c.settingID, &c.channel, &c.hawkeyeBot, &c.secret, &c.attempts, &c.alert.Event, &c.alert.To, &c.enabled, &c.verified,
-			&c.alert.StartedAt, &c.alert.ResolvedAt, &c.alert.Cause, &c.alert.MonitorID, &c.alert.MonitorName, &c.alert.MonitorURL,
+			&c.alert.StartedAt, &c.alert.ResolvedAt, &c.alert.Cause, &c.alert.MonitorID, &c.alert.MonitorName, &c.alert.MonitorURL, &c.alert.MonitorType,
 			&c.alert.SSLExpiresAt, &c.alert.SSLBucket, &c.alert.DomainName, &c.alert.DomainExpiresAt, &c.alert.DomainBucket,
 			&c.alert.SlowThresholdMs, &c.alert.SlowPeakMs)
 	if errors.Is(err, pgx.ErrNoRows) {

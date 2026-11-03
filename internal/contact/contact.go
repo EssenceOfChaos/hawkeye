@@ -162,7 +162,7 @@ func (s *Service) Submit(ctx context.Context, in Submission) (string, error) {
 // The submission is cleaned again here, so a caller that did not validate it cannot put control characters into the recipient.
 func (s *Service) Acknowledge(ctx context.Context, in Submission, ref string) {
 	if err := Validate(&in); err != nil {
-		s.log.WarnContext(ctx, "contact acknowledgement skipped: invalid submission", "error", err)
+		s.log.WarnContext(ctx, "contact acknowledgment skipped: invalid submission", "error", err)
 		return
 	}
 	cat, _ := lookup(in.Category)
@@ -176,7 +176,7 @@ func (s *Service) Acknowledge(ctx context.Context, in Submission, ref string) {
 		Note:  "You are receiving this because someone submitted the contact form with this address. If that was not you, you can ignore this email.", AppBaseURL: s.appBaseURL,
 	}
 	if err := s.mail.Send(ctx, c.Message(s.from, in.Email, "We received your message to HawkEye ("+ref+")")); err != nil {
-		s.log.WarnContext(ctx, "send contact acknowledgement failed", "error", err)
+		s.log.WarnContext(ctx, "send contact acknowledgment failed", "error", err)
 	}
 }
 

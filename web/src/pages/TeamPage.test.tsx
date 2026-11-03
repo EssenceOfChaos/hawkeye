@@ -84,7 +84,7 @@ describe('TeamPage for the owner', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Send invitation' }))
     expect(await screen.findByText('Invitation sent to carol@example.com.')).toBeInTheDocument()
     const post = calls.find((c) => c.m === 'POST' && c.url.endsWith('/organizations/org-1/invitations'))
-    expect(post?.body).toEqual({ email: 'Carol@Example.com' }) // the server normalises the case
+    expect(post?.body).toEqual({ email: 'Carol@Example.com' }) // the server normalizes the case
     expect(calls.filter((c) => c.m === 'GET' && c.url.endsWith('/invitations')).length).toBeGreaterThanOrEqual(2)
   })
 
@@ -130,7 +130,7 @@ describe('TeamPage for the owner', () => {
     expect(await screen.findByText('A new invitation was sent to carol@example.com.')).toBeInTheDocument()
     expect(calls.some((c) => c.m === 'POST' && c.url.endsWith('/invitations/inv-1/resend'))).toBe(true)
     await userEvent.click(within(row).getByRole('button', { name: 'Cancel the invitation to carol@example.com' }))
-    expect(await screen.findByText('The invitation to carol@example.com was cancelled.')).toBeInTheDocument()
+    expect(await screen.findByText('The invitation to carol@example.com was canceled.')).toBeInTheDocument()
     expect(calls.some((c) => c.m === 'DELETE' && c.url.endsWith('/invitations/inv-1'))).toBe(true)
   })
 

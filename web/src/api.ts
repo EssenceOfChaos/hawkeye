@@ -28,7 +28,7 @@ export interface Plan {
   max_domains?: number
   /** How many public status pages an organization may have on this plan. */
   max_status_pages?: number
-  /** A logo, accent colour and website link on status pages (Pro and Agency). */
+  /** A logo, accent color and website link on status pages (Pro and Agency). */
   status_page_branding?: boolean
   /** Hiding "Powered by HawkEye" on status pages (Agency). */
   status_page_white_label?: boolean
@@ -126,8 +126,13 @@ export interface Assertion {
   value?: string
 }
 
+/** A website or API that HawkEye checks, or a heartbeat: a cron job or scheduled task that pings HawkEye each time it runs. */
+export type MonitorType = 'http' | 'heartbeat'
+
 export interface Monitor {
   id: string
+  /** Fixed when the monitor is created. For a heartbeat, url and the request fields are unused and check_interval_seconds is the expected time between pings. */
+  type: MonitorType
   name: string
   url: string
   method: HttpMethod
@@ -161,6 +166,39 @@ export interface Monitor {
   alert_delay_minutes: number
   /** Alerts for this monitor are held during this daily window and sent when it ends; null for none. */
   quiet_hours: QuietHours | null
+  /** Set for heartbeat monitors only. */
+  heartbeat: HeartbeatInfo | null
+}
+
+/** A heartbeat monitor's ping address and timing. */
+export interface HeartbeatInfo {
+  /** The job requests /ping/<ping_token> each time it runs. */
+  ping_token: string
+  /** Extra time allowed after the expected time before a ping counts as missed. */
+  grace_seconds: number
+  last_ping_at: string | null
+  /** When HawkEye will call the job missed: the last ping plus the period plus the grace time. Null until the first ping. */
+  due_by: string | null
+}
+
+/** One request a job made to its ping address. */
+export interface HeartbeatPing {
+  id: number
+  received_at: string
+  kind: 'success' | 'fail'
+  exit_status: number | null
+  method: string
+  source_ip: string
+  user_agent: string | null
+  /** The start of what the job sent (at most 1,000 characters). */
+  body: string | null
+  /** Received while the monitor was paused: logged but not counted. */
+  ignored: boolean
+}
+
+/** The full ping address for a heartbeat token, on this site's own origin. */
+export function pingURL(token: string): string {
+  return `${window.location.origin}/ping/${token}`
 }
 
 /** A daily window in local time ("HH:MM"); an end earlier than the start crosses midnight. */
@@ -418,6 +456,17 @@ export interface MonitorInput {
   slow_threshold_ms?: number | null
   slow_checks?: number
   /** Replaces the monitor's tags. */
+  tag_ids?: string[]
+  alert_delay_minutes?: number
+  quiet_hours?: QuietHours | null
+}
+
+/** Creates or edits a heartbeat monitor. check_interval_seconds is the expected time between pings. */
+export interface HeartbeatInput {
+  type?: 'heartbeat' // only when creating
+  name: string
+  check_interval_seconds: number
+  grace_seconds: number
   tag_ids?: string[]
   alert_delay_minutes?: number
   quiet_hours?: QuietHours | null

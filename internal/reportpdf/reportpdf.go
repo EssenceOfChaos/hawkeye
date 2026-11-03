@@ -30,7 +30,7 @@ type Brand struct {
 // Branded says whether the report carries the organization's own identity instead of HawkEye's.
 func (b Brand) Branded() bool { return b.Name != "" || len(b.Logo) > 0 }
 
-// colours as RGB triples, matching the HawkEye palette on a white page.
+// colors as RGB triples, matching the HawkEye palette on a white page.
 var (
 	navy   = [3]int{9, 28, 51}
 	gold   = [3]int{232, 185, 94}
@@ -247,8 +247,8 @@ func (r *renderer) tiles(y float64) float64 {
 	return y + h + 10
 }
 
-// dayColour is the bar colour for a day's availability: green from 99.9%, amber from 99%, red below, grey with no checks.
-func dayColour(d reports.DayStat) [3]int {
+// dayColor is the bar color for a day's availability: green from 99.9%, amber from 99%, red below, gray with no checks.
+func dayColor(d reports.DayStat) [3]int {
 	a, ok := d.Available()
 	switch {
 	case !ok:
@@ -277,7 +277,7 @@ func (r *renderer) days(y float64) float64 {
 	slot := contentW / float64(days)
 	for i := 1; i <= days; i++ {
 		x := marginX + float64(i-1)*slot
-		r.fill(dayColour(byDay[i]))
+		r.fill(dayColor(byDay[i]))
 		pdf.Rect(x+0.25, y, slot-0.5, barH, "F")
 		if i == 1 || i%5 == 0 || i == days {
 			pdf.SetFont("Helvetica", "", 6.5)

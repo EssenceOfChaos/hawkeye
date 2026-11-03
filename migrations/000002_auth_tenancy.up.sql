@@ -6,7 +6,7 @@ CREATE TABLE users (
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
     disabled_at       timestamptz,
-    -- Emails are normalised (trimmed, lower-cased) by the application; the constraint enforces it.
+    -- Emails are normalized (trimmed, lower-cased) by the application; the constraint enforces it.
     CONSTRAINT users_email_normalized CHECK (email = lower(btrim(email))),
     CONSTRAINT users_email_key UNIQUE (email)
 );

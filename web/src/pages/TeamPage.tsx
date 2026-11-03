@@ -146,7 +146,7 @@ export function TeamPage() {
         <>
           <p className="hint" role="status">
             {used} of {seats} seat{seats === 1 ? '' : 's'} used{usage ? ` on the ${usage.plan.name} plan` : ''}.
-            {invitations.length > 0 && ' An invitation holds a seat until it is accepted or cancelled.'}
+            {invitations.length > 0 && ' An invitation holds a seat until it is accepted or canceled.'}
           </p>
           <div className="table-wrap">
             <table>
@@ -198,7 +198,7 @@ export function TeamPage() {
                         Resend
                       </button>
                       <button type="button" className="danger" aria-label={`Cancel the invitation to ${i.email}`}
-                        onClick={() => void run(() => api('DELETE', `/organizations/${orgId}/invitations/${i.id}`), `The invitation to ${i.email} was cancelled.`)}>
+                        onClick={() => void run(() => api('DELETE', `/organizations/${orgId}/invitations/${i.id}`), `The invitation to ${i.email} was canceled.`)}>
                         Cancel
                       </button>
                     </td>

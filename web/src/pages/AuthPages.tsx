@@ -174,15 +174,15 @@ export function VerifyEmailPage() {
   const [state, setState] = useState<'working' | 'ok' | 'failed'>('working')
 
   useEffect(() => {
-    let cancelled = false
+    let canceled = false
     api('POST', '/auth/verify-email', { token })
       .then(() => {
-        if (!cancelled) setState('ok')
+        if (!canceled) setState('ok')
         void refresh()
       })
-      .catch(() => !cancelled && setState('failed'))
+      .catch(() => !canceled && setState('failed'))
     return () => {
-      cancelled = true
+      canceled = true
     }
   }, [token, refresh])
 
@@ -203,12 +203,12 @@ export function ConfirmAlertAddressPage() {
   const [state, setState] = useState<'working' | 'ok' | 'failed'>('working')
 
   useEffect(() => {
-    let cancelled = false
+    let canceled = false
     api('POST', '/notification-settings/confirm', { token })
-      .then(() => !cancelled && setState('ok'))
-      .catch(() => !cancelled && setState('failed'))
+      .then(() => !canceled && setState('ok'))
+      .catch(() => !canceled && setState('failed'))
     return () => {
-      cancelled = true
+      canceled = true
     }
   }, [token])
 

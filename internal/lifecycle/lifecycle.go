@@ -1,4 +1,4 @@
-// Package lifecycle sends the onboarding emails that nudge new accounts towards their first monitor.
+// Package lifecycle sends the onboarding emails that nudge new accounts toward their first monitor.
 //
 // There is no funnel-stage column and nothing is scheduled ahead of time. Each email is a rule: "people whose address was verified between After and
 // Until ago, who still have no monitor, and have not been sent this email". A pass runs every few minutes, finds who matches each rule right now, and
@@ -101,7 +101,7 @@ func (j *Job) WithReporter(r errtrack.Reporter) *Job {
 	return j
 }
 
-// Run does a pass immediately and then every Interval until ctx is cancelled.
+// Run does a pass immediately and then every Interval until ctx is canceled.
 func (j *Job) Run(ctx context.Context) {
 	t := time.NewTicker(j.cfg.Interval)
 	defer t.Stop()

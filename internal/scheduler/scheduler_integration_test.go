@@ -103,7 +103,7 @@ func TestOnlyEnabledLiveDueMonitorsAreScheduled(t *testing.T) {
 }
 
 // The user-stored interval can never beat the plan: the effective interval is derived from the entitlement.
-func TestScheduleHonoursPlanMinimumInterval(t *testing.T) {
+func TestScheduleHonorsPlanMinimumInterval(t *testing.T) {
 	pool := testutil.NewPool(t)
 	cases := []struct {
 		plan, status string

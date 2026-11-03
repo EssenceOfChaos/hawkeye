@@ -42,7 +42,7 @@ type entry[T any] struct {
 	expires time.Time
 }
 
-// Guard applies the limits to work that returns a T. The key is the host name, already normalised by the caller.
+// Guard applies the limits to work that returns a T. The key is the host name, already normalized by the caller.
 type Guard[T any] struct {
 	timeout    time.Duration
 	cacheTTL   time.Duration

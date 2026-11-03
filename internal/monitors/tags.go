@@ -77,7 +77,7 @@ func cleanColor(c *string) (*string, string) {
 	}
 	v := strings.ToLower(strings.TrimSpace(*c))
 	if !colorRE.MatchString(v) {
-		return nil, "must be a colour like #1a73e8, or null"
+		return nil, "must be a color like #1a73e8, or null"
 	}
 	return &v, ""
 }
@@ -117,7 +117,7 @@ func (s *Service) CreateTag(ctx context.Context, orgID uuid.UUID, in TagInput) (
 	}
 	var out TagSummary
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		// Serialise per organization so the count check cannot be raced.
+		// Serialize per organization so the count check cannot be raced.
 		if err := lockOrg(ctx, tx, orgID); err != nil {
 			return err
 		}
@@ -325,9 +325,14 @@ func (s *Service) Bulk(ctx context.Context, orgID uuid.UUID, in BulkInput) (int,
 		case BulkPause:
 			_, err = tx.Exec(ctx, `UPDATE monitors SET enabled = false WHERE id = ANY($1)`, ids)
 		case BulkResume:
-			// Resuming makes a monitor due immediately instead of waiting out a stale schedule.
+			// Resuming makes a monitor due immediately instead of waiting out a stale schedule, and gives a heartbeat a full period to ping.
+			var minInterval int
+			if minInterval, err = s.plans.GetMinimumCheckInterval(ctx, tx, orgID); err != nil {
+				return err
+			}
 			_, err = tx.Exec(ctx, `UPDATE monitors SET enabled = true,
-				next_check_at = CASE WHEN NOT enabled THEN now() ELSE next_check_at END WHERE id = ANY($1)`, ids)
+				next_check_at = CASE WHEN NOT enabled AND kind = 'http' THEN now() ELSE next_check_at END, `+resumeDeadline+`
+				WHERE id = ANY($1) AND organization_id = $2`, ids, orgID, true, minInterval)
 		case BulkDelete:
 			if _, err = deleteTx(ctx, tx, orgID, ids); err != nil {
 				return err
@@ -343,7 +348,8 @@ func (s *Service) Bulk(ctx context.Context, orgID uuid.UUID, in BulkInput) (int,
 			if err := s.plans.CheckInterval(ctx, tx, orgID, v); err != nil {
 				return err
 			}
-			_, err = tx.Exec(ctx, `UPDATE monitors SET check_interval_seconds = $2 WHERE id = ANY($1)`, ids, v)
+			// A heartbeat's period is when its job runs, which a website check interval says nothing about: heartbeats are left as they are.
+			_, err = tx.Exec(ctx, `UPDATE monitors SET check_interval_seconds = $2 WHERE id = ANY($1) AND kind = 'http'`, ids, v)
 		case BulkAddTags:
 			var tagIDs []uuid.UUID
 			if tagIDs, err = resolveTags(ctx, tx, orgID, in.TagIDs); err != nil {

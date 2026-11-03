@@ -18,6 +18,7 @@ import (
 	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/branding"
+	"hawkeye/internal/checks"
 	"hawkeye/internal/config"
 	"hawkeye/internal/contact"
 	"hawkeye/internal/database"
@@ -25,7 +26,9 @@ import (
 	"hawkeye/internal/email"
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/healthcheck"
+	"hawkeye/internal/heartbeats"
 	"hawkeye/internal/httpapi"
+	"hawkeye/internal/incidents"
 	"hawkeye/internal/invitations"
 	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/logging"
@@ -147,6 +150,7 @@ func run() error {
 		Regions:       cfg.Regions(),
 		StatusPages:   statuspage.NewService(pool, planSvc),
 		Badges:        badges.NewService(pool),
+		Heartbeats:    heartbeats.NewService(pool, checks.NewStore(pool, heartbeats.Thresholds, incidents.Engine{}).WithRegions(cfg.Regions())),
 		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress, notifications.WithSecretBox(box), notifications.WithTelegramBot(telegramBot)),
 		TelegramBot:   telegramBot,
 		SecureCookies: cfg.IsProduction(), AuthRateLimitPerMin: cfg.AuthRateLimitPerMin, TrustForwardedFor: cfg.TrustForwardedFor,
@@ -171,6 +175,9 @@ func run() error {
 			log.Error("metrics server failed", "error", err)
 		}
 	}()
+
+	// Tell the heartbeat sweeper that pings can reach HawkEye, so it never reports a ping lost while the API was down as a missed job.
+	go heartbeats.RunIntake(ctx, pool, log)
 
 	errCh := make(chan error, 1)
 	go func() {
