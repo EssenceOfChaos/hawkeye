@@ -16,11 +16,13 @@ import {
   type MonitorInput,
   type RegionInfo,
   type RequestHeader,
+  type QuietHours,
   type TagSummary,
 } from '../api'
 import { Field } from '../components/Field'
 import { KeywordChecks } from '../components/KeywordChecks'
 import { TagPicker } from '../components/Tags'
+import { AlertTiming } from '../components/AlertTiming'
 
 /** The server allows this many checks in total: text checks and JSON checks together. */
 const MAX_CHECKS = 10
@@ -89,6 +91,8 @@ export function MonitorFormPage() {
   const [avgMs, setAvgMs] = useState<number | null>(null) // this monitor's average response over the last 24 hours, as a guide
   const [allTags, setAllTags] = useState<TagSummary[]>([])
   const [tagIDs, setTagIDs] = useState<string[]>([])
+  const [alertDelay, setAlertDelay] = useState(0)
+  const [quiet, setQuiet] = useState<QuietHours | null>(null)
 
   useEffect(() => {
     api<{ usage: { plan: { minimum_check_interval_seconds: number } } }>('GET', '/usage')
@@ -128,6 +132,8 @@ export function MonitorFormPage() {
         if (m.slow_threshold_ms != null) setSlowMs(String(m.slow_threshold_ms))
         setSlowChecks(String(m.slow_checks ?? 3))
         setTagIDs((m.tags ?? []).map((t) => t.id))
+        setAlertDelay(m.alert_delay_minutes ?? 0)
+        setQuiet(m.quiet_hours ?? null)
         setLoaded(true)
       })
       .catch((e: ApiError) => setError(e))
@@ -168,6 +174,8 @@ export function MonitorFormPage() {
       slow_threshold_ms: slowOn ? Number(slowMs) : null,
       slow_checks: Number(slowChecks),
       tag_ids: tagIDs,
+      alert_delay_minutes: alertDelay,
+      quiet_hours: quiet,
     }
     if (allRegions.length > 1) payload.regions = chosen
     if (authType === 'basic') payload.auth!.username = authUsername
@@ -376,6 +384,8 @@ export function MonitorFormPage() {
               f.slow_threshold_ms && <small className="error">{f.slow_threshold_ms}</small>
             )}
           </fieldset>
+
+          <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f} />
 
           {allRegions.length > 1 && (
             <fieldset className="group">

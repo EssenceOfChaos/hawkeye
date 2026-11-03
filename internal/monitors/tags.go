@@ -235,20 +235,27 @@ const (
 	BulkSetInterval = "set_interval"
 	BulkAddTags     = "add_tags"
 	BulkRemoveTags  = "remove_tags"
+	// BulkSetAlertTiming sets the alert delay, the quiet hours, or both; whichever is left out stays as it is on each monitor.
+	BulkSetAlertTiming = "set_alert_timing"
 )
 
-// BulkInput applies one action to several monitors at once. CheckIntervalSeconds is for set_interval, TagIDs for add_tags and remove_tags.
+// BulkInput applies one action to several monitors at once. CheckIntervalSeconds is for set_interval, TagIDs for add_tags and remove_tags, and
+// AlertDelayMinutes and QuietHours (null turns quiet hours off) for set_alert_timing.
 type BulkInput struct {
-	MonitorIDs           []uuid.UUID `json:"monitor_ids"`
-	Action               string      `json:"action"`
-	CheckIntervalSeconds *int        `json:"check_interval_seconds"`
-	TagIDs               []uuid.UUID `json:"tag_ids"`
+	MonitorIDs           []uuid.UUID          `json:"monitor_ids"`
+	Action               string               `json:"action"`
+	CheckIntervalSeconds *int                 `json:"check_interval_seconds"`
+	TagIDs               []uuid.UUID          `json:"tag_ids"`
+	AlertDelayMinutes    *int                 `json:"alert_delay_minutes"`
+	QuietHours           Nullable[QuietHours] `json:"quiet_hours"`
 }
 
 // Bulk applies an action to the listed monitors, all or nothing: if any monitor is missing (or in another organization) nothing changes and
 // the result is ErrNotFound; if the action is not allowed for any of them nothing changes either. It returns how many monitors it changed.
 func (s *Service) Bulk(ctx context.Context, orgID uuid.UUID, in BulkInput) (int, error) {
 	bad := map[string]string{}
+	var quietStart, quietEnd *int // set_alert_timing: the stored form of the quiet hours (nil with QuietHours.Set: turn them off)
+	var quietTZ *string
 	ids := []uuid.UUID{}
 	for _, id := range in.MonitorIDs {
 		if !slices.Contains(ids, id) {
@@ -270,8 +277,18 @@ func (s *Service) Bulk(ctx context.Context, orgID uuid.UUID, in BulkInput) (int,
 		if len(in.TagIDs) == 0 {
 			bad["tag_ids"] = "must list at least one tag"
 		}
+	case BulkSetAlertTiming:
+		switch {
+		case in.AlertDelayMinutes == nil && !in.QuietHours.Set:
+			bad["alert_delay_minutes"] = "give alert_delay_minutes, quiet_hours, or both"
+		case in.AlertDelayMinutes != nil && (*in.AlertDelayMinutes < 0 || *in.AlertDelayMinutes > MaxAlertDelayMinutes):
+			bad["alert_delay_minutes"] = fmt.Sprintf("must be between 0 and %d minutes", MaxAlertDelayMinutes)
+		}
+		if in.QuietHours.Set {
+			quietStart, quietEnd, quietTZ = cleanQuiet(in.QuietHours.Value, bad)
+		}
 	default:
-		bad["action"] = "must be pause, resume, delete, set_interval, add_tags or remove_tags"
+		bad["action"] = "must be pause, resume, delete, set_interval, add_tags, remove_tags or set_alert_timing"
 	}
 	if len(bad) > 0 {
 		return 0, &validation.Error{Fields: bad}
@@ -350,6 +367,12 @@ func (s *Service) Bulk(ctx context.Context, orgID uuid.UUID, in BulkInput) (int,
 				return err
 			}
 			_, err = tx.Exec(ctx, `DELETE FROM monitor_tags WHERE monitor_id = ANY($1) AND tag_id = ANY($2)`, ids, tagIDs)
+		case BulkSetAlertTiming:
+			// Like a single edit, this affects alerts raised from now on; alerts already held keep their schedule.
+			_, err = tx.Exec(ctx, `UPDATE monitors SET alert_delay_minutes = COALESCE($2, alert_delay_minutes),
+				quiet_start = CASE WHEN $3 THEN $4 ELSE quiet_start END, quiet_end = CASE WHEN $3 THEN $5 ELSE quiet_end END,
+				quiet_timezone = CASE WHEN $3 THEN $6 ELSE quiet_timezone END
+				WHERE id = ANY($1)`, ids, in.AlertDelayMinutes, in.QuietHours.Set, quietStart, quietEnd, quietTZ)
 		}
 		return err
 	})

@@ -76,7 +76,7 @@ malformed ID gives 404) or, if absent, the organization the caller **owns** (the
 
 **Monitor fields.** Editable: `name` (1–100), `url`, `method` (`GET` default, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`), `expected_status_code`
 (100–599 or null; null means any response below 400 is up), `check_interval_seconds` (60–86400, default = plan minimum),
-`timeout_seconds` (1–30, default 10), `slow_threshold_ms` (100–60000 and below the timeout, or null = off; see *Slow-response alerts*) and `slow_checks` (2–10, default 3). Read-only and ignored if sent: `slow_since`, `current_status`, `consecutive_*`, `last_*`,
+`timeout_seconds` (1–30, default 10), `slow_threshold_ms` (100–60000 and below the timeout, or null = off; see *Slow-response alerts*) and `slow_checks` (2–10, default 3), `tag_ids`, `alert_delay_minutes` (0–1440, default 0) and `quiet_hours` (`{start, end, timezone}` or null; see *Alert routing, alert delay and quiet hours*). Read-only and ignored if sent: `slow_since`, `current_status`, `consecutive_*`, `last_*`,
 `enabled` (use pause/resume), `organization_id`. `effective_check_interval_seconds` is what the scheduler will use: the stored
 interval raised to the plan minimum, so a downgrade takes effect without rewriting data.
 
@@ -116,7 +116,7 @@ organization's own tags (otherwise 400 on `tag_ids`). Deleting a monitor removes
 each monitor's tag names.
 
 `POST /monitors/bulk` applies one `action` to up to 200 `monitor_ids`: `pause`, `resume`, `delete`, `set_interval` (with
-`check_interval_seconds`), `add_tags` or `remove_tags` (with `tag_ids`). It is **all or nothing**: if any listed monitor is missing, deleted or in
+`check_interval_seconds`), `add_tags` or `remove_tags` (with `tag_ids`), or `set_alert_timing` (with `alert_delay_minutes`, `quiet_hours`, or both: whichever is left out stays as it is on each monitor, and `quiet_hours: null` turns quiet hours off; validated like the single-monitor fields). It is **all or nothing**: if any listed monitor is missing, deleted or in
 another organization the result is 404 and nothing changes, and if the action is not allowed for any of them (an interval below the plan's minimum,
 403 `PLAN_LIMIT_REACHED`; below 5 minutes for a monitor using a state-changing method, or a monitor left with more than 10 tags, 400) nothing
 changes either. Repeated ids count once; `updated` is how many monitors were changed. The same rules as the single-monitor endpoints apply
@@ -204,18 +204,36 @@ Provider failures return 502 `BILLING_PROVIDER_ERROR` with a generic message.
 ## Alert recipients (notification settings)
 
 Each owner's own address is a recipient from registration; it starts receiving alerts when the account email is verified.
-Alerts go only to destinations that are **enabled and verified**.
+Alerts go only to destinations that are **enabled and verified**, and only for the monitors a destination is routed to (see *Alert routing* below).
 
 | Method & path | Who | Notes |
 |---|---|---|
-| `GET /notification-settings` | any member | `{notification_settings: [{id, user_id, channel, destination, enabled, verified, created_at}], max, telegram_bot}`; `telegram_bot` is the @name (without @) of HawkEye's bot when chats can be connected through it, else `""` |
+| `GET /notification-settings` | any member | `{notification_settings: [{id, user_id, channel, destination, enabled, verified, monitor_scope, tag_ids, created_at}], max, telegram_bot}`; `telegram_bot` is the @name (without @) of HawkEye's bot when chats can be connected through it, else `""` |
 | `POST /notification-settings` | owner, verified email | `{channel?, destination, bot_token?}`; `channel` is `email` (default), `slack`, `discord`, `teams`, `telegram` or `webhook`. **Email:** your own address is verified at once; any other address is emailed a confirmation link and gets no alerts until confirmed. **Slack / Discord / Teams / webhook:** `destination` is an `https://` URL (no IP addresses, port 443 only). Slack: `https://hooks.slack.com/services/…`; Discord: `https://discord.com/api/webhooks/<id>/<token>` (also `discordapp.com`, `ptb.`/`canary.discord.com`, `/api/v<n>/…`; a `?thread_id=` query is kept); Teams: a Workflows webhook (`https://….logic.azure.com/workflows/…` or `https://….powerplatform.com/…/workflows/…`; retired Office 365 connector URLs are refused). **Telegram (own bot):** `bot_token` is the token from @BotFather and `destination` the chat ID (a number such as `-1001234567890`, or `@channelname`); errors name `bot_token` or `destination`. To use HawkEye's bot instead, see `telegram-link` below. A test message is delivered first and nothing is saved unless the receiver accepts it (400 `VALIDATION_ERROR` naming the reason; for Telegram with a hint such as "check the chat ID"). The URL (for Telegram, the Bot API URL holding the token) is stored encrypted and listings show only its host (`hooks.slack.com/…`), or `chat <id>` for Telegram. A webhook also returns `signing_secret` **once**. Rate-limited. 409 `DESTINATION_EXISTS`, 403 `NOTIFICATION_SETTINGS_LIMIT` (max 10) |
 | `POST /notification-settings/telegram-link` | owner, verified email | 201 `{telegram_link: {bot, code, chat_url, group_url, channel_url, expires_at}}`: a one-time code (15 minutes; a new link cancels the previous one) that connects a Telegram chat through HawkEye's bot. `chat_url` (`t.me/<bot>?start=<code>`) connects a private chat, `group_url` (`?startgroup=`) a group; for a channel, add the bot as an admin (`channel_url`) and post `/connect <code>` there. The chat appears in the list as a verified `telegram` destination named after the chat, once someone taps Start. 503 `TELEGRAM_UNAVAILABLE` when the bot is not configured or not reached yet; 403 `NOTIFICATION_SETTINGS_LIMIT` when the list is full |
 | `POST /notification-settings/:id/test` | owner, verified email | Sends a test to one **confirmed** recipient → 204. **Email:** the "HawkEye test alert" email (gold, says nothing is wrong, names who asked); at most `EMAIL_ACTION_LIMIT_PER_HOUR` per address per hour, then 429 `RATE_LIMITED` with `Retry-After`. **Webhook / chat:** a test message (signed for webhooks); 400 if it is not delivered. An address that has not confirmed → 409 `NOT_VERIFIED` (nothing is sent). Works on a recipient that is turned off (it tests delivery, not the switch); another organization's id is a 404. |
 | `PATCH /notification-settings/:id` | owner; a member for their own address | `{enabled}` only; to change an address, delete and re-add |
+| `PUT /notification-settings/:id/routing` | owner | `{monitor_scope: "all"\|"tags", tag_ids}` → `{notification_setting}`. `all` (the default) is every monitor plus account-wide alerts; `tags` needs at least one of the organization's own tags (400 otherwise) |
+| `GET /notification-settings/coverage` | any member | `{uncovered_monitors: [{id, name}], fallback_available}`: monitors no destination is routed to, and whether the fallback can reach anyone |
 | `DELETE /notification-settings/:id` | owner; a member for their own address | 204 |
 | `POST /notification-settings/:id/resend-confirmation` | owner, verified email | 202; older links stop working |
 | `POST /notification-settings/confirm` | public | `{token}` from the confirmation email → 204; single use, valid 48 h |
+
+### Alert routing, alert delay and quiet hours
+
+**Routing.** A destination gets alerts for every monitor (`monitor_scope: "all"`, the default) or only for monitors carrying one of its tags (`"tags"`), so an
+agency can send each client only that client's alerts. Account-wide alerts that belong to no monitor (domain expiry) go to the `all` destinations. When
+routing would leave an alert with no destination, it goes instead to the **team's own email addresses** (email destinations that belong to a current
+member), never to every destination: those can include other clients. With no such address the alert reaches nobody, which
+`GET /notification-settings/coverage` (and a warning on the Notifications page) reports beforehand. Deleting a tag removes it from destinations; a
+destination left with no tags receives nothing until it is changed.
+
+**Alert delay** (`alert_delay_minutes` on a monitor, 0–1440, default 0): an outage alert is sent only once the outage has lasted that long, counted from its
+first failed check. **Quiet hours** (`quiet_hours: {start: "HH:MM", end: "HH:MM", timezone}` or null; `end` before `start` crosses midnight; an IANA time
+zone; start and end must differ): every day in that window the monitor's outage, recovery, slow-response and certificate alerts are held and sent when it
+ends. Slow-response and certificate alerts ignore the delay. If the problem ends while its alert is still held, the alert is cancelled
+(`status: skipped`, `suppressed: ended_while_held`) and that destination gets no "recovered" or "back to normal" either. An alert that was never held but is
+simply late (a stopped dispatcher) is never cancelled. Held alerts keep the schedule they were given; changing the settings affects later alerts only.
 
 ## Check locations
 
@@ -348,7 +366,8 @@ One logical notification exists per (incident, recipient, event) — or, for cer
 so it cannot be lost or duplicated. The worker's dispatcher claims due deliveries with a visibility timeout and sends them; transient
 failures retry with backoff 1 m, 5 m, 15 m, 1 h, 3 h up to `NOTIFY_MAX_ATTEMPTS` (default 6), then the delivery is marked `failed`.
 Permanent errors (`email.ErrPermanent`) fail immediately. Delivery is at-least-once: a crash between sending and recording can cause one duplicate email.
-Settings disabled or removed after queuing are skipped.
+Settings disabled or removed after queuing are skipped. A delivery held by an alert delay or quiet hours is queued with a later `next_attempt_at` and is
+left alone until then (see *Alert routing, alert delay and quiet hours*).
 
 ## Contact form
 

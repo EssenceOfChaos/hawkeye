@@ -185,7 +185,7 @@ describe('MonitorFormPage editing', () => {
       { type: 'body_not_contains', value: 'Account Suspended' },
       { type: 'json_path', path: 'status', operator: 'equals', value: 'ok' },
     ])
-  })
+  }, 15_000) // types a lot into a long form; near the default 5 s when the whole suite runs in parallel
 
   it('shows a server error for a text check on that row', async () => {
     setup(() => json(400, { error: { code: 'VALIDATION_ERROR', message: 'bad', details: { fields: { 'assertions[1].value': 'must be at most 1000 characters' } } } }))

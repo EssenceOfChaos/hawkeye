@@ -236,3 +236,60 @@ describe('NotificationsPage', () => {
     })
   })
 })
+
+describe('alert routing', () => {
+  const tags = [{ id: 't1', name: 'Acme', color: null, monitor_count: 2 }, { id: 't2', name: 'Beta', color: '#1a73e8', monitor_count: 1 }]
+  const routed = (o: Partial<{ monitor_scope: 'all' | 'tags'; tag_ids: string[] }>) => ({ ...mk('c', 'client@acme.test'), monitor_scope: 'all', tag_ids: [], ...o })
+
+  function stub(items: unknown[], coverage: unknown, role: 'owner' | 'member' = 'owner') {
+    document.cookie = 'csrf_token=t; path=/'
+    const puts: { url: string; body: unknown }[] = []
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/auth/me')) return json(200, { user: { id: 'u', email: 'me@example.com', email_verified_at: '2026-01-01T00:00:00Z' }, organizations: [{ id: 'o', name: 'Org', role }] })
+      if (url.endsWith('/tags')) return json(200, { tags })
+      if (url.endsWith('/notification-settings/coverage')) return json(200, coverage)
+      if (init?.method === 'PUT') {
+        puts.push({ url, body: JSON.parse(String(init.body)) })
+        return json(200, { notification_setting: items[0] })
+      }
+      if (url.endsWith('/notification-settings')) return json(200, { notification_settings: items, max: 10, telegram_bot: '' })
+      return json(404, {})
+    }))
+    render(<MemoryRouter><AuthProvider><NotificationsPage /></AuthProvider></MemoryRouter>)
+    return puts
+  }
+
+  it('shows which monitors each destination gets alerts for', async () => {
+    stub([routed({ monitor_scope: 'tags', tag_ids: ['t2'] }), { ...routed({}), id: 'o', destination: 'ops@agency.test' }], { uncovered_monitors: [], fallback_available: true })
+    expect(await screen.findByRole('list', { name: 'Only monitors tagged' })).toHaveTextContent('Beta')
+    expect(screen.getByText('All monitors')).toBeInTheDocument()
+  })
+
+  it('lets the owner route a destination to tags, sending the chosen tag ids', async () => {
+    const puts = stub([routed({})], { uncovered_monitors: [], fallback_available: true })
+    await userEvent.click(await screen.findByRole('button', { name: 'Change which monitors client@acme.test gets alerts for' }))
+    await userEvent.click(screen.getByLabelText('Only monitors with these tags'))
+    const save = screen.getByRole('button', { name: 'Save' })
+    expect(save).toBeDisabled() // a tag must be chosen
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Acme' }))
+    await userEvent.click(save)
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]).toEqual({ url: '/api/v1/notification-settings/c/routing', body: { monitor_scope: 'tags', tag_ids: ['t1'] } })
+  })
+
+  it('does not let members change routing', async () => {
+    stub([routed({})], { uncovered_monitors: [], fallback_available: true }, 'member')
+    expect(await screen.findByText('All monitors')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Change which monitors/ })).not.toBeInTheDocument()
+  })
+
+  it('warns about monitors no destination covers, and loudly when nobody would be alerted', async () => {
+    stub([routed({})], { uncovered_monitors: [{ id: 'm1', name: 'Our blog' }], fallback_available: true })
+    expect(await screen.findByText(/1 monitor is not routed to any destination: Our blog\. Their alerts go to your team members’ own email addresses/)).toBeInTheDocument()
+    vi.unstubAllGlobals()
+    document.body.innerHTML = ''
+    stub([routed({})], { uncovered_monitors: [{ id: 'm1', name: 'Our blog' }, { id: 'm2', name: 'Shop' }], fallback_available: false })
+    const alert = await screen.findByText(/Nobody would be alerted/)
+    expect(alert.closest('[role="alert"]') ?? alert.parentElement).toHaveTextContent(/these monitors go offline: Our blog, Shop/)
+  })
+})

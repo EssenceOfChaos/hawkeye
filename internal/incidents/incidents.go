@@ -24,20 +24,26 @@ func (Engine) Opened(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, failur
 		return err
 	}
 	var id uuid.UUID
+	var startedAt time.Time
 	err := tx.QueryRow(ctx, `INSERT INTO incidents (monitor_id, started_at, cause_category, summary)
 		VALUES ($1,
 			COALESCE((SELECT min(checked_at) FROM (SELECT checked_at FROM check_results WHERE monitor_id = $1
 				ORDER BY checked_at DESC LIMIT $2) s), now()),
 			NULLIF($3, ''), NULLIF($4, ''))
 		ON CONFLICT (monitor_id) WHERE status = 'open' DO NOTHING
-		RETURNING id`, monitorID, failures, category, summary).Scan(&id)
+		RETURNING id, started_at`, monitorID, failures, category, summary).Scan(&id, &startedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil // already open: do not notify twice
 	}
 	if err != nil {
 		return err
 	}
-	_, err = notifications.Enqueue(ctx, tx, orgID, id, notifications.EventOutage)
+	// The alert waits for the monitor's alert delay (counted from the first failed check) and for the end of its quiet hours.
+	timing, err := notifications.MonitorTiming(ctx, tx, monitorID)
+	if err != nil {
+		return err
+	}
+	_, err = notifications.Enqueue(ctx, tx, orgID, monitorID, id, notifications.EventOutage, timing.OutageAt(time.Now(), startedAt))
 	return err
 }
 
@@ -47,12 +53,17 @@ func (Engine) CertificateExpiring(ctx context.Context, tx pgx.Tx, monitorID uuid
 	if err := tx.QueryRow(ctx, `SELECT organization_id FROM monitors WHERE id = $1`, monitorID).Scan(&orgID); err != nil {
 		return err
 	}
-	_, err := notifications.EnqueueSSL(ctx, tx, orgID, monitorID, expiresAt, bucket)
+	timing, err := notifications.MonitorTiming(ctx, tx, monitorID)
+	if err != nil {
+		return err
+	}
+	_, err = notifications.EnqueueSSL(ctx, tx, orgID, monitorID, expiresAt, bucket, timing.At(time.Now()))
 	return err
 }
 
-// Resolved closes the monitor's open incident, if any, and enqueues recovery notifications.
-// successes is the length of the current success streak; the incident ends at its first check.
+// Resolved closes the monitor's open incident, if any, and enqueues recovery notifications. An outage alert still held (alert delay or quiet hours)
+// is cancelled instead, and its destinations get no recovery alert. successes is the length of the current success streak; the incident ends at its
+// first check.
 func (Engine) Resolved(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, successes int) error {
 	var id, orgID uuid.UUID
 	err := tx.QueryRow(ctx, `UPDATE incidents i SET status = 'resolved',
@@ -68,7 +79,14 @@ func (Engine) Resolved(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, succ
 	if err != nil {
 		return err
 	}
-	_, err = notifications.Enqueue(ctx, tx, orgID, id, notifications.EventRecovery)
+	if err := notifications.CancelHeldOutage(ctx, tx, id); err != nil {
+		return err
+	}
+	timing, err := notifications.MonitorTiming(ctx, tx, monitorID)
+	if err != nil {
+		return err
+	}
+	_, err = notifications.Enqueue(ctx, tx, orgID, monitorID, id, notifications.EventRecovery, timing.At(time.Now()))
 	return err
 }
 
@@ -86,11 +104,16 @@ func (Engine) SlowStarted(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, t
 	if err != nil {
 		return err
 	}
-	_, err = notifications.EnqueueSlowdown(ctx, tx, orgID, id, notifications.EventSlow)
+	// A slowdown is already confirmed by several slow checks in a row, so the alert delay does not apply; quiet hours do.
+	timing, err := notifications.MonitorTiming(ctx, tx, monitorID)
+	if err != nil {
+		return err
+	}
+	_, err = notifications.EnqueueSlowdown(ctx, tx, orgID, monitorID, id, notifications.EventSlow, timing.At(time.Now()))
 	return err
 }
 
-// SlowEnded closes the monitor's open slowdown, if any, and queues the "back to normal" alerts.
+// SlowEnded closes the monitor's open slowdown, if any, and queues the "back to normal" alerts (or cancels a slow alert still held in quiet hours).
 func (Engine) SlowEnded(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, at time.Time) error {
 	var id, orgID uuid.UUID
 	err := tx.QueryRow(ctx, `UPDATE slowdowns sd SET status = 'resolved', resolved_at = GREATEST(sd.started_at, $2)
@@ -102,7 +125,14 @@ func (Engine) SlowEnded(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, at 
 	if err != nil {
 		return err
 	}
-	_, err = notifications.EnqueueSlowdown(ctx, tx, orgID, id, notifications.EventSlowRecovery)
+	if err := notifications.CancelHeldSlow(ctx, tx, id); err != nil {
+		return err
+	}
+	timing, err := notifications.MonitorTiming(ctx, tx, monitorID)
+	if err != nil {
+		return err
+	}
+	_, err = notifications.EnqueueSlowdown(ctx, tx, orgID, monitorID, id, notifications.EventSlowRecovery, timing.At(time.Now()))
 	return err
 }
 

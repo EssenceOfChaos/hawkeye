@@ -102,10 +102,57 @@ type Monitor struct {
 	SlowChecks      int        `json:"slow_checks"`
 	SlowSince       *time.Time `json:"slow_since"` // set while a slowdown is open: responses are confirmed slow
 	// BadgeToken addresses the monitor's public uptime badge (/badge/<token>.svg); nil while the badge is off.
-	BadgeToken *string   `json:"badge_token"`
-	Tags       []Tag     `json:"tags"` // sorted by name
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	BadgeToken *string `json:"badge_token"`
+	Tags       []Tag   `json:"tags"` // sorted by name
+	// Alert timing: announce an outage only once it has lasted this many minutes (0: as soon as it is confirmed), and hold this monitor's alerts during
+	// quiet hours (nil: none).
+	AlertDelayMinutes int         `json:"alert_delay_minutes"`
+	QuietHours        *QuietHours `json:"quiet_hours"`
+	CreatedAt         time.Time   `json:"created_at"`
+	UpdatedAt         time.Time   `json:"updated_at"`
+}
+
+// QuietHours is a daily window, in local time, during which a monitor's alerts are held until it ends. Start and End are "HH:MM"; a window whose end
+// is earlier than its start crosses midnight.
+type QuietHours struct {
+	Start    string `json:"start"`
+	End      string `json:"end"`
+	Timezone string `json:"timezone"` // an IANA time zone such as America/New_York
+}
+
+const MaxAlertDelayMinutes = 1440
+
+// parseClock reads "HH:MM" as minutes after midnight.
+func parseClock(v string) (int, bool) {
+	t, err := time.Parse("15:04", strings.TrimSpace(v))
+	if err != nil {
+		return 0, false
+	}
+	return t.Hour()*60 + t.Minute(), true
+}
+
+func formatClock(m int) string { return fmt.Sprintf("%02d:%02d", m/60, m%60) }
+
+// cleanQuiet validates quiet hours and returns the stored form (minutes after midnight and the zone name).
+func cleanQuiet(q *QuietHours, bad map[string]string) (start, end *int, tz *string) {
+	if q == nil {
+		return nil, nil, nil
+	}
+	s, okS := parseClock(q.Start)
+	e, okE := parseClock(q.End)
+	zone := strings.TrimSpace(q.Timezone)
+	switch {
+	case !okS:
+		bad["quiet_hours.start"] = "must be a time like 22:00"
+	case !okE:
+		bad["quiet_hours.end"] = "must be a time like 07:00"
+	case s == e:
+		bad["quiet_hours.end"] = "must differ from the start"
+	}
+	if _, err := time.LoadLocation(zone); err != nil || zone == "" || zone == "Local" || len(zone) > 64 {
+		bad["quiet_hours.timezone"] = "must be a time zone such as America/New_York"
+	}
+	return &s, &e, &zone
 }
 
 // SSLInfo describes the TLS certificate of an HTTPS monitor as last seen by a check.
@@ -169,23 +216,27 @@ type CreateInput struct {
 	SlowThresholdMs      *int               `json:"slow_threshold_ms"`
 	SlowChecks           *int               `json:"slow_checks"`
 	TagIDs               []uuid.UUID        `json:"tag_ids"`
+	AlertDelayMinutes    *int               `json:"alert_delay_minutes"`
+	QuietHours           *QuietHours        `json:"quiet_hours"`
 }
 
 type UpdateInput struct {
-	Name                 *string             `json:"name"`
-	URL                  *string             `json:"url"`
-	Method               *string             `json:"method"`
-	ExpectedStatusCode   Nullable[int]       `json:"expected_status_code"`
-	CheckIntervalSeconds *int                `json:"check_interval_seconds"`
-	TimeoutSeconds       *int                `json:"timeout_seconds"`
-	Headers              *[]checks.Header    `json:"headers"`
-	Body                 Nullable[string]    `json:"body"`
-	Auth                 *AuthInput          `json:"auth"`
-	Assertions           *[]checks.Assertion `json:"assertions"`
-	Regions              *[]string           `json:"regions"`
-	SlowThresholdMs      Nullable[int]       `json:"slow_threshold_ms"`
-	SlowChecks           *int                `json:"slow_checks"`
-	TagIDs               *[]uuid.UUID        `json:"tag_ids"` // replaces the monitor's tags
+	Name                 *string              `json:"name"`
+	URL                  *string              `json:"url"`
+	Method               *string              `json:"method"`
+	ExpectedStatusCode   Nullable[int]        `json:"expected_status_code"`
+	CheckIntervalSeconds *int                 `json:"check_interval_seconds"`
+	TimeoutSeconds       *int                 `json:"timeout_seconds"`
+	Headers              *[]checks.Header     `json:"headers"`
+	Body                 Nullable[string]     `json:"body"`
+	Auth                 *AuthInput           `json:"auth"`
+	Assertions           *[]checks.Assertion  `json:"assertions"`
+	Regions              *[]string            `json:"regions"`
+	SlowThresholdMs      Nullable[int]        `json:"slow_threshold_ms"`
+	SlowChecks           *int                 `json:"slow_checks"`
+	TagIDs               *[]uuid.UUID         `json:"tag_ids"` // replaces the monitor's tags
+	AlertDelayMinutes    *int                 `json:"alert_delay_minutes"`
+	QuietHours           Nullable[QuietHours] `json:"quiet_hours"` // null turns quiet hours off
 }
 
 type ListFilter struct {
@@ -287,16 +338,22 @@ const cols = `id, organization_id, name, url, method, expected_status_code, chec
 	enabled, current_status, last_checked_at, last_success_at, consecutive_failures, consecutive_successes, created_at, updated_at,
 	request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), auth_secret IS NOT NULL,
 	assertions, ssl_expires_at, ssl_checked_at, in_maintenance(organization_id, id, now()), regions,
-	slow_threshold_ms, slow_checks, (SELECT started_at FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'), badge_token, ` + tagsCol
+	slow_threshold_ms, slow_checks, (SELECT started_at FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'), badge_token, ` + tagsCol + `,
+	alert_delay_minutes, quiet_start, quiet_end, quiet_timezone`
 
 func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	var m Monitor
 	var sslExpires, sslChecked *time.Time
+	var quietStart, quietEnd *int
+	var quietTZ *string
 	err := row.Scan(&m.ID, &m.OrganizationID, &m.Name, &m.URL, &m.Method, &m.ExpectedStatusCode, &m.CheckIntervalSeconds,
 		&m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.LastCheckedAt, &m.LastSuccessAt, &m.ConsecutiveFailures,
 		&m.ConsecutiveSuccesses, &m.CreatedAt, &m.UpdatedAt, &m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username,
 		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked, &m.InMaintenance, &m.Regions,
-		&m.SlowThresholdMs, &m.SlowChecks, &m.SlowSince, &m.BadgeToken, &m.Tags)
+		&m.SlowThresholdMs, &m.SlowChecks, &m.SlowSince, &m.BadgeToken, &m.Tags, &m.AlertDelayMinutes, &quietStart, &quietEnd, &quietTZ)
+	if quietStart != nil && quietEnd != nil && quietTZ != nil {
+		m.QuietHours = &QuietHours{Start: formatClock(*quietStart), End: formatClock(*quietEnd), Timezone: *quietTZ}
+	}
 	m.EffectiveCheckIntervalSeconds = max(m.CheckIntervalSeconds, minInterval)
 	if sslExpires != nil {
 		now := time.Now()
@@ -322,6 +379,11 @@ type fields struct {
 	regions           []string
 	slowThreshold     *int // ms; nil: slow-response alerts off
 	slowChecks        int
+	alertDelay        int
+	quiet             *QuietHours // nil: no quiet hours
+	quietStart        *int        // stored form of quiet, set by validate
+	quietEnd          *int
+	quietTZ           *string
 }
 
 // setAuth applies an auth input on top of the current type, keeping the stored secret when allowed.
@@ -521,6 +583,10 @@ func (f *fields) validate() error {
 	if f.slowChecks < MinSlowChecks || f.slowChecks > MaxSlowChecks {
 		bad["slow_checks"] = fmt.Sprintf("must be between %d and %d", MinSlowChecks, MaxSlowChecks)
 	}
+	if f.alertDelay < 0 || f.alertDelay > MaxAlertDelayMinutes {
+		bad["alert_delay_minutes"] = fmt.Sprintf("must be between 0 and %d minutes", MaxAlertDelayMinutes)
+	}
+	f.quietStart, f.quietEnd, f.quietTZ = cleanQuiet(f.quiet, bad)
 	if IsWriteMethod(f.method) && f.interval < MinWriteIntervalSeconds {
 		bad["check_interval_seconds"] = fmt.Sprintf("must be at least %d minutes for %s, because the request is repeated on every check", MinWriteIntervalSeconds/60, f.method)
 	}
@@ -586,6 +652,10 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		if in.SlowChecks != nil {
 			f.slowChecks = *in.SlowChecks
 		}
+		if in.AlertDelayMinutes != nil {
+			f.alertDelay = *in.AlertDelayMinutes
+		}
+		f.quiet = in.QuietHours
 		if f.regions, err = s.cleanRegions(in.Regions); err != nil {
 			return err
 		}
@@ -621,10 +691,12 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		}
 		out, err = scan(tx.QueryRow(ctx, `INSERT INTO monitors
 			(id, organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
-			 request_headers, request_body, auth_type, auth_username, auth_header_name, auth_secret, assertions, regions, slow_threshold_ms, slow_checks)
-			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16,$17,$18) RETURNING `+cols,
+			 request_headers, request_body, auth_type, auth_username, auth_header_name, auth_secret, assertions, regions, slow_threshold_ms, slow_checks,
+			 alert_delay_minutes, quiet_start, quiet_end, quiet_timezone)
+			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16,$17,$18,$19,$20,$21,$22) RETURNING `+cols,
 			orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout,
-			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, sealed, f.assertions, id, f.regions, f.slowThreshold, f.slowChecks), minInterval)
+			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, sealed, f.assertions, id, f.regions, f.slowThreshold, f.slowChecks,
+			f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ), minInterval)
 		if err != nil {
 			return err
 		}
@@ -721,7 +793,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		f := fields{name: cur.Name, url: cur.URL, method: cur.Method, expected: cur.ExpectedStatusCode,
 			interval: cur.CheckIntervalSeconds, timeout: cur.TimeoutSeconds, headers: slices.Clone(cur.Headers),
 			body: cur.Body, assertions: slices.Clone(cur.Assertions), regions: slices.Clone(cur.Regions),
-			slowThreshold: cur.SlowThresholdMs, slowChecks: cur.SlowChecks,
+			slowThreshold: cur.SlowThresholdMs, slowChecks: cur.SlowChecks, alertDelay: cur.AlertDelayMinutes, quiet: cur.QuietHours,
 			auth: checks.Auth{Type: cur.Auth.Type, Username: cur.Auth.Username, HeaderName: cur.Auth.HeaderName}}
 		f.setAuth(in.Auth, cur.Auth.Type, cur.Auth.SecretSet)
 		if in.Headers != nil {
@@ -761,6 +833,12 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		}
 		if in.SlowChecks != nil {
 			f.slowChecks = *in.SlowChecks
+		}
+		if in.AlertDelayMinutes != nil {
+			f.alertDelay = *in.AlertDelayMinutes
+		}
+		if in.QuietHours.Set {
+			f.quiet = in.QuietHours.Value
 		}
 		if err := f.validate(); err != nil {
 			return err
@@ -814,12 +892,13 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			auth_header_name=NULLIF($14,''),
 			auth_secret = CASE WHEN $12 = 'none' THEN NULL WHEN $15 THEN auth_secret ELSE NULLIF($16,'') END,
 			assertions=$17, regions=$19, slow_threshold_ms=$20, slow_checks=$21,
+			alert_delay_minutes=$22, quiet_start=$23, quiet_end=$24, quiet_timezone=$25,
 			ssl_expires_at = CASE WHEN $18 THEN NULL ELSE ssl_expires_at END, ssl_checked_at = CASE WHEN $18 THEN NULL ELSE ssl_checked_at END,
 			ssl_notified_bucket = CASE WHEN $18 THEN NULL ELSE ssl_notified_bucket END, ssl_notified_for = CASE WHEN $18 THEN NULL ELSE ssl_notified_for END
 			WHERE id = $1 AND organization_id = $2 RETURNING `+cols,
 			id, orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout, reset,
 			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.keepSecret, sealed, f.assertions, f.url != cur.URL, f.regions,
-			f.slowThreshold, f.slowChecks), minInterval)
+			f.slowThreshold, f.slowChecks, f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ), minInterval)
 		if err != nil {
 			return err
 		}

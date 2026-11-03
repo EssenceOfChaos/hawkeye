@@ -157,6 +157,18 @@ export interface Monitor {
   badge_token: string | null
   /** Sorted by name. */
   tags: Tag[]
+  /** Announce an outage only once it has lasted this many minutes (0: as soon as it is confirmed). */
+  alert_delay_minutes: number
+  /** Alerts for this monitor are held during this daily window and sent when it ends; null for none. */
+  quiet_hours: QuietHours | null
+}
+
+/** A daily window in local time ("HH:MM"); an end earlier than the start crosses midnight. */
+export interface QuietHours {
+  start: string
+  end: string
+  /** An IANA time zone such as America/New_York. */
+  timezone: string
 }
 
 /** Groups monitors, for example by client or project. */
@@ -175,7 +187,7 @@ export interface TagSummary extends Tag {
 export const MAX_TAGS_PER_MONITOR = 10
 export const MAX_TAG_NAME = 40
 
-export type BulkAction = 'pause' | 'resume' | 'delete' | 'set_interval' | 'add_tags' | 'remove_tags'
+export type BulkAction = 'pause' | 'resume' | 'delete' | 'set_interval' | 'add_tags' | 'remove_tags' | 'set_alert_timing'
 
 export interface SSLInfo {
   expires_at: string
@@ -286,7 +298,16 @@ export interface NotificationSetting {
   destination: string // the address; for webhook and chat URLs a masked host such as hooks.slack.com/…; for Telegram "chat <id>"
   enabled: boolean
   verified: boolean
+  /** Which monitors it gets alerts for: every monitor, or only those carrying one of tag_ids. */
+  monitor_scope: 'all' | 'tags'
+  tag_ids: string[]
   created_at: string
+}
+
+/** Monitors that no destination is routed to, and whether their alerts can fall back to the team's own email addresses. */
+export interface AlertCoverage {
+  uncovered_monitors: { id: string; name: string }[]
+  fallback_available: boolean
 }
 
 export interface Incident {
@@ -398,6 +419,8 @@ export interface MonitorInput {
   slow_checks?: number
   /** Replaces the monitor's tags. */
   tag_ids?: string[]
+  alert_delay_minutes?: number
+  quiet_hours?: QuietHours | null
 }
 
 /** An error response from the API, using the common `{error: {code, message, details}}` envelope. */

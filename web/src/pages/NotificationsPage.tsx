@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { api, ApiError, type NotificationSetting, type TelegramLink } from '../api'
+import { Link } from 'react-router'
+import { api, ApiError, type AlertCoverage, type NotificationSetting, type TagSummary, type TelegramLink } from '../api'
 import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
+import { TagChip } from '../components/Tags'
 
 type Channel = NotificationSetting['channel']
 
@@ -113,6 +115,77 @@ function TelegramConnect({ bot, disabled, items, onConnected, onError }: {
   )
 }
 
+/** Which monitors a destination is told about: all of them, or the tags it is routed to. */
+export function RoutingSummary({ s, tags }: { s: NotificationSetting; tags: TagSummary[] }) {
+  if (s.monitor_scope !== 'tags') return <span>All monitors</span>
+  const chosen = tags.filter((t) => s.tag_ids.includes(t.id))
+  if (chosen.length === 0) return <span className="hint">No monitors (its tags were deleted)</span>
+  return (
+    <ul className="tag-list" aria-label="Only monitors tagged">
+      {chosen.map((t) => <li key={t.id}><TagChip tag={t} /></li>)}
+    </ul>
+  )
+}
+
+/** Owner-only: choose whether a destination gets every monitor's alerts or only those of monitors with some tags. */
+export function RoutingEditor({ s, tags, onSave, onCancel }: {
+  s: NotificationSetting
+  tags: TagSummary[]
+  onSave: (scope: 'all' | 'tags', tagIDs: string[]) => void
+  onCancel: () => void
+}) {
+  const [scope, setScope] = useState<'all' | 'tags'>(s.monitor_scope)
+  const [chosen, setChosen] = useState<string[]>(s.tag_ids.filter((id) => tags.some((t) => t.id === id)))
+  const name = `scope-${s.id}`
+  return (
+    <fieldset className="group routing-editor">
+      <legend>Send alerts for</legend>
+      <label><input type="radio" name={name} checked={scope === 'all'} onChange={() => setScope('all')} /> All monitors, and account-wide alerts such as domain expiry</label>
+      <label>
+        <input type="radio" name={name} checked={scope === 'tags'} disabled={tags.length === 0} onChange={() => setScope('tags')} /> Only monitors with these tags
+      </label>
+      {tags.length === 0 && <p className="hint">Create tags on the <Link to="/monitors">Monitors</Link> page to send a client only their own sites’ alerts.</p>}
+      {scope === 'tags' && (
+        <div className="filters" role="group" aria-label="Tags">
+          {tags.map((t) => {
+            const on = chosen.includes(t.id)
+            return (
+              <label key={t.id} className={`chip${on ? ' selected' : ''}`}>
+                <input type="checkbox" checked={on} onChange={(e) => setChosen(e.target.checked ? [...chosen, t.id] : chosen.filter((id) => id !== t.id))} />
+                <TagChip tag={t} />
+              </label>
+            )
+          })}
+        </div>
+      )}
+      <div className="row">
+        <button type="button" className="primary" disabled={scope === 'tags' && chosen.length === 0} onClick={() => onSave(scope, scope === 'tags' ? chosen : [])}>Save</button>
+        <button type="button" className="linklike" onClick={onCancel}>Cancel</button>
+      </div>
+    </fieldset>
+  )
+}
+
+/** Warns about monitors whose alerts no destination is routed to: they go to the team's own addresses, or, without any, to nobody. */
+export function CoverageWarning({ coverage }: { coverage: AlertCoverage }) {
+  const missing = coverage.uncovered_monitors
+  if (missing.length === 0) return null
+  const shown = missing.slice(0, 5).map((m) => m.name).join(', ') + (missing.length > 5 ? ` and ${missing.length - 5} more` : '')
+  const which = missing.length === 1 ? '1 monitor is' : `${missing.length} monitors are`
+  return coverage.fallback_available ? (
+    <Alert tone="warning" role="status">
+      {which} not routed to any destination: {shown}. Their alerts go to your team members’ own email addresses instead. Send a destination alerts for all
+      monitors, or for their tags, to choose where they go.
+    </Alert>
+  ) : (
+    <Alert>
+      <strong>Nobody would be alerted</strong> if {missing.length === 1 ? 'this monitor goes' : 'these monitors go'} offline: {shown}. No destination is routed to{' '}
+      {missing.length === 1 ? 'it' : 'them'}, and no team member has their own address here to fall back to. Send a destination alerts for all monitors, or
+      for their tags.
+    </Alert>
+  )
+}
+
 function StatusLabel({ s }: { s: NotificationSetting }) {
   if (!s.verified) return <span className="d-badge d-badge-soft d-badge-warning"><span aria-hidden="true">⏳</span> Waiting for confirmation</span>
   if (!s.enabled) return <span className="d-badge d-badge-soft d-badge-ghost"><span aria-hidden="true">⏸</span> Alerts off</span>
@@ -138,6 +211,9 @@ export function NotificationsPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [testing, setTesting] = useState<string | null>(null) // the recipient a test is being sent to right now
+  const [tags, setTags] = useState<TagSummary[]>([])
+  const [coverage, setCoverage] = useState<AlertCoverage | null>(null)
+  const [routing, setRouting] = useState<string | null>(null) // the destination whose routing is being edited
 
   const load = useCallback(async () => {
     try {
@@ -146,6 +222,13 @@ export function NotificationsPage() {
       setMax(r.max)
       setTelegramBot(r.telegram_bot ?? '')
       setError(null)
+      // Routing details only add to the list; it still works without them.
+      const [t, c] = await Promise.all([
+        api<{ tags?: TagSummary[] }>('GET', '/tags').catch(() => ({ tags: [] })),
+        api<AlertCoverage>('GET', '/notification-settings/coverage').catch(() => null),
+      ])
+      setTags(t.tags ?? [])
+      setCoverage(c && Array.isArray(c.uncovered_monitors) ? c : null)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not load alert recipients.')
     }
@@ -234,6 +317,10 @@ export function NotificationsPage() {
         <h1>Alert recipients</h1>
       </div>
       <p>Everything listed here is told when a monitor is confirmed offline, when it recovers, and when a certificate or domain is about to expire: by email, in Slack, Discord, Microsoft Teams or Telegram, or by a signed webhook to your own systems.</p>
+      <p className="hint">
+        Each destination gets alerts for all monitors, or only for monitors with chosen tags, so each client can get just their own sites’ alerts. To delay a
+        monitor’s alerts or hold them overnight, edit the monitor.
+      </p>
 
       {!verified && (
         <Alert tone="warning" role="status">
@@ -242,6 +329,7 @@ export function NotificationsPage() {
       )}
       {error && <Alert>{error}</Alert>}
       {notice && <Alert tone="success" role="status">{notice}</Alert>}
+      {coverage && <CoverageWarning coverage={coverage} />}
       {secret && (
         <Alert tone="warning" role="status">
           Signing secret: <code>{secret}</code>. Copy it now — it is not shown again. HawkEye signs every request with it (HMAC-SHA256 in the <code>X-HawkEye-Signature</code> header), so your server can check a request is genuine.
@@ -254,7 +342,7 @@ export function NotificationsPage() {
           <table>
             <caption className="sr-only">Alert recipients</caption>
             <thead>
-              <tr><th>Destination</th><th>Status</th>{(isOwner || items.some(mine)) && <th>Actions</th>}</tr>
+              <tr><th>Destination</th><th>Status</th><th>Alerts for</th>{(isOwner || items.some(mine)) && <th>Actions</th>}</tr>
             </thead>
             <tbody>
               {items.map((s) => (
@@ -265,6 +353,22 @@ export function NotificationsPage() {
                     {mine(s) ? <span className="hint"> (you)</span> : s.user_id && <span className="hint"> (team member)</span>}
                   </td>
                   <td><StatusLabel s={s} /></td>
+                  <td>
+                    {routing === s.id ? (
+                      <RoutingEditor s={s} tags={tags} onCancel={() => setRouting(null)}
+                        onSave={(scope, tagIDs) => void run(async () => {
+                          await api('PUT', `/notification-settings/${s.id}/routing`, { monitor_scope: scope, tag_ids: tagIDs })
+                          setRouting(null)
+                        }, scope === 'all' ? 'Saved. This destination gets alerts for all monitors.' : 'Saved. This destination gets alerts only for monitors with those tags.')} />
+                    ) : (
+                      <>
+                        <RoutingSummary s={s} tags={tags} />
+                        {isOwner && (
+                          <div><button type="button" className="linklike" onClick={() => setRouting(s.id)} aria-label={`Change which monitors ${s.destination} gets alerts for`}>Change</button></div>
+                        )}
+                      </>
+                    )}
+                  </td>
                   {!isOwner && items.some(mine) && (
                     // A member may turn off or remove only their own address, added when they joined.
                     <td className="actions">

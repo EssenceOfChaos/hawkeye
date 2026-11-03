@@ -17,6 +17,7 @@ import (
 	"hawkeye/internal/billing"
 	"hawkeye/internal/checks"
 	"hawkeye/internal/email"
+	"hawkeye/internal/monitors"
 	"hawkeye/internal/validation"
 )
 
@@ -98,6 +99,9 @@ type ExportMonitor struct {
 	SlowChecks      int  `json:"slow_checks"`
 	// The names of the monitor's tags, sorted.
 	Tags []string `json:"tags"`
+	// Alert timing: minutes an outage must last before it is announced, and quiet hours ({start, end, timezone}, or null).
+	AlertDelayMinutes int                  `json:"alert_delay_minutes"`
+	QuietHours        *monitors.QuietHours `json:"quiet_hours"`
 }
 
 // ExportAuth names a monitor's authentication method and its non-secret settings.
@@ -211,18 +215,23 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 	rows, err := s.pool.Query(ctx, `SELECT id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds, enabled, current_status, created_at,
 		request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), assertions, regions,
 		slow_threshold_ms, slow_checks,
-		COALESCE((SELECT array_agg(t.name ORDER BY lower(t.name)) FROM monitor_tags mt JOIN tags t ON t.id = mt.tag_id WHERE mt.monitor_id = monitors.id), '{}')
+		COALESCE((SELECT array_agg(t.name ORDER BY lower(t.name)) FROM monitor_tags mt JOIN tags t ON t.id = mt.tag_id WHERE mt.monitor_id = monitors.id), '{}'),
+		alert_delay_minutes, to_char(make_time(quiet_start / 60, quiet_start % 60, 0), 'HH24:MI'), to_char(make_time(quiet_end / 60, quiet_end % 60, 0), 'HH24:MI'), quiet_timezone
 		FROM monitors WHERE organization_id = $1 AND deleted_at IS NULL ORDER BY created_at, id`, o.ID)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
 		var m ExportMonitor
+		var quietStart, quietEnd, quietTZ *string
 		if err := rows.Scan(&m.ID, &m.Name, &m.URL, &m.Method, &m.ExpectedStatusCode, &m.CheckIntervalSeconds, &m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.CreatedAt,
 			&m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username, &m.Auth.HeaderName, &m.Assertions, &m.Regions,
-			&m.SlowThresholdMs, &m.SlowChecks, &m.Tags); err != nil {
+			&m.SlowThresholdMs, &m.SlowChecks, &m.Tags, &m.AlertDelayMinutes, &quietStart, &quietEnd, &quietTZ); err != nil {
 			rows.Close()
 			return err
+		}
+		if quietStart != nil && quietEnd != nil && quietTZ != nil {
+			m.QuietHours = &monitors.QuietHours{Start: *quietStart, End: *quietEnd, Timezone: *quietTZ}
 		}
 		o.Monitors = append(o.Monitors, m)
 	}

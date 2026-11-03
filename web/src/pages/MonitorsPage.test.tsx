@@ -46,6 +46,30 @@ describe('BulkBar', () => {
     expect(onRun.mock.calls).toEqual([['add_tags', { tag_ids: ['t2'] }], ['set_interval', { check_interval_seconds: 600 }]])
   })
 
+  it('sets alert timing in bulk, sending only what was chosen', () => {
+    const onRun = vi.fn()
+    render(<BulkBar count={4} tags={tags} minMinutes={5} onRun={onRun} onClear={() => undefined} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Alert timing…' }))
+    const apply = screen.getByRole('button', { name: 'Apply' })
+    expect(apply).toBeDisabled() // both start at "keep"
+
+    fireEvent.change(screen.getByLabelText('Alert'), { target: { value: '15' } })
+    fireEvent.click(apply)
+    expect(onRun).toHaveBeenLastCalledWith('set_alert_timing', { alert_delay_minutes: 15 })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Alert timing…' }))
+    fireEvent.change(screen.getByLabelText('Quiet hours'), { target: { value: 'off' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    expect(onRun).toHaveBeenLastCalledWith('set_alert_timing', { quiet_hours: null })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Alert timing…' }))
+    fireEvent.change(screen.getByLabelText('Quiet hours'), { target: { value: 'set' } })
+    fireEvent.change(screen.getByLabelText('Quiet hours start'), { target: { value: '21:30' } })
+    fireEvent.change(screen.getByLabelText('Time zone'), { target: { value: 'Europe/London' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    expect(onRun).toHaveBeenLastCalledWith('set_alert_timing', { quiet_hours: { start: '21:30', end: '07:00', timezone: 'Europe/London' } })
+  })
+
   it('hides tag actions when the organization has no tags', () => {
     render(<BulkBar count={2} tags={[]} minMinutes={5} onRun={() => undefined} onClear={() => undefined} />)
     expect(screen.queryByLabelText('Tag to add')).not.toBeInTheDocument()

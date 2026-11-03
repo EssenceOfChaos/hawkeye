@@ -170,6 +170,35 @@ func (h *handlers) updateSetting(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"notification_setting": s})
 }
 
+// setRouting chooses which monitors a destination gets alerts for (owner only).
+func (h *handlers) setRouting(c echo.Context) error {
+	id, err := settingID(c)
+	if err != nil {
+		return err
+	}
+	var in struct {
+		MonitorScope string      `json:"monitor_scope"`
+		TagIDs       []uuid.UUID `json:"tag_ids"`
+	}
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	s, err := h.notifications.SetRouting(c.Request().Context(), currentOrg(c), id, in.MonitorScope, in.TagIDs)
+	if err != nil {
+		return mapError(err)
+	}
+	return c.JSON(http.StatusOK, map[string]any{"notification_setting": s})
+}
+
+// alertCoverage lists monitors that no destination is routed to, and whether the fallback (team members' own email addresses) can reach anyone.
+func (h *handlers) alertCoverage(c echo.Context) error {
+	uncovered, fallback, err := h.notifications.Coverage(c.Request().Context(), currentOrg(c))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"uncovered_monitors": uncovered, "fallback_available": fallback})
+}
+
 func (h *handlers) deleteSetting(c echo.Context) error {
 	id, err := settingID(c)
 	if err != nil {

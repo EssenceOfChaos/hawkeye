@@ -8,6 +8,7 @@ import { PageIcon } from '../components/Brand'
 import { CertBadge } from '../components/Certificate'
 import { StatusBadge } from '../components/StatusBadge'
 import { TagList } from '../components/Tags'
+import { BulkAlertTiming, type AlertTimingChange } from '../components/AlertTiming'
 
 const PAGE_SIZE = 25
 
@@ -47,18 +48,21 @@ const plural = (n: number) => `${n} monitor${n === 1 ? '' : 's'}`
 /** What a finished bulk action did, for the status line. */
 const DONE: Record<BulkAction, string> = {
   pause: 'Paused', resume: 'Resumed', delete: 'Deleted', set_interval: 'Changed the interval of',
-  add_tags: 'Tagged', remove_tags: 'Removed the tag from',
+  add_tags: 'Tagged', remove_tags: 'Removed the tag from', set_alert_timing: 'Changed the alert timing of',
 }
+
+type BulkExtra = { check_interval_seconds?: number; tag_ids?: string[] } & AlertTimingChange
 
 /** Acts on the selected monitors. Every action is all or nothing on the server. */
 export function BulkBar({ count, tags, minMinutes, onRun, onClear }: {
   count: number
   tags: TagSummary[]
   minMinutes: number
-  onRun: (action: BulkAction, extra?: { check_interval_seconds?: number; tag_ids?: string[] }) => void
+  onRun: (action: BulkAction, extra?: BulkExtra) => void
   onClear: () => void
 }) {
   const [minutes, setMinutes] = useState('')
+  const [timing, setTiming] = useState(false)
   const [addTag, setAddTag] = useState('')
   const [removeTag, setRemoveTag] = useState('')
   return (
@@ -85,9 +89,16 @@ export function BulkBar({ count, tags, minMinutes, onRun, onClear }: {
       <button type="button" disabled={minutes === ''} onClick={() => onRun('set_interval', { check_interval_seconds: Number(minutes) * 60 })}>
         Set interval
       </button>
+      <button type="button" aria-expanded={timing} onClick={() => setTiming(!timing)}>Alert timing…</button>
       <button type="button" className="danger" onClick={() => onRun('delete')}>Delete</button>
       <span className="spacer" />
       <button type="button" className="linklike" onClick={onClear}>Clear selection</button>
+      {timing && (
+        <BulkAlertTiming onCancel={() => setTiming(false)} onApply={(change) => {
+          setTiming(false)
+          onRun('set_alert_timing', change)
+        }} />
+      )}
     </div>
   )
 }
@@ -229,7 +240,7 @@ export function MonitorsPage() {
     }
   }
 
-  async function bulk(action: BulkAction, extra: { check_interval_seconds?: number; tag_ids?: string[] } = {}) {
+  async function bulk(action: BulkAction, extra: BulkExtra = {}) {
     const n = selected.length
     if (action === 'delete' && !window.confirm(`Delete ${plural(n)}? Their monitoring stops and this cannot be undone.`)) return
     setNotice(null)

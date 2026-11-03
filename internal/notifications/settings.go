@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,7 +44,10 @@ type Setting struct {
 	Destination string     `json:"destination"`
 	Enabled     bool       `json:"enabled"`
 	Verified    bool       `json:"verified"`
-	CreatedAt   time.Time  `json:"created_at"`
+	// Which monitors it gets alerts for: "all" (every monitor, and account-wide alerts) or "tags" (only monitors carrying one of TagIDs).
+	MonitorScope string      `json:"monitor_scope"`
+	TagIDs       []uuid.UUID `json:"tag_ids"`
+	CreatedAt    time.Time   `json:"created_at"`
 }
 
 // Actor is the authenticated user performing an action.
@@ -87,12 +91,101 @@ func NewService(pool *pgxpool.Pool, mail email.Sender, log *slog.Logger, appBase
 }
 
 // For webhook and chat destinations the stored destination is sealed, so what is shown is the masked label.
-const cols = `id, user_id, channel, COALESCE(label, destination), enabled, verified_at IS NOT NULL, created_at`
+const cols = `id, user_id, channel, COALESCE(label, destination), enabled, verified_at IS NOT NULL, created_at, monitor_scope,
+	COALESCE((SELECT array_agg(tag_id ORDER BY tag_id) FROM notification_setting_tags WHERE setting_id = notification_settings.id), '{}')`
 
 func scan(row pgx.Row) (Setting, error) {
 	var s Setting
-	err := row.Scan(&s.ID, &s.UserID, &s.Channel, &s.Destination, &s.Enabled, &s.Verified, &s.CreatedAt)
+	err := row.Scan(&s.ID, &s.UserID, &s.Channel, &s.Destination, &s.Enabled, &s.Verified, &s.CreatedAt, &s.MonitorScope, &s.TagIDs)
 	return s, err
+}
+
+// Monitor scopes.
+const (
+	ScopeAll  = "all"
+	ScopeTags = "tags"
+)
+
+// SetRouting chooses which monitors a destination gets alerts for: every monitor (ScopeAll), or only those carrying one of tagIDs (ScopeTags; at least
+// one tag, all of them the organization's own).
+func (s *Service) SetRouting(ctx context.Context, orgID, id uuid.UUID, scope string, tagIDs []uuid.UUID) (Setting, error) {
+	ids := []uuid.UUID{}
+	for _, t := range tagIDs {
+		if !slices.Contains(ids, t) {
+			ids = append(ids, t)
+		}
+	}
+	switch scope {
+	case ScopeAll:
+		ids = []uuid.UUID{}
+	case ScopeTags:
+		if len(ids) == 0 {
+			return Setting{}, validation.New("tag_ids", "choose at least one tag, or send alerts for all monitors")
+		}
+	default:
+		return Setting{}, validation.New("monitor_scope", "must be all or tags")
+	}
+	var st Setting
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		var n int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM tags WHERE organization_id = $1 AND id = ANY($2)`, orgID, ids).Scan(&n); err != nil {
+			return err
+		}
+		if n != len(ids) {
+			return validation.New("tag_ids", "contains a tag that does not exist")
+		}
+		tag, err := tx.Exec(ctx, `UPDATE notification_settings SET monitor_scope = $3 WHERE id = $1 AND organization_id = $2`, id, orgID, scope)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrNotFound
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM notification_setting_tags WHERE setting_id = $1 AND NOT (tag_id = ANY($2))`, id, ids); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO notification_setting_tags (setting_id, tag_id) SELECT $1, unnest($2::uuid[]) ON CONFLICT DO NOTHING`, id, ids); err != nil {
+			return err
+		}
+		st, err = scan(tx.QueryRow(ctx, `SELECT `+cols+` FROM notification_settings WHERE id = $1`, id))
+		return err
+	})
+	return st, err
+}
+
+// UncoveredMonitor is a monitor whose alerts no destination is routed to.
+type UncoveredMonitor struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+}
+
+// Coverage lists the organization's monitors that routing sends to no destination (so their alerts would use the fallback, see routing.go), and
+// whether a fallback address exists at all. With fallback false, alerts for those monitors would reach nobody.
+func (s *Service) Coverage(ctx context.Context, orgID uuid.UUID) (uncovered []UncoveredMonitor, fallback bool, err error) {
+	rows, err := s.pool.Query(ctx, `SELECT m.id, m.name FROM monitors m
+		WHERE m.organization_id = $1 AND m.deleted_at IS NULL AND NOT EXISTS (
+			SELECT 1 FROM notification_settings s WHERE s.organization_id = $1 AND s.enabled AND s.verified_at IS NOT NULL
+				AND (s.monitor_scope = 'all' OR EXISTS (SELECT 1 FROM notification_setting_tags nt JOIN monitor_tags mt ON mt.tag_id = nt.tag_id
+					WHERE nt.setting_id = s.id AND mt.monitor_id = m.id)))
+		ORDER BY lower(m.name), m.id`, orgID)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	uncovered = []UncoveredMonitor{}
+	for rows.Next() {
+		var u UncoveredMonitor
+		if err := rows.Scan(&u.ID, &u.Name); err != nil {
+			return nil, false, err
+		}
+		uncovered = append(uncovered, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	err = s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM notification_settings s JOIN organization_members om ON om.organization_id = s.organization_id AND om.user_id = s.user_id
+		WHERE s.organization_id = $1 AND s.enabled AND s.verified_at IS NOT NULL AND s.channel = 'email')`, orgID).Scan(&fallback)
+	return uncovered, fallback, err
 }
 
 func (s *Service) List(ctx context.Context, orgID uuid.UUID) ([]Setting, error) {

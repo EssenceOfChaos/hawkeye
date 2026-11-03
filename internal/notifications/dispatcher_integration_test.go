@@ -208,7 +208,7 @@ func TestIdempotencyConstraintBlocksDuplicates(t *testing.T) {
 	}
 
 	tx, _ := e.pool.Begin(t.Context())
-	n, err := notifications.Enqueue(t.Context(), tx, e.org, e.inc, notifications.EventOutage)
+	n, err := notifications.Enqueue(t.Context(), tx, e.org, e.monitor, e.inc, notifications.EventOutage, time.Now())
 	tx.Commit(t.Context())
 	if err != nil || n != 0 {
 		t.Fatalf("re-enqueueing must be a no-op, inserted %d (%v)", n, err)

@@ -255,6 +255,11 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .tag-manager li { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding: .4rem 0; border-bottom: 1px solid var(--border); }
 .tag-manager ul { list-style: none; padding: 0; margin: 0; }
 .tag-manager input[type="color"] { width: 2.5rem; height: 2rem; padding: 0; }
+.routing-editor { margin: 0; min-width: 16rem; }
+.routing-editor label { display: block; margin: .2rem 0; }
+.routing-editor .filters { margin: .5rem 0; }
+.bulk-bar .bulk-timing { flex-basis: 100%; margin: .25rem 0 0; }
+.bulk-timing .row { margin: .35rem 0; }
 .hero-figure { margin: 0 0 1rem; }
 .stat-label { font-size: .85rem; opacity: .75; }
 .hero-value { font-size: 3.5rem; font-weight: 700; line-height: 1.1; letter-spacing: -.02em; }
