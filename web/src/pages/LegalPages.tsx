@@ -105,8 +105,17 @@ export function PrivacyPage() {
         We use <strong>Google Analytics</strong> (provided by Google LLC) to understand how people use our website, for example which pages are visited and from what kind of device. Google receives the
         page address (without any query string or fragment, so one-time links and tokens are not shared; the one exception is campaign tags such as <code>utm_source</code> and advertising click identifiers, which tell us which of our ads or links brought you here and contain no personal information), the page title, whether you created an account (an event with no name or email attached), your IP address, browser and device information, and an identifier stored in a cookie, and it processes
         them for us under its own terms. We turn off Google’s advertising features and ad personalization, and we do not send your name, email address, or monitoring data to Google. You can turn analytics off at any time (see Section E), and we also treat a Global Privacy Control signal from your browser as a choice to opt out. When analytics is off, no Google script is loaded and nothing is sent to Google. We also use <strong>Google Ads</strong> conversion measurement, which tells us whether a visit that began with one of our ads ended in a paid subscription. When a payment is confirmed, Google receives a
-        “purchase” event with the price you paid (the plan’s monthly or yearly price) and a timestamp that identifies the purchase, together with the same technical information described above; it contains no name, email address, or card details. We use this only to measure our own advertising, not to build audiences or show you ads elsewhere. Google Ads conversion measurement is covered by the same opt-out: when analytics is off, nothing is sent to Google Ads either. We do not use any other advertising or
-        error-tracking service. If that changes, we will update this Policy first.
+        “purchase” event with the price you paid (the plan’s monthly or yearly price) and a timestamp that identifies the purchase, together with the same technical information described above; it contains no name, email address, or card details. We use this only to measure our own advertising, not to build audiences or show you ads elsewhere. Google Ads conversion measurement is covered by the same opt-out: when analytics is off, nothing is sent to Google Ads either.
+      </p>
+      <p>
+        We also advertise in ChatGPT and use the <strong>OpenAI Ads measurement pixel</strong> (provided by OpenAI) to learn whether a visit that began with one of those ads led to a
+        sign-up or a paid subscription. The pixel is a script from OpenAI that runs on our pages. It receives the address of the page (we load it only on pages whose address contains
+        no one-time link, token, or other personal information, and never on pages that do), that a page was viewed, that an account was created (with no name or email
+        attached), and, when a payment is confirmed, a subscription event with the plan, the price you paid, and an identifier for that purchase, together with your IP address
+        and browser and device information. It stores two cookies, listed below: an ad-click reference when you arrive from an OpenAI ad, and a random reference for your browser.
+        We do not send your name, email address, or monitoring data to OpenAI, and we use this only to measure our own advertising, not to build audiences or show you ads elsewhere.
+        The pixel is covered by the same opt-out as Google Analytics: when analytics is off, it is not loaded, nothing is sent to OpenAI, and its cookies are deleted. We do not
+        use any other advertising or error-tracking service. If that changes, we will update this Policy first.
       </p>
 
       <h3>D. Subscription and payment information</h3>
@@ -122,7 +131,7 @@ export function PrivacyPage() {
       </p>
 
       <h3>E. Cookies and similar technologies</h3>
-      <p>HawkEye always uses the cookies it needs to work. Google Analytics cookies, which measure how the site is used, are set by default, and you can turn them off at any time (see below). We do not use advertising cookies for ad targeting or remarketing; the only advertising-related cookies are the conversion-measurement cookies in the table below, and we host our fonts ourselves so your browser does not contact a font provider.</p>
+      <p>HawkEye always uses the cookies it needs to work. Google Analytics cookies, which measure how the site is used, are set by default, and you can turn them off at any time (see below). We do not use advertising cookies for ad targeting or remarketing; the only advertising-related cookies are the Google and OpenAI conversion-measurement cookies in the table below, and we host our fonts ourselves so your browser does not contact a font provider.</p>
       <table>
         <thead><tr><th>Cookie</th><th>Purpose</th><th>Category</th><th>Lifetime</th></tr></thead>
         <tbody>
@@ -131,11 +140,13 @@ export function PrivacyPage() {
           <tr><td><code>hawkeye_analytics</code></td><td>Remembers your analytics choice (on or off) if you use “Cookie settings.”</td><td>Strictly necessary</td><td>1 year</td></tr>
           <tr><td><code>_ga</code>, <code>_ga_ZNT8EMTFGY</code></td><td>Set by Google Analytics, unless you turn analytics off, to tell visitors and sessions apart and measure site usage.</td><td>Analytics (opt-out)</td><td>Up to 2 years</td></tr>
           <tr><td><code>_gcl_au</code>, <code>_gcl_aw</code></td><td>Set by the Google tag for Google Ads conversion measurement, unless you turn analytics off, to connect a visit that began with one of our ads to a later purchase. <code>_gcl_aw</code> is set only when you arrive from a Google ad.</td><td>Advertising measurement (opt-out)</td><td>Up to 90 days</td></tr>
+          <tr><td><code>__oppref</code></td><td>Set by the OpenAI Ads pixel, unless you turn analytics off, when you arrive from an ad in ChatGPT, to connect that visit to a later sign-up or purchase.</td><td>Advertising measurement (opt-out)</td><td>30 days from your last visit from an OpenAI ad</td></tr>
+          <tr><td><code>__obref</code></td><td>Set by the OpenAI Ads pixel, unless you turn analytics off: a random reference for your browser on our site, used for the same measurement.</td><td>Advertising measurement (opt-out)</td><td>1 year</td></tr>
         </tbody>
       </table>
       <p>
-        The sign-in, security, and cookie-choice cookies are strictly necessary to provide the Service you ask for. The Google Analytics and Google Ads measurement cookies are not, so you are free to refuse them: use the “Cookie settings” link at the bottom
-        of our pages and choose “Turn off analytics,” which stops Google Analytics and Google Ads measurement and deletes their cookies. If your browser sends a Global Privacy Control signal, we treat that as turning analytics off. You can also block or delete cookies in your browser settings, or install Google’s <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener noreferrer">Analytics opt-out browser add-on</a>; the Service works the same without them. Google’s handling of the data is described in its
+        The sign-in, security, and cookie-choice cookies are strictly necessary to provide the Service you ask for. The Google Analytics, Google Ads, and OpenAI Ads measurement cookies are not, so you are free to refuse them: use the “Cookie settings” link at the bottom
+        of our pages and choose “Turn off analytics,” which stops Google Analytics, Google Ads, and OpenAI Ads measurement and deletes their cookies. If your browser sends a Global Privacy Control signal, we treat that as turning analytics off. You can also block or delete cookies in your browser settings, or install Google’s <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener noreferrer">Analytics opt-out browser add-on</a>; the Service works the same without them. Google’s handling of the data is described in its
         <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">“How Google uses information from sites or apps that use our services”</a> page. When you pay, Stripe’s hosted checkout page may set its own cookies; see Stripe’s
         policies. Our emails do not contain tracking pixels and we do not track email opens or link clicks.
       </p>
@@ -176,7 +187,8 @@ export function PrivacyPage() {
         <li><strong>Cloudflare</strong>: domain name (DNS) services and the forwarding of messages sent to our support address.</li>
         <li><strong>Google (Gmail)</strong>: the mailbox where we read and answer support messages.</li>
         <li><strong>Sentry</strong>: error tracking. When something unexpected goes wrong in our software, a technical error report is sent from our servers to Sentry so we can find and fix the problem. A report contains the error message, the software version and the part of the service that failed, and may include technical identifiers or a web address that appeared in the error. We remove email addresses, passwords, tokens and keys from it before it leaves our servers, and we do not send request contents, cookies, or the names of the people using the Service.</li>
-        <li><strong>Google (Analytics and Ads)</strong>: website usage analytics and measurement of our own advertising, unless you opt out, as described in Section 2.C and E. Google receives page addresses without query strings or fragments, your IP address, browser and device information, and, when a payment is confirmed, a purchase event with the plan’s monthly price.</li>
+        <li><strong>Google (Analytics and Ads)</strong>: website usage analytics and measurement of our own advertising, unless you opt out, as described in Section 2.C and E. Google receives page addresses without query strings or fragments, your IP address, browser and device information, and, when a payment is confirmed, a purchase event with the price paid.</li>
+        <li><strong>OpenAI (Ads measurement)</strong>: measurement of our own advertising in ChatGPT, unless you opt out, as described in Section 2.C and E. OpenAI receives page addresses that contain no personal information, page-view and sign-up events, your IP address, browser and device information, and, when a payment is confirmed, a subscription event with the plan and the price paid.</li>
       </ul>
       <p>
         To find when a domain’s registration expires, we ask the public registry that runs the domain’s top-level domain (and the Internet Assigned Numbers Authority, which tells us which registry to ask). Those requests contain the domain name
@@ -211,7 +223,7 @@ export function PrivacyPage() {
       <p>Information you publish on a status page (see Section 2) is visible to anyone with its address.</p>
 
       <p>
-        We do not sell personal information or share it for cross-context behavioral advertising, and we do not use it for targeted advertising. Google Ads is used only to measure whether our ads led to a purchase, with ad personalization turned off.
+        We do not sell personal information or share it for cross-context behavioral advertising, and we do not use it for targeted advertising. Google Ads and the OpenAI Ads pixel are used only to measure whether our ads led to a sign-up or purchase, with Google’s ad personalization turned off.
       </p>
 
       <h2>5. Data Retention</h2>

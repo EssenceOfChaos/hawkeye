@@ -3,12 +3,17 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider, useAuth } from './auth'
-import { analyticsEnabled, initAnalytics, readChoice, safeLocation, setChoice, trackEvent, trackPageView } from './analytics'
+import { addressIsShareable, analyticsEnabled, initAnalytics, readChoice, safeLocation, setChoice, trackEvent, trackPageView, trackRegistration, trackSubscription } from './analytics'
 import { CookieBanner, CookieSettingsButton } from './components/CookieBanner'
 
-type G = { gtag?: unknown; dataLayer?: unknown[] }
+type G = { gtag?: unknown; dataLayer?: unknown[]; oaiq?: { q?: unknown[] } }
 const win = window as unknown as G
 const googleScripts = () => [...document.querySelectorAll('script')].filter((s) => s.src.includes('googletagmanager'))
+const openAIScripts = () => [...document.querySelectorAll('script')].filter((s) => s.src.includes('bzrcdn.openai.com'))
+/** The calls queued for the OpenAI SDK, as arrays. */
+const openAICalls = () => (win.oaiq?.q ?? []).map((a) => Array.from(a as ArrayLike<unknown>))
+const openAIEvents = () => openAICalls().filter((c) => c[0] === 'measure').map((c) => c[1])
+const at = (address: string) => vi.stubGlobal('location', new URL(address))
 const sentEvents = () => JSON.stringify((win.dataLayer ?? []).map((a) => Array.from(a as ArrayLike<unknown>)))
 
 function clearCookies() {
@@ -25,6 +30,8 @@ beforeEach(() => {
   document.head.querySelectorAll('script').forEach((s) => s.remove())
   delete win.gtag
   delete win.dataLayer
+  delete win.oaiq
+  localStorage.clear()
   asProductionHost()
 })
 afterEach(() => {
@@ -146,5 +153,87 @@ describe('analytics (on by default, opt-out)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'ok' }))
     await vi.waitFor(() => expect(sentEvents()).toContain('sign_up'))
     expect(sentEvents()).not.toContain('new@example.com')
+  })
+})
+
+describe('OpenAI Ads pixel', () => {
+  it('loads with the pixel id on a safe address, with debug logging off', () => {
+    at('https://hawkeye.observer/?utm_source=chatgpt&oppref=abc123')
+    initAnalytics()
+    expect(openAIScripts()).toHaveLength(1)
+    expect(openAIScripts()[0].src).toBe('https://bzrcdn.openai.com/sdk/oaiq.min.js')
+    expect(openAICalls()).toContainEqual(['init', { pixelId: 'BQzFQqkTH5HXxdU4vT171u', debug: false }])
+  })
+
+  it('turns on debug logging only in a browser that asked for it', () => {
+    localStorage.setItem('hawkeye_oaiq_debug', '1')
+    at('https://hawkeye.observer/')
+    initAnalytics()
+    expect(openAICalls()).toContainEqual(['init', { pixelId: 'BQzFQqkTH5HXxdU4vT171u', debug: true }])
+  })
+
+  it('never loads or sends anything while the address carries a token, and starts on the next safe page', () => {
+    initAnalytics() // on /reset-password?token=secret#frag
+    trackPageView('/reset-password')
+    expect(openAIScripts()).toHaveLength(0)
+    expect(win.oaiq).toBeUndefined()
+    expect(googleScripts()).toHaveLength(1) // Google is unaffected: it is only ever sent the cleaned address
+
+    at('https://hawkeye.observer/dashboard')
+    trackPageView('/dashboard')
+    expect(openAIScripts()).toHaveLength(1)
+    expect(openAIEvents()).toEqual(['page_viewed'])
+
+    at('https://hawkeye.observer/accept-invite?token=abc')
+    trackPageView('/accept-invite')
+    expect(openAIEvents()).toEqual(['page_viewed'])
+  })
+
+  it('allows only campaign tags, its click id and harmless app parameters in the address', () => {
+    for (const ok of ['https://hawkeye.observer/', 'https://hawkeye.observer/?oppref=x&utm_campaign=y', 'https://hawkeye.observer/billing?checkout=success', 'https://hawkeye.observer/billing?interval=year']) {
+      at(ok)
+      expect(addressIsShareable()).toBe(true)
+    }
+    for (const bad of ['https://hawkeye.observer/verify-email?token=t', 'https://hawkeye.observer/x?email=a@b.co', 'https://hawkeye.observer/#access_token=t', 'https://hawkeye.observer/lifecycle/unsubscribe?token=t&list=onboarding']) {
+      at(bad)
+      expect(addressIsShareable()).toBe(false)
+    }
+  })
+
+  it('reports a registration and a paid subscription with the amount in cents and a dedup id', () => {
+    at('https://hawkeye.observer/billing?checkout=success')
+    initAnalytics()
+    trackRegistration()
+    trackSubscription(59000, 'agency', 'year', '2027-11-02T00:00:00Z')
+    const measured = openAICalls().filter((c) => c[0] === 'measure')
+    expect(measured).toEqual([
+      ['measure', 'registration_completed', { type: 'customer_action' }],
+      ['measure', 'subscription_created', { type: 'plan_enrollment', plan_id: 'agency_year', amount: 59000, currency: 'USD' }, { event_id: '2027-11-02T00:00:00Z' }],
+    ])
+  })
+
+  it('stays off for an opted-out visitor, and turning analytics off withdraws consent and deletes its cookies', () => {
+    at('https://hawkeye.observer/')
+    vi.stubGlobal('navigator', Object.assign(Object.create(navigator), { globalPrivacyControl: true }))
+    initAnalytics()
+    trackPageView('/')
+    expect(openAIScripts()).toHaveLength(0)
+    vi.unstubAllGlobals()
+
+    at('https://hawkeye.observer/')
+    setChoice('on')
+    expect(openAIScripts()).toHaveLength(1)
+    document.cookie = '__oppref=abc; Path=/'
+    document.cookie = '__obref=def; Path=/'
+    setChoice('off')
+    expect(openAICalls()).toContainEqual(['consent', false])
+    expect(document.cookie).not.toMatch(/__oppref|__obref/)
+    const before = openAIEvents().length
+    trackPageView('/')
+    trackSubscription(1900, 'pro', 'month', 'x')
+    expect(openAIEvents()).toHaveLength(before)
+
+    setChoice('on')
+    expect(openAICalls().at(-1)).toEqual(['consent', true])
   })
 })

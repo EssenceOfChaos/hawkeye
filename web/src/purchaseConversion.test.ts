@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BillingSubscription } from './api'
 
-vi.mock('./analytics', () => ({ trackPurchase: vi.fn() }))
-import { trackPurchase } from './analytics'
+vi.mock('./analytics', () => ({ trackPurchase: vi.fn(), trackSubscription: vi.fn() }))
+import { trackPurchase, trackSubscription } from './analytics'
 import { hasPendingPurchase, markCheckoutReturn, reportPurchaseIfPaid } from './purchaseConversion'
 
 const pro = { code: 'pro', name: 'Pro', monthly_price_cents: 1900, max_monitors: 50, minimum_check_interval_seconds: 60, history_retention_days: 90 }
@@ -14,6 +14,7 @@ const sub = (o: Partial<BillingSubscription> = {}): BillingSubscription => ({
 beforeEach(() => {
   localStorage.clear()
   vi.mocked(trackPurchase).mockClear()
+  vi.mocked(trackSubscription).mockClear()
 })
 afterEach(() => vi.useRealTimers())
 
@@ -24,6 +25,9 @@ describe('purchase conversion', () => {
     reportPurchaseIfPaid(sub())
     expect(trackPurchase).toHaveBeenCalledTimes(1)
     expect(trackPurchase).toHaveBeenCalledWith(19, '2026-11-30T00:00:00Z')
+    // OpenAI Ads gets the same purchase once, in cents, with the same id so a repeat is dropped.
+    expect(trackSubscription).toHaveBeenCalledTimes(1)
+    expect(trackSubscription).toHaveBeenCalledWith(1900, 'pro', 'month', '2026-11-30T00:00:00Z')
     expect(hasPendingPurchase()).toBe(false)
   })
 
@@ -31,6 +35,7 @@ describe('purchase conversion', () => {
     markCheckoutReturn()
     reportPurchaseIfPaid(sub({ plan: { ...pro, annual_price_cents: 19000 }, billing_interval: 'year' }))
     expect(trackPurchase).toHaveBeenCalledWith(190, '2026-11-30T00:00:00Z')
+    expect(trackSubscription).toHaveBeenCalledWith(19000, 'pro', 'year', '2026-11-30T00:00:00Z')
   })
 
   it('waits for the provider: nothing is sent while the subscription is unpaid, and it is sent when it later becomes paid', () => {

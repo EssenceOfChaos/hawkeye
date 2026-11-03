@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, ApiError, ORGANIZATION_LOST_EVENT, setApiOrganization, type Organization, type User } from './api'
-import { trackEvent } from './analytics'
+import { trackEvent, trackRegistration } from './analytics'
 
 interface AuthState {
   status: 'loading' | 'anonymous' | 'authenticated'
@@ -118,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register: async (email, password) => {
         await api('POST', '/auth/register', { email, password })
         trackEvent('sign_up', { method: 'email' })
+        trackRegistration()
         await refresh()
       },
       logout: async () => {

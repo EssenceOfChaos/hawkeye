@@ -4,6 +4,10 @@
 // query string or fragment, so only the origin and path are ever sent: never location.href. The one exception is a short allow-list of campaign
 // parameters (utm_* and ad click IDs), which Google Analytics needs to attribute a visit to an ad campaign.
 // If the service starts taking customers in the EU/UK, analytics must go back to opt-in (consent before anything loads): see docs/security.md.
+//
+// The OpenAI Ads measurement pixel (conversions from ads in ChatGPT) follows the same choice. Unlike Google's tag, its SDK reads the page address itself
+// and cannot be handed a cleaned one, so it is only loaded, and only sent events, while the address carries nothing beyond a short allow-list
+// (addressIsShareable): a one-time token in a reset, verification or invitation link can never reach it.
 import { useSyncExternalStore } from 'react'
 
 const MEASUREMENT_ID = 'G-ZNT8EMTFGY'
@@ -11,12 +15,32 @@ const MEASUREMENT_ID = 'G-ZNT8EMTFGY'
 const ADS_ID = 'AW-18527685454'
 const ADS_PURCHASE_SEND_TO = `${ADS_ID}/A0aqCPXL2aMdEM6W2IJF`
 const CHOICE_COOKIE = 'hawkeye_analytics'
+// OpenAI Ads: the data source's pixel id (from Ads Manager → Conversions) and its SDK.
+const OPENAI_PIXEL_ID = 'BQzFQqkTH5HXxdU4vT171u'
+const OPENAI_SDK_URL = 'https://bzrcdn.openai.com/sdk/oaiq.min.js'
+// Setting this localStorage key to "1" turns on the SDK's console logging in your own browser, to check events while testing.
+const OPENAI_DEBUG_KEY = 'hawkeye_oaiq_debug'
+// The pixel's own cookies (attribution and browser reference), removed when analytics is turned off.
+const OPENAI_COOKIES = ['__oppref', '__obref']
 const CHOICE_MAX_AGE = 60 * 60 * 24 * 365
 
 export type Choice = 'on' | 'off'
 
 // The only query parameters that ever leave the browser. Never add anything that can carry a secret (token, email, reset or verification links).
 const CAMPAIGN_PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'msclkid', 'fbclid']
+
+// Query parameters the OpenAI pixel may see besides the campaign ones: its own ad click ID, and app parameters that never carry anything personal
+// (/billing?checkout=success after paying, /billing?interval=year from a pricing card).
+const PIXEL_PARAMS = ['oppref', 'checkout', 'interval']
+
+/** Whether the OpenAI pixel may run on the current address: no fragment, and no query parameter outside the allow-lists. */
+export function addressIsShareable(): boolean {
+  if (window.location.hash) return false
+  for (const name of new URLSearchParams(window.location.search).keys()) {
+    if (!CAMPAIGN_PARAMS.includes(name) && !PIXEL_PARAMS.includes(name)) return false
+  }
+  return true
+}
 
 /** The current address reduced to origin, path and the campaign allow-list: safe to send to Google. */
 export function safeLocation(pathname: string): string {
@@ -31,7 +55,8 @@ export function safeLocation(pathname: string): string {
 }
 
 type Gtag = (...args: unknown[]) => void
-type AnalyticsWindow = Window & { dataLayer?: unknown[]; gtag?: Gtag } & Record<string, unknown>
+type Oaiq = ((...args: unknown[]) => void) & { q?: unknown[] }
+type AnalyticsWindow = Window & { dataLayer?: unknown[]; gtag?: Gtag; oaiq?: Oaiq } & Record<string, unknown>
 const w = () => window as unknown as AnalyticsWindow
 
 let editing = false
@@ -55,8 +80,50 @@ export function analyticsEnabled(): boolean {
 
 const isLocal = () => ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
 
+function openAIDebug(): boolean {
+  try {
+    return window.localStorage.getItem(OPENAI_DEBUG_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** Loads the OpenAI pixel (OpenAI's setup snippet, run from here because the CSP forbids inline scripts), or re-grants consent if it is loaded. */
+function loadOpenAIPixel() {
+  if (isLocal()) return
+  const win = w()
+  if (win.oaiq) {
+    win.oaiq('consent', true)
+    return
+  }
+  if (!addressIsShareable()) return // loaded at the next page whose address is safe
+  const oaiq: Oaiq = function oaiq() {
+    // The SDK reads the queued calls as `arguments` objects, as in OpenAI's snippet.
+    // eslint-disable-next-line prefer-rest-params
+    oaiq.q!.push(arguments)
+  }
+  oaiq.q = []
+  win.oaiq = oaiq
+  const script = document.createElement('script')
+  script.async = true
+  script.src = OPENAI_SDK_URL
+  document.head.appendChild(script)
+  oaiq('init', { pixelId: OPENAI_PIXEL_ID, debug: openAIDebug() })
+}
+
+/** Sends one event to the OpenAI pixel, loading it first if needed, while analytics is on and the address is safe to expose. */
+function measure(event: string, data: Record<string, unknown>, options?: Record<string, unknown>) {
+  if (!analyticsEnabled() || isLocal() || !addressIsShareable()) return
+  if (!w().oaiq) loadOpenAIPixel()
+  const oaiq = w().oaiq
+  if (typeof oaiq !== 'function') return
+  if (options) oaiq('measure', event, data, options)
+  else oaiq('measure', event, data)
+}
+
 function loadAnalytics() {
   if (isLocal()) return // never count local development or test runs
+  loadOpenAIPixel()
   const win = w()
   win[`ga-disable-${MEASUREMENT_ID}`] = false
   if (win.gtag) return // already loaded this visit
@@ -81,7 +148,7 @@ function deleteAnalyticsCookies() {
   const domains = ['']
   for (let i = 0; i <= parts.length - 2; i++) domains.push(`; Domain=${parts.slice(i).join('.')}`)
   for (const name of document.cookie.split('; ').map((c) => c.split('=')[0])) {
-    if (name !== '_ga' && !name.startsWith('_ga_') && name !== '_gid' && !name.startsWith('_gat')) continue
+    if (name !== '_ga' && !name.startsWith('_ga_') && name !== '_gid' && !name.startsWith('_gat') && !OPENAI_COOKIES.includes(name)) continue
     for (const d of domains) document.cookie = `${name}=; Max-Age=0; Path=/${d}`
   }
 }
@@ -96,6 +163,7 @@ export function setChoice(choice: Choice) {
     if (!wasLoaded) trackPageView(window.location.pathname)
   } else {
     w()[`ga-disable-${MEASUREMENT_ID}`] = true
+    w().oaiq?.('consent', false) // stops the pixel's pings and removes its cookies (deleted below too, in case it is not loaded this visit)
     deleteAnalyticsCookies()
   }
   emit()
@@ -113,6 +181,7 @@ export function initAnalytics() {
 }
 
 export function trackPageView(pathname: string) {
+  measure('page_viewed', { type: 'contents' })
   const gtag = w().gtag
   if (!analyticsEnabled() || typeof gtag !== 'function') return
   gtag('event', 'page_view', {
@@ -134,6 +203,19 @@ export function trackPurchase(valueUsd: number, transactionId: string) {
   const gtag = w().gtag
   if (!analyticsEnabled() || typeof gtag !== 'function') return
   gtag('event', 'conversion', { send_to: ADS_PURCHASE_SEND_TO, value: valueUsd, currency: 'USD', transaction_id: transactionId })
+}
+
+/** A completed registration, for OpenAI Ads (Google Analytics gets the sign_up event through trackEvent). */
+export function trackRegistration() {
+  measure('registration_completed', { type: 'customer_action' })
+}
+
+/**
+ * A confirmed paid subscription, for OpenAI Ads: what was paid, in cents (a year's price for yearly billing), and the plan and interval. `eventId` is the
+ * same value Google gets as the transaction id, so a repeat is dropped.
+ */
+export function trackSubscription(cents: number, planCode: string, interval: 'month' | 'year', eventId: string) {
+  measure('subscription_created', { type: 'plan_enrollment', plan_id: `${planCode}_${interval}`, amount: cents, currency: 'USD' }, { event_id: eventId })
 }
 
 /** What the settings panel needs: whether to show it, and whether analytics is currently on. */

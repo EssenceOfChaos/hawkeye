@@ -2,7 +2,7 @@
 // Returning from Checkout only marks the purchase as pending (the provider confirms by webhook, which can take longer than the buyer waits). The
 // conversion is sent the first time we see the subscription is paid, on the billing page or on any signed-in page, and only once per period paid for.
 import type { BillingSubscription } from './api'
-import { trackPurchase } from './analytics'
+import { trackPurchase, trackSubscription } from './analytics'
 
 const PENDING_KEY = 'hawkeye_purchase_pending'
 const PENDING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000 // a purchase confirmed a week later is no longer this ad click's conversion
@@ -43,5 +43,7 @@ export function reportPurchaseIfPaid(sub: BillingSubscription) {
   }, false)
   // The value is what was actually paid: a year's price for a yearly subscription.
   const cents = sub.billing_interval === 'year' && sub.plan.annual_price_cents != null ? sub.plan.annual_price_cents : sub.plan.monthly_price_cents
-  if (first) trackPurchase(cents / 100, sub.current_period_end)
+  if (!first) return
+  trackPurchase(cents / 100, sub.current_period_end)
+  trackSubscription(cents, sub.plan.code, sub.billing_interval === 'year' ? 'year' : 'month', sub.current_period_end)
 }
