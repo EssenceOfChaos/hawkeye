@@ -99,3 +99,29 @@ func FuzzParse(f *testing.F) {
 		}
 	})
 }
+
+func TestParseDNSName(t *testing.T) {
+	ok := map[string]string{
+		"example.com":                  "example.com",
+		" Example.COM. ":               "example.com",
+		"https://www.example.com/path": "www.example.com",
+		"_dmarc.example.com":           "_dmarc.example.com",
+		"s1._domainkey.example.com":    "s1._domainkey.example.com",
+		"_sip._tcp.example.com":        "_sip._tcp.example.com",
+		"münchen.de":                   "xn--mnchen-3ya.de",
+	}
+	for in, want := range ok {
+		if got, err := ParseDNSName(in); err != nil || got != want {
+			t.Errorf("ParseDNSName(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"", "localhost", "intranet", "127.0.0.1", "[::1]", "db.internal", "printer.local", "_dmarc.internal", "db.hawkeye_default", "*.example.com", "user:pw@example.com"} {
+		if got, err := ParseDNSName(in); err == nil {
+			t.Errorf("ParseDNSName(%q) = %q; want an error", in, got)
+		}
+	}
+	// Websites stay as strict as before: an underscore is only for DNS names.
+	if _, err := Parse("_dmarc.example.com"); err == nil {
+		t.Error("Parse accepted an underscore")
+	}
+}

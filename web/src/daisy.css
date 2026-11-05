@@ -14,7 +14,7 @@
 @source not "./**/*.test.tsx";
 @plugin "daisyui" {
   prefix: "d-";
-  include: collapse, badge, steps, skeleton, footer, link, button, status, tooltip, countdown, timeline, stat, indicator, hero, alert, toggle, loading, aura;
+  include: collapse, badge, steps, skeleton, footer, link, button, status, tooltip, countdown, timeline, stat, indicator, hero, alert, toggle, loading, aura, menu;
   themes: light --default;
   logs: false;
 }

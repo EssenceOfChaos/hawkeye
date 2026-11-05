@@ -64,6 +64,7 @@ export function MonitorDetailPage() {
   }
   const m = changed?.id === monitorID ? changed : monitor.data?.monitor
   const hb = m?.heartbeat ?? null
+  const dns = m?.dns ?? null
   const options = availableRanges(usage.data?.usage.plan.history_retention_days ?? 7)
   const loading = uptime.loading || series.loading
   const changeRange = (r: string) => {
@@ -90,6 +91,12 @@ export function MonitorDetailPage() {
               {hb.last_ping_at ? `last ping ${formatDateTime(hb.last_ping_at)}` : 'no ping yet'}
               {hb.due_by && m.enabled && ` · next ping due by ${formatDateTime(hb.due_by)}`}
             </p>
+          ) : dns ? (
+            <p className="hint">
+              {dns.record_type} record of {m.url} · {dns.expected ? `must match ${dns.expected}` : 'any answer will do'} · every{' '}
+              {Math.round(m.effective_check_interval_seconds / 60)} min ·{' '}
+              {m.last_checked_at ? `last checked ${formatDateTime(m.last_checked_at)}` : 'not checked yet'}
+            </p>
           ) : (
             <p className="hint">
               {m.method} {m.url} · every {Math.round(m.effective_check_interval_seconds / 60)} min ·{' '}
@@ -104,7 +111,7 @@ export function MonitorDetailPage() {
             </Alert>
           )}
 
-          {hb ? <PingSetup monitor={m} onChanged={setChanged} /> : <CertificateCard monitor={m} />}
+          {hb ? <PingSetup monitor={m} onChanged={setChanged} /> : !dns && <CertificateCard monitor={m} />}
 
           <ReportDownload monitorID={m.id} plan={usage.data?.usage.plan} />
 
@@ -134,7 +141,7 @@ export function MonitorDetailPage() {
 
           {series.data && !hb && (
             <ResponseChart
-              title="Average response time"
+              title={dns ? 'Average lookup time' : 'Average response time'}
               points={series.data.points}
               bucketSeconds={series.data.bucket_seconds}
               range={series.data.range}
@@ -148,7 +155,7 @@ export function MonitorDetailPage() {
               <span className="spacer" />
               <Link to="/incidents">All incidents</Link>
             </div>
-            {incidents.data?.incidents.length === 0 && <p>No incidents for this {hb ? 'job' : 'website'}.</p>}
+            {incidents.data?.incidents.length === 0 && <p>No incidents for this {hb ? 'job' : dns ? 'record' : 'website'}.</p>}
             <ul className="plain-list">
               {incidents.data?.incidents.map((i) => (
                 <li key={i.id}>
@@ -200,7 +207,7 @@ export function MonitorDetailPage() {
                 <table>
                   <caption className="sr-only">Individual checks, newest first</caption>
                   <thead>
-                    <tr><th>When</th>{several && <th>Location</th>}<th>Result</th>{!hb && <><th className="num">HTTP</th><th className="num">Response</th></>}<th>Details</th></tr>
+                    <tr><th>When</th>{several && <th>Location</th>}<th>Result</th>{!hb && <>{!dns && <th className="num">HTTP</th>}<th className="num">{dns ? 'Lookup' : 'Response'}</th></>}<th>Details</th></tr>
                   </thead>
                   <tbody>
                     {results.data.results.map((r) => (
@@ -214,7 +221,7 @@ export function MonitorDetailPage() {
                         </td>
                         {!hb && (
                           <>
-                            <td className="num">{r.http_status_code ?? '—'}</td>
+                            {!dns && <td className="num">{r.http_status_code ?? '—'}</td>}
                             <td className="num">{formatMs(r.response_time_ms)}</td>
                           </>
                         )}

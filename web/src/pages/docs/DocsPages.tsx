@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { BellAlertIcon, ClockIcon, GlobeAltIcon, RocketLaunchIcon } from '@heroicons/react/24/outline'
+import type { ComponentType, ReactNode, SVGProps } from 'react'
 import { Link, NavLink } from 'react-router'
 import { useAuth } from '../../auth'
 import { brand } from '../../brand'
@@ -9,6 +10,7 @@ interface Doc {
   path: string
   title: string
   summary: string
+  icon: ComponentType<SVGProps<SVGSVGElement>>
   body: () => ReactNode
 }
 
@@ -22,7 +24,7 @@ function GettingStarted() {
   return (
     <>
       <p>
-        HawkEye watches your websites, APIs and scheduled jobs and tells you when something goes wrong, before your customers notice. This page gets
+        HawkEye watches your websites, APIs, scheduled jobs and DNS records and tells you when something goes wrong, before your customers notice. This page gets
         you from a new account to your first alert in a few minutes.
       </p>
       <h2 id="account">1. Create your account</h2>
@@ -41,6 +43,10 @@ function GettingStarted() {
         <li>
           <strong>A cron job or scheduled task.</strong> Your job pings HawkEye each time it runs, and HawkEye tells you when a ping is late or the job
           reports a failure. See <Link to="/docs/cron-job-monitoring">Heartbeat monitoring</Link>.
+        </li>
+        <li>
+          <strong>A DNS record.</strong> HawkEye looks up a record on a schedule and tells you when it disappears or stops matching the value you expect.
+          See <Link to="/docs/dns-monitoring">DNS monitoring</Link>.
         </li>
       </ul>
       <p>Every monitor counts toward your plan’s monitor limit, whichever kind it is.</p>
@@ -199,6 +205,77 @@ urllib.request.urlopen("${PING}", timeout=10)`}</Code>
   )
 }
 
+function DnsMonitoring() {
+  return (
+    <>
+      <p>
+        A website can be running perfectly and still be unreachable because a DNS record changed. A DNS monitor looks up one record of a host name on a
+        schedule and alerts you when it disappears or stops matching the value you expect. DNS monitors are on every plan, and each one counts toward
+        your plan’s monitor limit.
+      </p>
+
+      <h2 id="create">Create a DNS monitor</h2>
+      <ol>
+        <li>On the <strong>Monitors</strong> page choose <strong>Monitor a DNS record</strong>.</li>
+        <li>Enter a public host name, such as <code>example.com</code> or <code>_dmarc.example.com</code>.</li>
+        <li>Choose the record type.</li>
+        <li>Optionally enter the value you expect. Without one, any answer counts as healthy, and you are alerted only if the record disappears.</li>
+      </ol>
+
+      <h2 id="records">What each record type checks</h2>
+      <ul>
+        <li><strong>A and AAAA</strong> (IPv4 and IPv6 addresses): one of the addresses must equal the one you enter.</li>
+        <li><strong>MX</strong> (mail servers): one of the mail servers must equal the one you enter. Upper and lower case do not matter.</li>
+        <li><strong>NS</strong> (name servers): one of the name servers must equal the one you enter. Upper and lower case do not matter.</li>
+        <li>
+          <strong>TXT</strong>: one of the records must contain the text you enter, in the same upper and lower case. Enter just the part you care about,
+          such as <code>p=reject</code> for <code>_dmarc.example.com</code>.
+        </li>
+      </ul>
+      <p>
+        CNAME records cannot be checked directly. To watch a name that uses one, use an A or AAAA monitor on the same name: it follows the CNAME and checks
+        the addresses it leads to.
+      </p>
+
+      <h2 id="examples">Useful things to watch</h2>
+      <ul>
+        <li><strong>Your website’s address</strong>: an A record, with the address of your server, to catch a change you did not make.</li>
+        <li><strong>Your mail</strong>: an MX record, so a change that would stop your email arriving does not go unnoticed.</li>
+        <li><strong>Your name servers</strong>: an NS record, the first thing to change when a domain moves or is taken over.</li>
+        <li><strong>Email authentication</strong>: a TXT record on your domain for SPF, or on <code>_dmarc.example.com</code> for DMARC.</li>
+      </ul>
+
+      <h2 id="alerts">How problems are confirmed</h2>
+      <p>
+        A DNS problem is treated like a website outage: it opens an incident only after consecutive failed checks, and from most locations when a monitor is
+        checked from several. <Link to="/docs/alerts">Routing by tag</Link>, alert delay, quiet hours and maintenance windows all apply, and a DNS monitor
+        can appear on status pages and have an uptime badge. The domain it belongs to is also added to your <strong>Domains</strong> page, so you are warned
+        before its registration lapses, up to your plan’s domain limit.
+      </p>
+      <p>
+        Alerts name the value you expected. They never include the answer HawkEye received, so look the record up yourself or ask your DNS provider when
+        you investigate.
+      </p>
+
+      <h2 id="limits">Good to know</h2>
+      <ul>
+        <li>
+          <strong>Changes are not instant.</strong> HawkEye asks a DNS resolver, as your visitors’ devices do, so a change shows up once the
+          old record expires from caches (its TTL). Planned changes can show as failing until you update the expected value.
+        </li>
+        <li>
+          <strong>Addresses must be public.</strong> Names on private networks cannot be checked, and a name that resolves to a private address fails with
+          “Destination is not permitted”.
+        </li>
+        <li>
+          <strong>The lookup time is not your DNS provider’s speed.</strong> It is often near zero because the answer was cached, so slow-response alerts do
+          not apply to DNS monitors.
+        </li>
+      </ul>
+    </>
+  )
+}
+
 function Alerts() {
   return (
     <>
@@ -220,6 +297,7 @@ function Alerts() {
       <ul>
         <li><strong>Outages and recoveries</strong> of websites and APIs, confirmed by consecutive failed checks (and by most locations, when a monitor is checked from several).</li>
         <li><strong>Cron jobs</strong> that miss a ping or report a failure (<Link to="/docs/cron-job-monitoring">heartbeat monitors</Link>).</li>
+        <li><strong>DNS records</strong> that disappear or stop matching the value you expect (<Link to="/docs/dns-monitoring">DNS monitors</Link>).</li>
         <li><strong>Slow responses</strong>, if you turn this on for a monitor: when responses stay above your threshold for several checks in a row.</li>
         <li><strong>Certificates</strong> 30, 14, 7 and 1 days before they expire, and <strong>domains</strong> before their registration lapses.</li>
       </ul>
@@ -257,9 +335,10 @@ function Alerts() {
 }
 
 export const DOCS: readonly Doc[] = [
-  { path: '/docs/getting-started', title: 'Getting started', summary: 'From a new account to your first monitor and alert in a few minutes.', body: GettingStarted },
-  { path: '/docs/cron-job-monitoring', title: 'Heartbeat (cron job) monitoring', summary: 'Get alerted when a backup, scheduled task or queue worker stops running or fails.', body: HeartbeatMonitoring },
-  { path: '/docs/alerts', title: 'Alerts', summary: 'Alert channels, routing alerts by client, alert delays, quiet hours and maintenance windows.', body: Alerts },
+  { path: '/docs/getting-started', title: 'Getting started', summary: 'From a new account to your first monitor and alert in a few minutes.', icon: RocketLaunchIcon, body: GettingStarted },
+  { path: '/docs/cron-job-monitoring', title: 'Heartbeat (cron job) monitoring', summary: 'Get alerted when a backup, scheduled task or queue worker stops running or fails.', icon: ClockIcon, body: HeartbeatMonitoring },
+  { path: '/docs/dns-monitoring', title: 'DNS monitoring', summary: 'Get alerted when a DNS record disappears or stops matching the value you expect.', icon: GlobeAltIcon, body: DnsMonitoring },
+  { path: '/docs/alerts', title: 'Alerts', summary: 'Alert channels, routing alerts by client, alert delays, quiet hours and maintenance windows.', icon: BellAlertIcon, body: Alerts },
 ]
 
 function DocsShell({ children }: { children: ReactNode }) {
@@ -274,8 +353,15 @@ function DocsShell({ children }: { children: ReactNode }) {
       </header>
       <div className="docs-layout">
         <nav aria-label="Documentation" className="docs-nav">
-          <ul>
-            {DOCS.map((d) => <li key={d.path}><NavLink to={d.path}>{d.title}</NavLink></li>)}
+          <ul className="d-menu">
+            {DOCS.map((d) => (
+              <li key={d.path}>
+                <NavLink to={d.path} className={({ isActive }) => (isActive ? 'd-menu-active' : undefined)}>
+                  <d.icon />
+                  {d.title}
+                </NavLink>
+              </li>
+            ))}
           </ul>
         </nav>
         <main>{children}</main>
@@ -292,7 +378,7 @@ export function DocsIndexPage() {
   return (
     <DocsShell>
       <h1>HawkEye documentation</h1>
-      <p className="tool-intro">How to monitor websites, APIs and scheduled jobs with HawkEye, and how to get the right alerts to the right people.</p>
+      <p className="tool-intro">How to monitor websites, APIs, scheduled jobs and DNS records with HawkEye, and how to get the right alerts to the right people.</p>
       <ul className="tool-list">
         {DOCS.map((d) => (
           <li key={d.path} className="card">

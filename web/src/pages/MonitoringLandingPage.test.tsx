@@ -54,14 +54,14 @@ describe('MonitoringLandingPage', () => {
 
   it('shows live plan prices and the multi-location note only when plans offer several locations', async () => {
     renderPage(anonymous)
-    expect(await screen.findByText('50 website monitors')).toBeInTheDocument()
+    expect(await screen.findByText('50 monitors')).toBeInTheDocument()
     expect(screen.getByText('$19')).toBeInTheDocument()
     expect(screen.getByText(/Checks from several locations/)).toBeInTheDocument()
   })
 
   it('does not claim several locations when no plan offers them', async () => {
     renderPage((url) => (url.includes('/plans') ? json(200, { plans: [plans[0]] }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } })))
-    expect(await screen.findByText('5 website monitors')).toBeInTheDocument()
+    expect(await screen.findByText('5 monitors')).toBeInTheDocument()
     expect(screen.queryByText(/Checks from several locations/)).not.toBeInTheDocument()
   })
 

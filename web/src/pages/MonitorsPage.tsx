@@ -276,6 +276,7 @@ export function MonitorsPage() {
           <>
             <Link className="button" to="/monitors/new">Add monitor</Link>
             <Link to="/monitors/new?type=heartbeat">Monitor a cron job</Link>
+            <Link to="/monitors/new?type=dns">Monitor a DNS record</Link>
           </>
         ) : (
           <button disabled aria-describedby="limit-reason">Add monitor</button>
@@ -346,11 +347,12 @@ export function MonitorsPage() {
                   </td>
                   <td>
                     <Link to={`/monitors/${m.id}`}>{m.name}</Link>
-                    {m.type === 'heartbeat' ? <div className="hint">Cron job heartbeat</div> : <div className="hint mono">{m.url}</div>}
+                    {m.type === 'heartbeat' ? <div className="hint">Cron job heartbeat</div>
+                      : <div className="hint mono">{m.dns ? `${m.dns.record_type} ${m.url}` : m.url}</div>}
                     <TagList tags={m.tags ?? []} />
                   </td>
                   <td><StatusBadge monitor={m} /></td>
-                  <td><CertBadge monitor={m} /></td>
+                  <td>{m.type === 'dns' ? <span className="hint">—</span> : <CertBadge monitor={m} />}</td>
                   <td>{m.type === 'heartbeat' ? `expected every ${formatPeriod(m.effective_check_interval_seconds)}` : `every ${Math.round(m.effective_check_interval_seconds / 60)} min`}</td>
                   <td>{m.type === 'heartbeat' && m.heartbeat
                     ? m.heartbeat.last_ping_at ? `pinged ${new Date(m.heartbeat.last_ping_at).toLocaleString()}` : 'No ping yet'

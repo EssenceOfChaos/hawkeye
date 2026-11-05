@@ -574,3 +574,68 @@ func TestSuccessfulChecksAreNeverTouchedByTheCanary(t *testing.T) {
 		t.Fatalf("%+v", s)
 	}
 }
+
+// dnsAnswers is a resolver whose address answer can change between checks. It is only ever asked for addresses here.
+type dnsAnswers struct {
+	checks.DNSResolver
+	ip atomic.Value // netip.Addr
+}
+
+func (d *dnsAnswers) LookupNetIP(context.Context, string, string) ([]netip.Addr, error) {
+	return []netip.Addr{d.ip.Load().(netip.Addr)}, nil
+}
+
+// A DNS monitor runs through the same scheduler, queue, streaks and incidents as a website: a changed record opens an incident, and restoring it resolves it.
+func TestDNSMonitorOpensAndResolvesAnIncident(t *testing.T) {
+	e := newEnv(t)
+	dns := &dnsAnswers{}
+	dns.ip.Store(netip.MustParseAddr("93.184.216.34"))
+	w := worker.New(e.pool, checks.NewChecker(safehttp.Config{}).WithDNSResolver(dns),
+		checks.NewStore(e.pool, checks.Thresholds{Failure: 2, Recovery: 2}, incidents.Engine{}),
+		worker.Config{Concurrency: 1, PollInterval: 20 * time.Millisecond}, e.m, quiet).WithSecrets(testutil.SecretBox())
+	var id uuid.UUID
+	if err := e.pool.QueryRow(t.Context(), `INSERT INTO monitors (organization_id, name, url, check_interval_seconds, timeout_seconds, kind, dns_record_type, dns_expected)
+		VALUES ($1, 'm', 'example.com', 60, 2, 'dns', 'A', '93.184.216.34') RETURNING id`, e.org).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+
+	e.round(t, w)
+	e.round(t, w)
+	if s := e.state(t, id); s.Status != "up" {
+		t.Fatalf("status = %s", s.Status)
+	}
+
+	dns.ip.Store(netip.MustParseAddr("198.51.100.200")) // reserved for documentation, so it is refused like a private address
+	e.round(t, w)
+	var category, summary string
+	if err := e.pool.QueryRow(t.Context(), `SELECT error_category, error_summary FROM check_results WHERE monitor_id = $1 AND NOT success`, id).Scan(&category, &summary); err != nil {
+		t.Fatal(err)
+	}
+	if category != checks.CatBlocked {
+		t.Fatalf("got %s: %s", category, summary)
+	}
+
+	dns.ip.Store(netip.MustParseAddr("93.184.216.99"))
+	e.round(t, w)
+	if s := e.state(t, id); s.Status != "down" {
+		t.Fatalf("status = %s", s.Status)
+	}
+	var cause, incident string
+	if err := e.pool.QueryRow(t.Context(), `SELECT cause_category, summary FROM incidents WHERE monitor_id = $1 AND status = 'open'`, id).Scan(&cause, &incident); err != nil {
+		t.Fatal(err)
+	}
+	if cause != checks.CatAssertion || !strings.Contains(incident, "does not match") || strings.Contains(incident, "93.184.216.99") {
+		t.Fatalf("incident = %s: %s", cause, incident)
+	}
+
+	dns.ip.Store(netip.MustParseAddr("93.184.216.34"))
+	e.round(t, w)
+	e.round(t, w)
+	if s := e.state(t, id); s.Status != "up" {
+		t.Fatalf("status = %s", s.Status)
+	}
+	var open int
+	if err := e.pool.QueryRow(t.Context(), `SELECT count(*) FROM incidents WHERE monitor_id = $1 AND status = 'open'`, id).Scan(&open); err != nil || open != 0 {
+		t.Fatalf("open incidents = %d, %v", open, err)
+	}
+}

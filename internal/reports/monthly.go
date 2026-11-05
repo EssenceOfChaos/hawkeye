@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -161,8 +162,11 @@ func BuildMonthly(ctx context.Context, db DB, orgID, monitorID uuid.UUID, month,
 }
 
 // displayURL keeps what identifies a website (host and path) and drops what must not be printed on a document that is forwarded: any user name and
-// password, and the query string, which can carry tokens.
+// password, and the query string, which can carry tokens. A DNS monitor's target is a bare host name, which has none of those.
 func displayURL(raw string) string {
+	if !strings.Contains(raw, "://") {
+		return raw
+	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
 		return ""

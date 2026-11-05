@@ -29,7 +29,7 @@ describe('LandingPage', () => {
   it('advertises team seats only on a plan that has more than one, with the number from the plans table', async () => {
     const withSeats = [plans[0], plans[1], { code: 'agency', name: 'Agency', monthly_price_cents: 5900, max_monitors: 200, minimum_check_interval_seconds: 60, history_retention_days: 365, max_domains: 100, max_team_members: 5 }]
     renderLanding((url) => (url.includes('/plans') ? json(200, { plans: withSeats }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } })))
-    await screen.findByText('200 website monitors')
+    await screen.findByText('200 monitors')
     const cards = document.querySelector('ul.plans') as HTMLElement
     expect(within(cards).getAllByText(/team members/)).toHaveLength(1)
     expect(within(cards).getByText('5 team members')).toBeInTheDocument()
@@ -43,7 +43,7 @@ describe('LandingPage', () => {
       { code: 'agency', name: 'Agency', monthly_price_cents: 5900, max_monitors: 200, minimum_check_interval_seconds: 60, history_retention_days: 365, max_domains: 100, reports_enabled: true, branded_reports_enabled: true },
     ]
     renderLanding((url) => (url.includes('/plans') ? json(200, { plans: withReports }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } })))
-    await screen.findByText('200 website monitors')
+    await screen.findByText('200 monitors')
     expect(screen.getAllByText('Monthly PDF uptime reports')).toHaveLength(2)
     expect(screen.getAllByText('Branded Reports with name and logo')).toHaveLength(1)
   })
@@ -53,7 +53,7 @@ describe('LandingPage', () => {
       url.includes('/plans') ? json(200, { plans }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }),
     )
     expect(screen.getAllByRole('img', { name: 'HawkEye' }).length).toBeGreaterThan(0)
-    expect(await screen.findByText('50 website monitors')).toBeInTheDocument()
+    expect(await screen.findByText('50 monitors')).toBeInTheDocument()
     expect(screen.getByText('$19')).toBeInTheDocument()
     // Paid checkout is not built yet, so the page must not pretend it is.
     expect(screen.getByRole('button', { name: /open soon/i })).toBeDisabled()
@@ -135,8 +135,10 @@ describe('LandingPage', () => {
     renderLanding((url) =>
       url.includes('/plans') ? json(200, { plans }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }),
     )
-    await screen.findByText('50 website monitors')
+    await screen.findByText('50 monitors')
     expect(screen.getByRole('heading', { name: 'Website and API monitoring' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'DNS monitoring' })).toBeInTheDocument()
+    expect(screen.getByText('Cron job and DNS monitoring', { selector: '.value-strip li' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'SSL certificate alerts' })).toBeInTheDocument()
     // Every plan card lists them, so visitors can see they are not paid extras.
     expect(screen.getAllByText('SSL certificate expiry warnings')).toHaveLength(plans.length)
@@ -152,7 +154,7 @@ describe('LandingPage', () => {
     renderLanding((url) =>
       url.includes('/plans') ? json(200, { plans }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }),
     )
-    await screen.findByText('50 website monitors')
+    await screen.findByText('50 monitors')
     expect(screen.getByRole('heading', { name: 'Domain expiry alerts' })).toBeInTheDocument()
     expect(screen.getByText('Domain expiry warnings for up to 3 domains')).toBeInTheDocument()
     expect(screen.getByText('Domain expiry warnings for up to 25 domains')).toBeInTheDocument()

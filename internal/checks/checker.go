@@ -74,9 +74,12 @@ type Result struct {
 type Checker struct {
 	cfg safehttp.Config
 	now func() time.Time
+	dns DNSResolver // used by DNS monitors; website checks resolve through the safehttp client
 }
 
-func NewChecker(cfg safehttp.Config) *Checker { return &Checker{cfg: cfg, now: time.Now} }
+func NewChecker(cfg safehttp.Config) *Checker {
+	return &Checker{cfg: cfg, now: time.Now, dns: net.DefaultResolver}
+}
 
 // Check performs a check. A check that fails because the target is down, slow or prohibited returns a
 // Result with Success=false. The error is non-nil only when ctx itself was canceled, in which case the

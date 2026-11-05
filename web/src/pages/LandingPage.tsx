@@ -41,6 +41,12 @@ const FEATURES = [
     text: 'Backups, reports and queue workers ping HawkEye when they run. Miss one, or report a failure, and you hear about it.',
   },
   {
+    icon: brand.icons.shield,
+    title: 'DNS monitoring',
+    lead: 'Know when a DNS record changes or disappears.',
+    text: 'Watch address, mail, name server and TXT records, and hear about it when one stops matching what you expect.',
+  },
+  {
     icon: brand.icons.analytics,
     title: 'Response-time tracking',
     lead: 'Spot slowdowns early.',
@@ -112,7 +118,7 @@ const AUDIENCES = [
   { title: 'Freelancers', lead: 'Spend less time checking. More time creating.', text: 'Know when a client site is offline without refreshing every project.' },
   { title: 'Web agencies', lead: 'Keep an eye on every client website.', text: 'Monitor every client in one place and show the care you provide.' },
   { title: 'Independent business owners', lead: 'Your website is too important to leave unchecked.', text: 'Hear about downtime before your customers do.' },
-  { title: 'Developers and small teams', lead: 'Make availability visible.', text: 'Check your APIs and cron jobs too: authenticated requests, JSON checks and heartbeats, no complex stack.' },
+  { title: 'Developers and small teams', lead: 'Make availability visible.', text: 'Check your APIs, cron jobs and DNS records too: authenticated requests, JSON checks, heartbeats and record lookups, no complex stack.' },
 ]
 
 const STEPS = [
@@ -136,6 +142,7 @@ const FAQ = [
   { q: 'Can HawkEye tell when my page loads but shows an error?', a: 'Yes, on every plan. Some failures still answer “200 OK”: a WordPress database error, a hosting “Account Suspended” page, a server’s default page, or an expired domain that has been parked. In a monitor’s “Page content” section, add text the page must contain (such as “Add to cart” or your company name) and text it must not contain, or pick a common problem from the list with one click. If the check fails you are alerted just as for an outage.' },
   { q: 'Can I monitor an API?', a: 'Yes. Choose the request method, add custom headers and a request body, and authenticate with Basic, a bearer token or an API-key header. You can then check the status code, look for text in the response, or verify a value in a JSON response. Passwords, tokens and API keys are stored encrypted and are never shown again. Methods that change data (POST, PUT, PATCH and DELETE) are repeated on every check, so they require a verified email address and run at most every 5 minutes.' },
   { q: 'Can HawkEye monitor cron jobs and scheduled tasks?', a: 'Yes, on every plan. Create a heartbeat monitor and HawkEye gives it a private ping address. Add one line to the end of your cron job, backup script, scheduled task or queue worker so it requests that address each time it runs. If a ping does not arrive on schedule (you choose how often to expect one and how much grace time to allow), or the job reports a failure or a non-zero exit status, HawkEye opens an incident and alerts you like it does for a website that is down. Heartbeat monitors count toward your plan’s monitor limit. See the heartbeat monitoring guide in our docs for examples.' },
+  { q: 'Can HawkEye monitor my DNS records?', a: 'Yes, on every plan. Create a DNS monitor for a host name and choose an A, AAAA, MX, NS or TXT record. HawkEye looks it up on a schedule and alerts you when the record disappears or, if you enter the value you expect, when it stops matching: a mail server that changed, or an SPF or DMARC record that was removed. Each DNS monitor counts toward your plan’s monitor limit.' },
   { q: 'What happens if I downgrade?', a: 'Your existing monitors are never deleted automatically. You may not be able to add new ones until you are within the new plan’s limits, and history older than the new plan’s retention period is removed. Maintenance windows you already created keep working, but you cannot create new ones until you are on a paid plan. Domains beyond the new plan’s limit stay in your list but are no longer looked up.' },
 ]
 
@@ -230,6 +237,7 @@ export function LandingPage() {
             <li className="d-badge d-badge-soft d-badge-warning">SSL expiry warnings</li>
             <li className="d-badge d-badge-soft d-badge-info">Performance history</li>
             <li className="d-badge d-badge-soft d-badge-accent">Public status page</li>
+            <li className="d-badge d-badge-soft d-badge-primary">Cron job and DNS monitoring</li>
           </ul>
         </div>
         <img

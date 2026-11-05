@@ -15,7 +15,7 @@ type Alert struct {
 	MonitorID   string // for links to the monitor page
 	MonitorName string
 	MonitorURL  string
-	MonitorType string // http or heartbeat; empty is treated as http
+	MonitorType string // http, heartbeat or dns; empty is treated as http
 	Cause       string
 	StartedAt   time.Time
 	ResolvedAt  *time.Time
@@ -44,9 +44,15 @@ type Alert struct {
 // IsHeartbeat reports whether the alert is about a heartbeat (cron job) monitor, which has no website to name.
 func (a Alert) IsHeartbeat() bool { return a.MonitorType == "heartbeat" }
 
+// IsDNS reports whether the alert is about a DNS monitor: its host name may answer perfectly well, just not with the expected record.
+func (a Alert) IsDNS() bool { return a.MonitorType == "dns" }
+
 func (a Alert) monitorType() string {
-	if a.IsHeartbeat() {
+	switch {
+	case a.IsHeartbeat():
 		return "heartbeat"
+	case a.IsDNS():
+		return "dns"
 	}
 	return "http"
 }
@@ -106,6 +112,9 @@ func Render(a Alert) email.Message {
 	if a.IsHeartbeat() {
 		return renderHeartbeat(a, name)
 	}
+	if a.IsDNS() {
+		return renderDNS(a, name, url)
+	}
 	started := a.StartedAt.UTC().Format("2006-01-02 15:04 UTC")
 	c := email.Content{
 		ButtonLabel: "View incidents", ButtonURL: a.AppBaseURL + "/incidents", AppBaseURL: a.AppBaseURL,
@@ -142,6 +151,41 @@ func Render(a Alert) email.Message {
 		c.Facts = append(c.Facts, email.Fact{Label: "Incident status", Value: "Open"})
 	}
 	return c.Message(a.From, a.To, subject)
+}
+
+// renderDNS is the outage and recovery alert of a DNS monitor: a record stopped resolving, or stopped matching the expected value.
+func renderDNS(a Alert, name, host string) email.Message {
+	started := a.StartedAt.UTC().Format("2006-01-02 15:04 UTC")
+	c := email.Content{
+		ButtonLabel: "View the DNS check", ButtonURL: a.AppBaseURL + "/monitors/" + a.MonitorID, AppBaseURL: a.AppBaseURL,
+		Note: "Manage who receives alerts: " + a.AppBaseURL + "/notifications",
+	}
+	if a.Event == EventRecovery {
+		c.Tone = email.ToneSuccess
+		c.Heading = "DNS for " + name + " is resolving correctly again"
+		c.Preheader = c.Heading + "."
+		c.Paragraphs = []string{"Good news. HawkEye has recorded enough successful lookups to resolve the incident affecting " + name + "."}
+		c.Facts = []email.Fact{{Label: "Host name", Value: host}, {Label: "Problem began", Value: started}}
+		if a.ResolvedAt != nil {
+			c.Facts = append(c.Facts,
+				email.Fact{Label: "Recovery confirmed", Value: a.ResolvedAt.UTC().Format("2006-01-02 15:04 UTC")},
+				email.Fact{Label: "Incident duration", Value: Duration(a.ResolvedAt.Sub(a.StartedAt))})
+		}
+		return c.Message(a.From, a.To, "HawkEye recovery: DNS for "+name+" is resolving correctly again")
+	}
+	c.Tone = email.ToneAlert
+	c.Heading = "DNS check failing for " + name
+	c.Preheader = "HawkEye detected repeated failures while looking up " + name + "."
+	c.Paragraphs = []string{
+		"HawkEye has detected repeated failures while looking up " + name + ".",
+		"We recommend reviewing the record with your DNS provider and confirming the change was intended. HawkEye will keep looking it up on your configured schedule, and will email you once when it recovers.",
+	}
+	c.Facts = []email.Fact{{Label: "Host name", Value: host}, {Label: "Detected at", Value: started}}
+	if a.Cause != "" {
+		c.Facts = append(c.Facts, email.Fact{Label: "Latest result", Value: clean(a.Cause)})
+	}
+	c.Facts = append(c.Facts, email.Fact{Label: "Incident status", Value: "Open"})
+	return c.Message(a.From, a.To, "HawkEye alert: DNS check failing for "+name)
 }
 
 // renderHeartbeat is the outage and recovery alert of a heartbeat (cron job) monitor: the job stopped checking in, or said it failed.

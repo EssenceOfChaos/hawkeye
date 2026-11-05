@@ -351,16 +351,21 @@ td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 .tool-list { list-style: none; padding: 0; }
 /* Docs (/docs): a contents list beside the article on wide screens, above it on narrow ones. */
 .docs { max-width: 64rem; width: 100%; box-sizing: border-box; }
-.docs-layout { display: grid; grid-template-columns: 13rem minmax(0, 1fr); gap: 2rem; align-items: start; }
-.docs-nav ul { list-style: none; padding: 0; margin: 0; position: sticky; top: 1rem; }
-.docs-nav li { margin: 0 0 .4rem; }
-.docs-nav a.active { font-weight: 600; color: var(--gold-hi); }
+.docs-layout { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 2rem; align-items: start; }
+.docs-nav { position: sticky; top: 1rem; }
+/* daisyUI's menu on the app's dark colors: its own theme is the light one the landing page uses. */
+.docs-nav .d-menu { width: 100%; box-sizing: border-box; gap: .15rem; padding: .5rem; margin: 0; background: var(--panel); border: 1px solid var(--border); border-radius: .75rem; }
+.docs-nav .d-menu a { color: var(--text); text-decoration: none; line-height: 1.3; }
+.docs-nav .d-menu svg { width: 1.25rem; height: 1.25rem; flex: none; }
+.docs-nav .d-menu a:hover { background: var(--panel-hi); color: var(--text); }
+.docs-nav .d-menu a.d-menu-active { background: var(--panel-hi); color: var(--gold-hi); font-weight: 600; box-shadow: inset 3px 0 0 var(--gold); }
+.docs-nav .d-menu a:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
 .docs h2 { font-size: 1.3rem; margin-top: 2rem; }
 .docs h3 { font-size: 1.05rem; margin-top: 1.25rem; }
 .doc-code { background: #08172b; border: 1px solid var(--border); border-radius: .5rem; padding: .75rem 1rem; overflow-x: auto; font-size: .85rem; }
 .doc-table { border-collapse: collapse; }
 .doc-table th, .doc-table td { text-align: left; padding: .4rem .7rem; border-bottom: 1px solid var(--border); }
-@media (max-width: 48rem) { .docs-layout { grid-template-columns: 1fr; gap: 1rem; } .docs-nav ul { position: static; } }
+@media (max-width: 48rem) { .docs-layout { grid-template-columns: 1fr; gap: 1rem; } .docs-nav { position: static; } }
 .tool-list h2 { margin: 0 0 .25rem; font-size: 1.2rem; }
 
 /* Type roles: Sora for headlines and brand moments, Inter for reading and UI, JetBrains Mono for data (URLs, figures, timestamps). */

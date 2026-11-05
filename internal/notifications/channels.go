@@ -302,10 +302,16 @@ func chatContent(a Alert, now time.Time) chatMessage {
 		if a.IsHeartbeat() {
 			m.Title = "✅ " + name + " is checking in again"
 		}
+		if a.IsDNS() {
+			m.Title = "✅ DNS for " + name + " is resolving correctly again"
+		}
 		if a.ResolvedAt != nil {
 			m.Lines = []string{"Offline for " + Duration(a.ResolvedAt.Sub(a.StartedAt))}
 			if a.IsHeartbeat() {
 				m.Lines = []string{"Overdue or failing for " + Duration(a.ResolvedAt.Sub(a.StartedAt))}
+			}
+			if a.IsDNS() {
+				m.Lines = []string{"Failing for " + Duration(a.ResolvedAt.Sub(a.StartedAt))}
 			}
 		}
 	case EventSlow:
@@ -330,6 +336,9 @@ func chatContent(a Alert, now time.Time) chatMessage {
 		m.Title, m.Tone = "🔴 "+name+" may be offline", toneBad
 		if a.IsHeartbeat() {
 			m.Title = "🔴 " + name + " " + heartbeatProblem(a.Cause)
+		}
+		if a.IsDNS() {
+			m.Title = "🔴 DNS check failing for " + name
 		}
 		m.Lines = []string{"Detected " + a.StartedAt.UTC().Format("2006-01-02 15:04 UTC")}
 		if a.Cause != "" {

@@ -59,7 +59,7 @@ function readCards(): Record<string, string[]> {
 async function cardsOn(ui: React.ReactElement, signedIn: boolean, yearly = false) {
   stubApi(signedIn, yearly)
   const { unmount } = render(<MemoryRouter><AuthProvider>{ui}</AuthProvider></MemoryRouter>)
-  await screen.findAllByText('200 website monitors')
+  await screen.findAllByText('200 monitors')
   if (yearly) fireEvent.click(await screen.findByRole('radio', { name: 'Yearly · 2 months free' }))
   const cards = readCards()
   unmount()
@@ -81,7 +81,7 @@ describe('pricing cards stay in sync', () => {
     for (const [ui, signedIn] of [[<LandingPage />, false], [<MonitoringLandingPage />, false], [<BillingPage />, true]] as const) {
       const cards = await cardsOn(ui, signedIn)
       expect(cards.Agency).toEqual(expect.arrayContaining([
-        '200 website monitors', 'Checks from up to 3 locations', '5 team members', 'Domain expiry warnings for up to 100 domains',
+        '200 monitors', 'Cron job and DNS monitoring', 'Checks from up to 3 locations', '5 team members', 'Domain expiry warnings for up to 100 domains',
         'Maintenance windows', 'Monthly PDF uptime reports', 'Branded Reports with name and logo',
       ]))
       expect(cards.Free).not.toContain('Branded Reports with name and logo')
@@ -102,7 +102,7 @@ describe('pricing cards stay in sync', () => {
   it('offers no yearly option when the server does not', async () => {
     stubApi(false, false)
     const { unmount } = render(<MemoryRouter><AuthProvider><LandingPage /></AuthProvider></MemoryRouter>)
-    await screen.findAllByText('200 website monitors')
+    await screen.findAllByText('200 monitors')
     expect(screen.queryByRole('radiogroup', { name: 'Billing period' })).not.toBeInTheDocument()
     unmount()
   })
