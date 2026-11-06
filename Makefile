@@ -65,5 +65,5 @@ smoke-down:
 	$(SMOKE) down -v
 
 vuln:          ## Scan Go and npm dependencies for known vulnerabilities
-	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	python3 scripts/vulncheck.py
 	cd web && npm audit
