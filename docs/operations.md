@@ -239,6 +239,10 @@ reclaimed automatically; no manual action is needed. To force a retry: `UPDATE c
 Raise `WORKER_CONCURRENCY` (and DB pool), add worker instances, or raise `QUEUE_MAX_DEPTH`. Each check holds one
 goroutine and one database connection only while claiming/recording, not while waiting on the website.
 
+### A DNS monitor fails but the record looks right
+
+DNS monitors ask the worker's resolver, so a recent change shows up only once the old record's TTL expires there: compare with `dig <name> <type> @<resolver>`, using the resolver the worker uses. Other common causes are a TXT value in different case (TXT comparison is case-sensitive) and a `blocked` result, which means the name resolves to a non-public address. The answers are deliberately not stored, so the check history cannot show what was returned. Rising `dns` failures across many DNS monitors point at the resolver, not at customers: see *Many dns or timeout failures across unrelated sites*.
+
 ### Many blocked failures for one monitor
 
 The target resolves to a private/reserved address or redirects to one; this is the SSRF guard working. Tell the customer.

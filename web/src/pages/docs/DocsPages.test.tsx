@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
+import { DNS_RECORD_TYPES } from '../../api'
 import { AuthProvider } from '../../auth'
 import { PAGES } from '../../seo'
 import { DocPage, DOCS, DocsIndexPage } from './DocsPages'
@@ -20,6 +21,21 @@ describe('docs', () => {
     page(<DocPage path={path} />)
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(DOCS.find((d) => d.path === path)!.title)
     expect(PAGES.find((p) => p.path === path)?.index).toBe(true)
+  })
+
+  it('marks only the current article in the menu, and gives every link a decorative icon', () => {
+    render(<MemoryRouter initialEntries={['/docs/alerts']}><AuthProvider><DocPage path="/docs/alerts" /></AuthProvider></MemoryRouter>)
+    const nav = screen.getByRole('navigation', { name: 'Documentation' })
+    const links = within(nav).getAllByRole('link')
+    expect(links.map((l) => l.textContent)).toEqual(DOCS.map((d) => d.title))
+    expect(links.filter((l) => l.classList.contains('d-menu-active')).map((l) => l.textContent)).toEqual(['Alerts'])
+    expect(within(nav).getByRole('link', { current: 'page' })).toHaveTextContent('Alerts')
+    for (const l of links) expect(l.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('names every record type a DNS monitor accepts', () => {
+    page(<DocPage path="/docs/dns-monitoring" />)
+    for (const t of DNS_RECORD_TYPES) expect(screen.getAllByText(new RegExp(`\\b${t}\\b`)).length).toBeGreaterThan(0)
   })
 
   it('shows the heartbeat ping forms the API accepts', () => {

@@ -320,3 +320,63 @@ describe('MonitorFormPage: heartbeat (cron job) monitors', () => {
     expect(screen.getByRole('heading', { name: 'Monitor a cron job or scheduled task' })).toBeInTheDocument()
   })
 })
+
+describe('MonitorFormPage: DNS monitors', () => {
+  const newDns = () => render(
+    <MemoryRouter initialEntries={['/monitors/new?type=dns']}>
+      <Routes>
+        <Route path="/monitors/new" element={<MonitorFormPage />} />
+        <Route path="/monitors" element={<h1>Monitor list</h1>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const stub = (post: () => Promise<Response>) => {
+    document.cookie = 'csrf_token=t; path=/'
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (url.endsWith('/usage')) return json(200, { usage: { plan: { minimum_check_interval_seconds: 300 } } })
+      if (init?.method === 'POST') return post()
+      return json(200, {})
+    }))
+  }
+
+  it('creates a DNS monitor with its record type and expected value', async () => {
+    stub(() => json(201, { monitor: { id: 'd1' } }))
+    newDns()
+    expect(screen.getByRole('radio', { name: /DNS record/ })).toBeChecked()
+    expect(screen.queryByLabelText('URL')).not.toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Name'), 'Mail')
+    await userEvent.type(screen.getByLabelText('Host name'), 'example.com')
+    await userEvent.selectOptions(screen.getByLabelText('Record type'), 'MX')
+    await userEvent.type(screen.getByLabelText('Expected mail server (optional)'), 'mail.example.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    expect(await screen.findByRole('heading', { name: 'Monitor list' })).toBeInTheDocument()
+
+    const post = vi.mocked(globalThis.fetch).mock.calls.find(([, init]) => init?.method === 'POST')!
+    expect(JSON.parse(post[1]!.body as string)).toEqual({
+      type: 'dns', name: 'Mail', url: 'example.com', dns_record_type: 'MX', dns_expected: 'mail.example.com', tag_ids: [], alert_delay_minutes: 0, quiet_hours: null,
+    })
+  })
+
+  it('sends no expected value when it is left empty, and clears it when the record type changes', async () => {
+    stub(() => json(201, { monitor: { id: 'd1' } }))
+    newDns()
+    await userEvent.type(screen.getByLabelText('Name'), 'Site')
+    await userEvent.type(screen.getByLabelText('Host name'), 'example.com')
+    await userEvent.type(screen.getByLabelText('Expected IPv4 address (optional)'), '93.184.216.34')
+    await userEvent.selectOptions(screen.getByLabelText('Record type'), 'TXT')
+    expect(screen.getByLabelText('Expected text (optional)')).toHaveValue('')
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    await screen.findByRole('heading', { name: 'Monitor list' })
+    const post = vi.mocked(globalThis.fetch).mock.calls.find(([, init]) => init?.method === 'POST')!
+    expect(JSON.parse(post[1]!.body as string)).toMatchObject({ dns_record_type: 'TXT', dns_expected: null })
+  })
+
+  it('shows a refused host name next to its field', async () => {
+    stub(() => json(400, { error: { code: 'VALIDATION_ERROR', message: 'x', details: { fields: { url: 'Enter a domain name, not an IP address.' } } } }))
+    newDns()
+    await userEvent.type(screen.getByLabelText('Name'), 'Site')
+    await userEvent.type(screen.getByLabelText('Host name'), '8.8.8.8')
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    expect(await screen.findByText('Enter a domain name, not an IP address.')).toBeInTheDocument()
+  })
+})

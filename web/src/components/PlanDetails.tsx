@@ -56,12 +56,13 @@ export function PlanDetails({ plan, interval = 'month' }: { plan: Plan; interval
         </p>
       )}
       <ul>
-        <li>{plan.max_monitors} website monitors</li>
+        <li>{plan.max_monitors} monitors</li>
         <li>Checks every {mins} minute{mins === 1 ? '' : 's'}</li>
         <li>{plan.history_retention_days} days of history</li>
         {(plan.max_regions ?? 1) > 1 && <li>Checks from up to {plan.max_regions} locations</li>}
         {(plan.max_team_members ?? 1) > 1 && <li>{plan.max_team_members} team members</li>}
         <li>Website and API monitoring</li>
+        <li>Cron job and DNS monitoring</li>
         <li>SSL certificate expiry warnings</li>
         {plan.max_domains !== undefined && <li>Domain expiry warnings for up to {plan.max_domains} domains</li>}
         <li>Email, Slack, Teams, Discord, Telegram and webhook alerts</li>

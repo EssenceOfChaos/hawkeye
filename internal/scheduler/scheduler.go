@@ -144,7 +144,7 @@ func (s *Scheduler) Tick(ctx context.Context) (Stats, error) {
 
 		// Heartbeat monitors are never checked: their jobs ping them (internal/heartbeats).
 		rows, err := tx.Query(ctx, `SELECT id, organization_id, check_interval_seconds, next_check_at, regions FROM monitors
-			WHERE enabled AND deleted_at IS NULL AND next_check_at <= now() AND kind = 'http'
+			WHERE enabled AND deleted_at IS NULL AND next_check_at <= now() AND kind <> 'heartbeat'
 			ORDER BY next_check_at
 			FOR UPDATE SKIP LOCKED
 			LIMIT $1`, min(s.cfg.Batch, capacity))
@@ -233,6 +233,6 @@ func min64(a, b time.Duration) time.Duration {
 func Lag(ctx context.Context, db plans.DB) (time.Duration, error) {
 	var secs float64
 	err := db.QueryRow(ctx, `SELECT COALESCE(EXTRACT(EPOCH FROM now() - min(next_check_at)), 0)::float8
-		FROM monitors WHERE enabled AND deleted_at IS NULL AND next_check_at <= now() AND kind = 'http'`).Scan(&secs)
+		FROM monitors WHERE enabled AND deleted_at IS NULL AND next_check_at <= now() AND kind <> 'heartbeat'`).Scan(&secs)
 	return time.Duration(secs * float64(time.Second)), err
 }

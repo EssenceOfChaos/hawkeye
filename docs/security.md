@@ -127,6 +127,35 @@ See `docs/security-review.md` for the review and residual risks.
 
 `POST /api/v1/tools/site-check` (`internal/sitecheck`) has the same protections plus the ones an HTTP request needs. It reuses the monitoring engine's `checks.Checker`, so every connection and every redirect hop goes through `safehttp` (public addresses only, ports 80 and 443, at most 5 redirects, no credentials in redirects). The visitor's input is reduced to a host (`internal/publichost`, shared with the SSL checker); the request is always `GET /` with no custom headers or body, so a pasted link containing a token is never sent and the tool cannot trigger an action on a site; the response body is read only to drain it, never returned or stored; the report holds the status code, timing, the final address without its query, and a verdict. A bare domain is tried over https, then over http only if https could not connect or negotiate TLS. The User-Agent is `HawkEye-StatusChecker/1.0 (+https://hawkeye.observer/tools/is-website-down)` so site owners can identify and block it. The shared limits live in `internal/toolguard` (concurrency 8, 5 fresh checks per host per 10 minutes, 30 s cache) and each tool has its own per-IP budget (10/minute, 40/hour). Tests: `internal/sitecheck`, `internal/toolguard`, `internal/httpapi/tools_integration_test.go`, `SITECHECK_LIVE=1` (on Linux).
 
+## DNS monitors (outbound lookups)
+
+A DNS monitor (`internal/checks/dns.go`) sends no traffic to the customer's host: it asks the worker's own resolver for one record. The risk is learning what exists on HawkEye's network, so:
+
+- Host names pass `publichost.ParseDNSName`: no IP addresses, single labels or private-network suffixes, and the last label may not contain an underscore, which keeps out container network names. This is input hygiene; the next two rules are the control.
+- Lookups use the fully qualified name (a trailing dot), so the resolver's search domains can never turn a customer's name into an internal one.
+- An `A` or `AAAA` answer that is not public fails the check as `blocked`, the same result a website gets, and an expected value must itself be a public address. A private answer therefore cannot be confirmed by guessing it.
+- Answers are never stored, logged or shown: summaries name only the customer's own expected value, so a monitor cannot be used to read records out of a zone.
+
+`MX`, `NS` and `TXT` answers are not filtered, because nothing connects to them. Tests: `internal/checks/dns_test.go`, `internal/publichost/publichost_test.go`, `internal/monitors/dns_integration_test.go`.
+
+## TCP port monitors (policy decided, not built)
+
+Roadmap item #12 also covers TCP port monitors. Nothing below exists yet: this is the agreed policy to build to, recorded here because it changes a deliberate defense. Today website checks reach ports 80 and 443 only (`safehttp.IsAllowedPort`), and that allowlist is the **only** limit on ports: `deploy/egress-filter.sh` drops private ranges but allows every port on the public internet. Without care, a TCP monitor turns HawkEye into a port scanner aimed at third parties.
+
+**Decided:** a curated allowlist of ports, on paid plans only.
+
+- **Paid plans only**, through a new plan flag decided in `internal/plans` like every other entitlement, with a verified email address required. Free accounts are the cheapest to create in bulk, so they are the likeliest source of abuse.
+- **A curated allowlist, never a free-form port.** The list lives in one place in code, and adding a port is a reviewed change. Starting list, confirmed on 2026-11-05: 22 (SSH), 110, 143, 465, 587, 993, 995 (mail), 1433, 3306, 5432, 6379, 27017 (databases), 8080, 8443 (alternate web).
+- **Port 25 stays blocked.** Reaching third-party mail servers from HawkEye's addresses risks them being listed for spam. Reconsider only with a specific reason.
+- **Connect only.** The check opens a connection and closes it: no bytes are sent and no banner is read or stored.
+
+**Requirements when it is built:**
+
+- Dial through `safehttp.NewDialer` with a TCP-only `AllowPort`, so every existing rule still applies (all answers must be public, the validated address is dialed, no second lookup). Website checks keep their own 80/443 rule; the new list must not widen it.
+- Limit how many distinct hosts and ports one organization can monitor, so an account cannot sweep a network within its monitor limit, and add a rate limit per destination across all organizations.
+- Add a matching port rule to `deploy/egress-filter.sh`, so the network enforces the list as well and a bug in one layer is not a breach. Verify it with `scripts/verify-egress.sh`.
+- Update the Terms (acceptable use) and `docs/legal-placeholders.md`, and record abuse handling in `docs/operations.md`.
+
 ## Heartbeat pings (public, inbound)
 
 `/ping/<token>[/fail|/<exit status>]` (`internal/heartbeats`, `internal/httpapi/handlers_heartbeats.go`) is the only endpoint that records data

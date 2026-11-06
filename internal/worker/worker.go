@@ -139,12 +139,14 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 	var t checks.Target
 	var enabled bool
 	var timeoutSecs int
+	var dnsType string // set for DNS monitors, whose url is the host name to look up
+	var dnsExpected string
 	err = w.pool.QueryRow(ctx, `SELECT url, method, expected_status_code, timeout_seconds, enabled,
 		request_headers, COALESCE(request_body, ''), auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''),
-		COALESCE(auth_secret, ''), assertions
+		COALESCE(auth_secret, ''), assertions, COALESCE(dns_record_type, ''), COALESCE(dns_expected, '')
 		FROM monitors WHERE id = $1 AND deleted_at IS NULL`, job.MonitorID).
 		Scan(&t.URL, &t.Method, &t.ExpectedStatus, &timeoutSecs, &enabled, &t.Headers, &t.Body, &t.Auth.Type,
-			&t.Auth.Username, &t.Auth.HeaderName, &t.Auth.Secret, &t.Assertions)
+			&t.Auth.Username, &t.Auth.HeaderName, &t.Auth.Secret, &t.Assertions, &dnsType, &dnsExpected)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows) || err == nil && !enabled:
 		return true, w.complete(ctx, job) // deleted or paused since it was scheduled
@@ -168,7 +170,12 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 	}
 	t.Timeout = time.Duration(timeoutSecs) * time.Second
 
-	res, err := w.checker.Check(ctx, t)
+	var res checks.Result
+	if dnsType != "" {
+		res, err = w.checker.CheckDNS(ctx, checks.DNSTarget{Host: t.URL, RecordType: dnsType, Expected: dnsExpected, Timeout: t.Timeout})
+	} else {
+		res, err = w.checker.Check(ctx, t)
+	}
 	if err != nil { // only when ctx was canceled
 		w.retry(ctx, job)
 		return true, nil

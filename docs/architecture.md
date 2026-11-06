@@ -17,7 +17,8 @@ internal/plans         plan catalog + the entitlement service (all limit decisio
 internal/monitors      monitor CRUD, validation, soft delete, per-organization scoping
 cmd/worker             monitoring engine process: scheduler + check workers + metrics endpoint (:9090)
 internal/safehttp      SSRF-safe HTTP client (see docs/security.md)
-internal/checks        runs one check, classifies errors, applies results to monitor state (`Apply`, `Store.Record`)
+internal/publichost    decides whether a typed host name is a public one, for the free tools and DNS monitors
+internal/checks        runs one check (`Check` for websites, `CheckDNS` for DNS records), classifies errors, applies results to monitor state (`Apply`, `Store.Record`)
 internal/queue         durable PostgreSQL job queue (claim / lease / complete / release)
 internal/scheduler     finds due monitors, enqueues jobs, jitter, backpressure
 internal/worker        bounded-concurrency polling loops, metrics sampler

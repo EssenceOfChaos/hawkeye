@@ -331,7 +331,7 @@ func (s *Service) Bulk(ctx context.Context, orgID uuid.UUID, in BulkInput) (int,
 				return err
 			}
 			_, err = tx.Exec(ctx, `UPDATE monitors SET enabled = true,
-				next_check_at = CASE WHEN NOT enabled AND kind = 'http' THEN now() ELSE next_check_at END, `+resumeDeadline+`
+				next_check_at = CASE WHEN NOT enabled AND kind <> 'heartbeat' THEN now() ELSE next_check_at END, `+resumeDeadline+`
 				WHERE id = ANY($1) AND organization_id = $2`, ids, orgID, true, minInterval)
 		case BulkDelete:
 			if _, err = deleteTx(ctx, tx, orgID, ids); err != nil {
@@ -348,8 +348,8 @@ func (s *Service) Bulk(ctx context.Context, orgID uuid.UUID, in BulkInput) (int,
 			if err := s.plans.CheckInterval(ctx, tx, orgID, v); err != nil {
 				return err
 			}
-			// A heartbeat's period is when its job runs, which a website check interval says nothing about: heartbeats are left as they are.
-			_, err = tx.Exec(ctx, `UPDATE monitors SET check_interval_seconds = $2 WHERE id = ANY($1) AND kind = 'http'`, ids, v)
+			// A heartbeat's period is when its job runs, which a check interval says nothing about: heartbeats are left as they are.
+			_, err = tx.Exec(ctx, `UPDATE monitors SET check_interval_seconds = $2 WHERE id = ANY($1) AND kind <> 'heartbeat'`, ids, v)
 		case BulkAddTags:
 			var tagIDs []uuid.UUID
 			if tagIDs, err = resolveTags(ctx, tx, orgID, in.TagIDs); err != nil {

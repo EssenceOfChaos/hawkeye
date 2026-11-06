@@ -5,11 +5,14 @@ import {
   api,
   ApiError,
   BODY_METHODS,
+  DNS_RECORD_TYPES,
   HTTP_METHODS,
   WRITE_METHODS,
   WRITE_MIN_MINUTES,
   type Assertion,
   type AuthType,
+  type DnsInput,
+  type DnsRecordType,
   type HeartbeatInput,
   type HttpMethod,
   type JsonOperator,
@@ -57,6 +60,15 @@ function RowError({ id, children }: { id: string; children?: string }) {
   ) : null
 }
 
+/** What the expected value of each DNS record type looks like, and how it is compared with the answers. */
+const DNS_EXPECTED: Record<DnsRecordType, { label: string; placeholder: string; hint: string }> = {
+  A: { label: 'Expected IPv4 address (optional)', placeholder: '203.0.113.10', hint: 'One of the addresses must match exactly. Leave empty to accept any address.' },
+  AAAA: { label: 'Expected IPv6 address (optional)', placeholder: '2001:db8::1', hint: 'One of the addresses must match exactly. Leave empty to accept any address.' },
+  MX: { label: 'Expected mail server (optional)', placeholder: 'mail.example.com', hint: 'One of the mail servers must match exactly. Leave empty to accept any.' },
+  NS: { label: 'Expected name server (optional)', placeholder: 'ns1.example.com', hint: 'One of the name servers must match exactly. Leave empty to accept any.' },
+  TXT: { label: 'Expected text (optional)', placeholder: 'v=spf1 include:_spf.example.com', hint: 'One of the TXT records must contain this text, in the same upper and lower case. Leave empty to accept any.' },
+}
+
 /** The threshold offered when slow-response alerts are turned on. */
 const DEFAULT_SLOW_MS = 2000
 
@@ -65,9 +77,12 @@ export function MonitorFormPage() {
   const editing = Boolean(monitorID)
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const [kind, setKind] = useState<MonitorType>(params.get('type') === 'heartbeat' ? 'heartbeat' : 'http')
+  const [kind, setKind] = useState<MonitorType>(params.get('type') === 'heartbeat' ? 'heartbeat' : params.get('type') === 'dns' ? 'dns' : 'http')
   const [period, setPeriod] = useState(86400) // heartbeats: expected time between pings, in seconds
   const [grace, setGrace] = useState(3600)
+  const [host, setHost] = useState('') // DNS monitors: the host name to look up
+  const [recordType, setRecordType] = useState<DnsRecordType>('A')
+  const [dnsExpected, setDnsExpected] = useState('')
   const [loaded, setLoaded] = useState(!editing)
   const [name, setName] = useState('')
   const [url, setUrl] = useState('https://')
@@ -121,6 +136,11 @@ export function MonitorFormPage() {
         if (m.heartbeat) {
           setPeriod(m.check_interval_seconds)
           setGrace(m.heartbeat.grace_seconds)
+        }
+        if (m.dns) {
+          setHost(m.url)
+          setRecordType(m.dns.record_type)
+          setDnsExpected(m.dns.expected ?? '')
         }
         setName(m.name)
         setUrl(m.url)
@@ -179,11 +199,30 @@ export function MonitorFormPage() {
     }
   }
 
+  async function onSubmitDns() {
+    const payload: DnsInput = {
+      name, url: host, dns_record_type: recordType, dns_expected: dnsExpected.trim() === '' ? null : dnsExpected,
+      tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet,
+    }
+    if (allRegions.length > 1) payload.regions = chosen
+    if (intervalMin !== '') payload.check_interval_seconds = Number(intervalMin) * 60
+    try {
+      if (editing) await api('PATCH', `/monitors/${monitorID}`, payload)
+      else await api('POST', '/monitors', { ...payload, type: 'dns' })
+      navigate('/monitors')
+    } catch (err) {
+      setError(err instanceof ApiError ? err : new ApiError(0, 'NETWORK', 'Could not reach the server. Try again.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)
     if (kind === 'heartbeat') return onSubmitHeartbeat()
+    if (kind === 'dns') return onSubmitDns()
     // Text checks first, then JSON checks. Empty text rows are dropped rather than refused.
     const checks: { assertion: Assertion; origin: Origin }[] = [
       ...contains.map((v, row) => ({ v, row })).filter((x) => x.v.trim() !== '')
@@ -240,9 +279,33 @@ export function MonitorFormPage() {
   const rowErrors = (list: Origin['list'], n: number) => Object.fromEntries(Array.from({ length: n }, (_, row) => [row, errorAt(list, row)]))
   const generic = error && !Object.keys(f).length
   const secretLabel = authType === 'basic' ? 'Password' : authType === 'bearer' ? 'Token' : 'Header value'
+  const regionPicker = allRegions.length > 1 && (
+    <fieldset className="group">
+      <legend>Check from</legend>
+      {allRegions.map((r, i) => {
+        const on = chosen.includes(r.code) || (chosen.length === 0 && i === 0)
+        return (
+          <label key={r.code}>
+            <input type="checkbox" checked={on} disabled={!on && chosen.length >= maxRegions}
+              onChange={(e) => {
+                // Leaving everything unticked would mean "primary", so the list always starts from what is shown.
+                const current = chosen.length === 0 ? [allRegions[0].code] : chosen
+                setChosen(e.target.checked ? [...current, r.code] : current.filter((c) => c !== r.code))
+              }} /> {r.name}
+          </label>
+        )
+      })}
+      {f.regions && <small className="error">{f.regions}</small>}
+      <small className="hint">
+        {maxRegions > 1
+          ? `Your plan can check each monitor from up to ${maxRegions} locations. A monitor counts as offline only when most of its locations agree, so a problem at one location never raises an alert.`
+          : 'Checking from several locations is available on paid plans. A monitor counts as offline only when most of its locations agree.'}
+      </small>
+    </fieldset>
+  )
   return (
     <section className="card narrow">
-      <h1>{editing ? 'Edit monitor' : kind === 'heartbeat' ? 'Monitor a cron job or scheduled task' : 'Add a website or API to monitor'}</h1>
+      <h1>{editing ? 'Edit monitor' : kind === 'heartbeat' ? 'Monitor a cron job or scheduled task' : kind === 'dns' ? 'Monitor a DNS record' : 'Add a website or API to monitor'}</h1>
       {!editing && (
         <fieldset className="field monitor-kind">
           <legend>What do you want to monitor?</legend>
@@ -253,6 +316,10 @@ export function MonitorFormPage() {
           <label>
             <input type="radio" name="kind" checked={kind === 'heartbeat'} onChange={() => setKind('heartbeat')} /> A cron job or scheduled task (heartbeat)
             <small className="hint"> Your job pings HawkEye each time it runs; you are alerted when a ping is late or reports a failure.</small>
+          </label>
+          <label>
+            <input type="radio" name="kind" checked={kind === 'dns'} onChange={() => setKind('dns')} /> A DNS record
+            <small className="hint"> HawkEye looks it up on a schedule; you are alerted when it disappears or stops matching the value you expect.</small>
           </label>
         </fieldset>
       )}
@@ -274,6 +341,37 @@ export function MonitorFormPage() {
           <div className="row">
             <button type="submit" disabled={busy}>{editing ? 'Save changes' : 'Create and show the ping address'}</button>
             <Link to={editing ? `/monitors/${monitorID}` : '/monitors'}>Cancel</Link>
+          </div>
+        </form>
+      )}
+      {loaded && kind === 'dns' && (
+        <form onSubmit={onSubmit}>
+          <Field label="Name" required maxLength={100} value={name} placeholder="Mail records for example.com" onChange={(e) => setName(e.target.value)} error={f.name} />
+          <Field label="Host name" required value={host} placeholder="example.com" onChange={(e) => setHost(e.target.value)} error={f.url}
+            hint="A public host name, such as example.com or _dmarc.example.com. Addresses and names on private networks are not allowed." />
+          <TagPicker tags={allTags} selected={tagIDs} onChange={setTagIDs} error={f.tag_ids}
+            onCreated={(t) => setAllTags((ts) => [...ts, t].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())))} />
+          <div className="field">
+            <label htmlFor="record-type">Record type</label>
+            <select id="record-type" value={recordType} aria-invalid={f.dns_record_type ? true : undefined}
+              onChange={(e) => {
+                setRecordType(e.target.value as DnsRecordType)
+                setDnsExpected('') // a value written for one record type means nothing for another
+              }}>
+              {DNS_RECORD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            {f.dns_record_type && <small className="error">{f.dns_record_type}</small>}
+          </div>
+          <Field label={DNS_EXPECTED[recordType].label} value={dnsExpected} maxLength={255} placeholder={DNS_EXPECTED[recordType].placeholder}
+            onChange={(e) => setDnsExpected(e.target.value)} error={f.dns_expected} hint={DNS_EXPECTED[recordType].hint} />
+          <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f} />
+          {regionPicker}
+          <Field label="Check every (minutes)" type="number" min={minAllowed} max={1440} value={intervalMin}
+            onChange={(e) => setIntervalMin(e.target.value)} error={f.check_interval_seconds}
+            hint={`Your plan allows checks every ${minAllowed} minute(s) or slower. Leave empty for the default. A changed record shows up here once the old one expires from DNS caches.`} />
+          <div className="row">
+            <button type="submit" disabled={busy}>{editing ? 'Save changes' : 'Add monitor'}</button>
+            <Link to="/monitors">Cancel</Link>
           </div>
         </form>
       )}
@@ -447,30 +545,7 @@ export function MonitorFormPage() {
 
           <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f} />
 
-          {allRegions.length > 1 && (
-            <fieldset className="group">
-              <legend>Check from</legend>
-              {allRegions.map((r, i) => {
-                const on = chosen.includes(r.code) || (chosen.length === 0 && i === 0)
-                return (
-                  <label key={r.code}>
-                    <input type="checkbox" checked={on} disabled={!on && chosen.length >= maxRegions}
-                      onChange={(e) => {
-                        // Leaving everything unticked would mean "primary", so the list always starts from what is shown.
-                        const current = chosen.length === 0 ? [allRegions[0].code] : chosen
-                        setChosen(e.target.checked ? [...current, r.code] : current.filter((c) => c !== r.code))
-                      }} /> {r.name}
-                  </label>
-                )
-              })}
-              {f.regions && <small className="error">{f.regions}</small>}
-              <small className="hint">
-                {maxRegions > 1
-                  ? `Your plan can check each monitor from up to ${maxRegions} locations. A monitor counts as offline only when most of its locations agree, so a problem at one location never raises an alert.`
-                  : 'Checking from several locations is available on paid plans. A monitor counts as offline only when most of its locations agree.'}
-              </small>
-            </fieldset>
-          )}
+          {regionPicker}
 
           <Field label="Check every (minutes)" type="number" min={minIntervalMin} max={1440} value={intervalMin}
             onChange={(e) => setIntervalMin(e.target.value)} error={f.check_interval_seconds}

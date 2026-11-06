@@ -79,8 +79,10 @@ type ExportBilling struct {
 
 type ExportMonitor struct {
 	ID                   uuid.UUID `json:"id"`
-	Type                 string    `json:"type"`          // http or heartbeat
-	GraceSeconds         *int      `json:"grace_seconds"` // heartbeats only
+	Type                 string    `json:"type"`            // http or heartbeat
+	GraceSeconds         *int      `json:"grace_seconds"`   // heartbeats only
+	DNSRecordType        *string   `json:"dns_record_type"` // DNS monitors only
+	DNSExpected          *string   `json:"dns_expected"`    // DNS monitors only
 	Name                 string    `json:"name"`
 	URL                  string    `json:"url"`
 	Method               string    `json:"method"`
@@ -219,7 +221,7 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 		slow_threshold_ms, slow_checks,
 		COALESCE((SELECT array_agg(t.name ORDER BY lower(t.name)) FROM monitor_tags mt JOIN tags t ON t.id = mt.tag_id WHERE mt.monitor_id = monitors.id), '{}'),
 		alert_delay_minutes, to_char(make_time(quiet_start / 60, quiet_start % 60, 0), 'HH24:MI'), to_char(make_time(quiet_end / 60, quiet_end % 60, 0), 'HH24:MI'), quiet_timezone,
-		kind, heartbeat_grace_seconds
+		kind, heartbeat_grace_seconds, dns_record_type, dns_expected
 		FROM monitors WHERE organization_id = $1 AND deleted_at IS NULL ORDER BY created_at, id`, o.ID)
 	if err != nil {
 		return err
@@ -229,7 +231,7 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 		var quietStart, quietEnd, quietTZ *string
 		if err := rows.Scan(&m.ID, &m.Name, &m.URL, &m.Method, &m.ExpectedStatusCode, &m.CheckIntervalSeconds, &m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.CreatedAt,
 			&m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username, &m.Auth.HeaderName, &m.Assertions, &m.Regions,
-			&m.SlowThresholdMs, &m.SlowChecks, &m.Tags, &m.AlertDelayMinutes, &quietStart, &quietEnd, &quietTZ, &m.Type, &m.GraceSeconds); err != nil {
+			&m.SlowThresholdMs, &m.SlowChecks, &m.Tags, &m.AlertDelayMinutes, &quietStart, &quietEnd, &quietTZ, &m.Type, &m.GraceSeconds, &m.DNSRecordType, &m.DNSExpected); err != nil {
 			rows.Close()
 			return err
 		}

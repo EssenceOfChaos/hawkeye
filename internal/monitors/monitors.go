@@ -22,6 +22,7 @@ import (
 
 	"hawkeye/internal/checks"
 	"hawkeye/internal/plans"
+	"hawkeye/internal/publichost"
 	"hawkeye/internal/regions"
 	"hawkeye/internal/secrets"
 	"hawkeye/internal/validation"
@@ -53,10 +54,12 @@ const (
 	maxSecretChars = 2048
 )
 
-// Monitor types. A website (HTTP) monitor is checked by HawkEye; a heartbeat monitor waits for the customer's job to ping it.
+// Monitor types. A website (HTTP) monitor is checked by HawkEye, a DNS monitor has a record looked up by HawkEye, and a heartbeat monitor waits for the
+// customer's job to ping it.
 const (
 	TypeHTTP      = "http"
 	TypeHeartbeat = "heartbeat"
+	TypeDNS       = "dns"
 )
 
 // Methods lists the accepted request methods. Only some of them may carry a body.
@@ -90,7 +93,7 @@ var reservedHeaders = map[string]bool{
 type Monitor struct {
 	ID                   uuid.UUID `json:"id"`
 	OrganizationID       uuid.UUID `json:"organization_id"`
-	Type                 string    `json:"type"` // http or heartbeat; fixed when the monitor is created
+	Type                 string    `json:"type"` // http, heartbeat or dns; fixed when the monitor is created
 	Name                 string    `json:"name"`
 	URL                  string    `json:"url"`
 	Method               string    `json:"method"`
@@ -127,8 +130,16 @@ type Monitor struct {
 	// Heartbeat is set for heartbeat monitors only. For them check_interval_seconds is the expected time between pings, and URL and the request
 	// fields are unused.
 	Heartbeat *Heartbeat `json:"heartbeat"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	// DNS is set for DNS monitors only. For them URL is the host name looked up, and the request fields are unused.
+	DNS       *DNSCheck `json:"dns"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// DNSCheck is what a DNS monitor looks up. Expected is what an answer must match; null means any answer will do.
+type DNSCheck struct {
+	RecordType string  `json:"record_type"`
+	Expected   *string `json:"expected"`
 }
 
 // Heartbeat is the state of a heartbeat monitor. The job pings /ping/<PingToken> each time it runs; DueBy is when HawkEye will call the job missed
@@ -230,8 +241,10 @@ func (n *Nullable[T]) UnmarshalJSON(b []byte) error {
 
 // Only client-editable fields exist here; state fields (status, counters, timestamps) cannot be set.
 type CreateInput struct {
-	Type                 string             `json:"type"` // http (the default) or heartbeat
+	Type                 string             `json:"type"` // http (the default), heartbeat or dns
 	GraceSeconds         *int               `json:"grace_seconds"`
+	DNSRecordType        *string            `json:"dns_record_type"`
+	DNSExpected          *string            `json:"dns_expected"`
 	Name                 string             `json:"name"`
 	URL                  string             `json:"url"`
 	Method               *string            `json:"method"`
@@ -268,6 +281,8 @@ type UpdateInput struct {
 	AlertDelayMinutes    *int                 `json:"alert_delay_minutes"`
 	QuietHours           Nullable[QuietHours] `json:"quiet_hours"` // null turns quiet hours off
 	GraceSeconds         *int                 `json:"grace_seconds"`
+	DNSRecordType        *string              `json:"dns_record_type"`
+	DNSExpected          Nullable[string]     `json:"dns_expected"` // null or empty: any answer will do
 }
 
 type ListFilter struct {
@@ -370,7 +385,8 @@ const cols = `id, organization_id, name, url, method, expected_status_code, chec
 	request_headers, request_body, auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''), auth_secret IS NOT NULL,
 	assertions, ssl_expires_at, ssl_checked_at, in_maintenance(organization_id, id, now()), regions,
 	slow_threshold_ms, slow_checks, (SELECT started_at FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'), badge_token, ` + tagsCol + `,
-	alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, COALESCE(ping_token, ''), COALESCE(heartbeat_grace_seconds, 0), last_ping_at, ping_deadline`
+	alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, COALESCE(ping_token, ''), COALESCE(heartbeat_grace_seconds, 0), last_ping_at, ping_deadline,
+	COALESCE(dns_record_type, ''), dns_expected`
 
 func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	var m Monitor
@@ -378,17 +394,21 @@ func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	var quietStart, quietEnd *int
 	var quietTZ *string
 	var hb Heartbeat
+	var dns DNSCheck
 	err := row.Scan(&m.ID, &m.OrganizationID, &m.Name, &m.URL, &m.Method, &m.ExpectedStatusCode, &m.CheckIntervalSeconds,
 		&m.TimeoutSeconds, &m.Enabled, &m.CurrentStatus, &m.LastCheckedAt, &m.LastSuccessAt, &m.ConsecutiveFailures,
 		&m.ConsecutiveSuccesses, &m.CreatedAt, &m.UpdatedAt, &m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username,
 		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked, &m.InMaintenance, &m.Regions,
 		&m.SlowThresholdMs, &m.SlowChecks, &m.SlowSince, &m.BadgeToken, &m.Tags, &m.AlertDelayMinutes, &quietStart, &quietEnd, &quietTZ,
-		&m.Type, &hb.PingToken, &hb.GraceSeconds, &hb.LastPingAt, &hb.DueBy)
+		&m.Type, &hb.PingToken, &hb.GraceSeconds, &hb.LastPingAt, &hb.DueBy, &dns.RecordType, &dns.Expected)
 	if quietStart != nil && quietEnd != nil && quietTZ != nil {
 		m.QuietHours = &QuietHours{Start: formatClock(*quietStart), End: formatClock(*quietEnd), Timezone: *quietTZ}
 	}
 	if m.Type == TypeHeartbeat {
 		m.Heartbeat = &hb
+	}
+	if m.Type == TypeDNS {
+		m.DNS = &dns
 	}
 	m.EffectiveCheckIntervalSeconds = max(m.CheckIntervalSeconds, minInterval)
 	if sslExpires != nil {
@@ -403,8 +423,10 @@ func scan(row pgx.Row, minInterval int) (Monitor, error) {
 
 // fields are the validated, normalized editable values of a monitor.
 type fields struct {
-	kind              string // TypeHTTP or TypeHeartbeat
+	kind              string // TypeHTTP, TypeHeartbeat or TypeDNS
 	grace             int    // heartbeats: seconds allowed after the period before a ping counts as missed
+	dnsType           string // DNS monitors: the record to look up
+	dnsExpected       string // DNS monitors: what an answer must match; "": any answer will do
 	name, url, method string
 	expected          *int
 	interval, timeout int
@@ -422,6 +444,17 @@ type fields struct {
 	quietStart        *int        // stored form of quiet, set by validate
 	quietEnd          *int
 	quietTZ           *string
+}
+
+// dnsColumns is the stored form of the DNS fields: NULL unless a DNS monitor, and NULL for "any answer".
+func (f *fields) dnsColumns() (recordType, expected any) {
+	if f.kind != TypeDNS {
+		return nil, nil
+	}
+	if f.dnsExpected == "" {
+		return f.dnsType, nil
+	}
+	return f.dnsType, f.dnsExpected
 }
 
 // setAuth applies an auth input on top of the current type, keeping the stored secret when allowed.
@@ -595,9 +628,12 @@ func (f *fields) validate() error {
 		bad["alert_delay_minutes"] = fmt.Sprintf("must be between 0 and %d minutes", MaxAlertDelayMinutes)
 	}
 	f.quietStart, f.quietEnd, f.quietTZ = cleanQuiet(f.quiet, bad)
-	if f.kind == TypeHeartbeat {
+	switch f.kind {
+	case TypeHeartbeat:
 		f.validateHeartbeat(bad)
-	} else {
+	case TypeDNS:
+		f.validateDNS(bad)
+	default:
 		f.validateHTTP(bad)
 	}
 	if len(bad) > 0 {
@@ -630,6 +666,48 @@ func (f *fields) validateHeartbeat(bad map[string]string) {
 	f.url, f.method, f.headers, f.body, f.assertions, f.regions = "", "GET", []checks.Header{}, nil, []checks.Assertion{}, []string{}
 }
 
+// validateDNS checks the host name, the record type and the expected value. A DNS monitor makes no web request, so the website fields must be left out.
+func (f *fields) validateDNS(bad map[string]string) {
+	host, err := publichost.ParseDNSName(f.url)
+	var invalid *publichost.InvalidHostError
+	switch {
+	case errors.As(err, &invalid):
+		bad["url"] = invalid.Reason
+	case err != nil:
+		bad["url"] = "must be a public host name"
+	default:
+		f.url = host
+	}
+	f.dnsType = strings.ToUpper(strings.TrimSpace(f.dnsType))
+	if slices.Contains(checks.RecordTypes, f.dnsType) {
+		expected, reason := checks.NormalizeDNSExpected(f.dnsType, f.dnsExpected)
+		if reason != "" {
+			bad["dns_expected"] = reason
+		}
+		f.dnsExpected = expected
+	} else {
+		bad["dns_record_type"] = "must be one of " + strings.Join(checks.RecordTypes, ", ")
+	}
+	f.validateTiming(bad)
+	if f.slowThreshold != nil {
+		bad["slow_threshold_ms"] = "is not used by DNS monitors"
+	}
+	if len(f.headers) > 0 || f.body != nil && *f.body != "" || len(f.assertions) > 0 || f.auth.Type != checks.AuthNone || f.expected != nil {
+		bad["type"] = "DNS monitors make no web request: leave out the headers, body, authentication, assertions and expected status"
+	}
+	f.method, f.headers, f.body, f.assertions = "GET", []checks.Header{}, nil, []checks.Assertion{}
+}
+
+// validateTiming checks the two settings every monitor HawkEye checks itself has.
+func (f *fields) validateTiming(bad map[string]string) {
+	if f.interval < MinIntervalSeconds || f.interval > MaxIntervalSeconds {
+		bad["check_interval_seconds"] = fmt.Sprintf("must be between %d and %d", MinIntervalSeconds, MaxIntervalSeconds)
+	}
+	if f.timeout < 1 || f.timeout > 30 {
+		bad["timeout_seconds"] = "must be between 1 and 30"
+	}
+}
+
 func (f *fields) validateHTTP(bad map[string]string) {
 	if u, reason := NormalizeURL(f.url); reason != "" {
 		bad["url"] = reason
@@ -643,12 +721,7 @@ func (f *fields) validateHTTP(bad map[string]string) {
 	if f.expected != nil && (*f.expected < 100 || *f.expected > 599) {
 		bad["expected_status_code"] = "must be between 100 and 599, or null"
 	}
-	if f.interval < MinIntervalSeconds || f.interval > MaxIntervalSeconds {
-		bad["check_interval_seconds"] = fmt.Sprintf("must be between %d and %d", MinIntervalSeconds, MaxIntervalSeconds)
-	}
-	if f.timeout < 1 || f.timeout > 30 {
-		bad["timeout_seconds"] = "must be between 1 and 30"
-	}
+	f.validateTiming(bad)
 	if f.slowThreshold != nil {
 		switch t := *f.slowThreshold; {
 		case t < MinSlowThresholdMs || t > MaxSlowThresholdMs:
@@ -713,8 +786,16 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 			if in.GraceSeconds != nil {
 				f.grace = *in.GraceSeconds
 			}
+		case TypeDNS:
+			f.kind, f.dnsType = TypeDNS, checks.RecordA
+			if in.DNSRecordType != nil {
+				f.dnsType = *in.DNSRecordType
+			}
+			if in.DNSExpected != nil {
+				f.dnsExpected = *in.DNSExpected
+			}
 		default:
-			return validation.New("type", "must be http or heartbeat")
+			return validation.New("type", "must be http, heartbeat or dns")
 		}
 		if in.Method != nil {
 			f.method = *in.Method
@@ -769,19 +850,20 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		if err != nil {
 			return fmt.Errorf("protect credentials: %w", err)
 		}
-		var pingToken, grace any // NULL for website monitors
+		var pingToken, grace any // NULL unless a heartbeat
 		if f.kind == TypeHeartbeat {
 			pingToken, grace = NewPingToken(), f.grace
 		}
+		dnsType, dnsExpected := f.dnsColumns()
 		out, err = scan(tx.QueryRow(ctx, `INSERT INTO monitors
 			(id, organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
 			 request_headers, request_body, auth_type, auth_username, auth_header_name, auth_secret, assertions, regions, slow_threshold_ms, slow_checks,
-			 alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, ping_token, heartbeat_grace_seconds, next_check_at)
-			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,
+			 alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, ping_token, heartbeat_grace_seconds, dns_record_type, dns_expected, next_check_at)
+			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,
 				CASE WHEN $23 = 'heartbeat' THEN 'infinity'::timestamptz ELSE now() END) RETURNING `+cols,
 			orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout,
 			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, sealed, f.assertions, id, f.regions, f.slowThreshold, f.slowChecks,
-			f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, f.kind, pingToken, grace), minInterval)
+			f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, f.kind, pingToken, grace, dnsType, dnsExpected), minInterval)
 		if err != nil {
 			return err
 		}
@@ -925,7 +1007,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		if in.QuietHours.Set {
 			f.quiet = in.QuietHours.Value
 		}
-		var grace any // NULL for website monitors
+		var grace any // NULL unless a heartbeat
 		if cur.Heartbeat != nil {
 			f.grace = cur.Heartbeat.GraceSeconds
 			if in.GraceSeconds != nil {
@@ -934,6 +1016,28 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			grace = f.grace
 		} else if in.GraceSeconds != nil {
 			return validation.New("grace_seconds", "is only used by heartbeat monitors")
+		}
+		var curExpected string
+		if cur.DNS != nil {
+			f.dnsType = cur.DNS.RecordType
+			if cur.DNS.Expected != nil {
+				curExpected = *cur.DNS.Expected
+			}
+			f.dnsExpected = curExpected
+			if in.DNSRecordType != nil {
+				f.dnsType = *in.DNSRecordType
+				if !in.DNSExpected.Set {
+					f.dnsExpected = "" // the old value was written for another kind of record
+				}
+			}
+			if in.DNSExpected.Set {
+				f.dnsExpected = ""
+				if in.DNSExpected.Value != nil {
+					f.dnsExpected = *in.DNSExpected.Value
+				}
+			}
+		} else if in.DNSRecordType != nil || in.DNSExpected.Set {
+			return validation.New("dns_record_type", "is only used by DNS monitors")
 		}
 		if err := f.validate(); err != nil {
 			return err
@@ -951,10 +1055,11 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 				return err
 			}
 		}
-		// A changed request (target, headers, body or credentials) invalidates the previous health state.
+		// A changed request (target, headers, body, credentials or the DNS record looked up) invalidates the previous health state.
 		reset := f.url != cur.URL || f.method != cur.Method || !slices.Equal(f.headers, cur.Headers) ||
 			!equalPtr(f.body, cur.Body) || f.auth.Type != cur.Auth.Type || f.auth.Username != cur.Auth.Username || f.auth.HeaderName != cur.Auth.HeaderName ||
-			f.auth.Secret != ""
+			f.auth.Secret != "" || cur.DNS != nil && (f.dnsType != cur.DNS.RecordType || f.dnsExpected != curExpected)
+		dnsType, dnsExpected := f.dnsColumns()
 		sealed, err := s.sealSecret(f.auth.Secret, id)
 		if err != nil {
 			return fmt.Errorf("protect credentials: %w", err)
@@ -988,6 +1093,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			auth_secret = CASE WHEN $12 = 'none' THEN NULL WHEN $15 THEN auth_secret ELSE NULLIF($16,'') END,
 			assertions=$17, regions=$19, slow_threshold_ms=$20, slow_checks=$21,
 			alert_delay_minutes=$22, quiet_start=$23, quiet_end=$24, quiet_timezone=$25, heartbeat_grace_seconds=$26,
+			dns_record_type=$28, dns_expected=$29,
 			ping_deadline = CASE WHEN ping_deadline IS NOT NULL AND last_ping_at IS NOT NULL AND (check_interval_seconds <> $7 OR heartbeat_grace_seconds <> $26)
 				THEN last_ping_at + make_interval(secs => GREATEST($7::int, $27::int) + $26::int) ELSE ping_deadline END,
 			ssl_expires_at = CASE WHEN $18 THEN NULL ELSE ssl_expires_at END, ssl_checked_at = CASE WHEN $18 THEN NULL ELSE ssl_checked_at END,
@@ -995,7 +1101,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			WHERE id = $1 AND organization_id = $2 RETURNING `+cols,
 			id, orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout, reset,
 			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.keepSecret, sealed, f.assertions, f.url != cur.URL, f.regions,
-			f.slowThreshold, f.slowChecks, f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, grace, minInterval), minInterval)
+			f.slowThreshold, f.slowChecks, f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, grace, minInterval, dnsType, dnsExpected), minInterval)
 		if err != nil {
 			return err
 		}
@@ -1065,7 +1171,7 @@ func (s *Service) SetEnabled(ctx context.Context, orgID, id uuid.UUID, enabled b
 	}
 	// Resuming makes the monitor due immediately instead of waiting out a stale schedule; a heartbeat gets a full period (and its grace time) to ping.
 	m, err := scan(s.pool.QueryRow(ctx, `UPDATE monitors SET enabled = $3,
-		next_check_at = CASE WHEN $3 AND NOT enabled AND kind = 'http' THEN now() ELSE next_check_at END, `+resumeDeadline+`
+		next_check_at = CASE WHEN $3 AND NOT enabled AND kind <> 'heartbeat' THEN now() ELSE next_check_at END, `+resumeDeadline+`
 		WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL RETURNING `+cols, id, orgID, enabled, min), min)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Monitor{}, ErrNotFound

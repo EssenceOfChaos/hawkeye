@@ -222,6 +222,43 @@ func TestMilliseconds(t *testing.T) {
 	}
 }
 
+func TestRenderDNSAlerts(t *testing.T) {
+	start := time.Date(2026, 11, 5, 8, 0, 0, 0, time.UTC)
+	end := start.Add(90 * time.Minute)
+	base := Alert{MonitorType: "dns", MonitorID: "m1", MonitorName: "Mail records", MonitorURL: "example.com", StartedAt: start, AppBaseURL: "https://app"}
+
+	down := base
+	down.Event, down.Cause = EventOutage, `MX record for example.com does not match "mail.example.com"`
+	msg := Render(down)
+	if msg.Subject != "HawkEye alert: DNS check failing for Mail records" {
+		t.Fatalf("subject = %q", msg.Subject)
+	}
+	for _, want := range []string{"example.com", "does not match", "/monitors/m1"} {
+		if !strings.Contains(msg.Text, want) {
+			t.Fatalf("text misses %q: %s", want, msg.Text)
+		}
+	}
+	if strings.Contains(msg.Text, "offline") || strings.Contains(msg.Text, "Website") {
+		t.Fatalf("a DNS alert is not about a website being offline: %s", msg.Text)
+	}
+
+	up := base
+	up.Event, up.ResolvedAt = EventRecovery, &end
+	if msg := Render(up); msg.Subject != "HawkEye recovery: DNS for Mail records is resolving correctly again" || !strings.Contains(msg.Text, "1h 30m") {
+		t.Fatalf("recovery: %q %s", msg.Subject, msg.Text)
+	}
+
+	if p := buildWebhook(down, end); p.Monitor.Type != "dns" || p.Monitor.URL != "example.com" {
+		t.Fatalf("webhook: %+v", p.Monitor)
+	}
+	if c := chatContent(down, end); c.Title != "🔴 DNS check failing for Mail records" || c.Target != "example.com" {
+		t.Fatalf("chat: %+v", c)
+	}
+	if c := chatContent(up, end); !strings.Contains(c.Title, "resolving correctly again") || c.Lines[0] != "Failing for 1h 30m" {
+		t.Fatalf("chat recovery: %+v", c)
+	}
+}
+
 func TestRenderHeartbeatAlerts(t *testing.T) {
 	start := time.Date(2026, 11, 3, 2, 0, 0, 0, time.UTC)
 	end := start.Add(25 * time.Minute)

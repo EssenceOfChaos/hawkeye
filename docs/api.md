@@ -65,7 +65,7 @@ malformed ID gives 404) or, if absent, the organization the caller **owns** (the
 | `GET /plans` | public price list (active plans, cheapest first) |
 | `GET /usage` | `{usage: {plan, monitors_used, monitor_limit, over_limit, next_plan}}` |
 | `GET /monitors` | filters `status` (unknown/up/down), `enabled`, `q` (name/URL substring), `tag` (a tag id); pagination `limit` (1–100, default 25) and `offset`; returns `{monitors, total, limit, offset}`, newest first |
-| `POST /monitors` | `{name, url, method?, expected_status_code?, check_interval_seconds?, timeout_seconds?, headers?, body?, auth?, assertions?, slow_threshold_ms?, slow_checks?, tag_ids?}` → 201. For a heartbeat (cron job) monitor: `{type: "heartbeat", name, check_interval_seconds?, grace_seconds?, tag_ids?, alert_delay_minutes?, quiet_hours?}`; see *Heartbeat monitors* |
+| `POST /monitors` | `{name, url, method?, expected_status_code?, check_interval_seconds?, timeout_seconds?, headers?, body?, auth?, assertions?, slow_threshold_ms?, slow_checks?, tag_ids?}` → 201. For a heartbeat (cron job) monitor: `{type: "heartbeat", name, check_interval_seconds?, grace_seconds?, tag_ids?, alert_delay_minutes?, quiet_hours?}`; see *Heartbeat monitors*. For a DNS monitor: `{type: "dns", name, url, dns_record_type?, dns_expected?, check_interval_seconds?, timeout_seconds?, regions?, tag_ids?, alert_delay_minutes?, quiet_hours?}`; see *DNS monitors* |
 | `GET/PATCH/DELETE /monitors/:id` | PATCH is partial; `expected_status_code: null`, `body: null` and `slow_threshold_ms: null` clear them, `headers`, `assertions` and `tag_ids` replace the whole list. DELETE is a soft delete (204) and frees a plan slot |
 | `POST /monitors/:id/pause`, `/resume` | toggles `enabled`; allowed even when over the plan limit |
 | `POST /monitors/bulk` | `{monitor_ids, action, check_interval_seconds?, tag_ids?}` → `{updated}`. See *Tags and bulk actions* |
@@ -76,7 +76,7 @@ malformed ID gives 404) or, if absent, the organization the caller **owns** (the
 | `PATCH /tags/:id` | `{name?, color?}`; `color: null` clears it |
 | `DELETE /tags/:id` | 204; the tag's monitors are kept |
 
-**Monitor fields.** `type` is `http` (a website or API, the default) or `heartbeat`, set on create and fixed after that. Editable: `name` (1–100), `url`, `method` (`GET` default, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`), `expected_status_code`
+**Monitor fields.** `type` is `http` (a website or API, the default), `heartbeat` or `dns`, set on create and fixed after that. Editable: `name` (1–100), `url`, `method` (`GET` default, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`), `expected_status_code`
 (100–599 or null; null means any response below 400 is up), `check_interval_seconds` (60–86400, default = plan minimum),
 `timeout_seconds` (1–30, default 10), `slow_threshold_ms` (100–60000 and below the timeout, or null = off; see *Slow-response alerts*) and `slow_checks` (2–10, default 3), `tag_ids`, `alert_delay_minutes` (0–1440, default 0) and `quiet_hours` (`{start, end, timezone}` or null; see *Alert routing, alert delay and quiet hours*). Read-only and ignored if sent: `slow_since`, `current_status`, `consecutive_*`, `last_*`,
 `enabled` (use pause/resume), `organization_id`. `effective_check_interval_seconds` is what the scheduler will use: the stored
@@ -121,7 +121,7 @@ each monitor's tag names.
 `check_interval_seconds`), `add_tags` or `remove_tags` (with `tag_ids`), or `set_alert_timing` (with `alert_delay_minutes`, `quiet_hours`, or both: whichever is left out stays as it is on each monitor, and `quiet_hours: null` turns quiet hours off; validated like the single-monitor fields). It is **all or nothing**: if any listed monitor is missing, deleted or in
 another organization the result is 404 and nothing changes, and if the action is not allowed for any of them (an interval below the plan's minimum,
 403 `PLAN_LIMIT_REACHED`; below 5 minutes for a monitor using a state-changing method, or a monitor left with more than 10 tags, 400) nothing
-changes either. `set_interval` changes website monitors only: a heartbeat's period follows its job's schedule, so heartbeats in the selection keep theirs. Repeated ids count once; `updated` is how many monitors were changed. The same rules as the single-monitor endpoints apply
+changes either. `set_interval` changes website and DNS monitors only: a heartbeat's period follows its job's schedule, so heartbeats in the selection keep theirs. Repeated ids count once; `updated` is how many monitors were changed. The same rules as the single-monitor endpoints apply
 (resume makes a monitor due at once; delete erases credentials, closes open incidents without alerts and frees plan slots).
 
 ## Team
@@ -320,7 +320,27 @@ nothing; resuming it, or changing the period or grace time, restarts the deadlin
 gets a full period plus grace after the gap before it can be called missed, because its ping may have been sent while HawkEye could not receive it.
 
 Alerts for heartbeats say the job "did not check in on time" or "reported a failure" and "is checking in again"; webhook payloads carry
-`monitor.type` (`http` or `heartbeat`) and an empty `monitor.url` for heartbeats.
+`monitor.type` (`http`, `heartbeat` or `dns`) and an empty `monitor.url` for heartbeats.
+
+### DNS monitors
+
+A DNS monitor (`type: "dns"`) looks up one record of a host name on a schedule. Available on every plan; it counts toward the monitor limit like any
+monitor, and the plan's minimum interval and locations apply. `url` is the host name: it follows the free tools' public-host rules (no IP addresses, single
+labels or private-network names), except that underscores are allowed so `_dmarc.example.com` works. A pasted URL is reduced to its host name. `dns_record_type`
+is `A` (the default), `AAAA`, `MX`, `NS` or `TXT`. `dns_expected` (at most 255 characters, null or empty for any answer) is what an answer must match: an exact
+address for `A` and `AAAA` (which must be public), an exact host name ignoring case and the final dot for `MX` and `NS`, and text contained in a record,
+case-sensitive, for `TXT`. CNAME is not offered, because the resolver reports only where a chain of CNAMEs ends.
+
+PATCH accepts the same fields. Changing `dns_record_type` without sending `dns_expected` clears the expected value, which was written for another kind of
+record; either change resets the monitor's state, as a changed website target does. Both fields are a 400 on other monitor types. The website fields
+(`slow_threshold_ms`, `headers`, `body`, `auth`, `assertions`, `expected_status_code`) must be left out (400 otherwise). DNS monitors carry
+`dns: {record_type, expected}` (null for other monitors).
+
+**Results.** A missing record or a failed lookup is `error_category: "dns"`, a wrong answer is `assertion`, and an answer that is not a public address is
+`blocked`. `http_status_code` is null and `response_time_ms` is the lookup time. Summaries name the expected value and never the answers. Streaks, locations,
+incidents, routing, alert delay, quiet hours, maintenance, status pages and badges work as for websites, and the host name's registered domain is tracked
+for expiry. Alerts say "DNS check failing for" and "is resolving correctly again"; webhook payloads carry `monitor.type: "dns"` and the host name in
+`monitor.url`.
 
 ### Webhook and chat alerts
 

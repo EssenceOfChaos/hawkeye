@@ -24,6 +24,12 @@ func (e *InvalidHostError) Error() string { return "invalid host: " + e.Reason }
 
 var labelRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
+// dnsLabelRE also accepts the underscores of service names such as _dmarc.example.com, which name records but never websites.
+var dnsLabelRE = regexp.MustCompile(`^[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?$`)
+
+// dnsNames is idna.Lookup without its strict rule against underscores.
+var dnsNames = idna.New(idna.MapForLookup(), idna.BidiRule(), idna.StrictDomainName(false))
+
 // Name suffixes that only exist on private networks. This is early feedback, not the SSRF control: the dialer refuses any host that
 // resolves to a non-public address, whatever it is called.
 var privateSuffixes = []string{".localhost", ".local", ".internal", ".localdomain", ".lan", ".home.arpa"}
@@ -37,6 +43,23 @@ type Target struct {
 
 // Parse reads a visitor's input: a bare domain, or a URL (whose path, query and fragment are ignored).
 func Parse(raw string) (Target, error) {
+	return parse(raw, idna.Lookup, labelRE)
+}
+
+// ParseDNSName reads the host name a DNS monitor looks up. The rules are Parse's, except that labels may contain underscores. The last label may not,
+// which also keeps out the single-word network names container platforms use.
+func ParseDNSName(raw string) (string, error) {
+	t, err := parse(raw, dnsNames, dnsLabelRE)
+	if err != nil {
+		return "", err
+	}
+	if !labelRE.MatchString(t.Host[strings.LastIndexByte(t.Host, '.')+1:]) {
+		return "", &InvalidHostError{"That does not look like a valid domain name."}
+	}
+	return t.Host, nil
+}
+
+func parse(raw string, names *idna.Profile, label *regexp.Regexp) (Target, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return Target{}, &InvalidHostError{"Enter a domain name, for example example.com."}
@@ -66,7 +89,7 @@ func Parse(raw string) (Target, error) {
 	if strings.ContainsAny(host, "*%[]:") {
 		return Target{}, &InvalidHostError{"Enter a single domain name, without wildcards."}
 	}
-	ascii, err := idna.Lookup.ToASCII(host)
+	ascii, err := names.ToASCII(host)
 	if err != nil || ascii == "" {
 		return Target{}, &InvalidHostError{"That does not look like a valid domain name."}
 	}
@@ -78,7 +101,7 @@ func Parse(raw string) (Target, error) {
 		return Target{}, &InvalidHostError{"Enter a full domain name, for example example.com."}
 	}
 	for _, l := range labels {
-		if !labelRE.MatchString(l) {
+		if !label.MatchString(l) {
 			return Target{}, &InvalidHostError{"That does not look like a valid domain name."}
 		}
 	}

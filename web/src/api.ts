@@ -126,12 +126,19 @@ export interface Assertion {
   value?: string
 }
 
-/** A website or API that HawkEye checks, or a heartbeat: a cron job or scheduled task that pings HawkEye each time it runs. */
-export type MonitorType = 'http' | 'heartbeat'
+/** A website or API that HawkEye checks, a heartbeat (a cron job or scheduled task that pings HawkEye each time it runs), or a DNS record HawkEye looks up. */
+export type MonitorType = 'http' | 'heartbeat' | 'dns'
+
+export type DnsRecordType = 'A' | 'AAAA' | 'MX' | 'NS' | 'TXT'
+
+export const DNS_RECORD_TYPES: DnsRecordType[] = ['A', 'AAAA', 'MX', 'NS', 'TXT']
 
 export interface Monitor {
   id: string
-  /** Fixed when the monitor is created. For a heartbeat, url and the request fields are unused and check_interval_seconds is the expected time between pings. */
+  /**
+   * Fixed when the monitor is created. For a heartbeat, url and the request fields are unused and check_interval_seconds is the expected time between pings.
+   * For a DNS monitor, url is the host name looked up and the request fields are unused.
+   */
   type: MonitorType
   name: string
   url: string
@@ -168,6 +175,15 @@ export interface Monitor {
   quiet_hours: QuietHours | null
   /** Set for heartbeat monitors only. */
   heartbeat: HeartbeatInfo | null
+  /** Set for DNS monitors only. */
+  dns?: DnsCheck | null
+}
+
+/** What a DNS monitor looks up. */
+export interface DnsCheck {
+  record_type: DnsRecordType
+  /** What an answer must match; null means any answer will do. */
+  expected: string | null
 }
 
 /** A heartbeat monitor's ping address and timing. */
@@ -467,6 +483,20 @@ export interface HeartbeatInput {
   name: string
   check_interval_seconds: number
   grace_seconds: number
+  tag_ids?: string[]
+  alert_delay_minutes?: number
+  quiet_hours?: QuietHours | null
+}
+
+/** Creates or edits a DNS monitor. url is the host name to look up. */
+export interface DnsInput {
+  type?: 'dns' // only when creating
+  name: string
+  url: string
+  dns_record_type: DnsRecordType
+  dns_expected: string | null
+  check_interval_seconds?: number
+  regions?: string[]
   tag_ids?: string[]
   alert_delay_minutes?: number
   quiet_hours?: QuietHours | null

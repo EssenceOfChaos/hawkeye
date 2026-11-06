@@ -28,7 +28,7 @@ const SUPPORT = 'customer_support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 3, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 5, 2026</p>
       <p>
         HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -72,9 +72,10 @@ export function PrivacyPage() {
         <li>For each check: the time, the HTTP status code, the response time, whether your response checks passed, and a short error category if it failed. To evaluate response checks we read the response (up to the first 1 MB) while the check runs; we do not store its content.</li>
         <li>For heartbeat (cron job) monitors, each ping your job sends to its private ping address: the time, the request method, the IP address and user agent it came from, whether it reported success or failure (and any exit status), and the first 1,000 characters of anything your job sends with it. We keep the last 100 pings of each heartbeat monitor, show them only to your organization, and delete them with the monitor. Do not send passwords or other secrets in a ping.</li>
         <li>Incident and recovery records, alert settings, and records of the notifications we sent.</li>
+        <li>For DNS monitors, the host name, record type and any expected value you enter, and whether each lookup succeeded and matched. We do not store the answers we receive.</li>
         <li>Maintenance windows you schedule: their names, times, repeat settings, and the monitors they cover. Checks made during a window are recorded and marked as such.</li>
         <li>For HTTPS monitors, the expiry date of the SSL certificate your website presents, and when we last read it. We do not store the certificate itself or any other detail from it.</li>
-        <li>Domain names: the registered domain of each monitor’s web address (for example example.com for https://www.example.com) and any domain you add yourself, the registration expiry date a public domain registry reports for it, and when we last looked it up.</li>
+        <li>Domain names: the registered domain of each monitor’s web address or host name (for example example.com for https://www.example.com) and any domain you add yourself, the registration expiry date a public domain registry reports for it, and when we last looked it up.</li>
         <li>Usage counts needed to enforce your plan’s limits.</li>
       </ul>
       <p>

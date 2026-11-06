@@ -18,6 +18,12 @@ const HEARTBEAT: Partial<Record<Kind, { text: string; tip: string }>> = {
   unknown: { text: 'Waiting for first ping', tip: 'Active · Add the ping to your job; no alerts until the first ping' },
 }
 
+/** A host name can answer perfectly well with the wrong record, so a DNS monitor says what it found rather than online or offline. */
+const DNS: Partial<Record<Kind, { text: string; tip: string }>> = {
+  up: { text: 'Resolving', tip: 'Active · The record resolves as expected' },
+  down: { text: 'Failing', tip: 'Active · The record is missing or does not match' },
+}
+
 /**
  * A daisyUI status dot (green = online, yellow = paused/inactive, red = offline and pulsing) with a hover tooltip.
  * The text beside the dot always carries the meaning, so color and motion are never the only signal.
@@ -32,7 +38,7 @@ export function StatusBadge({ monitor }: {
       : monitor.current_status === 'up'
         ? monitor.slow_since ? 'slow' : 'up'
         : monitor.current_status === 'down' ? 'down' : 'unknown'
-  const look = { ...LOOK[kind], ...(monitor.type === 'heartbeat' ? HEARTBEAT[kind] : undefined) }
+  const look = { ...LOOK[kind], ...(monitor.type === 'heartbeat' ? HEARTBEAT[kind] : monitor.type === 'dns' ? DNS[kind] : undefined) }
   return (
     <span className={`badge ${kind}`}>
       <span className="d-tooltip" data-tip={look.tip}>

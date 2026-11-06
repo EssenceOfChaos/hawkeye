@@ -103,6 +103,25 @@ func TestOnlyEnabledLiveDueMonitorsAreScheduled(t *testing.T) {
 }
 
 // The user-stored interval can never beat the plan: the effective interval is derived from the entitlement.
+func TestDNSMonitorsAreScheduledAndHeartbeatsAreNot(t *testing.T) {
+	pool := testutil.NewPool(t)
+	org := newOrg(t, pool, "pro", "active")
+	if _, err := pool.Exec(t.Context(), `INSERT INTO monitors (organization_id, name, url, check_interval_seconds, kind, dns_record_type)
+		VALUES ($1, 'd', 'example.com', 60, 'dns', 'A')`, org); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(t.Context(), `INSERT INTO monitors (organization_id, name, url, check_interval_seconds, kind, heartbeat_grace_seconds, ping_token)
+		VALUES ($1, 'h', '', 60, 'heartbeat', 60, 'aaaaaaaaaaaaaaaaaaaaaa')`, org); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := newScheduler(pool, scheduler.Config{}).Tick(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if n := jobCount(t, pool); n != 1 {
+		t.Fatalf("jobs = %d", n)
+	}
+}
+
 func TestScheduleHonorsPlanMinimumInterval(t *testing.T) {
 	pool := testutil.NewPool(t)
 	cases := []struct {
