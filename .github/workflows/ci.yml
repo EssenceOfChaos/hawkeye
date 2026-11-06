@@ -41,7 +41,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: govulncheck (Go code and standard library)
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: python3 scripts/vulncheck.py
       - uses: actions/setup-node@v4
         with:
           node-version: 22
