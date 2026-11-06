@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
@@ -83,7 +83,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 	}
 	planSvc := plans.NewService("http://app.test")
 	opts := httpapi.Options{
-		Logger: log, DB: pool, RequestTimeout: 10 * time.Second, BodyLimit: "1M",
+		Logger: log, DB: pool, RequestTimeout: 10 * time.Second, BodyLimit: 1_000_000,
 		Auth: svc, Orgs: organizations.NewService(pool), AuthRateLimitPerMin: rateLimit,
 		Plans: planSvc, Monitors: monitors.NewService(pool, planSvc, monitors.WithSecretBox(testutil.SecretBox()), monitors.WithDomainSync(domains.SyncTx)), Pool: pool, PgPool: pool,
 		Notifications: notifications.NewService(pool, mail, log, "http://app.test", "alerts@test", notifications.WithTelegramBot(o.telegram)),

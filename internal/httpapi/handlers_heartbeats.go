@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/heartbeats"
 )
@@ -17,7 +17,7 @@ const maxPingBody = 4 << 10
 // ping receives a heartbeat from a customer's job: /ping/<token> (success), /ping/<token>/fail, or /ping/<token>/<exit status> (0 is success). It is
 // called by scripts (curl, wget, PowerShell), not browsers, so it answers in plain text, accepts GET, HEAD and POST alike, and needs no session: the
 // unguessable token is the only thing that authorizes it, and all it can do is record a ping.
-func (h *handlers) ping(c echo.Context) error {
+func (h *handlers) ping(c *echo.Context) error {
 	p := heartbeats.Ping{Method: c.Request().Method, SourceIP: c.RealIP(), UserAgent: c.Request().UserAgent()}
 	switch status := c.Param("status"); status {
 	case "":
@@ -52,7 +52,7 @@ func (h *handlers) ping(c echo.Context) error {
 }
 
 // heartbeatPings lists a heartbeat monitor's recent pings, newest first (?limit=, at most 100).
-func (h *handlers) heartbeatPings(c echo.Context) error {
+func (h *handlers) heartbeatPings(c *echo.Context) error {
 	id, err := monitorID(c)
 	if err != nil {
 		return err
@@ -75,7 +75,7 @@ func (h *handlers) heartbeatPings(c echo.Context) error {
 }
 
 // rotatePingToken gives a heartbeat monitor a new ping address; the old one stops working at once.
-func (h *handlers) rotatePingToken(c echo.Context) error {
+func (h *handlers) rotatePingToken(c *echo.Context) error {
 	id, err := monitorID(c)
 	if err != nil {
 		return err

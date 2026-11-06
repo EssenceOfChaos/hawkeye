@@ -3,13 +3,13 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/regions"
 )
 
 // listRegions returns the locations checks can run from and how many the organization's plan lets one monitor use.
-func (h *handlers) listRegions(c echo.Context) error {
+func (h *handlers) listRegions(c *echo.Context) error {
 	p, err := h.plans.Plan(c.Request().Context(), h.pool, currentOrg(c))
 	if err != nil {
 		return err
@@ -22,7 +22,7 @@ func (h *handlers) listRegions(c echo.Context) error {
 }
 
 // monitorRegions returns how each of a monitor's regions currently sees it.
-func (h *handlers) monitorRegions(c echo.Context) error {
+func (h *handlers) monitorRegions(c *echo.Context) error {
 	id, err := monitorID(c)
 	if err != nil {
 		return err

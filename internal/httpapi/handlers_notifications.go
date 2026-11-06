@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/notifications"
@@ -20,7 +20,7 @@ const roleKey = "organization_role"
 
 // requireOwner restricts an endpoint to organization owners.
 func requireOwner(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		if c.Get(roleKey) != organizations.RoleOwner {
 			return mapError(organizations.ErrForbidden)
 		}
@@ -29,7 +29,7 @@ func requireOwner(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 // ownOnly is nil for the owner, who manages every recipient, and the caller's own id for a member, who may only turn off or remove their own address.
-func ownOnly(c echo.Context) *uuid.UUID {
+func ownOnly(c *echo.Context) *uuid.UUID {
 	if c.Get(roleKey) == organizations.RoleOwner {
 		return nil
 	}
@@ -37,12 +37,12 @@ func ownOnly(c echo.Context) *uuid.UUID {
 	return &id
 }
 
-func actor(c echo.Context) notifications.Actor {
+func actor(c *echo.Context) notifications.Actor {
 	u := currentUser(c)
 	return notifications.Actor{ID: u.ID, Email: u.Email}
 }
 
-func settingID(c echo.Context) (uuid.UUID, error) {
+func settingID(c *echo.Context) (uuid.UUID, error) {
 	id, err := uuid.Parse(c.Param("settingID"))
 	if err != nil {
 		return uuid.Nil, mapError(notifications.ErrNotFound)
@@ -50,7 +50,7 @@ func settingID(c echo.Context) (uuid.UUID, error) {
 	return id, nil
 }
 
-func (h *handlers) listSettings(c echo.Context) error {
+func (h *handlers) listSettings(c *echo.Context) error {
 	list, err := h.notifications.List(c.Request().Context(), currentOrg(c))
 	if err != nil {
 		return err
@@ -61,7 +61,7 @@ func (h *handlers) listSettings(c echo.Context) error {
 }
 
 // telegramLink issues a one-time link that connects a Telegram chat through HawkEye's bot. The chat appears in the list once someone taps Start.
-func (h *handlers) telegramLink(c echo.Context) error {
+func (h *handlers) telegramLink(c *echo.Context) error {
 	link, err := h.notifications.TelegramLink(c.Request().Context(), currentOrg(c), currentUser(c).ID)
 	if err != nil {
 		return mapError(err)
@@ -72,7 +72,7 @@ func (h *handlers) telegramLink(c echo.Context) error {
 // telegramWebhook receives updates for HawkEye's Telegram bot. Telegram calls it, not a browser: no session or CSRF token. It is authenticated by
 // the secret registered with setWebhook, which Telegram sends back in a header. A reply to the chat, if any, is returned as the response body
 // (Telegram performs the method it names).
-func (h *handlers) telegramWebhook(c echo.Context) error {
+func (h *handlers) telegramWebhook(c *echo.Context) error {
 	if !h.telegramBot.CheckSecret(c.Request().Header.Get("X-Telegram-Bot-Api-Secret-Token")) {
 		h.log.Warn("rejected telegram webhook with a wrong secret", "remote", c.RealIP())
 		return &APIError{Status: http.StatusUnauthorized, Code: "UNAUTHORIZED", Message: "Unauthorized."}
@@ -91,7 +91,7 @@ func (h *handlers) telegramWebhook(c echo.Context) error {
 	return c.JSON(http.StatusOK, reply)
 }
 
-func (h *handlers) createSetting(c echo.Context) error {
+func (h *handlers) createSetting(c *echo.Context) error {
 	var in struct {
 		Channel     string `json:"channel"`
 		Destination string `json:"destination"`
@@ -130,7 +130,7 @@ func (h *handlers) createSetting(c echo.Context) error {
 
 // testSetting sends a test to a recipient: a test message to a webhook or chat URL, or a test alert email to a confirmed email address.
 // Emailing is capped per address, like every other action that emails a third party.
-func (h *handlers) testSetting(c echo.Context) error {
+func (h *handlers) testSetting(c *echo.Context) error {
 	id, err := settingID(c)
 	if err != nil {
 		return err
@@ -149,7 +149,7 @@ func (h *handlers) testSetting(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h *handlers) updateSetting(c echo.Context) error {
+func (h *handlers) updateSetting(c *echo.Context) error {
 	id, err := settingID(c)
 	if err != nil {
 		return err
@@ -171,7 +171,7 @@ func (h *handlers) updateSetting(c echo.Context) error {
 }
 
 // setRouting chooses which monitors a destination gets alerts for (owner only).
-func (h *handlers) setRouting(c echo.Context) error {
+func (h *handlers) setRouting(c *echo.Context) error {
 	id, err := settingID(c)
 	if err != nil {
 		return err
@@ -191,7 +191,7 @@ func (h *handlers) setRouting(c echo.Context) error {
 }
 
 // alertCoverage lists monitors that no destination is routed to, and whether the fallback (team members' own email addresses) can reach anyone.
-func (h *handlers) alertCoverage(c echo.Context) error {
+func (h *handlers) alertCoverage(c *echo.Context) error {
 	uncovered, fallback, err := h.notifications.Coverage(c.Request().Context(), currentOrg(c))
 	if err != nil {
 		return err
@@ -199,7 +199,7 @@ func (h *handlers) alertCoverage(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"uncovered_monitors": uncovered, "fallback_available": fallback})
 }
 
-func (h *handlers) deleteSetting(c echo.Context) error {
+func (h *handlers) deleteSetting(c *echo.Context) error {
 	id, err := settingID(c)
 	if err != nil {
 		return err
@@ -210,7 +210,7 @@ func (h *handlers) deleteSetting(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h *handlers) resendSettingConfirmation(c echo.Context) error {
+func (h *handlers) resendSettingConfirmation(c *echo.Context) error {
 	id, err := settingID(c)
 	if err != nil {
 		return err
@@ -226,7 +226,7 @@ func (h *handlers) resendSettingConfirmation(c echo.Context) error {
 }
 
 // confirmSetting is called from the link in the confirmation email; the recipient need not have an account.
-func (h *handlers) confirmSetting(c echo.Context) error {
+func (h *handlers) confirmSetting(c *echo.Context) error {
 	var in struct {
 		Token string `json:"token"`
 	}
@@ -240,7 +240,7 @@ func (h *handlers) confirmSetting(c echo.Context) error {
 }
 
 // incidentFilter parses status, from, to, limit and offset.
-func incidentFilter(c echo.Context) (incidents.Filter, error) {
+func incidentFilter(c *echo.Context) (incidents.Filter, error) {
 	f := incidents.Filter{Limit: 25, Status: c.QueryParam("status")}
 	bad := map[string]string{}
 	if f.Status != "" && f.Status != "open" && f.Status != "resolved" {
@@ -279,7 +279,7 @@ func incidentFilter(c echo.Context) (incidents.Filter, error) {
 	return f, nil
 }
 
-func (h *handlers) listIncidents(c echo.Context) error {
+func (h *handlers) listIncidents(c *echo.Context) error {
 	f, err := incidentFilter(c)
 	if err != nil {
 		return err
@@ -291,7 +291,7 @@ func (h *handlers) listIncidents(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"incidents": list, "total": total, "limit": f.Limit, "offset": f.Offset})
 }
 
-func (h *handlers) listMonitorIncidents(c echo.Context) error {
+func (h *handlers) listMonitorIncidents(c *echo.Context) error {
 	id, err := monitorID(c)
 	if err != nil {
 		return err

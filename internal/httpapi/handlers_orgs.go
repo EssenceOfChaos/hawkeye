@@ -6,11 +6,11 @@ import (
 	"hawkeye/internal/organizations"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // orgID parses the path parameter. A malformed ID is reported as not found, like an unknown one.
-func orgID(c echo.Context) (uuid.UUID, error) {
+func orgID(c *echo.Context) (uuid.UUID, error) {
 	id, err := uuid.Parse(c.Param("organizationID"))
 	if err != nil {
 		return uuid.Nil, mapError(organizations.ErrNotFound)
@@ -18,7 +18,7 @@ func orgID(c echo.Context) (uuid.UUID, error) {
 	return id, nil
 }
 
-func (h *handlers) listOrgs(c echo.Context) error {
+func (h *handlers) listOrgs(c *echo.Context) error {
 	orgs, err := h.orgs.List(c.Request().Context(), currentUser(c).ID)
 	if err != nil {
 		return err
@@ -26,7 +26,7 @@ func (h *handlers) listOrgs(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"organizations": orgs})
 }
 
-func (h *handlers) getOrg(c echo.Context) error {
+func (h *handlers) getOrg(c *echo.Context) error {
 	id, err := orgID(c)
 	if err != nil {
 		return err
@@ -38,7 +38,7 @@ func (h *handlers) getOrg(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"organization": o})
 }
 
-func (h *handlers) updateOrg(c echo.Context) error {
+func (h *handlers) updateOrg(c *echo.Context) error {
 	id, err := orgID(c)
 	if err != nil {
 		return err
@@ -56,7 +56,7 @@ func (h *handlers) updateOrg(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"organization": o})
 }
 
-func (h *handlers) listMembers(c echo.Context) error {
+func (h *handlers) listMembers(c *echo.Context) error {
 	id, err := orgID(c)
 	if err != nil {
 		return err

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/sitecheck"
 	"hawkeye/internal/sslcheck"
@@ -17,7 +17,7 @@ import (
 // page, crawler or prefetch cannot trigger a connection to a third party just by being loaded. The per-IP limits are applied by middleware
 // in front of it; the per-host limit, the concurrency cap and the cache are inside sslcheck. It never returns anything the host sent
 // except what is in its certificate, and it does not persist the host that was asked about.
-func (h *handlers) sslCheck(c echo.Context) error {
+func (h *handlers) sslCheck(c *echo.Context) error {
 	if h.sslcheck == nil {
 		return &APIError{Status: http.StatusServiceUnavailable, Code: "TOOL_UNAVAILABLE", Message: "The SSL checker is not available right now."}
 	}
@@ -39,7 +39,7 @@ func (h *handlers) sslCheck(c echo.Context) error {
 
 // toolFailed logs a failed check (its outcome and duration; the host only at debug level, as it is not needed to run the service) and returns
 // what the visitor is told. An error that is not one of the expected ones is returned as it is, so the API's error handler logs and reports it.
-func (h *handlers) toolFailed(c echo.Context, what, host string, start time.Time, err error) error {
+func (h *handlers) toolFailed(c *echo.Context, what, host string, start time.Time, err error) error {
 	ctx := c.Request().Context()
 	out := toolError(c, err)
 	var apiErr *APIError
@@ -54,7 +54,7 @@ func (h *handlers) toolFailed(c echo.Context, what, host string, start time.Time
 // toolError turns an error from a free tool's checker into a message a visitor can act on. Statuses: 400 the input is not a checkable name;
 // 422 the host is fine as input but cannot be checked (not found, no HTTPS, not allowed); 429/503/504 limits and timeouts. Anything unexpected
 // is returned unchanged.
-func toolError(c echo.Context, err error) error {
+func toolError(c *echo.Context, err error) error {
 	var invalid *sslcheck.InvalidHostError
 	var limited *sslcheck.TargetLimitedError
 	switch {
@@ -97,7 +97,7 @@ func waitText(d time.Duration) string {
 // siteCheck is the free website status checker ("is it down?"): anyone may ask whether a public site answers, from our server. The same
 // protections as sslCheck apply (POST with CSRF, per-IP limits in middleware, per-host limit, concurrency cap and short cache inside
 // sitecheck). Only the host the visitor typed is used, the request is always GET /, and nothing from the response body is returned.
-func (h *handlers) siteCheck(c echo.Context) error {
+func (h *handlers) siteCheck(c *echo.Context) error {
 	if h.sitecheck == nil {
 		return &APIError{Status: http.StatusServiceUnavailable, Code: "TOOL_UNAVAILABLE", Message: "The website checker is not available right now."}
 	}

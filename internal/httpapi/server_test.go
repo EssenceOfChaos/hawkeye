@@ -22,7 +22,7 @@ func (f fakeDB) Ping(context.Context) error { return f.err }
 func newApp(db httpapi.Pinger) http.Handler {
 	return httpapi.New(httpapi.Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: db,
-		RequestTimeout: 5 * time.Second, BodyLimit: "1K",
+		RequestTimeout: 5 * time.Second, BodyLimit: 1000,
 	})
 }
 

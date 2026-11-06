@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/organizations"
@@ -17,7 +17,7 @@ const orgKey = "organization_id"
 
 // resolveOrg picks the organization a request acts on and verifies the caller belongs to it.
 func (h *handlers) resolveOrg(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		ctx := c.Request().Context()
 		u := currentUser(c)
 		if raw := c.Request().Header.Get("X-Organization-ID"); raw != "" {
@@ -55,9 +55,9 @@ func (h *handlers) resolveOrg(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
-func currentOrg(c echo.Context) uuid.UUID { return c.Get(orgKey).(uuid.UUID) }
+func currentOrg(c *echo.Context) uuid.UUID { return c.Get(orgKey).(uuid.UUID) }
 
-func monitorID(c echo.Context) (uuid.UUID, error) {
+func monitorID(c *echo.Context) (uuid.UUID, error) {
 	id, err := uuid.Parse(c.Param("monitorID"))
 	if err != nil {
 		return uuid.Nil, mapError(monitors.ErrNotFound)
@@ -80,7 +80,7 @@ func limitAPIError(e *plans.LimitError) *APIError {
 	return &APIError{Status: http.StatusForbidden, Code: "PLAN_LIMIT_REACHED", Message: e.Message(), Details: d}
 }
 
-func (h *handlers) listPlans(c echo.Context) error {
+func (h *handlers) listPlans(c *echo.Context) error {
 	list, err := plans.List(c.Request().Context(), h.pool)
 	if err != nil {
 		return err
@@ -94,7 +94,7 @@ func (h *handlers) listPlans(c echo.Context) error {
 		"annual_billing_enabled": h.billing != nil && h.billing.AnnualEnabled()})
 }
 
-func (h *handlers) usage(c echo.Context) error {
+func (h *handlers) usage(c *echo.Context) error {
 	u, err := h.plans.Usage(c.Request().Context(), h.pool, currentOrg(c))
 	if err != nil {
 		return err
@@ -102,7 +102,7 @@ func (h *handlers) usage(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"usage": u})
 }
 
-func (h *handlers) listMonitors(c echo.Context) error {
+func (h *handlers) listMonitors(c *echo.Context) error {
 	f := monitors.ListFilter{Limit: 25, Query: c.QueryParam("q"), Status: c.QueryParam("status")}
 	bad := map[string]string{}
 	switch f.Status {
@@ -148,7 +148,7 @@ func (h *handlers) listMonitors(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"monitors": list, "total": total, "limit": f.Limit, "offset": f.Offset})
 }
 
-func (h *handlers) createMonitor(c echo.Context) error {
+func (h *handlers) createMonitor(c *echo.Context) error {
 	var in monitors.CreateInput
 	if err := bind(c, &in); err != nil {
 		return err
@@ -165,7 +165,7 @@ func (h *handlers) createMonitor(c echo.Context) error {
 
 // requireVerifiedForWriteMethod keeps state-changing request methods (POST, PUT, PATCH, DELETE) behind a verified email address: a monitor
 // repeats the request on every check, so an anonymous throwaway account must not be able to aim it at someone else's API.
-func requireVerifiedForWriteMethod(c echo.Context, method *string) error {
+func requireVerifiedForWriteMethod(c *echo.Context, method *string) error {
 	if method == nil || !monitors.IsWriteMethod(*method) || currentUser(c).EmailVerified() {
 		return nil
 	}
@@ -173,7 +173,7 @@ func requireVerifiedForWriteMethod(c echo.Context, method *string) error {
 		Message: "Verify your email address to monitor with POST, PUT, PATCH or DELETE requests."}
 }
 
-func (h *handlers) getMonitor(c echo.Context) error {
+func (h *handlers) getMonitor(c *echo.Context) error {
 	id, err := monitorID(c)
 	if err != nil {
 		return err
@@ -185,7 +185,7 @@ func (h *handlers) getMonitor(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"monitor": m})
 }
 
-func (h *handlers) updateMonitor(c echo.Context) error {
+func (h *handlers) updateMonitor(c *echo.Context) error {
 	id, err := monitorID(c)
 	if err != nil {
 		return err
@@ -204,7 +204,7 @@ func (h *handlers) updateMonitor(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"monitor": m})
 }
 
-func (h *handlers) deleteMonitor(c echo.Context) error {
+func (h *handlers) deleteMonitor(c *echo.Context) error {
 	id, err := monitorID(c)
 	if err != nil {
 		return err
@@ -215,7 +215,7 @@ func (h *handlers) deleteMonitor(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h *handlers) setEnabled(c echo.Context, enabled bool) error {
+func (h *handlers) setEnabled(c *echo.Context, enabled bool) error {
 	id, err := monitorID(c)
 	if err != nil {
 		return err
@@ -227,5 +227,5 @@ func (h *handlers) setEnabled(c echo.Context, enabled bool) error {
 	return c.JSON(http.StatusOK, map[string]any{"monitor": m})
 }
 
-func (h *handlers) pauseMonitor(c echo.Context) error  { return h.setEnabled(c, false) }
-func (h *handlers) resumeMonitor(c echo.Context) error { return h.setEnabled(c, true) }
+func (h *handlers) pauseMonitor(c *echo.Context) error  { return h.setEnabled(c, false) }
+func (h *handlers) resumeMonitor(c *echo.Context) error { return h.setEnabled(c, true) }

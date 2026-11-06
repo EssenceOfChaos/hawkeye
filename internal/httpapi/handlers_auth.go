@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
@@ -66,7 +66,7 @@ type credentials struct {
 }
 
 // bind decodes a JSON body, rejecting malformed input with a 400.
-func bind(c echo.Context, dst any) error {
+func bind(c *echo.Context, dst any) error {
 	if err := c.Bind(dst); err != nil {
 		return &APIError{Status: http.StatusBadRequest, Code: "INVALID_JSON", Message: "Request body must be valid JSON."}
 	}
@@ -174,7 +174,7 @@ func mapError(err error) error {
 	return err
 }
 
-func (h *handlers) register(c echo.Context) error {
+func (h *handlers) register(c *echo.Context) error {
 	var in credentials
 	if err := bind(c, &in); err != nil {
 		return err
@@ -187,7 +187,7 @@ func (h *handlers) register(c echo.Context) error {
 	return c.JSON(http.StatusCreated, map[string]any{"user": u})
 }
 
-func (h *handlers) login(c echo.Context) error {
+func (h *handlers) login(c *echo.Context) error {
 	var in credentials
 	if err := bind(c, &in); err != nil {
 		return err
@@ -203,7 +203,7 @@ func (h *handlers) login(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"user": u})
 }
 
-func (h *handlers) logout(c echo.Context) error {
+func (h *handlers) logout(c *echo.Context) error {
 	if cookie, err := c.Cookie(sessionCookie); err == nil {
 		if err := h.auth.Logout(c.Request().Context(), cookie.Value); err != nil {
 			return err
@@ -213,7 +213,7 @@ func (h *handlers) logout(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h *handlers) forgotPassword(c echo.Context) error {
+func (h *handlers) forgotPassword(c *echo.Context) error {
 	var in struct {
 		Email string `json:"email"`
 	}
@@ -230,7 +230,7 @@ func (h *handlers) forgotPassword(c echo.Context) error {
 	return c.JSON(http.StatusAccepted, map[string]string{"status": "If the account exists, a reset email has been sent."})
 }
 
-func (h *handlers) resetPassword(c echo.Context) error {
+func (h *handlers) resetPassword(c *echo.Context) error {
 	var in struct {
 		Token    string `json:"token"`
 		Password string `json:"password"`
@@ -244,7 +244,7 @@ func (h *handlers) resetPassword(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h *handlers) verifyEmail(c echo.Context) error {
+func (h *handlers) verifyEmail(c *echo.Context) error {
 	var in struct {
 		Token string `json:"token"`
 	}
@@ -257,7 +257,7 @@ func (h *handlers) verifyEmail(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h *handlers) resendVerification(c echo.Context) error {
+func (h *handlers) resendVerification(c *echo.Context) error {
 	if !h.emailBudget(c, "verify", currentUser(c).Email) {
 		c.Response().Header().Set("Retry-After", "3600")
 		return errRateLimited
@@ -268,7 +268,7 @@ func (h *handlers) resendVerification(c echo.Context) error {
 	return c.NoContent(http.StatusAccepted)
 }
 
-func (h *handlers) me(c echo.Context) error {
+func (h *handlers) me(c *echo.Context) error {
 	u := currentUser(c)
 	orgs, err := h.orgs.List(c.Request().Context(), u.ID)
 	if err != nil {

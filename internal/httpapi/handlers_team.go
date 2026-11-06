@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/invitations"
 	"hawkeye/internal/organizations"
@@ -14,7 +14,7 @@ import (
 
 // ownedOrg returns the organization named in the path when the caller is its owner. Members, and people who do not belong to it at all, get the same
 // answers as everywhere else: 403 for a member, 404 for a stranger.
-func (h *handlers) ownedOrg(c echo.Context) (uuid.UUID, error) {
+func (h *handlers) ownedOrg(c *echo.Context) (uuid.UUID, error) {
 	id, err := orgID(c)
 	if err != nil {
 		return uuid.Nil, err
@@ -29,7 +29,7 @@ func (h *handlers) ownedOrg(c echo.Context) (uuid.UUID, error) {
 	return id, nil
 }
 
-func (h *handlers) listInvitations(c echo.Context) error {
+func (h *handlers) listInvitations(c *echo.Context) error {
 	id, err := h.ownedOrg(c)
 	if err != nil {
 		return err
@@ -42,7 +42,7 @@ func (h *handlers) listInvitations(c echo.Context) error {
 }
 
 // createInvitation emails a third party, so it needs a verified inviter and is capped per target address as well as per IP.
-func (h *handlers) createInvitation(c echo.Context) error {
+func (h *handlers) createInvitation(c *echo.Context) error {
 	id, err := h.ownedOrg(c)
 	if err != nil {
 		return err
@@ -64,7 +64,7 @@ func (h *handlers) createInvitation(c echo.Context) error {
 	return c.JSON(http.StatusCreated, map[string]any{"invitation": inv})
 }
 
-func (h *handlers) resendInvitation(c echo.Context) error {
+func (h *handlers) resendInvitation(c *echo.Context) error {
 	id, err := h.ownedOrg(c)
 	if err != nil {
 		return err
@@ -84,7 +84,7 @@ func (h *handlers) resendInvitation(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"invitation": inv})
 }
 
-func (h *handlers) revokeInvitation(c echo.Context) error {
+func (h *handlers) revokeInvitation(c *echo.Context) error {
 	id, err := h.ownedOrg(c)
 	if err != nil {
 		return err
@@ -99,7 +99,7 @@ func (h *handlers) revokeInvitation(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h *handlers) removeMember(c echo.Context) error {
+func (h *handlers) removeMember(c *echo.Context) error {
 	id, err := orgID(c)
 	if err != nil {
 		return err
@@ -114,7 +114,7 @@ func (h *handlers) removeMember(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h *handlers) leaveOrg(c echo.Context) error {
+func (h *handlers) leaveOrg(c *echo.Context) error {
 	id, err := orgID(c)
 	if err != nil {
 		return err
@@ -126,7 +126,7 @@ func (h *handlers) leaveOrg(c echo.Context) error {
 }
 
 // previewInvitation is called from the link in the invitation email by someone who may not be signed in, or may not have an account yet.
-func (h *handlers) previewInvitation(c echo.Context) error {
+func (h *handlers) previewInvitation(c *echo.Context) error {
 	var in struct {
 		Token string `json:"token"`
 	}
@@ -140,7 +140,7 @@ func (h *handlers) previewInvitation(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"invitation": p})
 }
 
-func (h *handlers) acceptInvitation(c echo.Context) error {
+func (h *handlers) acceptInvitation(c *echo.Context) error {
 	var in struct {
 		Token  string `json:"token"`
 		Alerts bool   `json:"alerts"` // also receive the organization's alerts at the account's own address
@@ -160,7 +160,7 @@ func (h *handlers) acceptInvitation(c echo.Context) error {
 
 // transferOwnership hands the organization to one of its members. The old owner stays as a member. Billing email follows the new owner; if the payment
 // provider cannot be reached the transfer still stands, and the address can be changed in the billing portal.
-func (h *handlers) transferOwnership(c echo.Context) error {
+func (h *handlers) transferOwnership(c *echo.Context) error {
 	id, err := h.ownedOrg(c)
 	if err != nil {
 		return err

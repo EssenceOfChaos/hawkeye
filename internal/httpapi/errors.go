@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/errtrack"
 )
@@ -31,22 +31,25 @@ type APIError struct {
 
 func (e *APIError) Error() string { return e.Code + ": " + e.Message }
 
+// StatusCode lets Echo work out the status of a request that ended in this error, for the request log and the metrics.
+func (e *APIError) StatusCode() int { return e.Status }
+
 // errorHandler serializes every error into the common envelope. Internal errors are
 // logged but never exposed to the client.
 func errorHandler(log *slog.Logger, rep errtrack.Reporter) echo.HTTPErrorHandler {
-	return func(err error, c echo.Context) {
-		if c.Response().Committed {
+	return func(c *echo.Context, err error) {
+		if resp, _ := echo.UnwrapResponse(c.Response()); resp != nil && resp.Committed {
 			return
 		}
 		status, body := http.StatusInternalServerError, ErrorDetail{Code: "INTERNAL_ERROR", Message: "An internal error occurred."}
 
 		var apiErr *APIError
-		var httpErr *echo.HTTPError
+		var httpErr echo.HTTPStatusCoder // the router's own 404 and 405 are not *echo.HTTPError
 		switch {
 		case errors.As(err, &apiErr):
 			status, body = apiErr.Status, ErrorDetail{Code: apiErr.Code, Message: apiErr.Message, Details: apiErr.Details}
 		case errors.As(err, &httpErr):
-			status = httpErr.Code
+			status = httpErr.StatusCode()
 			body = ErrorDetail{Code: codeForStatus(status), Message: http.StatusText(status)}
 		default:
 			rid := c.Response().Header().Get(echo.HeaderXRequestID)

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/reports"
@@ -14,7 +14,7 @@ import (
 )
 
 // resolveRange reads range / from / to and applies the organization's plan retention.
-func (h *handlers) resolveRange(c echo.Context) (reports.Range, error) {
+func (h *handlers) resolveRange(c *echo.Context) (reports.Range, error) {
 	bad := map[string]string{}
 	parse := func(name string) *time.Time {
 		v := c.QueryParam(name)
@@ -48,7 +48,7 @@ func rangeJSON(r reports.Range) map[string]any {
 }
 
 // monitorInScope checks the monitor belongs to the caller's organization (404 otherwise).
-func (h *handlers) monitorInScope(c echo.Context) (uuid.UUID, error) {
+func (h *handlers) monitorInScope(c *echo.Context) (uuid.UUID, error) {
 	id, err := monitorID(c)
 	if err != nil {
 		return uuid.Nil, err
@@ -59,7 +59,7 @@ func (h *handlers) monitorInScope(c echo.Context) (uuid.UUID, error) {
 	return id, nil
 }
 
-func (h *handlers) monitorUptime(c echo.Context) error {
+func (h *handlers) monitorUptime(c *echo.Context) error {
 	id, err := h.monitorInScope(c)
 	if err != nil {
 		return err
@@ -75,7 +75,7 @@ func (h *handlers) monitorUptime(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"range": rangeJSON(r), "uptime": u})
 }
 
-func (h *handlers) monitorResponseTimes(c echo.Context) error {
+func (h *handlers) monitorResponseTimes(c *echo.Context) error {
 	id, err := h.monitorInScope(c)
 	if err != nil {
 		return err
@@ -83,9 +83,9 @@ func (h *handlers) monitorResponseTimes(c echo.Context) error {
 	return h.series(c, &id)
 }
 
-func (h *handlers) dashboardResponseTimes(c echo.Context) error { return h.series(c, nil) }
+func (h *handlers) dashboardResponseTimes(c *echo.Context) error { return h.series(c, nil) }
 
-func (h *handlers) series(c echo.Context, monitor *uuid.UUID) error {
+func (h *handlers) series(c *echo.Context, monitor *uuid.UUID) error {
 	r, err := h.resolveRange(c)
 	if err != nil {
 		return err
@@ -97,7 +97,7 @@ func (h *handlers) series(c echo.Context, monitor *uuid.UUID) error {
 	return c.JSON(http.StatusOK, map[string]any{"range": rangeJSON(r), "bucket_seconds": bucket, "points": pts})
 }
 
-func (h *handlers) monitorResults(c echo.Context) error {
+func (h *handlers) monitorResults(c *echo.Context) error {
 	id, err := h.monitorInScope(c)
 	if err != nil {
 		return err
@@ -133,7 +133,7 @@ func (h *handlers) monitorResults(c echo.Context) error {
 
 // dashboardSummary: monitor counts and open incidents describe the present; uptime and response figures are
 // scoped to the requested range (default 24h), so the dashboard's filter row governs every number on it.
-func (h *handlers) dashboardSummary(c echo.Context) error {
+func (h *handlers) dashboardSummary(c *echo.Context) error {
 	r, err := h.resolveRange(c)
 	if err != nil {
 		return err
@@ -145,7 +145,7 @@ func (h *handlers) dashboardSummary(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"range": rangeJSON(r), "summary": s})
 }
 
-func (h *handlers) dashboardRecentIncidents(c echo.Context) error {
+func (h *handlers) dashboardRecentIncidents(c *echo.Context) error {
 	limit := 5
 	if v := c.QueryParam("limit"); v != "" {
 		n, err := strconv.Atoi(v)

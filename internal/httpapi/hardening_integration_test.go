@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/metrics"
 )
@@ -263,12 +263,51 @@ func (r *captureReporter) Capture(_ context.Context, err error, f map[string]str
 	r.tags = append(r.tags, f)
 }
 
+// Echo v5 refuses a same-site request outright, where v4 fell back to the token: the app and the API share one origin, so a real session is never same-site.
+func TestCSRFUsesFetchMetadata(t *testing.T) {
+	e := newEnvOpts(t, 1000, envOpts{})
+	c := e.newClient(t)
+	c.do("GET", "/api/v1/auth/me", nil, false) // sets the CSRF cookie
+	post := func(site string, withToken bool) int {
+		t.Helper()
+		req, _ := http.NewRequest("POST", e.srv.URL+"/api/v1/auth/login", strings.NewReader(`{"email":"a@example.com","password":"wrong-password"}`))
+		req.Header.Set("Content-Type", "application/json")
+		if site != "" {
+			req.Header.Set("Sec-Fetch-Site", site)
+		}
+		if withToken {
+			req.Header.Set("X-CSRF-Token", c.csrf())
+		}
+		res, err := c.http.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	for _, site := range []string{"same-site", "cross-site"} {
+		if got := post(site, true); got != http.StatusForbidden {
+			t.Errorf("%s with a valid token: %d", site, got)
+		}
+	}
+	if got := post("", false); got != http.StatusForbidden {
+		t.Errorf("no token and no fetch metadata: %d", got)
+	}
+	// Past CSRF, the wrong password is refused by the handler.
+	if got := post("same-origin", true); got != http.StatusUnauthorized {
+		t.Errorf("same-origin: %d", got)
+	}
+	if got := post("", true); got != http.StatusUnauthorized {
+		t.Errorf("token without fetch metadata: %d", got)
+	}
+}
+
 func TestPanicsAreContainedCountedAndReported(t *testing.T) {
 	m := metrics.NewAPI()
 	rep := &captureReporter{}
 	e := newEnvOpts(t, 1000, envOpts{metrics: m, reporter: rep})
-	e.app.GET("/__test/panic", func(echo.Context) error { panic("boom: secret internal detail") })
-	e.app.GET("/__test/fail", func(echo.Context) error { return errors.New("database exploded: password=hunter2") })
+	e.app.GET("/__test/panic", func(*echo.Context) error { panic("boom: secret internal detail") })
+	e.app.GET("/__test/fail", func(*echo.Context) error { return errors.New("database exploded: password=hunter2") })
 
 	res, err := http.Get(e.srv.URL + "/__test/panic")
 	if err != nil {
