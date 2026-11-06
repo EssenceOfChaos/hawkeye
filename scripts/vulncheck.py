@@ -25,17 +25,10 @@ class Accepted:
     reason: str
 
 
-# Echo fixed both of these in v4.16.3, and GitHub's advisories end at v4.16.2, but the Go vulnerability database lists every v4 version as affected with no fix.
-ACCEPTED = {
-    "GO-2026-6872": Accepted(
-        "github.com/labstack/echo/v4", "v4.16.3", datetime.date(2027, 1, 31),
-        "Needs Echo#IPExtractor to be unset. internal/httpapi/server.go always sets it, and v4.16.3 fixes the default.",
-    ),
-    "GO-2026-6875": Accepted(
-        "github.com/labstack/echo/v4", "v4.16.3", datetime.date(2027, 1, 31),
-        "Affects Echo's reverse proxy middleware, which HawkEye does not use, and v4.16.3 fixes it.",
-    ),
-}
+# Nothing is accepted at the moment. An entry looks like this:
+#
+#   "GO-2026-1234": Accepted("example.com/module", "v1.2.3", datetime.date(2027, 1, 31), "Why HawkEye is not affected."),
+ACCEPTED = {}
 
 
 def parse_stream(text):

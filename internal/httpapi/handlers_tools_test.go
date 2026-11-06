@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/sitecheck"
 	"hawkeye/internal/sslcheck"

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/branding"
 	"hawkeye/internal/monitors"
@@ -17,7 +17,7 @@ import (
 )
 
 // brandingView is the settings page's data: what is stored, and what the plan lets this organization do with it.
-func (h *handlers) brandingView(c echo.Context) error {
+func (h *handlers) brandingView(c *echo.Context) error {
 	ctx := c.Request().Context()
 	b, err := h.branding.Get(ctx, currentOrg(c))
 	if err != nil {
@@ -32,7 +32,7 @@ func (h *handlers) brandingView(c echo.Context) error {
 
 // putBranding changes the display name and/or the monthly email switch. Each is optional, so the page can save one without sending the other.
 // Clearing the name is always allowed; setting one needs a plan with branded reports, and turning the monthly email on needs one with reports.
-func (h *handlers) putBranding(c echo.Context) error {
+func (h *handlers) putBranding(c *echo.Context) error {
 	var in struct {
 		DisplayName        *string `json:"display_name"`
 		MonthlyReportEmail *bool   `json:"monthly_report_email"`
@@ -69,7 +69,7 @@ func (h *handlers) putBranding(c echo.Context) error {
 }
 
 // putLogo takes the image itself as the request body (not a form), so the browser can send the chosen file as it is.
-func (h *handlers) putLogo(c echo.Context) error {
+func (h *handlers) putLogo(c *echo.Context) error {
 	ctx, org := c.Request().Context(), currentOrg(c)
 	if err := h.plans.CanUseBrandedReports(ctx, h.db, org); err != nil {
 		return mapError(err)
@@ -84,14 +84,14 @@ func (h *handlers) putLogo(c echo.Context) error {
 	return h.brandingView(c)
 }
 
-func (h *handlers) deleteLogo(c echo.Context) error {
+func (h *handlers) deleteLogo(c *echo.Context) error {
 	if err := h.branding.DeleteLogo(c.Request().Context(), currentOrg(c)); err != nil {
 		return err
 	}
 	return h.brandingView(c)
 }
 
-func (h *handlers) getLogo(c echo.Context) error {
+func (h *handlers) getLogo(c *echo.Context) error {
 	data, ctype, err := h.branding.Logo(c.Request().Context(), currentOrg(c))
 	if errors.Is(err, branding.ErrNoLogo) {
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "No logo has been uploaded."}
@@ -104,7 +104,7 @@ func (h *handlers) getLogo(c echo.Context) error {
 
 // monitorReportPDF returns one website's monthly report as a PDF download. With no month it is the last full month. Branding is applied only when the
 // plan includes it, so after a downgrade the same link simply gives the standard HawkEye report.
-func (h *handlers) monitorReportPDF(c echo.Context) error {
+func (h *handlers) monitorReportPDF(c *echo.Context) error {
 	id, err := h.monitorInScope(c)
 	if err != nil {
 		return err

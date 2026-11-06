@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/ratelimit"
 )
 
-func (h *handlers) changePassword(c echo.Context) error {
+func (h *handlers) changePassword(c *echo.Context) error {
 	var in struct {
 		CurrentPassword string `json:"current_password"`
 		NewPassword     string `json:"new_password"`
@@ -29,7 +29,7 @@ func (h *handlers) changePassword(c echo.Context) error {
 }
 
 // exportData returns the user's data as a JSON download. It is rate-limited per user because it reads a lot.
-func (h *handlers) exportData(c echo.Context) error {
+func (h *handlers) exportData(c *echo.Context) error {
 	if h.limits.l != nil {
 		if res, err := h.limits.l.Allow(c.Request().Context(), ratelimit.Key("account-export", currentUser(c).ID.String()), 5, time.Hour); err == nil && !res.Allowed {
 			c.Response().Header().Set("Retry-After", "3600")
@@ -49,7 +49,7 @@ func (h *handlers) exportData(c echo.Context) error {
 }
 
 // deleteAccount permanently deletes the account after the password and email are re-confirmed.
-func (h *handlers) deleteAccount(c echo.Context) error {
+func (h *handlers) deleteAccount(c *echo.Context) error {
 	var in struct {
 		Password     string `json:"password"`
 		ConfirmEmail string `json:"confirm_email"`

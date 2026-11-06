@@ -19,6 +19,24 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
+func TestBodyLimit(t *testing.T) {
+	// These are the sizes Echo v4 gave these values, so an existing BODY_LIMIT keeps its meaning.
+	for value, want := range map[string]int64{"": 1_000_000, "1M": 1_000_000, "512K": 512_000, "2MB": 2_000_000, "1MiB": 1 << 20, "4096": 4096} {
+		c, err := load(env(map[string]string{"DATABASE_URL": "postgres://x", "BODY_LIMIT": value}))
+		if err != nil {
+			t.Fatalf("%q: %v", value, err)
+		}
+		if c.BodyLimit != want {
+			t.Errorf("%q = %d, want %d", value, c.BodyLimit, want)
+		}
+	}
+	for _, value := range []string{"lots", "1X", "-1M", "0"} {
+		if _, err := load(env(map[string]string{"DATABASE_URL": "postgres://x", "BODY_LIMIT": value})); err == nil || !strings.Contains(err.Error(), "BODY_LIMIT") {
+			t.Errorf("%q: got %v", value, err)
+		}
+	}
+}
+
 func TestLoadRequiresDatabaseURL(t *testing.T) {
 	_, err := load(env(nil))
 	if err == nil || !strings.Contains(err.Error(), "DATABASE_URL") {

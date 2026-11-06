@@ -8,9 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
-	"golang.org/x/time/rate"
+	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 
 	"hawkeye/internal/account"
 	"hawkeye/internal/auth"
@@ -45,7 +44,7 @@ type Options struct {
 	Logger         *slog.Logger
 	DB             Pinger
 	RequestTimeout time.Duration
-	BodyLimit      string
+	BodyLimit      int64 // bytes
 
 	// Auth and Orgs are optional so the foundation can be tested without a database.
 	Auth          *auth.Service
@@ -89,8 +88,6 @@ const readinessTimeout = 2 * time.Second
 // New builds the Echo application.
 func New(o Options) *echo.Echo {
 	e := echo.New()
-	e.HideBanner = true
-	e.HidePort = true
 	if o.Errors == nil {
 		o.Errors = errtrack.Noop{}
 	}
@@ -131,13 +128,13 @@ func New(o Options) *echo.Echo {
 }
 
 // healthz is a liveness probe: it does not touch dependencies.
-func healthz(c echo.Context) error {
+func healthz(c *echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // readyz verifies that required dependencies are usable. Failure details are logged, not returned.
 func readyz(db Pinger, log *slog.Logger) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		ctx, cancel := context.WithTimeout(c.Request().Context(), readinessTimeout)
 		defer cancel()
 		if err := db.Ping(ctx); err != nil {
@@ -156,9 +153,9 @@ func readyz(db Pinger, log *slog.Logger) echo.HandlerFunc {
 
 func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 	return middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
-		LogMethod: true, LogURIPath: true, LogStatus: true, LogLatency: true, LogRequestID: true, LogError: true,
+		LogMethod: true, LogURIPath: true, LogStatus: true, LogLatency: true, LogRequestID: true,
 		HandleError: true,
-		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
+		LogValuesFunc: func(c *echo.Context, v middleware.RequestLoggerValues) error {
 			attrs := []any{"method", v.Method, "path", v.URIPath, "status", v.Status,
 				"latency_ms", v.Latency.Milliseconds(), "request_id", v.RequestID}
 			level := slog.LevelInfo
@@ -183,7 +180,7 @@ func registerAPI(e *echo.Echo, o Options) {
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
 		// session, and the unguessable token in the URL is the only thing that authorizes it (and all it can do is unsubscribe).
-		Skipper:        func(c echo.Context) bool { return c.Path() == "/api/v1/lifecycle/unsubscribe" },
+		Skipper:        func(c *echo.Context) bool { return c.Path() == "/api/v1/lifecycle/unsubscribe" },
 		TokenLookup:    "header:X-CSRF-Token",
 		CookieName:     "csrf_token",
 		CookiePath:     "/",
@@ -191,7 +188,7 @@ func registerAPI(e *echo.Echo, o Options) {
 		CookieHTTPOnly: false,
 		CookieSameSite: http.SameSiteLaxMode,
 		CookieMaxAge:   86400,
-		ErrorHandler: func(error, echo.Context) error {
+		ErrorHandler: func(*echo.Context, error) error {
 			return &APIError{Status: http.StatusForbidden, Code: "CSRF_INVALID", Message: "Missing or invalid CSRF token."}
 		},
 	}))
@@ -215,10 +212,10 @@ func registerAPI(e *echo.Echo, o Options) {
 	} else {
 		mem := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
 			Store: middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{
-				Rate: rate.Limit(float64(perMin) / 60), Burst: perMin, ExpiresIn: time.Hour,
+				Rate: float64(perMin) / 60, Burst: perMin, ExpiresIn: time.Hour,
 			}),
-			IdentifierExtractor: func(c echo.Context) (string, error) { return c.RealIP(), nil },
-			DenyHandler:         func(echo.Context, string, error) error { return errRateLimited },
+			IdentifierExtractor: func(c *echo.Context) (string, error) { return c.RealIP(), nil },
+			DenyHandler:         func(*echo.Context, string, error) error { return errRateLimited },
 		})
 		limit = func(string) echo.MiddlewareFunc { return mem }
 	}
@@ -226,10 +223,10 @@ func registerAPI(e *echo.Echo, o Options) {
 	if o.GlobalRateLimitPerMin > 0 {
 		v1.Use(middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
 			Store: middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{
-				Rate: rate.Limit(float64(o.GlobalRateLimitPerMin) / 60), Burst: max(20, o.GlobalRateLimitPerMin/6), ExpiresIn: time.Hour,
+				Rate: float64(o.GlobalRateLimitPerMin) / 60, Burst: max(20, o.GlobalRateLimitPerMin/6), ExpiresIn: time.Hour,
 			}),
-			IdentifierExtractor: func(c echo.Context) (string, error) { return c.RealIP(), nil },
-			DenyHandler: func(c echo.Context, _ string, _ error) error {
+			IdentifierExtractor: func(c *echo.Context) (string, error) { return c.RealIP(), nil },
+			DenyHandler: func(c *echo.Context, _ string, _ error) error {
 				c.Response().Header().Set("Retry-After", "30")
 				if o.Metrics != nil {
 					o.Metrics.RateLimited.WithLabelValues("global").Inc()
@@ -257,9 +254,9 @@ func registerAPI(e *echo.Echo, o Options) {
 		publicLimit = h.limits.byIP("public-status", 120, time.Minute)
 	} else {
 		publicLimit = middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
-			Store:               middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(2), Burst: 120, ExpiresIn: time.Hour}),
-			IdentifierExtractor: func(c echo.Context) (string, error) { return c.RealIP(), nil },
-			DenyHandler:         func(echo.Context, string, error) error { return errRateLimited },
+			Store:               middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{Rate: 2, Burst: 120, ExpiresIn: time.Hour}),
+			IdentifierExtractor: func(c *echo.Context) (string, error) { return c.RealIP(), nil },
+			DenyHandler:         func(*echo.Context, string, error) error { return errRateLimited },
 		})
 	}
 	v1.GET("/public/status/:slug", h.publicStatus, publicLimit)
@@ -269,27 +266,27 @@ func registerAPI(e *echo.Echo, o Options) {
 		// limits. Requests come largely from a few image proxies (GitHub's camo, for one), so the per-IP budget is generous and kept in memory: a
 		// badge is served from a one-minute cache and never costs a rate-limiter query.
 		e.GET("/badge/:file", h.publicBadge, middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
-			Store:               middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(20), Burst: 600, ExpiresIn: time.Hour}),
-			IdentifierExtractor: func(c echo.Context) (string, error) { return c.RealIP(), nil },
-			DenyHandler:         func(echo.Context, string, error) error { return errRateLimited },
+			Store:               middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{Rate: 20, Burst: 600, ExpiresIn: time.Hour}),
+			IdentifierExtractor: func(c *echo.Context) (string, error) { return c.RealIP(), nil },
+			DenyHandler:         func(*echo.Context, string, error) error { return errRateLimited },
 		}))
 	}
 	if h.heartbeats != nil {
 		// Heartbeat pings come from customers' scheduled jobs, so like the badges they live at a short address outside /api, its CSRF check and its
 		// global limit. Many jobs may share one server (and one address), so the per-IP budget is generous; one ping address may not be hit more than
 		// about once a second, which no real schedule needs. Both are kept in memory so a ping never costs a rate-limiter query.
-		deny := func(c echo.Context, _ string, _ error) error {
+		deny := func(c *echo.Context, _ string, _ error) error {
 			c.Response().Header().Set("Retry-After", "10")
 			return c.String(http.StatusTooManyRequests, "Too many pings\n")
 		}
 		perIP := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
-			Store:               middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(20), Burst: 600, ExpiresIn: time.Hour}),
-			IdentifierExtractor: func(c echo.Context) (string, error) { return c.RealIP(), nil },
+			Store:               middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{Rate: 20, Burst: 600, ExpiresIn: time.Hour}),
+			IdentifierExtractor: func(c *echo.Context) (string, error) { return c.RealIP(), nil },
 			DenyHandler:         deny,
 		})
 		perToken := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
-			Store:               middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(1), Burst: 30, ExpiresIn: time.Hour}),
-			IdentifierExtractor: func(c echo.Context) (string, error) { return c.Param("token"), nil },
+			Store:               middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{Rate: 1, Burst: 30, ExpiresIn: time.Hour}),
+			IdentifierExtractor: func(c *echo.Context) (string, error) { return c.Param("token"), nil },
 			DenyHandler:         deny,
 		})
 		methods := []string{http.MethodGet, http.MethodHead, http.MethodPost}
@@ -429,7 +426,7 @@ func registerAPI(e *echo.Echo, o Options) {
 
 	// Group middleware (authentication, CSRF) also guards each group's catch-all, which made unknown paths answer 401/403 to
 	// anonymous callers. Unknown API paths are simply 404 for everyone.
-	e.RouteNotFound("/api/v1/*", func(echo.Context) error {
+	e.RouteNotFound("/api/v1/*", func(*echo.Context) error {
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Not found."}
 	})
 }

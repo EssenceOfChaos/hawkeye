@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/auth"
 )
@@ -14,7 +14,7 @@ const (
 	userKey       = "user"
 )
 
-func (h *handlers) setSessionCookie(c echo.Context, token string) {
+func (h *handlers) setSessionCookie(c *echo.Context, token string) {
 	c.SetCookie(&http.Cookie{
 		Name: sessionCookie, Value: token, Path: "/",
 		MaxAge:   int(h.auth.SessionTTL() / time.Second),
@@ -22,7 +22,7 @@ func (h *handlers) setSessionCookie(c echo.Context, token string) {
 	})
 }
 
-func (h *handlers) clearSessionCookie(c echo.Context) {
+func (h *handlers) clearSessionCookie(c *echo.Context) {
 	c.SetCookie(&http.Cookie{
 		Name: sessionCookie, Value: "", Path: "/", MaxAge: -1,
 		HttpOnly: true, Secure: h.secureCookies, SameSite: http.SameSiteLaxMode,
@@ -33,7 +33,7 @@ var errUnauthenticated = &APIError{Status: http.StatusUnauthorized, Code: "UNAUT
 
 // requireAuth resolves the session cookie to a user and stores it on the context.
 func (h *handlers) requireAuth(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		cookie, err := c.Cookie(sessionCookie)
 		if err != nil {
 			return errUnauthenticated
@@ -51,11 +51,11 @@ func (h *handlers) requireAuth(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
-func currentUser(c echo.Context) auth.User { return c.Get(userKey).(auth.User) }
+func currentUser(c *echo.Context) auth.User { return c.Get(userKey).(auth.User) }
 
 // requireVerifiedEmail guards sensitive operations (billing, alert delivery settings). Used from Phase 3 on.
 func requireVerifiedEmail(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		if !currentUser(c).EmailVerified() {
 			return &APIError{Status: http.StatusForbidden, Code: "EMAIL_NOT_VERIFIED",
 				Message: "Verify your email address to use this feature."}

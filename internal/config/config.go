@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/labstack/gommon/bytes"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/canary"
 	"hawkeye/internal/regions"
@@ -46,7 +47,7 @@ type Config struct {
 	LogLevel slog.Level
 
 	RequestTimeout  time.Duration
-	BodyLimit       string
+	BodyLimit       int64 // bytes; BODY_LIMIT takes a size such as 1M
 	ShutdownTimeout time.Duration
 
 	SessionTTL          time.Duration
@@ -266,6 +267,14 @@ func load(get func(string) string) (Config, error) {
 		return d
 	}
 
+	byteSize := func(key, def string) int64 {
+		n, err := bytes.Parse(str(key, def))
+		if err != nil || n <= 0 {
+			errs = append(errs, fmt.Errorf("%s: must be a size such as 1M", key))
+		}
+		return n
+	}
+
 	boolean := func(key string) bool {
 		v := strings.TrimSpace(get(key))
 		if v == "" {
@@ -289,7 +298,7 @@ func load(get func(string) string) (Config, error) {
 		SessionSecret:   str("SESSION_SECRET", ""),
 		SecretsKey:      str("SECRETS_ENCRYPTION_KEY", ""),
 		RequestTimeout:  duration("REQUEST_TIMEOUT", 30*time.Second),
-		BodyLimit:       str("BODY_LIMIT", "1M"),
+		BodyLimit:       byteSize("BODY_LIMIT", "1M"),
 		ShutdownTimeout: duration("SHUTDOWN_TIMEOUT", 15*time.Second),
 
 		SessionTTL:          duration("SESSION_TTL", 14*24*time.Hour),

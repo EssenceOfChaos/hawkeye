@@ -3,18 +3,18 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/contact"
 )
 
-func (h *handlers) contactCategories(c echo.Context) error {
+func (h *handlers) contactCategories(c *echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"categories": contact.Categories})
 }
 
 // submitContact accepts the public contact form. Anyone may use it (signed in or not); a signed-in sender's account and plan are
 // attached on the server so support can triage without asking. Nothing about the account is taken from the request body.
-func (h *handlers) submitContact(c echo.Context) error {
+func (h *handlers) submitContact(c *echo.Context) error {
 	if h.contact == nil {
 		return &APIError{Status: http.StatusServiceUnavailable, Code: "CONTACT_UNAVAILABLE", Message: "The contact form is not available right now."}
 	}
@@ -57,7 +57,7 @@ func (h *handlers) submitContact(c echo.Context) error {
 }
 
 // attachSender adds the signed-in user's id and plan (best effort; an anonymous or failing lookup simply adds nothing).
-func (h *handlers) attachSender(c echo.Context, sub *contact.Submission) {
+func (h *handlers) attachSender(c *echo.Context, sub *contact.Submission) {
 	cookie, err := c.Cookie(sessionCookie)
 	if err != nil || h.auth == nil {
 		return

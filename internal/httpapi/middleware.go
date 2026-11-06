@@ -1,43 +1,30 @@
 package httpapi
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/ratelimit"
 )
 
-// statusFromError mirrors what the error handler will send, for requests whose error has not been rendered yet.
-func statusFromError(err error) int {
-	switch e := err.(type) {
-	case *APIError:
-		return e.Status
-	case *echo.HTTPError:
-		return e.Code
-	}
-	return http.StatusInternalServerError
-}
-
 // apiMetrics records request counts and latency using the route TEMPLATE (e.g. /api/v1/monitors/:monitorID), so label cardinality stays bounded.
 func apiMetrics(m *metrics.APIMetrics) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			start := time.Now()
 			m.InFlight.Inc()
 			err := next(c)
 			m.InFlight.Dec()
-			status := c.Response().Status
-			if err != nil && !c.Response().Committed {
-				status = statusFromError(err)
-			}
+			_, status := echo.ResolveResponseStatus(c.Response(), err)
 			m.Observe(c.Request().Method, c.Path(), status, time.Since(start))
 			return err
 		}
@@ -49,23 +36,30 @@ type panicError struct{ error }
 
 // recoverPanics turns a panic into a 500 (via the normal error handler), counts it, logs the stack and reports it.
 func recoverPanics(log *slog.Logger, m *metrics.APIMetrics, rep errtrack.Reporter) echo.MiddlewareFunc {
-	return middleware.RecoverWithConfig(middleware.RecoverConfig{
-		LogErrorFunc: func(c echo.Context, err error, stack []byte) error {
+	recoverer := middleware.Recover()
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		guarded := recoverer(next)
+		return func(c *echo.Context) error {
+			err := guarded(c)
+			var p *middleware.PanicStackError
+			if !errors.As(err, &p) {
+				return err
+			}
 			if m != nil {
 				m.Panics.Inc()
 			}
 			rid := c.Response().Header().Get(echo.HeaderXRequestID)
-			log.ErrorContext(c.Request().Context(), "panic recovered in request handler", "error", err, "request_id", rid, "stack", string(stack))
-			rep.Capture(c.Request().Context(), fmt.Errorf("panic: %w", err), map[string]string{"request_id": rid, "route": c.Path(), "kind": "panic"})
-			return panicError{err}
-		},
-	})
+			log.ErrorContext(c.Request().Context(), "panic recovered in request handler", "error", p.Err, "request_id", rid, "stack", string(p.Stack))
+			rep.Capture(c.Request().Context(), fmt.Errorf("panic: %w", p.Err), map[string]string{"request_id": rid, "route": c.Path(), "kind": "panic"})
+			return panicError{p.Err}
+		}
+	}
 }
 
 // securityHeaders sets headers appropriate for a JSON API. HSTS is only sent when the deployment serves HTTPS.
 func securityHeaders(hsts bool) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			h := c.Response().Header()
 			h.Set("X-Content-Type-Options", "nosniff")
 			h.Set("Cache-Control", "no-store")
@@ -95,12 +89,12 @@ type limiterDeps struct {
 // If the limiter's database is unavailable the request is allowed (fail open) and the failure is counted, because
 // refusing all logins during a database blip would be worse than briefly losing the limit.
 func (d limiterDeps) byIP(scope string, limit int, window time.Duration) echo.MiddlewareFunc {
-	return d.by(scope, limit, window, func(c echo.Context) string { return c.RealIP() })
+	return d.by(scope, limit, window, func(c *echo.Context) string { return c.RealIP() })
 }
 
-func (d limiterDeps) by(scope string, limit int, window time.Duration, subject func(echo.Context) string) echo.MiddlewareFunc {
+func (d limiterDeps) by(scope string, limit int, window time.Duration, subject func(*echo.Context) string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if !d.allow(c, scope, subject(c), limit, window) {
 				return errRateLimited
 			}
@@ -110,7 +104,7 @@ func (d limiterDeps) by(scope string, limit int, window time.Duration, subject f
 }
 
 // allow records a hit and reports whether it is within the limit, setting Retry-After when it is not.
-func (d limiterDeps) allow(c echo.Context, scope, subject string, limit int, window time.Duration) bool {
+func (d limiterDeps) allow(c *echo.Context, scope, subject string, limit int, window time.Duration) bool {
 	res, err := d.l.Allow(c.Request().Context(), ratelimit.Key(scope, subject), limit, window)
 	if err != nil {
 		d.log.WarnContext(c.Request().Context(), "rate limiter unavailable; allowing request", "scope", scope, "error", err)
@@ -133,7 +127,7 @@ func (d limiterDeps) allow(c echo.Context, scope, subject string, limit int, win
 // emailBudget consumes one unit of an address's hourly budget for an email-sending action. It returns false when the address has
 // used its budget. It never sets response headers, so callers can stay silent (no account enumeration) or return 429 as they prefer.
 // Without a shared limiter it allows everything (single-process development).
-func (h *handlers) emailBudget(c echo.Context, action, address string) bool {
+func (h *handlers) emailBudget(c *echo.Context, action, address string) bool {
 	if h.limits.l == nil {
 		return true
 	}

@@ -5,7 +5,7 @@ import unittest
 
 import vulncheck
 
-MODULE = "github.com/labstack/echo/v4"
+MODULE = "example.com/module"
 TODAY = datetime.date(2026, 11, 6)
 RULE = vulncheck.Accepted(MODULE, "v4.16.3", datetime.date(2027, 1, 31), "not affected")
 CONFIG = {"config": {"scanner_name": "govulncheck"}}
