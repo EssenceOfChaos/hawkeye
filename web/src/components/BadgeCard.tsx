@@ -71,7 +71,7 @@ export function BadgeCard({ monitor, plan, isOwner }: { monitor: Monitor; plan: 
       {isOwner && <Toggle checked={Boolean(token)} busy={busy} onToggle={toggle}>Public uptime badge</Toggle>}
       {!token && !isOwner && <p className="hint">The organization’s owner can turn on a public badge for this monitor.</p>}
       {token && code && (
-        <Appear play={token !== monitor.badge_token}>
+        <Appear className="badge-options" play={token !== monitor.badge_token}>
           <fieldset className="field">
             <legend>Size</legend>
             {(Object.keys(SIZES) as Size[]).map((k) => (
