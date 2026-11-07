@@ -61,6 +61,18 @@ export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString()
 }
 
+/** How long ago something happened, short enough for a table cell: "just now", "3 minutes ago", "2 hours ago", "4 days ago". */
+export function timeAgo(iso: string, now: number = Date.now()): string {
+  const seconds = Math.floor((now - Date.parse(iso)) / 1000)
+  if (!Number.isFinite(seconds) || seconds < 45) return 'just now' // a few seconds ahead (clock skew) also counts as now
+  const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'} ago`
+  const minutes = Math.max(1, Math.floor(seconds / 60))
+  if (minutes < 60) return plural(minutes, 'minute')
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return plural(hours, 'hour')
+  return plural(Math.floor(hours / 24), 'day')
+}
+
 /**
  * A plan price in US dollars from cents, shown exactly: "$0", "$19", "$19.99". Whole-dollar prices drop the cents; anything else keeps both
  * decimals, so a $19.99 plan is never displayed as $20.
