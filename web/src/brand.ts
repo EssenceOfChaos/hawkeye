@@ -16,6 +16,11 @@ import iconMonitors from './assets/brand/icon-monitors.png'
 import iconShield from './assets/brand/icon-shield.png'
 import iconSsl from './assets/brand/icon-ssl.png'
 import iconWebsites from './assets/brand/icon-websites.png'
+import iconCron from './assets/brand/icon-cron.png'
+import iconIncident from './assets/brand/icon-incident.png'
+import iconLocations from './assets/brand/icon-locations.png'
+import iconPdfReports from './assets/brand/icon-pdf-reports.png'
+import iconResponseTime from './assets/brand/icon-response-time.png'
 import emblem from './assets/brand/emblem.png'
 import screenAlertEmail from './assets/brand/screens/alert-email.webp'
 import screenDashboard from './assets/brand/screens/dashboard.webp'
@@ -61,5 +66,10 @@ export const brand = {
     statusPage: iconStatusPage,
     reports: iconReports,
     monitors: iconMonitors,
+    cron: iconCron,
+    incident: iconIncident,
+    locations: iconLocations,
+    pdfReports: iconPdfReports,
+    responseTime: iconResponseTime,
   },
 }

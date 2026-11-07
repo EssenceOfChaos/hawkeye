@@ -35,7 +35,7 @@ const FEATURES = [
     text: 'Send custom requests, authenticate, and verify what comes back.',
   },
   {
-    icon: brand.icons.history,
+    icon: brand.icons.cron,
     title: 'Cron job monitoring',
     lead: 'Know when a scheduled job stops running.',
     text: 'Backups, reports and queue workers ping HawkEye when they run. Miss one, or report a failure, and you hear about it.',
@@ -47,13 +47,13 @@ const FEATURES = [
     text: 'Watch address, mail, name server and TXT records, and hear about it when one stops matching what you expect.',
   },
   {
-    icon: brand.icons.analytics,
+    icon: brand.icons.responseTime,
     title: 'Response-time tracking',
     lead: 'Spot slowdowns early.',
     text: 'Track response times and review trends over time.',
   },
   {
-    icon: brand.icons.history,
+    icon: brand.icons.incident,
     title: 'Incident tracking',
     lead: 'Every incident, clearly accounted for.',
     text: 'See when a problem began and when service recovered.',
@@ -65,13 +65,13 @@ const FEATURES = [
     text: 'One alert when an outage is confirmed, one when it ends. Email, Slack, Teams, Discord, Telegram or webhook.',
   },
   {
-    icon: brand.icons.websites,
+    icon: brand.icons.statusPage,
     title: 'Public status pages',
     lead: 'Tell your customers before they ask.',
     text: 'Share live status, uptime and incidents, with one page per client on paid plans. You choose what appears.',
   },
   {
-    icon: brand.icons.analytics,
+    icon: brand.icons.pdfReports,
     title: 'Monthly PDF reports',
     lead: 'Show clients how their site performed.',
     text: 'A clear uptime report for each website: downtime, incidents and a day-by-day chart. Pro and Agency. Agency adds your own name and logo.',
@@ -89,7 +89,7 @@ const FEATURES = [
     text: 'A live countdown, plus warnings 30, 14, 7 and 1 days before expiry.',
   },
   {
-    icon: brand.icons.shield,
+    icon: brand.icons.history,
     title: 'Domain expiry alerts',
     lead: 'Don’t lose your domain to a missed renewal.',
     text: 'Warnings 30, 14, 7 and 1 days before a domain registration expires.',
@@ -104,7 +104,7 @@ const FEATURES = [
 
 // Shown only when this installation really offers more than one location (the plans report how many each allows).
 const LOCATION_FEATURE = {
-  icon: brand.icons.shield,
+  icon: brand.icons.locations,
   title: 'Checks from several locations',
   lead: 'One network hiccup is not an outage.',
   text: 'On paid plans, a monitor is offline only when most locations agree.',

@@ -390,7 +390,7 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 #faq-h, #faq-h + .faq { text-align: center; }
 .faq .d-collapse-title { text-align: center; padding-inline-start: 3rem; padding-inline-end: 3rem; white-space: normal; overflow-wrap: anywhere; width: 100%; box-sizing: border-box; }
 .faq .d-collapse { border-radius: .75rem; }
-.faq .d-collapse-content p { margin: 0; }
+.faq .d-collapse-content p { margin: 0; font-size: .92rem; font-weight: 300; }
 @media (prefers-reduced-motion: reduce) { .reveal-armed [data-reveal] { opacity: 1; } }
 .section .features { grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); }
 .section .features.audiences { grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr)); }
