@@ -1,0 +1,36 @@
+# A regional check worker on its own host: this one container, nothing else. It runs checks for WORKER_REGION and leaves everything that needs other
+# secrets (alert delivery, billing, scheduled emails, the scheduler) to the production server.
+#
+# Nothing runs this by hand. On every release the production server sends this host the image and .env.worker (scripts/regional-sync.sh), and
+# scripts/regional-receive.sh starts it, so this host never builds anything.
+#
+# The project name, the network name and the subnet match docker-compose.prod.yml on purpose: deploy/egress-filter.sh and scripts/verify-egress.sh
+# work here unchanged.
+name: hawkeye
+
+services:
+  worker:
+    image: "hawkeye-worker:${APP_VERSION:?APP_VERSION is missing from .env.worker, it comes from scripts/regional-receive.sh}"
+    pull_policy: never
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp"]
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+    env_file: ["../.env.worker"]
+    environment:
+      APP_ENV: production
+      WORKER_METRICS_PORT: "9090"
+      WORKER_CHECKS_ONLY: "true"
+    networks: [checks]
+    mem_limit: 512m
+    cpus: 1.0
+
+networks:
+  checks:
+    ipam:
+      config:
+        - subnet: 172.30.10.0/24

@@ -67,6 +67,9 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("invalid configuration:\n%w", err)
 	}
+	if cfg.WorkerChecksOnly { // it relaxes the production checks, which is only safe for a worker that serves nobody
+		return errors.New("invalid configuration:\nWORKER_CHECKS_ONLY: for regional workers only; it must not reach the API")
+	}
 	log := logging.New(os.Stdout, cfg.LogLevel, cfg.IsProduction())
 	slog.SetDefault(log)
 

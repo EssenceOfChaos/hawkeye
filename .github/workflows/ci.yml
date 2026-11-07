@@ -80,8 +80,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the migration check compares with the base commit
       - name: Shell syntax
-        run: for f in scripts/*.sh; do bash -n "$f"; done
+        run: for f in scripts/*.sh deploy/*.sh; do bash -n "$f"; done
+      - name: Check locations are valid
+        run: python3 scripts/regions.py validate
+      - name: New migrations work with the previous release
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 scripts/check_migrations.py "$BASE"
       - name: Tests
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 

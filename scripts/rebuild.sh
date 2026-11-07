@@ -9,6 +9,7 @@
 #   scripts/rebuild.sh cutover                        THE switch: freeze the old server, final backup, restore, move DNS, start, verify
 #   scripts/rebuild.sh rollback                       point DNS back at the old server and restart it
 #   scripts/rebuild.sh destroy --workspace NAME       delete a rehearsal server (never the production one)
+#   scripts/rebuild.sh regions                        create the regional workers listed in infra/regions.json and bring them into service
 #   scripts/rebuild.sh credentials --host IP          give an EXISTING server the secret manager credentials (one time; new servers get them in `create`)
 #
 # Settings come from the secret manager (Infisical) when ~/.hawkeye-secrets/.hawkeye-infisical.env exists (docs/secrets.md): that one small file is
@@ -314,9 +315,43 @@ EOF
   if [ "$DRY" = 1 ]; then echo "  [dry-run] would wait for https://$SITE, run the smoke test and set the GitHub secrets"; return 0; fi
   smoke_url "https://$SITE" || { echo "If this cannot be fixed quickly: scripts/rebuild.sh rollback"; exit 1; }
   set_github_secrets "$ip"
+  reconnect_regions "$ip"
   rssh "$ip" "$KH" "cd ~/hawkeye && sudo ufw status | head -1; test -x scripts/verify-egress.sh && echo 'run scripts/verify-egress.sh on the server to prove the egress rules'" || true
   say "Cutover complete: $SITE is served by $ip"
   echo "The old server ($old) is stopped, not deleted. Delete it in Vultr once the new one has run cleanly for a few days."
+}
+
+reconnect_regions() { # a new production server has a new tunnel key, and workers cannot reach the database until they know it
+  [ -n "$(python3 scripts/regions.py workers)" ] || return 0
+  say "Reconnect the regional workers"
+  HAWKEYE_REGIONAL_KNOWN_HOSTS="$KH" scripts/regional.sh link && rssh "$1" "$KH" 'cd ~/hawkeye && scripts/regional-sync.sh' && ok "regional workers reconnected" ||
+    warn "regional workers are not reconnected: run scripts/rebuild.sh regions"
+}
+
+cmd_regions() {
+  [ "$WS" = default ] || die "regional workers exist only in production"
+  say "Regional workers"
+  ws_select; prepare_live
+  python3 scripts/regions.py validate || die "fix infra/regions.json first"
+  local ip; ip="$(new_ip)"; [ -n "$ip" ] || die "no production server in this state"
+  # Workers run production's image, and production is what sends it, so production has to be on this list already.
+  rssh "$ip" "$KH" 'cat hawkeye/infra/regions.json' | diff -q - infra/regions.json >/dev/null || die "infra/regions.json here differs from production's: merge it and let the deploy finish first"
+  [ "$DRY" = 1 ] && { tf plan -input=false || true; echo; echo "  [dry-run] stopping before apply"; return 0; }
+  tf plan -input=false -out=.plan
+  # This command only ever adds or removes workers. Anything else in the plan means the configuration has drifted, and that needs a human's eyes first.
+  local other; other="$(tf show -json .plan | jq -r '.resource_changes[] | select(.change.actions != ["no-op"]) | select(.change.actions != ["read"]) | .address' | grep -v -E '^vultr_(instance\.worker|firewall_group\.worker|firewall_rule\.(worker_ssh|wireguard))' || true)"
+  if [ -n "$other" ]; then rm -f "$INFRA/.plan"; die "the plan also changes things that are not workers, so nothing was done: $other"; fi
+  confirm "regions"
+  tf apply -input=false .plan; rm -f "$INFRA/.plan"
+  [ -n "$(python3 scripts/regions.py workers)" ] || { ok "no workers are listed: nothing more to do"; return 0; }
+  say "Join them to the tunnel"
+  HAWKEYE_REGIONAL_KNOWN_HOSTS="$KH" scripts/regional.sh link
+  say "Send them production's release"
+  rssh "$ip" "$KH" 'cd ~/hawkeye && scripts/regional-sync.sh' || die "the release did not reach every worker (see above)"
+  say "Prove them"
+  HAWKEYE_REGIONAL_KNOWN_HOSTS="$KH" scripts/regional.sh verify
+  say "Regional workers are running, and customers do not see them yet"
+  echo 'To launch a region: set "launched": true for it in infra/regions.json and merge. The deploy does the rest.'
 }
 
 set_github_secrets() {
@@ -342,6 +377,7 @@ EOF
   rssh "$old" "$INFRA/.known_hosts_old" "cd ~/hawkeye && $COMPOSE up -d"
   smoke_url "https://$SITE"
   warn "GitHub's DEPLOY_HOST still points at the new server; set it back to $old if deploys should go to the old one"
+  [ -z "$(python3 scripts/regions.py workers)" ] || warn "regional workers still know the new server's tunnel key, so they are offline until you finish the rollback or cut over again"
 }
 
 cmd_credentials() { # give an existing server the secret manager credentials, and check that it can use them
@@ -370,6 +406,7 @@ case "$CMD" in
   create)    cmd_create ;;
   stage)     cmd_stage ;;
   cutover)   cmd_cutover ;;
+  regions)   cmd_regions ;;
   rollback)  cmd_rollback ;;
   destroy)   cmd_destroy ;;
   credentials) cmd_credentials ;;

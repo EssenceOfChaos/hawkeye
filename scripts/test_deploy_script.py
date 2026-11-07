@@ -37,8 +37,12 @@ class DeployScriptTests(Base):
         self.git(t, "clone", "-q", str(origin), str(self.repo))
         for d in ("scripts", "deploy"):
             (self.repo / d).mkdir()
-        for name in ("deploy.sh", "sync-secrets.sh", "fetch-secrets.py"):
+        for name in ("deploy.sh", "sync-secrets.sh", "fetch-secrets.py", "regions.py"):
             shutil.copy(HERE / name, self.repo / "scripts" / name)
+        (self.repo / "infra").mkdir()
+        (self.repo / "infra/regions.json").write_text('{"primary": {"name": "US East"}, "workers": {}}')
+        # Records that it ran, and fails when the test asks it to.
+        (self.repo / "scripts/regional-sync.sh").write_text('#!/bin/sh\necho regional-sync >> "$HOME/events"\n[ ! -f "$HOME/sync-fails" ]\n')
         shutil.copy(HERE.parent / "deploy" / "env.manifest", self.repo / "deploy" / "env.manifest")
         (self.repo / "scripts/backup-offsite.sh").write_text("#!/bin/sh\necho backup-ran >> \"$HOME/events\"\n")
         # The smoke test fails while the settings contain SMOKE=fail.
@@ -84,6 +88,67 @@ class DeployScriptTests(Base):
 
     def docker_calls(self):
         return self.log.read_text().splitlines() if self.log.exists() else []
+
+    def events(self):
+        f = self.home / "events"
+        return f.read_text().splitlines() if f.exists() else []
+
+    def launch_a_region(self):
+        """A new commit on origin, as a merged pull request that launches eu-central. Returns its sha."""
+        here = self.head()
+        self.git(self.repo, "checkout", "-q", "main")
+        self.git(self.repo, "reset", "-q", "--hard", self.sha2)
+        (self.repo / "infra/regions.json").write_text('{"primary": {"name": "US East"}, "workers": {"eu-central": {"name": "Europe", "vultr_region": "fra", "tunnel_ip": "10.66.0.2", "launched": true}}}')
+        self.commit("launch")
+        self.git(self.repo, "push", "-q", "origin", "main")
+        sha = self.head()
+        self.git(self.repo, "reset", "-q", "--hard", here)
+        return sha
+
+    # ---- regional workers ----
+
+    def test_workers_are_updated_after_a_healthy_deploy(self):
+        r = self.deploy(self.sha2, no_creds=True)
+        self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+        self.assertIn("regional-sync", self.events())
+
+    def test_a_regional_failure_never_fails_a_production_deploy(self):
+        (self.home / "sync-fails").write_text("")
+        r = self.deploy(self.sha2, no_creds=True)
+        self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+        self.assertEqual(self.head(), self.sha2)
+        self.assertIn("not every regional worker was updated", r.stderr)
+
+    def test_a_failed_deploy_sends_nothing_to_the_workers(self):
+        self.api.secrets["SMOKE"] = "fail"
+        r = self.deploy(self.sha2)
+        self.assertEqual(r.returncode, 1)
+        self.assertEqual(self.head(), self.sha1)
+        self.assertNotIn("regional-sync", self.events())
+
+    def test_launching_a_region_is_a_commit_not_a_setting(self):
+        self.assertNotIn("CHECK_REGIONS", self.settings())
+        r = self.deploy(self.launch_a_region(), no_creds=True)
+        self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+        self.assertEqual(self.settings()["CHECK_REGIONS"], "primary:US East,eu-central:Europe")
+
+    def test_regions_stay_when_settings_are_refreshed_from_the_secret_manager(self):
+        self.assertEqual(self.deploy(self.launch_a_region()).returncode, 0)
+        self.assertEqual(self.settings()["CHECK_REGIONS"], "primary:US East,eu-central:Europe")
+
+    def test_a_settings_refresh_with_no_change_restarts_nothing_even_with_a_region_launched(self):
+        self.assertEqual(self.deploy(self.launch_a_region()).returncode, 0)
+        before = len(self.docker_calls()); events = len(self.events())
+        r = self.deploy("secrets-only")
+        self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+        self.assertIn("nothing to restart", r.stdout)
+        self.assertEqual(len(self.docker_calls()), before)
+        self.assertEqual(len(self.events()), events)
+
+    def test_changed_settings_reach_the_workers(self):
+        r = self.deploy("secrets-only")
+        self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+        self.assertEqual(self.events().count("regional-sync"), 1)
 
     # ---- a normal release ----
 

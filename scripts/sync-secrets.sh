@@ -44,6 +44,10 @@ if [ "$rc" -ne 0 ]; then
   exit "$rc"
 fi
 
+# Check locations come from the repo, not the secret manager (scripts/regions.py). Written before APP_VERSION, the order a release leaves them in, so a
+# refresh with no real change compares as unchanged in scripts/deploy.sh.
+if [ -f "$HERE/regions.py" ]; then python3 "$HERE/regions.py" apply-env "$NEW_APP"; fi
+
 # APP_VERSION is the deploy script's, not the secret manager's: carry the current value over (scripts/deploy.sh sets the new one).
 if [ -f "$APP" ] && grep -q '^APP_VERSION=' "$APP"; then grep '^APP_VERSION=' "$APP" >> "$NEW_APP"; fi
 

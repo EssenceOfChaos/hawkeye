@@ -136,15 +136,64 @@ Migrations are **forward-only**. Make every schema change _expand/contract_: rel
 
 By default there is one location, `primary`, and nothing to configure. To offer more:
 
-1. Set the same `CHECK_REGIONS` on the API, the scheduler and every worker, for example `CHECK_REGIONS=us-east:US East,eu-west:Europe,ap-south:Asia`. The first entry is the primary: monitors that chose no location run there, so **do not rename or reorder it** once monitors exist (old results are labeled with its code).
-2. Run at least one worker per location, started with `WORKER_REGION=<code>` (default: the primary). Workers claim only the jobs queued for their location. Exactly one or two workers (any location) should run the scheduler; set `DISABLE_SCHEDULER=true` on the rest.
+This section explains how locations behave. On the hosted service they are configured in one place, `infra/regions.json`: see "Regional worker hosts" below.
+
+1. The API, the scheduler and every worker share one `CHECK_REGIONS`, for example `primary:US East,eu-central:Europe`. The first entry is the primary: monitors that chose no location run there, so **do not rename or reorder it** once monitors exist (old results are labeled with its code).
+2. At least one worker runs per location, started with `WORKER_REGION=<code>` (default: the primary). Workers claim only the jobs queued for their location. Exactly one or two workers (any location) should run the scheduler; set `DISABLE_SCHEDULER=true` on the rest.
 3. Plans decide how many locations one monitor may use (`plans.max_regions`: Free 1, Pro 3, Agency 5), never more than you have configured. With one location configured nobody sees any multi-location options.
 
 **How a decision is made.** Each location keeps its own failure streak (`FAILURE_THRESHOLD` / `RECOVERY_THRESHOLD` apply per location). A monitor is down while a **majority** of its locations are down (all of them if it has two), so one location's network trouble never opens an incident. Uptime figures count the checks from all locations.
 
-**Reaching the database.** Workers talk to PostgreSQL directly: they claim jobs, read monitor settings *including the decrypted credentials of the monitors they check* (they hold `SECRETS_ENCRYPTION_KEY`), and write results. A worker in another data center therefore needs a private, encrypted path to the database (a VPN or private network between the sites, or the managed database's private endpoint) and `sslmode=verify-full`. **Do not expose PostgreSQL to the public internet**, and treat every location's host as trusted infrastructure. If you cannot give remote hosts that access, keep all workers together and run extra locations only once a probe API exists (not built yet).
+**Reaching the database.** Workers talk to PostgreSQL directly: they claim jobs, read monitor settings *including the decrypted credentials of the monitors they check* (they hold `SECRETS_ENCRYPTION_KEY`), and write results. A worker in another data center therefore needs a private, encrypted path to the database. On a managed database, use its private endpoint with `sslmode=verify-full`; with the database on the production server, the tunnel below is that path and does the encrypting. **Do not expose PostgreSQL to the public internet**, and treat every location's host as trusted infrastructure: anyone who controls one can read the whole database, not just its own region's monitors. Moving remote hosts off direct database access needs a probe API (not built yet).
 
 **A location with no workers.** Its jobs queue up and never run; that location's streak stops changing, and the rest of the quorum decides as long as a majority of locations are healthy. Backpressure is per location, so it does not slow the others. Watch `hawkeye_queue_oldest_age_seconds` (not yet per location) and remove the location from `CHECK_REGIONS` if you retire it: monitors that listed it fall back to the locations that remain.
+
+## Regional worker hosts
+
+How the production server (the hub) and a small server per extra location fit together, with the database on the hub (`docker-compose.local-db.yml`):
+
+```
+ Frankfurt: check worker ──┐  WireGuard, UDP 51820                 ┌── hub: 10.66.0.1:5432 ──▶ db container 172.30.10.5:5432
+ Sydney:    check worker ──┴── (each worker dials out) ────────────┘   everything else arriving on the tunnel is dropped
+```
+
+| Piece | Where | What it does |
+|---|---|---|
+| The list of locations | `infra/regions.json` | the one source. OpenTofu creates a host for each worker in it, and each release works out `CHECK_REGIONS` from it. Nobody sets that by hand: a value in the secret manager is overwritten |
+| Hosts and firewall rules | `infra/workers.tf` | one small server per worker (production workspace only). Nothing exists until the file lists one |
+| First boot | `infra/worker-cloud-init.yaml.tftpl` | Docker, key-only SSH, SSH-only `ufw`, the egress firewall, the heartbeat. No secrets and no secret manager credentials |
+| Tunnel | `deploy/wireguard.sh` | each host makes its own key, which never leaves it |
+| Worker | `deploy/docker-compose.worker.yml` | one container with `WORKER_CHECKS_ONLY=true`. It never builds: it runs the image production is running |
+| Every release | `scripts/regional-sync.sh`, `scripts/regional-receive.sh` | the production server sends each worker the image and its settings through the tunnel, by itself |
+
+**What happens without you.** Each healthy deploy and each change of settings runs `scripts/regional-sync.sh` from `scripts/deploy.sh`:
+
+- The worker gets the same release and the current settings. If it does not become healthy it goes back to the release it had, by itself.
+- A problem with a worker never fails or rolls back a production deploy. Other workers still update, and the "HawkEye regional deploys" check in healthchecks.io goes down until a deploy reaches them all.
+- A failed production deploy sends workers nothing.
+- Each worker pings its own "HawkEye worker <code>" check every minute. Its health check needs the database, so a missed ping means the host, the container or the tunnel has a problem. The production server creates these checks, with all your integrations attached, when `HEALTHCHECKS_API_KEY` is in the secret manager (a read-write key from your healthchecks.io project). Free accounts allow 20 checks.
+
+**Checks-only workers.** `WORKER_CHECKS_ONLY=true` runs checks and the canary and nothing else: no scheduler, alert delivery, billing, or scheduled emails, all of which stay on the primary. An incident a regional check opens is delivered by the primary's dispatcher. So a regional host holds two secrets, `DATABASE_URL` and `SECRETS_ENCRYPTION_KEY`, and production's rules for SMTP, session and URL settings are skipped for it. The API refuses to start with this setting.
+
+**Why the tunnel forwards with firewall rules.** Publishing the database's port on the tunnel address would stop PostgreSQL, and so every production deploy, from starting whenever the tunnel is down. Instead, `PostUp` rules on `wg0` forward port 5432 and drop everything else, so the Compose stack is unchanged and a broken tunnel affects only the regions. The database has no TLS, so regional workers use `sslmode=disable` with `ALLOW_INSECURE_DATABASE=true`: the tunnel encrypts that connection, and it never leaves the tunnel unencrypted.
+
+**Migrations.** A deploy migrates first and updates workers just after, so for a moment workers run the previous code against the new schema. A migration therefore has to work with the release before it: add now, remove in a later release. `scripts/check_migrations.py` fails CI on a new migration that drops or renames something, unless it carries a `-- worker-safe: reason` line. It reads the SQL, so it cannot catch every unsafe change.
+
+**Adding a region.** Customers see nothing until the last step.
+
+1. Add it to `infra/regions.json` with `"launched": false` and a new `tunnel_ip`, and merge. Nothing happens yet, because the worker does not exist.
+2. From your machine: `scripts/rebuild.sh regions`. It shows the plan and asks you to type `regions`. It stops if the plan touches anything except workers. It then creates the host, builds the tunnel (which installs WireGuard on the production server the first time, restarting nothing), sends it production's release, and proves it is healthy, on the right release, and behind a working egress firewall. Running tunnels are not interrupted.
+3. Leave it running and read `scripts/regional.sh status`. It is idle, because nothing queues jobs for it yet.
+4. **Launch:** set `"launched": true` and merge. The deploy updates `CHECK_REGIONS` and customers can choose it.
+5. Watch how fast regional jobs complete. Every database call from Sydney crosses the Pacific, so a regional worker handles fewer checks per minute than the primary. Measure this on real traffic before promoting the feature.
+
+**Taking a region away.** Set `"launched": false` and merge: monitors that used it fall back to the locations that remain. Then remove it from the file, merge, and run `scripts/rebuild.sh regions`, which deletes the host.
+
+**When something breaks.**
+
+- *A worker died:* `tofu taint 'vultr_instance.worker["<code>"]'`, then `scripts/rebuild.sh regions`. Only that region is affected, and the rest of the quorum decides meanwhile.
+- *The production server was replaced:* `scripts/rebuild.sh cutover` reconnects the workers by itself. Their tunnel is down from the moment the old server stops until then. After a `rollback` they stay offline until you cut over again.
+- *The hub's tunnel restarted:* workers reconnect by themselves within about 15 seconds.
 
 ## Local production-like stack
 
