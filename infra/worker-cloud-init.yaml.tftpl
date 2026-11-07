@@ -1,0 +1,102 @@
+#cloud-config
+# First-boot setup for a regional check worker. Runs once. Rendered by OpenTofu/Terraform (infra/workers.tf); NO secrets belong in this file.
+# What it leaves you with: the deploy user, key-only SSH, ufw (SSH only), fail2ban, Docker, WireGuard with this host's own key, the repo at
+# /home/deploy/hawkeye, the worker egress firewall and the heartbeat. What it does not do: join the tunnel, write .env.worker or start the
+# worker. `scripts/rebuild.sh regions` joins it to the tunnel; after that the production server sends it every release and its settings
+# (scripts/regional-sync.sh). This host never gets the secret manager's credentials.
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - iptables
+  - wireguard-tools
+  - cron
+
+users:
+  - default
+  - name: deploy
+    gecos: HawkEye deploy
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${jsonencode(ssh_public_key)}
+
+write_files:
+  # Key-only SSH, no root login. This file sorts before cloud-init's own 50-cloud-init.conf, and sshd uses the first value it sees.
+  - path: /etc/ssh/sshd_config.d/10-hawkeye.conf
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+
+  # The same egress firewall as the production server (deploy/egress-filter.sh), except that the one private address the checks may reach
+  # is the database's end of the tunnel. It reapplies at every boot.
+  - path: /etc/systemd/system/hawkeye-egress.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=HawkEye worker egress filter
+      After=docker.service
+      Requires=docker.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/home/deploy/hawkeye
+      Environment=ALLOW_TCP=${hub_tunnel_ip}:5432
+      Environment=ALLOW_DNS=${dns_resolvers}
+      ExecStart=/home/deploy/hawkeye/deploy/egress-filter.sh apply
+      ExecStop=/home/deploy/hawkeye/deploy/egress-filter.sh remove
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # Heartbeat to healthchecks.io every minute. Silent until the production server has sent this host its ping address.
+  - path: /etc/cron.d/hawkeye-heartbeat
+    permissions: "0644"
+    content: |
+      * * * * * deploy /home/deploy/hawkeye/scripts/regional-heartbeat.sh >/dev/null 2>&1
+
+  - path: /usr/local/sbin/hawkeye-firstboot.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euxo pipefail
+
+      if [ ${swap_gb} -gt 0 ] && [ ! -f /swapfile ]; then
+        fallocate -l ${swap_gb}G /swapfile
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+      fi
+
+      # Docker Engine and Compose v2 from Docker's own installer.
+      curl -fsSL https://get.docker.com | sh
+      usermod -aG docker deploy
+      systemctl enable --now docker
+
+      # Host firewall (Vultr's network firewall is the outer layer). Nothing but SSH comes in: the worker dials out.
+      ufw default deny incoming
+      ufw default allow outgoing
+      ufw allow OpenSSH
+      ufw --force enable
+      systemctl restart ssh
+
+      # The repo, then the egress rules (the unit runs a script from the repo).
+      sudo -u deploy git clone ${repo_url} /home/deploy/hawkeye
+      systemctl daemon-reload
+      systemctl enable --now hawkeye-egress
+
+      touch /var/lib/hawkeye-firstboot-done
+      echo "first-boot setup finished"
+
+runcmd:
+  - [bash, -c, "/usr/local/sbin/hawkeye-firstboot.sh > /var/log/hawkeye-cloud-init.log 2>&1"]

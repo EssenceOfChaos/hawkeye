@@ -105,3 +105,21 @@ variable "dns_ttl" {
   type        = number
   default     = 60
 }
+
+variable "regions_file" {
+  description = "The list of check locations, relative to infra/. Only the tests change this."
+  type        = string
+  default     = "regions.json"
+}
+
+variable "worker_plan" {
+  description = "Vultr plan for worker hosts. They run one 512 MB container and never build images, so the smallest 1 GB plan is the starting point."
+  type        = string
+  default     = "vc2-1c-1gb"
+}
+
+variable "worker_swap_gb" {
+  description = "Swap file size on worker hosts: a cushion for a memory spike, not a way to run builds there."
+  type        = number
+  default     = 1
+}

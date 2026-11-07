@@ -29,6 +29,11 @@ main() {
   SITE="$(sed -n 's/^SITE_ADDRESS=\([^ #]*\).*/\1/p' .env.production)"
   [ -n "$SITE" ] || { echo "SITE_ADDRESS not found in .env.production" >&2; exit 1; }
 
+  # Check locations come from infra/regions.json in the release itself, never from the secret manager, so a release and its regions move together.
+  apply_regions() { [ ! -f scripts/regions.py ] || python3 scripts/regions.py apply-env .env.production; }
+  # Sends this release and its settings to the regional workers. A problem with a worker never fails production: it stays on the release it had and an
+  # alert goes out (scripts/regional-sync.sh). The script is missing when rolling back to a release from before it existed.
+  update_regions() { [ ! -x scripts/regional-sync.sh ] || scripts/regional-sync.sh || echo "!! not every regional worker was updated; production is fine" >&2; }
   healthy() { # smoke test against the public URL, retrying while containers settle
     local i
     for i in $(seq 1 "${HEALTH_TRIES:-6}"); do   # HEALTH_TRIES and HEALTH_WAIT exist so the tests need not wait a minute
@@ -49,6 +54,7 @@ main() {
         *) echo "!! the settings were not refreshed (exit $rc), so this release is not started" >&2; return 1 ;;
       esac
     fi
+    apply_regions || return 1
     sed -i '/^APP_VERSION=/d' .env.production; echo "APP_VERSION=${sha:0:12}" >> .env.production   # shown in logs and Sentry; also tags the images
     "${COMPOSE[@]}" up -d --build --remove-orphans
   }
@@ -60,10 +66,11 @@ main() {
     echo "== refreshing settings from the secret manager (no new code)"
     rc=0; scripts/sync-secrets.sh || rc=$?
     if [ "$rc" -ne 0 ]; then echo "!! settings were not refreshed (exit $rc): nothing was changed" >&2; exit 1; fi
+    apply_regions
     # The header comment carries the time it was written, so compare the settings themselves.
     if diff -q <(grep -v '^#' .env.production) <(grep -v '^#' .env.production.previous) >/dev/null; then echo "== the settings have not changed: nothing to restart"; exit 0; fi
     "${COMPOSE[@]}" up -d --remove-orphans
-    if healthy; then echo "== settings applied: smoke test passed"; exit 0; fi
+    if healthy; then echo "== settings applied: smoke test passed"; update_regions; exit 0; fi
     echo "!! the site is unhealthy with the new settings; putting the previous ones back" >&2
     cp -p .env.production.previous .env.production
     "${COMPOSE[@]}" up -d --remove-orphans
@@ -89,6 +96,7 @@ main() {
   if release "$TARGET" && healthy; then
     docker image prune -f >/dev/null
     echo "== deployed ${TARGET:0:12}: smoke test passed"
+    update_regions
     exit 0
   fi
 
@@ -98,7 +106,7 @@ main() {
   release "$PREVIOUS" keep
   if healthy; then echo "!! rolled back: ${PREVIOUS:0:12} is live again. The failed release did not go out." >&2
   else echo "!! ROLLBACK ALSO FAILED: the site needs attention (docker compose logs on the VM)" >&2; fi
-  exit 1
+  exit 1   # workers were not sent the failed release: they update only after a healthy deploy
 }
 main "$@"
 exit $?

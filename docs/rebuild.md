@@ -72,3 +72,4 @@ To switch it on for a server made before the cron entry existed: add `* * * * * 
   edit it by hand.
 - Cost: the instance bills hourly until destroyed; a reserved IP and Vultr's automatic backups add to it (`enable_backups = false` turns the backups off). A rehearsal costs cents if you destroy it.
 - First boot is proven only by running it. The egress rules still need `scripts/verify-egress.sh` on the new server.
+- Regional workers (`infra/workers.tf`, off until `infra/regions.json` lists one) are created by `scripts/rebuild.sh regions`, and `cutover` reconnects them to a new server by itself. See "Regional worker hosts" in `docs/deployment.md`. `tofu test` from `infra/` checks this configuration against mock providers, with no tokens.

@@ -1,0 +1,6 @@
+{
+  "primary": { "name": "US East" },
+  "workers": {
+    "eu-central": { "name": "Europe", "vultr_region": "fra", "tunnel_ip": "10.66.0.1", "launched": false }
+  }
+}
