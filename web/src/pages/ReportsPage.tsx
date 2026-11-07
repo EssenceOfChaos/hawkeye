@@ -8,6 +8,7 @@ import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
 import { reportMonths, reportPdfPath } from '../format'
 import { useApi } from '../hooks'
+import { Toggle } from '../components/Toggle'
 
 const MAX_LOGO_BYTES = 512 * 1024
 
@@ -59,9 +60,8 @@ export function ReportsPage() {
     void change(() => api<BrandingView>('PUT', '/branding', { display_name: shownName }), 'Saved.').then((ok) => ok && setName(null))
   }
 
-  function toggleMonthly(e: ChangeEvent<HTMLInputElement>) {
-    const on = e.target.checked
-    void change(() => api<BrandingView>('PUT', '/branding', { monthly_report_email: on }), on ? 'Monthly emails are on.' : 'Monthly emails are off.')
+  function toggleMonthly(on: boolean) {
+    return change(() => api<BrandingView>('PUT', '/branding', { monthly_report_email: on }), on ? 'Monthly emails are on.' : 'Monthly emails are off.')
   }
 
   function uploadLogo(e: ChangeEvent<HTMLInputElement>) {
@@ -133,15 +133,9 @@ export function ReportsPage() {
         <h2 id="mail-h">Monthly email</h2>
         <p>On the 1st of each month, HawkEye emails last month’s reports, one PDF per website, to the owners of this workspace. You forward each one to your client.</p>
         {current && !canReport && <Alert tone="info">Monthly report emails are included in the Pro and Agency plans. <Link to="/billing">See plans</Link></Alert>}
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={current?.branding.monthly_report_email ?? false}
-            disabled={!current || !canReport || !isOwner || busy}
-            onChange={toggleMonthly}
-          />
-          <span>Email me the reports every month</span>
-        </label>
+        <Toggle className="check" checked={current?.branding.monthly_report_email ?? false} disabled={!current || !canReport || !isOwner || busy} onToggle={toggleMonthly}>
+          Email me the reports every month
+        </Toggle>
         {current && canReport && !isOwner && <small className="hint">Only an owner of the workspace can change this.</small>}
       </section>
 

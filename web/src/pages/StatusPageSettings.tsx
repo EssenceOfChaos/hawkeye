@@ -7,6 +7,7 @@ import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
+import { Toggle } from '../components/Toggle'
 
 /** A notice passed to the list after saving or deleting a page. */
 type ListState = { notice?: string } | null
@@ -287,9 +288,7 @@ export function StatusPageEditor() {
                     <small className="hint">Create the page first, then add your client’s logo.</small>
                   )}
                 </div>
-                <label>
-                  <input type="checkbox" checked={accent !== ''} onChange={(e) => setAccent(e.target.checked ? '#1a73e8' : '')} /> Use an accent color for the header
-                </label>
+                <Toggle checked={accent !== ''} onToggle={(on) => setAccent(on ? '#1a73e8' : '')}>Use an accent color for the header</Toggle>
                 {accent !== '' && (
                   <div className="field">
                     <label htmlFor="accent">Accent color</label>
@@ -302,14 +301,10 @@ export function StatusPageEditor() {
                 <Field label="Link back to your client’s website (optional)" type="url" value={website} onChange={(e) => setWebsite(e.target.value)} error={fields.website_url}
                   placeholder="https://www.example.com" hint="Shown above the page title as “← Back to example.com”." />
               </fieldset>
-              <label>
-                <input type="checkbox" checked={hidePoweredBy} disabled={!canWhiteLabel && !hidePoweredBy} onChange={(e) => setHidePoweredBy(e.target.checked)} /> Hide “Powered by HawkEye”
-              </label>
+              <Toggle checked={hidePoweredBy} disabled={!canWhiteLabel && !hidePoweredBy} onToggle={setHidePoweredBy}>Hide “Powered by HawkEye”</Toggle>
               {!canWhiteLabel && <small className="hint">Included in the Agency plan.</small>}
             </fieldset>
-            <label>
-              <input type="checkbox" className="d-toggle d-toggle-sm" checked={published} onChange={(e) => setPublished(e.target.checked)} /> Publish — anyone with the link can see this page
-            </label>
+            <Toggle checked={published} onToggle={setPublished}>Publish — anyone with the link can see this page</Toggle>
           </fieldset>
           {isOwner ? (
             <p>

@@ -31,6 +31,22 @@ export function rotateScramble(el: HTMLElement, phrases: string[], { hold = 2600
   }
 }
 
+/** Shakes `el` briefly, to show that a change did not stick. Pair it with a message: with reduced motion the shake is skipped. */
+export function shake(el: HTMLElement) {
+  if (prefersReducedMotion()) return
+  animate(el, { translateX: [{ to: -5 }, { to: 5 }, { to: -3 }, { to: 3 }, { to: 0 }], duration: 320, ease: 'inOutSine' })
+}
+
+/** Fades and lifts the children of `el` in a quick stagger. Returns a cleanup that puts them back. */
+export function appear(el: HTMLElement): () => void {
+  const items = Array.from(el.children) as HTMLElement[]
+  if (items.length === 0) return () => {}
+  const fade = animate(items, { opacity: [0, 1], translateY: [10, 0], duration: 320, ease: 'outCubic', delay: stagger(45) })
+  return () => {
+    fade.revert()
+  }
+}
+
 /** Moves `el` slightly slower than the page while `trigger` is on screen. */
 export function parallax(el: HTMLElement, trigger: HTMLElement) {
   animate(el, {

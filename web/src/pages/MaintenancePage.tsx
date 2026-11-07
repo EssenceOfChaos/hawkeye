@@ -6,6 +6,7 @@ import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
+import { Toggle } from '../components/Toggle'
 
 const REPEAT_LABEL: Record<MaintenanceWindow['repeat'], string> = { none: 'One time', daily: 'Every day', weekly: 'Every week' }
 const DURATIONS = [
@@ -177,7 +178,7 @@ export function MaintenancePage() {
             </div>
             <fieldset className="field">
               <legend>Applies to</legend>
-              <label><input type="checkbox" className="d-toggle d-toggle-sm" checked={all} onChange={(e) => setAll(e.target.checked)} /> All monitors, including ones added later</label>
+              <Toggle checked={all} onToggle={setAll}>All monitors, including ones added later</Toggle>
               {!all &&
                 monitors.map((m) => (
                   <label key={m.id}>

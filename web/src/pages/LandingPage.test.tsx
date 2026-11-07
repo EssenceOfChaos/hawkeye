@@ -88,6 +88,14 @@ describe('LandingPage', () => {
     icons.forEach((img) => expect(img).toHaveAttribute('alt', ''))
   })
 
+  it('gives every feature card its own icon, including the locations card', async () => {
+    const { container } = renderLanding(() => json(200, { plans: [{ code: 'pro', max_regions: 3 }] }))
+    await screen.findByRole('heading', { name: 'Checks from several locations' })
+    const icons = Array.from(container.querySelectorAll('.feature img')).map((img) => img.getAttribute('src'))
+    expect(icons.length).toBeGreaterThanOrEqual(13)
+    expect(new Set(icons).size).toBe(icons.length)
+  })
+
   it('social icons link to the HawkEye accounts in a new tab', () => {
     renderLanding(() => json(200, { plans: [] }))
     const expected = {

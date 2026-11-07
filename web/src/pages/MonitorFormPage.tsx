@@ -29,6 +29,7 @@ import { KeywordChecks } from '../components/KeywordChecks'
 import { TagPicker } from '../components/Tags'
 import { AlertTiming } from '../components/AlertTiming'
 import { DurationField } from '../components/Heartbeat'
+import { Toggle } from '../components/Toggle'
 
 /** The server allows this many checks in total: text checks and JSON checks together. */
 const MAX_CHECKS = 10
@@ -518,9 +519,7 @@ export function MonitorFormPage() {
 
           <fieldset className="group">
             <legend>Slow-response alert</legend>
-            <label>
-              <input type="checkbox" checked={slowOn} onChange={(e) => setSlowOn(e.target.checked)} /> Alert me when this site responds slowly
-            </label>
+            <Toggle checked={slowOn} onToggle={setSlowOn}>Alert me when this site responds slowly</Toggle>
             {slowOn ? (
               <>
                 <Field label="Slower than (milliseconds)" type="number" required min={100} max={59999} step={100} value={slowMs}

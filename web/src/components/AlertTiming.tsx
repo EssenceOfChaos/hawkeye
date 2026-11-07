@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { QuietHours } from '../api'
+import { Toggle } from './Toggle'
 
 /** The waits offered before announcing an outage, in minutes. */
 const DELAYS = [0, 5, 10, 15, 30, 60, 120]
@@ -51,10 +52,7 @@ export function AlertTiming({ delay, onDelay, quiet, onQuiet, errors }: {
         </small>
       </div>
 
-      <label>
-        <input type="checkbox" checked={quiet !== null}
-          onChange={(e) => onQuiet(e.target.checked ? { start: '22:00', end: '07:00', timezone: localTimeZone() } : null)} /> Quiet hours for this monitor
-      </label>
+      <Toggle checked={quiet !== null} onToggle={(on) => onQuiet(on ? { start: '22:00', end: '07:00', timezone: localTimeZone() } : null)}>Quiet hours for this monitor</Toggle>
       {quiet && (
         <>
           <div className="kv-row">

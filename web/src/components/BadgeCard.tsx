@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api, ApiError, type Monitor, type Plan, type StatusPageConfig } from '../api'
 import { Alert } from './Alert'
+import { Appear } from './Appear'
+import { Toggle } from './Toggle'
 import { badgeLink, BADGE_SIZES as SIZES, snippets, type BadgeSize as Size } from '../badge'
 
 /** A read-only value with a Copy button. */
@@ -37,8 +39,8 @@ export function BadgeCard({ monitor, plan, isOwner }: { monitor: Monitor; plan: 
     api<{ status_pages: StatusPageConfig[] }>('GET', '/status-pages').then((r) => setPages(r.status_pages), () => undefined)
   }, [token])
 
-  async function toggle(on: boolean) {
-    if (!on && !window.confirm('Turn off the public badge? Anywhere it is embedded it will stop showing. Turning it on again gives it a new address.')) return
+  async function toggle(on: boolean): Promise<boolean> {
+    if (!on && !window.confirm('Turn off the public badge? Anywhere it is embedded it will stop showing. Turning it on again gives it a new address.')) return true
     setBusy(true)
     setError(null)
     try {
@@ -47,8 +49,10 @@ export function BadgeCard({ monitor, plan, isOwner }: { monitor: Monitor; plan: 
         await api('DELETE', `/monitors/${monitor.id}/badge`)
         setToken(null)
       }
+      return true
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'That did not work. Try again.')
+      return false
     } finally {
       setBusy(false)
     }
@@ -64,14 +68,10 @@ export function BadgeCard({ monitor, plan, isOwner }: { monitor: Monitor; plan: 
         monitor’s name or address, and it updates every few minutes.
       </p>
       {error && <Alert>{error}</Alert>}
-      {isOwner && (
-        <label>
-          <input type="checkbox" className="d-toggle d-toggle-sm" checked={Boolean(token)} disabled={busy} onChange={(e) => void toggle(e.target.checked)} /> Public uptime badge
-        </label>
-      )}
+      {isOwner && <Toggle checked={Boolean(token)} busy={busy} onToggle={toggle}>Public uptime badge</Toggle>}
       {!token && !isOwner && <p className="hint">The organization’s owner can turn on a public badge for this monitor.</p>}
       {token && code && (
-        <>
+        <Appear play={token !== monitor.badge_token}>
           <fieldset className="field">
             <legend>Size</legend>
             {(Object.keys(SIZES) as Size[]).map((k) => (
@@ -105,7 +105,7 @@ export function BadgeCard({ monitor, plan, isOwner }: { monitor: Monitor; plan: 
                 ? 'The badge links to your public status page that shows this monitor.'
                 : 'Add this monitor to a published status page and the badge will link to it.'}
           </p>
-        </>
+        </Appear>
       )}
     </section>
   )
