@@ -156,8 +156,24 @@ database index). Deleting a monitor closes its open incident silently.
 | `GET /incidents` | organization-wide, newest first. Query: `status` (`open`/`resolved`), `from`, `to` (RFC 3339, on `started_at`), `limit` (1–100, default 25), `offset` |
 | `GET /monitors/:id/incidents` | same filters for one monitor; 404 if it belongs to another organization |
 
-Incident: `{id, monitor_id, monitor_name, started_at, resolved_at, status, cause_category, summary, duration_seconds}`
-(`duration_seconds` is the elapsed time so far while open).
+Incident: `{id, monitor_id, monitor_name, started_at, resolved_at, status, cause_category, summary, duration_seconds, update_count}`
+(`duration_seconds` is the elapsed time so far while open; `update_count` is how many updates have been posted on it).
+
+### Incident updates
+
+Notes the team posts on an incident ("Investigating", "Fixed"). They appear under the incident on every **published** status page that lists its monitor,
+newest first, with their status, text and time, never who posted them. They are plain text: neither the API nor the page turns them into markup or links
+(migration `000032`). Every plan includes them.
+
+| Method & path | Who | Notes |
+|---|---|---|
+| `GET /incidents/:id/updates` | any member | `{updates: [{id, incident_id, status, message, author_email, created_at}], status_pages: [{title, slug}]}`, newest first. `status_pages` are the published pages that show these updates (empty: only the team sees them). `author_email` is null once that account is gone |
+| `POST /incidents/:id/updates` | owner | `{status, message}` → 201 `{update}`. `status`: `investigating`, `identified`, `monitoring` or `resolved` (a label only: the incident still opens and resolves from the checks). `message`: 1–1,000 characters after trimming; `\r\n` becomes `\n`; control and text-direction characters are refused (400 `VALIDATION_ERROR` on `message`). At most 50 per incident. Works on open and resolved incidents. Rate-limited per IP |
+| `DELETE /incidents/:id/updates/:updateID` | owner | 204 |
+
+Another organization's incident, or a malformed id, is a 404. Posting or deleting clears the server's cache of public pages, so the next request shows the
+change; a browser that already loaded a page may keep its copy for up to 30 seconds (`Cache-Control: max-age=30`). Updates go when their incident does
+(retention, or deleting the monitor or the account), are in the account export, and stay without an author when that person's account is deleted.
 
 ## Reports, history and the dashboard
 
@@ -252,7 +268,7 @@ Public pages at `/status/<slug>`. An organization may have as many as its plan i
 
 | Method & path | Who | Notes |
 |---|---|---|
-| `GET /public/status/:slug` | **no login** | `{branding, title, description, overall, monitors: [{name, state, uptime_percent, days: [{date, uptime_percent, status}]}], incidents: [{monitor, started_at, resolved_at}], history_days, generated_at}`. `overall` is `operational`, `partial_outage`, `major_outage` or `maintenance`; `state` is `up`, `down`, `maintenance` or `unknown` (paused / no check yet); day `status` is `ok` (≥ 99.5 %), `degraded` (≥ 95 %), `down` or `none` (fewer than 5 checks). Uptime leaves out checks made during maintenance windows. `history_days` is 90, or the plan's retention if shorter (Free: 7). Incidents are those from the last 14 days. Cached for 30 s (`Cache-Control: public, max-age=30`); 120 requests/min/IP |
+| `GET /public/status/:slug` | **no login** | `{branding, title, description, overall, monitors: [{name, state, uptime_percent, days: [{date, uptime_percent, status}]}], incidents: [{monitor, started_at, resolved_at, updates: [{status, message, posted_at}]}], history_days, generated_at}`. `overall` is `operational`, `partial_outage`, `major_outage` or `maintenance`; `state` is `up`, `down`, `maintenance` or `unknown` (paused / no check yet); day `status` is `ok` (≥ 99.5 %), `degraded` (≥ 95 %), `down` or `none` (fewer than 5 checks). Uptime leaves out checks made during maintenance windows. `history_days` is 90, or the plan's retention if shorter (Free: 7). Incidents are those from the last 14 days. Cached for 30 s (`Cache-Control: public, max-age=30`); 120 requests/min/IP |
 | `GET /status-pages` | any member | `{status_pages: [{id, slug, title, description, published, monitors: [{monitor_id, display_name}], accent_color, website_url, hide_powered_by, has_logo, logo_version}], max}`, oldest first; `max` is the plan's limit |
 | `POST /status-pages` | owner | `{slug, title, description?, published, monitors, accent_color?, website_url?, hide_powered_by?}` → 201 `{status_page}`. `slug`: 3–40 lowercase letters, digits, hyphens. `display_name` empty = the monitor's own name. Publishing needs at least one monitor. 409 `SLUG_TAKEN`, 400 `VALIDATION_ERROR` (for example a monitor from another organization), 403 `PLAN_LIMIT_REACHED` with `limit_type: "status_pages"` |
 | `GET /status-pages/:id` | any member | `{status_page}`; another organization's page (or a malformed id) is a 404 |

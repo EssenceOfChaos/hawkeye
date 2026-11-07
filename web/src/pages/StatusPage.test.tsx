@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -50,6 +50,20 @@ describe('public StatusPage', () => {
     expect(await screen.findByText(/Some systems are experiencing problems/)).toBeInTheDocument()
     expect(screen.getByText(/✖ Offline/)).toBeInTheDocument()
     expect(screen.getByText(/ongoing/)).toBeInTheDocument()
+  })
+
+  it('shows the owner’s updates under an incident as plain text, newest first', async () => {
+    renderPublic(() => json(200, page({ incidents: [{ monitor: 'Website', started_at: '2026-10-15T10:00:00Z', resolved_at: null, updates: [
+      { status: 'monitoring', message: 'A fix is out.\nWatching it.', posted_at: '2026-10-15T11:00:00Z' },
+      { status: 'investigating', message: '<b>Bold?</b> <a href="https://evil.example">link</a>', posted_at: '2026-10-15T10:05:00Z' },
+    ] }] })))
+    const list = await screen.findByRole('list', { name: /Updates on Website/ })
+    const items = within(list).getAllByRole('listitem')
+    expect(items[0]).toHaveTextContent('Monitoring')
+    expect(items[1]).toHaveTextContent('Investigating')
+    // Markup arrives as text and stays text: no element, no link.
+    expect(within(items[1]).getByText('<b>Bold?</b> <a href="https://evil.example">link</a>')).toBeInTheDocument()
+    expect(list.querySelector('b, a')).toBeNull()
   })
 
   it('shows the standard look, with Powered by HawkEye, when the page has no branding', async () => {

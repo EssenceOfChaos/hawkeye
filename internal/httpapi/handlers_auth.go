@@ -17,6 +17,7 @@ import (
 	"hawkeye/internal/contact"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/heartbeats"
+	"hawkeye/internal/incidents"
 	"hawkeye/internal/invitations"
 	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/maintenance"
@@ -115,6 +116,10 @@ func mapError(err error) error {
 		return &APIError{Status: http.StatusConflict, Code: "NO_BILLING_ACCOUNT", Message: "There is no billing account yet. Choose a plan first."}
 	case errors.Is(err, billing.ErrNoSubscription):
 		return &APIError{Status: http.StatusConflict, Code: "NO_ACTIVE_SUBSCRIPTION", Message: "There is no active subscription."}
+	case errors.Is(err, incidents.ErrIncidentNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Incident not found."}
+	case errors.Is(err, incidents.ErrUpdateNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Update not found."}
 	case errors.Is(err, statuspage.ErrNotFound):
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Status page not found."}
 	case errors.Is(err, statuspage.ErrSlugTaken):

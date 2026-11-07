@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { availableRanges, formatMoney, formatMs, formatUptime, reportMonths, reportPdfPath } from './format'
+import { availableRanges, formatMoney, formatMs, formatUptime, reportMonths, reportPdfPath, timeAgo } from './format'
 
 describe('format', () => {
   it('formats uptime without false precision or rounding up', () => {
@@ -61,5 +61,24 @@ describe('reportPdfPath', () => {
     expect(reportPdfPath('../../auth/me?x=', '2026-09')).toBe('/api/v1/monitors/..%2F..%2Fauth%2Fme%3Fx%3D/report.pdf?month=2026-09')
     expect(reportPdfPath('m1', '2026-09&download=1#x')).toBe('/api/v1/monitors/m1/report.pdf?month=2026-09%26download%3D1%23x')
     expect(reportPdfPath('m1', 'javascript:alert(1)')).toMatch(/^\/api\/v1\/monitors\/m1\/report\.pdf\?month=javascript%3Aalert/)
+  })
+})
+
+describe('timeAgo', () => {
+  const now = Date.parse('2026-11-07T12:00:00Z')
+  const ago = (s: number) => timeAgo(new Date(now - s * 1000).toISOString(), now)
+  it('says how long ago, in the largest whole unit', () => {
+    expect(ago(10)).toBe('just now')
+    expect(ago(50)).toBe('1 minute ago')
+    expect(ago(3 * 60)).toBe('3 minutes ago')
+    expect(ago(59 * 60 + 59)).toBe('59 minutes ago')
+    expect(ago(60 * 60)).toBe('1 hour ago')
+    expect(ago(5 * 3600 + 1800)).toBe('5 hours ago')
+    expect(ago(24 * 3600)).toBe('1 day ago')
+    expect(ago(2 * 86400 + 3600)).toBe('2 days ago')
+  })
+  it('treats a time slightly in the future, or nonsense, as now', () => {
+    expect(ago(-30)).toBe('just now')
+    expect(timeAgo('not a date', now)).toBe('just now')
   })
 })

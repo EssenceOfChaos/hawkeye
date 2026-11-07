@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router'
 import { api, ApiError, type PublicStatus } from '../api'
 import { Alert } from '../components/Alert'
+import { UpdateStatusBadge } from '../components/IncidentUpdates'
 import { isHexColor, readableTextOn } from '../color'
 
 const OVERALL: Record<PublicStatus['overall'], string> = {
@@ -139,10 +140,21 @@ export function StatusPage() {
       {data.incidents.length === 0 ? (
         <p className="hint">No incidents in the last 14 days.</p>
       ) : (
-        <ul>
+        <ul className="incident-list">
           {data.incidents.map((i) => (
             <li key={`${i.monitor}-${i.started_at}`}>
               <strong>{i.monitor}</strong> — {i.resolved_at ? `unavailable ${when(i.started_at)}, resolved ${when(i.resolved_at)}` : `unavailable since ${when(i.started_at)} (ongoing)`}
+              {/* Plain text from the site's owner: React shows it as text, so nothing in it can become markup or a link. */}
+              {(i.updates ?? []).length > 0 && (
+                <ol className="update-list" aria-label={`Updates on ${i.monitor}, newest first`}>
+                  {(i.updates ?? []).map((u) => (
+                    <li key={`${u.posted_at}-${u.status}`}>
+                      <div className="update-head"><UpdateStatusBadge status={u.status} /><time dateTime={u.posted_at}>{when(u.posted_at)}</time></div>
+                      <p className="update-message">{u.message}</p>
+                    </li>
+                  ))}
+                </ol>
+              )}
             </li>
           ))}
         </ul>

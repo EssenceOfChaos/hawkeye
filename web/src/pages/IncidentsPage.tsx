@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, type Incident } from '../api'
 import { Alert } from '../components/Alert'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
+import { IncidentUpdates } from '../components/IncidentUpdates'
+import { useAuth } from '../auth'
 
 const PAGE_SIZE = 25
 
@@ -44,6 +46,9 @@ export function IncidentsPage() {
   const [offset, setOffset] = useState(0)
   const [filter, setFilter] = useState<'' | 'open' | 'resolved'>('')
   const [error, setError] = useState<string | null>(null)
+  const [open, setOpen] = useState<string | null>(null)
+  const { organization } = useAuth()
+  const isOwner = organization?.role === 'owner'
 
   const load = useCallback(async () => {
     try {
@@ -77,7 +82,10 @@ export function IncidentsPage() {
           </select>
         </label>
       </div>
-      <p>An incident starts when an outage is confirmed by consecutive failed checks and ends when the site has recovered.</p>
+      <p>
+        An incident starts when an outage is confirmed by consecutive failed checks and ends when the site has recovered. Post updates on an incident
+        to tell visitors to your status pages what is happening.
+      </p>
 
       {error && <Alert>{error}</Alert>}
       {items === null && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading incidents…</p>}
@@ -92,18 +100,38 @@ export function IncidentsPage() {
           <table>
             <caption className="sr-only">Incidents, newest first</caption>
             <thead>
-              <tr><th>Website</th><th>Status</th><th>Started</th><th>Duration</th><th>Cause</th></tr>
+              <tr><th>Website</th><th>Status</th><th>Started</th><th>Duration</th><th>Cause</th><th>Updates</th></tr>
             </thead>
             <tbody>
-              {items.map((i) => (
-                <tr key={i.id}>
-                  <td><Link to={`/monitors/${i.monitor_id}/edit`}>{i.monitor_name}</Link></td>
-                  <td><IncidentStatus status={i.status} /></td>
-                  <td><time dateTime={i.started_at}>{new Date(i.started_at).toLocaleString()}</time></td>
-                  <td>{formatDuration(i.duration_seconds)}{i.status === 'open' && ' so far'}</td>
-                  <td>{i.summary ?? (i.cause_category ? CAUSES[i.cause_category] ?? i.cause_category : '—')}</td>
-                </tr>
-              ))}
+              {items.map((i) => {
+                const n = i.update_count ?? 0
+                const shown = open === i.id
+                return (
+                  <Fragment key={i.id}>
+                    <tr>
+                      <td><Link to={`/monitors/${i.monitor_id}/edit`}>{i.monitor_name}</Link></td>
+                      <td><IncidentStatus status={i.status} /></td>
+                      <td><time dateTime={i.started_at}>{new Date(i.started_at).toLocaleString()}</time></td>
+                      <td>{formatDuration(i.duration_seconds)}{i.status === 'open' && ' so far'}</td>
+                      <td>{i.summary ?? (i.cause_category ? CAUSES[i.cause_category] ?? i.cause_category : '—')}</td>
+                      <td>
+                        <button type="button" className="linklike" aria-expanded={shown} aria-controls={`updates-${i.id}`}
+                          onClick={() => setOpen(shown ? null : i.id)}>
+                          {n > 0 ? `${n} update${n === 1 ? '' : 's'}` : isOwner ? 'Add update' : 'None'}
+                        </button>
+                      </td>
+                    </tr>
+                    {shown && (
+                      <tr className="incident-updates-row" id={`updates-${i.id}`}>
+                        <td colSpan={6}>
+                          <IncidentUpdates incident={i} isOwner={isOwner}
+                            onCountChange={(count) => setItems((all) => all?.map((x) => (x.id === i.id ? { ...x, update_count: count } : x)) ?? all)} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
             </tbody>
           </table>
         </div>

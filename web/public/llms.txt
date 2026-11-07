@@ -14,7 +14,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 - Embeddable uptime badges for a website or a GitHub README, opt-in per monitor.
 - Slow-response alerts: an alert when a site stays slower than a threshold you choose for several checks in a row, and another when it is back to normal.
 - Alerts by email, Slack, Microsoft Teams, Discord or Telegram, or signed JSON webhook, routed per client by tag, with optional alert delays and quiet hours per monitor.
-- Public status pages for your customers: one on the Free plan, several on paid plans (one per client or product).
+- Public status pages for your customers: one on the Free plan, several on paid plans (one per client or product), with incident updates you post while you work on a problem.
 - Maintenance windows that pause alerts during planned work (paid plans).
 - SSL certificate expiry warnings 30, 14, 7 and 1 days before expiry, on every plan.
 - Domain registration expiry warnings on the same schedule, for a number of domains that depends on the plan. Some domain registries do not publish expiry dates; HawkEye says so rather than guessing.

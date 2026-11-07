@@ -1,6 +1,8 @@
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { AuthProvider } from '../auth'
 import { formatDuration, IncidentsPage } from './IncidentsPage'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -13,9 +15,32 @@ const incident = (o: object) => ({
   status: 'open', cause_category: 'timeout', summary: 'Request timed out', duration_seconds: 3700, ...o,
 })
 
-function renderPage(list: unknown[]) {
-  vi.stubGlobal('fetch', vi.fn(() => json(200, { incidents: list, total: list.length })))
-  render(<MemoryRouter><IncidentsPage /></MemoryRouter>)
+type Call = { method: string; url: string; body?: unknown }
+
+function renderPage(list: unknown[], o: { role?: 'owner' | 'member'; pages?: unknown[]; updates?: unknown[] } = {}) {
+  const calls: Call[] = []
+  let updates = o.updates ?? []
+  document.cookie = 'csrf_token=t; path=/'
+  vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET'
+    const body = init?.body ? JSON.parse(init.body as string) : undefined
+    calls.push({ method, url, body })
+    if (url.includes('/auth/me')) {
+      return json(200, { user: { id: 'u', email: 'me@example.com', email_verified_at: '2026-01-01T00:00:00Z' }, organizations: [{ id: 'o', name: 'Org', role: o.role ?? 'owner' }] })
+    }
+    if (url.includes('/updates')) {
+      if (method === 'POST') {
+        const u = { id: `u${updates.length + 1}`, incident_id: 'i1', status: body.status, message: body.message, author_email: 'me@example.com', created_at: '2026-10-12T15:00:00Z' }
+        updates = [u, ...updates]
+        return json(201, { update: u })
+      }
+      if (method === 'DELETE') return Promise.resolve(new Response(null, { status: 204 }))
+      return json(200, { updates, status_pages: o.pages ?? [] })
+    }
+    return json(200, { incidents: list, total: list.length })
+  }))
+  render(<MemoryRouter><AuthProvider><IncidentsPage /></AuthProvider></MemoryRouter>)
+  return calls
 }
 
 describe('IncidentsPage', () => {
@@ -27,6 +52,34 @@ describe('IncidentsPage', () => {
     expect(screen.getByText('1h 1m so far')).toBeInTheDocument()
     expect(screen.getByText('30m')).toBeInTheDocument()
     expect(screen.getByText('DNS lookup failed')).toBeInTheDocument()
+  })
+
+  it('lets the owner post an update, says where it appears, and suggests the next status', async () => {
+    const calls = renderPage([incident({ update_count: 0 })], { pages: [{ title: 'Acme status', slug: 'acme' }] })
+    await userEvent.click(await screen.findByRole('button', { name: 'Add update' }))
+    expect(await screen.findByRole('link', { name: 'Acme status' })).toHaveAttribute('href', '/status/acme')
+    expect(screen.getByLabelText('Status')).toHaveValue('investigating')
+    await userEvent.type(screen.getByLabelText('Update'), 'We are looking into it.')
+    await userEvent.click(screen.getByRole('button', { name: 'Post update' }))
+    expect(await screen.findByText('We are looking into it.')).toBeInTheDocument()
+    expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ status: 'investigating', message: 'We are looking into it.' })
+    expect(screen.getByLabelText('Status')).toHaveValue('identified')
+    expect(screen.getByRole('button', { name: '1 update' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('warns when no published status page shows the incident', async () => {
+    renderPage([incident({})])
+    await userEvent.click(await screen.findByRole('button', { name: 'Add update' }))
+    expect(await screen.findByText(/only your team sees these updates/)).toBeInTheDocument()
+  })
+
+  it('shows a member the updates but not the form', async () => {
+    renderPage([incident({ update_count: 1 })], { role: 'member', updates: [{ id: 'u1', incident_id: 'i1', status: 'monitoring', message: 'A fix is out.', author_email: 'owner@example.com', created_at: '2026-10-12T15:00:00Z' }] })
+    await userEvent.click(await screen.findByRole('button', { name: '1 update' }))
+    expect(await screen.findByText('A fix is out.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Update')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Delete/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/Only the organization’s owner can post updates/)).toBeInTheDocument()
   })
 
   it('has a friendly empty state', async () => {

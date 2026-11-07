@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, MAX_TAG_NAME, type BulkAction, type Monitor, type MonitorStatus, type TagSummary, type Usage } from '../api'
-import { formatMoney } from '../format'
+import { formatDateTime, formatMoney, timeAgo } from '../format'
 import { Alert } from '../components/Alert'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
@@ -167,6 +167,16 @@ function TagManager({ tags, onChanged }: { tags: TagSummary[]; onChanged: () => 
   )
 }
 
+/** "3 minutes ago", with the exact date and time on hover. */
+function Ago({ iso, now, what }: { iso: string; now: number; what: string }) {
+  return <time dateTime={iso} title={`${what}: ${formatDateTime(iso)}`}>{timeAgo(iso, now)}</time>
+}
+
+/** A check interval short enough for one line of the table: "10 min", "1 hour", "1 day". The full wording is in the cell's title. */
+function shortPeriod(seconds: number): string {
+  return seconds < 3600 ? `${Math.round(seconds / 60)} min` : formatPeriod(seconds)
+}
+
 export function MonitorsPage() {
   const [monitors, setMonitors] = useState<Monitor[] | null>(null)
   const [total, setTotal] = useState(0)
@@ -262,6 +272,12 @@ export function MonitorsPage() {
 
   const canAdd = usage ? usage.monitors_used < usage.monitor_limit : true
   const filtered = search !== '' || status !== '' || tag !== ''
+  // "3 minutes ago" has to keep moving while the page is open.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
   const allOnPage = monitors !== null && monitors.length > 0 && monitors.every((m) => selected.includes(m.id))
   const minMinutes = usage ? Math.ceil(usage.plan.minimum_check_interval_seconds / 60) : 1
   const toggle = (id: string, on: boolean) => setSelected((s) => (on ? [...s, id] : s.filter((x) => x !== id)))
@@ -326,7 +342,7 @@ export function MonitorsPage() {
         <BulkBar count={selected.length} tags={tags} minMinutes={minMinutes} onRun={(a, x) => void bulk(a, x)} onClear={() => setSelected([])} />
       )}
       {monitors && monitors.length > 0 && (
-        <div className="table-wrap">
+        <div className="table-wrap monitor-table">
           <table>
             <caption className="sr-only">Your monitors</caption>
             <thead>
@@ -335,7 +351,7 @@ export function MonitorsPage() {
                   <input type="checkbox" aria-label="Select all monitors on this page" checked={allOnPage}
                     onChange={(e) => setSelected(e.target.checked ? monitors.map((m) => m.id) : [])} />
                 </th>
-                <th>Name</th><th>Status</th><th>SSL</th><th>Interval</th><th>Last check</th><th>Actions</th>
+                <th>Name</th><th>Status</th><th>SSL</th><th>Interval</th><th>Last check</th><th className="actions">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -345,7 +361,7 @@ export function MonitorsPage() {
                     <input type="checkbox" aria-label={`Select ${m.name}`} checked={selected.includes(m.id)}
                       onChange={(e) => toggle(m.id, e.target.checked)} />
                   </td>
-                  <td>
+                  <td className="name">
                     <Link to={`/monitors/${m.id}`}>{m.name}</Link>
                     {m.type === 'heartbeat' ? <div className="hint">Cron job heartbeat</div>
                       : <div className="hint mono">{m.dns ? `${m.dns.record_type} ${m.url}` : m.url}</div>}
@@ -353,10 +369,12 @@ export function MonitorsPage() {
                   </td>
                   <td><StatusBadge monitor={m} /></td>
                   <td>{m.type === 'dns' ? <span className="hint">—</span> : <CertBadge monitor={m} />}</td>
-                  <td>{m.type === 'heartbeat' ? `expected every ${formatPeriod(m.effective_check_interval_seconds)}` : `every ${Math.round(m.effective_check_interval_seconds / 60)} min`}</td>
+                  <td title={m.type === 'heartbeat' ? `A ping is expected every ${formatPeriod(m.effective_check_interval_seconds)}` : `Checked every ${formatPeriod(m.effective_check_interval_seconds)}`}>
+                    {shortPeriod(m.effective_check_interval_seconds)}
+                  </td>
                   <td>{m.type === 'heartbeat' && m.heartbeat
-                    ? m.heartbeat.last_ping_at ? `pinged ${new Date(m.heartbeat.last_ping_at).toLocaleString()}` : 'No ping yet'
-                    : m.last_checked_at ? new Date(m.last_checked_at).toLocaleString() : 'Not yet'}</td>
+                    ? m.heartbeat.last_ping_at ? <Ago iso={m.heartbeat.last_ping_at} now={now} what="Last ping" /> : 'No ping yet'
+                    : m.last_checked_at ? <Ago iso={m.last_checked_at} now={now} what="Last check" /> : 'Not yet'}</td>
                   <td className="actions">
                     <button onClick={() => void act(() => api('POST', `/monitors/${m.id}/${m.enabled ? 'pause' : 'resume'}`))}>
                       {m.enabled ? 'Pause' : 'Resume'}
