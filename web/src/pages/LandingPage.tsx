@@ -115,10 +115,10 @@ const LOCATION_FAQ = {
 }
 
 const AUDIENCES = [
-  { title: 'Freelancers', lead: 'Spend less time checking. More time creating.', text: 'Know when a client site is offline without refreshing every project.' },
-  { title: 'Web agencies', lead: 'Keep an eye on every client website.', text: 'Monitor every client in one place and show the care you provide.' },
-  { title: 'Independent business owners', lead: 'Your website is too important to leave unchecked.', text: 'Hear about downtime before your customers do.' },
-  { title: 'Developers and small teams', lead: 'Make availability visible.', text: 'Check your APIs, cron jobs and DNS records too: authenticated requests, JSON checks, heartbeats and record lookups, no complex stack.' },
+  { icon: brand.audience.freelancer, title: 'Freelancers', lead: 'Spend less time checking. More time creating.', text: 'Know when a client site is offline without refreshing every project.' },
+  { icon: brand.audience.agency, title: 'Web agencies', lead: 'Keep an eye on every client website.', text: 'Monitor every client in one place and show the care you provide.' },
+  { icon: brand.audience.business, title: 'Independent business owners', lead: 'Your website is too important to leave unchecked.', text: 'Hear about downtime before your customers do.' },
+  { icon: brand.audience.developer, title: 'Developers and small teams', lead: 'Make availability visible.', text: 'Check your APIs, cron jobs and DNS records too: authenticated requests, JSON checks, heartbeats and record lookups, no complex stack.' },
 ]
 
 const STEPS = [
@@ -307,7 +307,10 @@ export function LandingPage() {
         <Reveal as="ul" className="features audiences">
           {AUDIENCES.map((f) => (
             <li key={f.title} className="feature" data-reveal>
-              <h3>{f.title}</h3>
+              <div className="audience-head">
+                <img src={f.icon} alt="" width={64} height={64} />
+                <h3>{f.title}</h3>
+              </div>
               <p><strong>{f.lead}</strong></p>
               <p>{f.text}</p>
             </li>

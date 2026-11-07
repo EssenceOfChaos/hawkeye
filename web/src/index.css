@@ -395,6 +395,10 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 .section .features { grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); }
 .section .features.audiences { grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr)); }
 @media (max-width: 30rem) { .section .features.audiences { grid-template-columns: 1fr; } }
+/* The icon and the audience's name share the top row of the card; the description runs underneath. */
+.audience-head { display: flex; align-items: center; gap: .75rem; margin-bottom: .75rem; }
+.audience-head img { flex: none; }
+.audience-head h3 { margin: 0; min-width: 0; }
 .step-no.d-badge { background: var(--gold); border-color: var(--gold); color: var(--ink-on-gold); font-weight: 700; }
 .step-no.d-badge { --size: 2rem; font-size: 1rem; height: 2rem; min-width: 2rem; padding-inline: .3rem; border-radius: 899px; margin-right: .4rem; }
 

@@ -96,6 +96,14 @@ describe('LandingPage', () => {
     expect(new Set(icons).size).toBe(icons.length)
   })
 
+  it('gives every audience card its own icon', () => {
+    const { container } = renderLanding(() => json(200, { plans: [] }))
+    const icons = Array.from(container.querySelectorAll('.audiences .feature img')).map((img) => img.getAttribute('src'))
+    expect(icons).toHaveLength(4)
+    expect(new Set(icons).size).toBe(4)
+    expect(container.querySelectorAll('.audience-head img + h3')).toHaveLength(4) // the name sits beside its icon
+  })
+
   it('social icons link to the HawkEye accounts in a new tab', () => {
     renderLanding(() => json(200, { plans: [] }))
     const expected = {
