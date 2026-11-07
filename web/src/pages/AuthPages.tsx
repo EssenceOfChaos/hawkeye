@@ -6,6 +6,7 @@ import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { BrandMark } from '../components/Brand'
 import { Field } from '../components/Field'
+import { Toggle } from '../components/Toggle'
 
 /**
  * Reads the one-time `?token=` from the URL and immediately removes it from the address bar (history entry replaced), so it does not linger in
@@ -360,10 +361,9 @@ export function AcceptInvitePage() {
               ) : (
                 <>
                   <p>
-                    <label>
-                      <input type="checkbox" checked={alerts} onChange={(e) => setAlerts(e.target.checked)} /> Also email me this team’s alerts (outages, recoveries,
-                      certificate and domain expiry) at {invite.email}
-                    </label>
+                    <Toggle checked={alerts} onToggle={setAlerts}>
+                      Also email me this team’s alerts (outages, recoveries, certificate and domain expiry) at {invite.email}
+                    </Toggle>
                   </p>
                   <p className="hint">You can turn these off at any time under Alerts.</p>
                   <button type="button" onClick={() => void accept()} disabled={busy}>{busy ? 'Joining…' : 'Accept invitation'}</button>

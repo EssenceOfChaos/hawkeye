@@ -6,6 +6,8 @@ import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
+import { Appear } from '../components/Appear'
+import { Toggle } from '../components/Toggle'
 
 function msg(e: unknown): string {
   return e instanceof ApiError ? e.message : 'That did not work. Try again.'
@@ -157,15 +159,20 @@ function EmailPreferencesCard() {
     api<{ email_preferences: EmailPreferences }>('GET', '/account/email-preferences').then((r) => setPrefs(r.email_preferences), (e: unknown) => setError(msg(e)))
   }, [])
 
-  async function change(patch: Partial<EmailPreferences>, done: string) {
+  // The switch moves at once, and goes back if the server refuses.
+  async function change(key: keyof EmailPreferences, on: boolean, done: string): Promise<boolean> {
     setError(null)
     setSaved(null)
+    setPrefs((p) => p && { ...p, [key]: on })
     try {
-      const r = await api<{ email_preferences: EmailPreferences }>('PUT', '/account/email-preferences', patch)
+      const r = await api<{ email_preferences: EmailPreferences }>('PUT', '/account/email-preferences', { [key]: on })
       setPrefs(r.email_preferences)
       setSaved(done)
+      return true
     } catch (e) {
+      setPrefs((p) => p && { ...p, [key]: !on })
       setError(msg(e))
+      return false
     }
   }
 
@@ -175,19 +182,11 @@ function EmailPreferencesCard() {
       {error && <Alert>{error}</Alert>}
       {prefs && (
         <>
-          <label>
-            <input type="checkbox" className="d-toggle d-toggle-sm" checked={prefs.weekly_summary}
-              onChange={(e) => void change({ weekly_summary: e.target.checked }, e.target.checked ? 'Weekly summary is on.' : 'Weekly summary is off.')} />{' '}
-            Weekly summary
-          </label>
+          <Toggle checked={prefs.weekly_summary} onToggle={(on) => change('weekly_summary', on, on ? 'Weekly summary is on.' : 'Weekly summary is off.')}>Weekly summary</Toggle>
           <p className="hint">Every Monday: last week’s uptime, incidents and slowest sites, and certificates and domains about to expire, for each team you belong to.</p>
-          <label>
-            <input type="checkbox" className="d-toggle d-toggle-sm" checked={prefs.onboarding}
-              onChange={(e) => void change({ onboarding: e.target.checked }, e.target.checked ? 'Getting-started tips are on.' : 'Getting-started tips are off.')} />{' '}
-            Getting-started tips
-          </label>
+          <Toggle checked={prefs.onboarding} onToggle={(on) => change('onboarding', on, on ? 'Getting-started tips are on.' : 'Getting-started tips are off.')}>Getting-started tips</Toggle>
           <p className="hint">A few emails in your first days, only until you add your first website.</p>
-          {saved && <p className="hint" role="status">{saved}</p>}
+          {saved && <Appear><p className="hint" role="status">{saved}</p></Appear>}
           <p className="hint">Alerts about your websites, and account and security emails, are always sent.</p>
         </>
       )}
