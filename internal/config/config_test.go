@@ -383,3 +383,43 @@ func TestTelegramBotIsOptionalButBothOrNeither(t *testing.T) {
 		}
 	}
 }
+
+func TestChecksOnlyWorkerNeedsOnlyTheDatabaseAndTheSecretsKey(t *testing.T) {
+	env := map[string]string{
+		"APP_ENV": "production", "WORKER_CHECKS_ONLY": "true", "WORKER_REGION": "eu-central", "CHECK_REGIONS": "primary:US East,eu-central:Europe",
+		"DATABASE_URL": "postgres://u:p@10.66.0.1:5432/monitoring?sslmode=disable", "ALLOW_INSECURE_DATABASE": "true",
+		"SECRETS_ENCRYPTION_KEY": prodBase()["SECRETS_ENCRYPTION_KEY"],
+	}
+	c, err := load(func(k string) string { return env[k] })
+	if err != nil {
+		t.Fatalf("a checks-only worker should not need email, session or URL settings: %v", err)
+	}
+	if c.RunScheduler || c.RunRetention || c.RunDomainChecks || c.RunLifecycle || c.RunWeeklySummary || c.RunMonthlyReports {
+		t.Fatalf("every background job must be off on a checks-only worker: %+v", c)
+	}
+	if c.Region() != "eu-central" {
+		t.Fatalf("region = %q", c.Region())
+	}
+}
+
+func TestChecksOnlyWorkerStillRefusesAMissingKeyOrAPlaintextDatabase(t *testing.T) {
+	base := map[string]string{
+		"APP_ENV": "production", "WORKER_CHECKS_ONLY": "true", "DATABASE_URL": "postgres://u:p@10.66.0.1:5432/monitoring?sslmode=disable",
+		"SECRETS_ENCRYPTION_KEY": prodBase()["SECRETS_ENCRYPTION_KEY"],
+	}
+	if _, err := load(func(k string) string { return base[k] }); err == nil || !strings.Contains(err.Error(), "sslmode") {
+		t.Fatalf("plaintext without ALLOW_INSECURE_DATABASE must be refused: %v", err)
+	}
+	base["ALLOW_INSECURE_DATABASE"], base["SECRETS_ENCRYPTION_KEY"] = "true", ""
+	if _, err := load(func(k string) string { return base[k] }); err == nil || !strings.Contains(err.Error(), "SECRETS_ENCRYPTION_KEY") {
+		t.Fatalf("a missing secrets key must be refused: %v", err)
+	}
+}
+
+func TestProductionRulesStillApplyWithoutChecksOnly(t *testing.T) {
+	env := prodBase()
+	env["SESSION_SECRET"] = ""
+	if _, err := load(func(k string) string { return env[k] }); err == nil || !strings.Contains(err.Error(), "SESSION_SECRET") {
+		t.Fatalf("expected the session secret to stay required: %v", err)
+	}
+}

@@ -133,68 +133,72 @@ func run() error {
 		job := domains.NewJob(pool, look, domains.JobConfig{Interval: cfg.DomainCheckInterval, Recheck: cfg.DomainRecheckInterval, Pace: cfg.DomainLookupPace}, m, log).WithReporter(reporter)
 		spawn(func() { job.Run(ctx) })
 	}
-	// Billing webhook events accepted by the API but not yet applied (the API processes most inline).
-	var billingProvider billing.Provider
-	if bc := cfg.Billing(); bc.Enabled() {
-		billingProvider = billing.NewStripeProvider(bc.SecretKey) // events are applied by re-reading the subscription from Stripe
-	}
-	billingSvc := billing.NewService(pool, billingProvider, cfg.Billing(), m, log).WithReporter(reporter)
-	spawn(func() {
-		for ctx.Err() == nil {
-			worked, err := billingSvc.ProcessOne(context.WithoutCancel(ctx))
-			if err != nil {
-				log.Warn("billing event processing failed", "error", err)
-			}
-			if worked {
-				continue
-			}
-			select {
-			case <-ctx.Done():
-			case <-time.After(2 * time.Second):
-			}
+	// Billing and everything that sends email or alerts. A checks-only worker (a regional host) leaves all of it to the primary, so it needs none of
+	// those secrets and cannot deliver anything twice: the incidents its checks open are delivered by the dispatcher on the primary.
+	if !cfg.WorkerChecksOnly {
+		// Billing webhook events accepted by the API but not yet applied (the API processes most inline).
+		var billingProvider billing.Provider
+		if bc := cfg.Billing(); bc.Enabled() {
+			billingProvider = billing.NewStripeProvider(bc.SecretKey) // events are applied by re-reading the subscription from Stripe
 		}
-	})
-	// Alert emails.
-	mailer, err := email.New(cfg.EmailProvider, email.SMTPConfig{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername,
-		Password: cfg.SMTPPassword, TLS: cfg.SMTPTLS, CAFile: cfg.SMTPCAFile, From: cfg.EmailFromAddress}, log)
-	if err != nil {
-		return err
-	}
-	dispatcher := notifications.NewDispatcher(pool, mailer,
-		notifications.DispatcherConfig{MaxAttempts: cfg.NotifyMaxAttempts, AppBaseURL: cfg.AppBaseURL, From: cfg.EmailFromAddress}, m, log).WithReporter(reporter).WithSecrets(box)
-	if cfg.TelegramBotToken != "" {
-		// Only sends: the API process registers the webhook and handles the bot's updates.
-		dispatcher.WithTelegramBot(notifications.NewTelegramBot(cfg.TelegramBotToken, cfg.TelegramWebhookSecret, "", nil))
-	}
-	spawn(func() { dispatcher.Run(ctx) })
-	// Onboarding emails to new accounts with no monitor. They are sent from their own address, so their engagement never affects the alerts' reputation.
-	switch {
-	case !cfg.RunLifecycle:
-		log.Info("lifecycle emails disabled on this worker (DISABLE_LIFECYCLE_EMAILS)")
-	case cfg.LifecycleFromAddress == "":
-		log.Info("lifecycle emails off (set LIFECYCLE_FROM_ADDRESS to enable them)")
-	default:
-		job := lifecycle.NewJob(pool, mailer, lifecycle.Config{Interval: cfg.LifecycleInterval, From: cfg.LifecycleFromAddress, ReplyTo: cfg.LifecycleReplyTo,
-			AppBaseURL: cfg.AppBaseURL, Address: cfg.LifecyclePostalAddress, Pace: time.Second}, m, log).WithReporter(reporter)
-		spawn(func() { job.Run(ctx) })
-	}
-	// The Monday summary, on by default for every verified member (each can turn it off).
-	if cfg.RunWeeklySummary {
-		from, replyTo := cfg.LifecycleFromAddress, cfg.LifecycleReplyTo
-		if from == "" {
-			from, replyTo = cfg.EmailFromAddress, ""
+		billingSvc := billing.NewService(pool, billingProvider, cfg.Billing(), m, log).WithReporter(reporter)
+		spawn(func() {
+			for ctx.Err() == nil {
+				worked, err := billingSvc.ProcessOne(context.WithoutCancel(ctx))
+				if err != nil {
+					log.Warn("billing event processing failed", "error", err)
+				}
+				if worked {
+					continue
+				}
+				select {
+				case <-ctx.Done():
+				case <-time.After(2 * time.Second):
+				}
+			}
+		})
+		// Alert emails.
+		mailer, err := email.New(cfg.EmailProvider, email.SMTPConfig{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername,
+			Password: cfg.SMTPPassword, TLS: cfg.SMTPTLS, CAFile: cfg.SMTPCAFile, From: cfg.EmailFromAddress}, log)
+		if err != nil {
+			return err
 		}
-		job := weeklysummary.NewJob(pool, mailer, weeklysummary.Config{Interval: cfg.WeeklySummaryInterval, From: from, ReplyTo: replyTo,
-			AppBaseURL: cfg.AppBaseURL, Address: cfg.LifecyclePostalAddress, Pace: time.Second}, m, log).WithReporter(reporter)
-		spawn(func() { job.Run(ctx) })
-	} else {
-		log.Info("weekly summary emails disabled on this worker (DISABLE_WEEKLY_SUMMARY)")
-	}
-	// Monthly PDF reports, emailed on the first day of the month to organizations that turned that on.
-	if cfg.RunMonthlyReports {
-		job := monthlyreport.NewJob(pool, mailer, branding.NewService(pool), monthlyreport.Config{Interval: cfg.MonthlyReportInterval,
-			AppBaseURL: cfg.AppBaseURL, Pace: time.Second}, m, log).WithReporter(reporter)
-		spawn(func() { job.Run(ctx) })
+		dispatcher := notifications.NewDispatcher(pool, mailer,
+			notifications.DispatcherConfig{MaxAttempts: cfg.NotifyMaxAttempts, AppBaseURL: cfg.AppBaseURL, From: cfg.EmailFromAddress}, m, log).WithReporter(reporter).WithSecrets(box)
+		if cfg.TelegramBotToken != "" {
+			// Only sends: the API process registers the webhook and handles the bot's updates.
+			dispatcher.WithTelegramBot(notifications.NewTelegramBot(cfg.TelegramBotToken, cfg.TelegramWebhookSecret, "", nil))
+		}
+		spawn(func() { dispatcher.Run(ctx) })
+		// Onboarding emails to new accounts with no monitor. They are sent from their own address, so their engagement never affects the alerts' reputation.
+		switch {
+		case !cfg.RunLifecycle:
+			log.Info("lifecycle emails disabled on this worker (DISABLE_LIFECYCLE_EMAILS)")
+		case cfg.LifecycleFromAddress == "":
+			log.Info("lifecycle emails off (set LIFECYCLE_FROM_ADDRESS to enable them)")
+		default:
+			job := lifecycle.NewJob(pool, mailer, lifecycle.Config{Interval: cfg.LifecycleInterval, From: cfg.LifecycleFromAddress, ReplyTo: cfg.LifecycleReplyTo,
+				AppBaseURL: cfg.AppBaseURL, Address: cfg.LifecyclePostalAddress, Pace: time.Second}, m, log).WithReporter(reporter)
+			spawn(func() { job.Run(ctx) })
+		}
+		// The Monday summary, on by default for every verified member (each can turn it off).
+		if cfg.RunWeeklySummary {
+			from, replyTo := cfg.LifecycleFromAddress, cfg.LifecycleReplyTo
+			if from == "" {
+				from, replyTo = cfg.EmailFromAddress, ""
+			}
+			job := weeklysummary.NewJob(pool, mailer, weeklysummary.Config{Interval: cfg.WeeklySummaryInterval, From: from, ReplyTo: replyTo,
+				AppBaseURL: cfg.AppBaseURL, Address: cfg.LifecyclePostalAddress, Pace: time.Second}, m, log).WithReporter(reporter)
+			spawn(func() { job.Run(ctx) })
+		} else {
+			log.Info("weekly summary emails disabled on this worker (DISABLE_WEEKLY_SUMMARY)")
+		}
+		// Monthly PDF reports, emailed on the first day of the month to organizations that turned that on.
+		if cfg.RunMonthlyReports {
+			job := monthlyreport.NewJob(pool, mailer, branding.NewService(pool), monthlyreport.Config{Interval: cfg.MonthlyReportInterval,
+				AppBaseURL: cfg.AppBaseURL, Pace: time.Second}, m, log).WithReporter(reporter)
+			spawn(func() { job.Run(ctx) })
+		}
 	}
 	spawn(func() {
 		t := time.NewTicker(15 * time.Second)
@@ -229,7 +233,7 @@ func run() error {
 		}
 	}()
 
-	log.Info("worker started", "concurrency", cfg.WorkerConcurrency, "scheduler", cfg.RunScheduler, "metrics_addr", srv.Addr)
+	log.Info("worker started", "concurrency", cfg.WorkerConcurrency, "region", cfg.Region(), "checks_only", cfg.WorkerChecksOnly, "scheduler", cfg.RunScheduler, "metrics_addr", srv.Addr)
 	errtrack.AnnounceStart(reporter, "worker", cfg.AppVersion, time.Now())
 	<-ctx.Done()
 	log.Info("shutting down; waiting for in-flight checks")

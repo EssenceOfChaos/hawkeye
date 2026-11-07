@@ -82,6 +82,9 @@ type Config struct {
 	WorkerRegion string
 
 	WorkerConcurrency int
+	// WorkerChecksOnly makes a worker run checks and nothing else: no scheduler, alert delivery, billing or scheduled emails. It is for regional
+	// hosts, which then need only the database and the secrets key, and it switches off the production rules for settings such a host never uses.
+	WorkerChecksOnly  bool
 	RunScheduler      bool
 	SchedulerInterval time.Duration
 	SchedulerBatch    int
@@ -311,6 +314,7 @@ func load(get func(string) string) (Config, error) {
 		CanaryInterval:    duration("CANARY_INTERVAL", time.Minute),
 		WorkerRegion:      str("WORKER_REGION", ""),
 		WorkerConcurrency: integer("WORKER_CONCURRENCY", 10),
+		WorkerChecksOnly:  boolean("WORKER_CHECKS_ONLY"),
 		RunScheduler:      !boolean("DISABLE_SCHEDULER"),
 		SchedulerInterval: duration("SCHEDULER_INTERVAL", time.Second),
 		SchedulerBatch:    integer("SCHEDULER_BATCH", 200),
@@ -494,34 +498,40 @@ func load(get func(string) string) (Config, error) {
 		errs = append(errs, errors.New("DATABASE_URL: required"))
 	}
 
+	if c.WorkerChecksOnly {
+		c.RunScheduler, c.RunRetention, c.RunDomainChecks, c.RunLifecycle, c.RunWeeklySummary, c.RunMonthlyReports = false, false, false, false, false, false
+	}
+
 	// Production must never fall back to a development secret.
 	if c.IsProduction() {
 		if c.SecretsKey == "" {
 			errs = append(errs, errors.New("SECRETS_ENCRYPTION_KEY: required in production (generate with: openssl rand -base64 32); it encrypts stored monitor credentials"))
 		}
-		if c.SessionSecret == "" || c.SessionSecret == placeholderSessionSecret {
-			errs = append(errs, errors.New("SESSION_SECRET: must be set to a unique random value in production"))
-		} else if len(c.SessionSecret) < minSessionSecretLen {
-			errs = append(errs, fmt.Errorf("SESSION_SECRET: must be at least %d characters in production", minSessionSecretLen))
-		}
-		if !strings.HasPrefix(c.AppBaseURL, "https://") {
-			errs = append(errs, errors.New("APP_BASE_URL: must use https in production"))
-		}
-		if !strings.HasPrefix(c.APIBaseURL, "https://") {
-			errs = append(errs, errors.New("API_BASE_URL: must use https in production"))
-		}
-		// Alerts and password resets must actually be delivered, and never over an unencrypted channel.
-		if c.EmailProvider != "smtp" {
-			errs = append(errs, errors.New("EMAIL_PROVIDER: must be smtp in production (console only logs messages)"))
-		}
-		if c.EmailProvider == "smtp" && c.SMTPTLS == "none" {
-			errs = append(errs, errors.New("SMTP_TLS: none is not allowed in production"))
-		}
-		if strings.HasSuffix(strings.ToLower(c.EmailFromAddress), "@example.com") {
-			errs = append(errs, errors.New("EMAIL_FROM_ADDRESS: set a real sender address you control (the default is a placeholder)"))
-		}
-		if strings.HasSuffix(strings.ToLower(c.SupportAddress), "@example.com") {
-			errs = append(errs, errors.New("CONTACT_TO_ADDRESS: set the support inbox that should receive contact-form messages (the default is a placeholder)"))
+		if !c.WorkerChecksOnly { // such a worker holds no session, sends no email and builds no links, so it is not given these settings
+			if c.SessionSecret == "" || c.SessionSecret == placeholderSessionSecret {
+				errs = append(errs, errors.New("SESSION_SECRET: must be set to a unique random value in production"))
+			} else if len(c.SessionSecret) < minSessionSecretLen {
+				errs = append(errs, fmt.Errorf("SESSION_SECRET: must be at least %d characters in production", minSessionSecretLen))
+			}
+			if !strings.HasPrefix(c.AppBaseURL, "https://") {
+				errs = append(errs, errors.New("APP_BASE_URL: must use https in production"))
+			}
+			if !strings.HasPrefix(c.APIBaseURL, "https://") {
+				errs = append(errs, errors.New("API_BASE_URL: must use https in production"))
+			}
+			// Alerts and password resets must actually be delivered, and never over an unencrypted channel.
+			if c.EmailProvider != "smtp" {
+				errs = append(errs, errors.New("EMAIL_PROVIDER: must be smtp in production (console only logs messages)"))
+			}
+			if c.EmailProvider == "smtp" && c.SMTPTLS == "none" {
+				errs = append(errs, errors.New("SMTP_TLS: none is not allowed in production"))
+			}
+			if strings.HasSuffix(strings.ToLower(c.EmailFromAddress), "@example.com") {
+				errs = append(errs, errors.New("EMAIL_FROM_ADDRESS: set a real sender address you control (the default is a placeholder)"))
+			}
+			if strings.HasSuffix(strings.ToLower(c.SupportAddress), "@example.com") {
+				errs = append(errs, errors.New("CONTACT_TO_ADDRESS: set the support inbox that should receive contact-form messages (the default is a placeholder)"))
+			}
 		}
 		if !c.AllowInsecureDatabase {
 			if mode := dbSSLMode(c.DatabaseURL); mode == "" || mode == "disable" || mode == "allow" || mode == "prefer" {
