@@ -353,6 +353,9 @@ func registerAPI(e *echo.Echo, o Options) {
 	}
 	scoped.GET("/monitors/:monitorID/incidents", h.listMonitorIncidents)
 	scoped.GET("/incidents", h.listIncidents)
+	scoped.GET("/incidents/:incidentID/updates", h.listIncidentUpdates)
+	scoped.POST("/incidents/:incidentID/updates", h.postIncidentUpdate, requireOwner, limit("incident-update"))
+	scoped.DELETE("/incidents/:incidentID/updates/:updateID", h.deleteIncidentUpdate, requireOwner)
 
 	// Billing: any member can see the plan; changes need the owner and a verified email.
 	scoped.GET("/billing/subscription", h.billingSubscription)

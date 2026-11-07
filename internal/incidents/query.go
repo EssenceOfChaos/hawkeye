@@ -47,7 +47,8 @@ func List(ctx context.Context, pool *pgxpool.Pool, orgID uuid.UUID, f Filter) ([
 	args = append(args, f.Limit, f.Offset)
 	rows, err := pool.Query(ctx, fmt.Sprintf(`SELECT i.id, i.monitor_id, m.name, i.started_at, i.resolved_at, i.status,
 			i.cause_category, i.summary,
-			EXTRACT(EPOCH FROM COALESCE(i.resolved_at, now()) - i.started_at)::bigint
+			EXTRACT(EPOCH FROM COALESCE(i.resolved_at, now()) - i.started_at)::bigint,
+			(SELECT count(*) FROM incident_updates u WHERE u.incident_id = i.id)
 		FROM incidents i JOIN monitors m ON m.id = i.monitor_id WHERE %s
 		ORDER BY i.started_at DESC, i.id LIMIT $%d OFFSET $%d`, where, len(args)-1, len(args)), args...)
 	if err != nil {
@@ -58,7 +59,7 @@ func List(ctx context.Context, pool *pgxpool.Pool, orgID uuid.UUID, f Filter) ([
 	for rows.Next() {
 		var in Incident
 		if err := rows.Scan(&in.ID, &in.MonitorID, &in.MonitorName, &in.StartedAt, &in.ResolvedAt, &in.Status,
-			&in.CauseCategory, &in.Summary, &in.DurationSeconds); err != nil {
+			&in.CauseCategory, &in.Summary, &in.DurationSeconds, &in.UpdateCount); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, in)

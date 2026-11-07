@@ -58,7 +58,7 @@ function GettingStarted() {
       </p>
       <h2 id="share">4. Share the status (optional)</h2>
       <ul>
-        <li><strong>Status pages</strong> show visitors which of your services are up, without revealing their addresses or error details.</li>
+        <li><strong>Status pages</strong> show visitors which of your services are up, without revealing their addresses or error details. During an incident, post updates from the <strong>Incidents</strong> page to tell them what is happening.</li>
         <li><strong>Uptime badges</strong> put a live uptime figure on a website or in a README. Turn one on from a monitor’s page.</li>
         <li><strong>Monthly PDF reports</strong> (Pro and Agency) summarize each site’s uptime for clients or managers.</li>
       </ul>

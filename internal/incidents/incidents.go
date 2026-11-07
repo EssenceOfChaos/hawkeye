@@ -147,4 +147,5 @@ type Incident struct {
 	CauseCategory   *string    `json:"cause_category"`
 	Summary         *string    `json:"summary"`
 	DurationSeconds int64      `json:"duration_seconds"` // so far, while the incident is open
+	UpdateCount     int        `json:"update_count"`     // notes posted on it (updates.go)
 }

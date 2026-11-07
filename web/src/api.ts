@@ -330,7 +330,8 @@ export interface PublicStatus {
     uptime_percent: number | null
     days: { date: string; uptime_percent: number | null; status: 'ok' | 'degraded' | 'down' | 'none' }[]
   }[]
-  incidents: { monitor: string; started_at: string; resolved_at: string | null }[]
+  /** Updates are plain text, newest first, without who posted them. */
+  incidents: { monitor: string; started_at: string; resolved_at: string | null; updates?: { status: string; message: string; posted_at: string }[] }[]
   history_days: number
   generated_at: string
 }
@@ -374,6 +375,26 @@ export interface Incident {
   cause_category: string | null
   summary: string | null
   duration_seconds: number
+  /** How many updates the team has posted on it. */
+  update_count?: number
+}
+
+export type IncidentUpdateStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved'
+
+export interface IncidentUpdate {
+  id: string
+  incident_id: string
+  status: IncidentUpdateStatus
+  message: string
+  /** Who posted it; for the team only, and null once that account is gone. */
+  author_email: string | null
+  created_at: string
+}
+
+/** A published status page that shows an incident's updates. */
+export interface StatusPageRef {
+  title: string
+  slug: string
 }
 
 export type BillingInterval = 'month' | 'year'

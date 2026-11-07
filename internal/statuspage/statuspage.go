@@ -94,9 +94,17 @@ type MonitorView struct {
 }
 
 type IncidentView struct {
-	Monitor    string     `json:"monitor"`
-	StartedAt  time.Time  `json:"started_at"`
-	ResolvedAt *time.Time `json:"resolved_at"`
+	Monitor    string       `json:"monitor"`
+	StartedAt  time.Time    `json:"started_at"`
+	ResolvedAt *time.Time   `json:"resolved_at"`
+	Updates    []UpdateView `json:"updates"` // newest first
+}
+
+// UpdateView is a note the owner posted on an incident. Plain text: the page must show it as text, never as markup. Who wrote it is not public.
+type UpdateView struct {
+	Status   string    `json:"status"`
+	Message  string    `json:"message"`
+	PostedAt time.Time `json:"posted_at"`
 }
 
 // PublicBranding is the page's look, as far as the plan allows it. Empty fields mean the standard HawkEye look.
@@ -379,6 +387,9 @@ func (s *Service) Delete(ctx context.Context, orgID, id uuid.UUID) error {
 	return nil
 }
 
+// Forget drops every cached public page, so a change shows on the next request (incident updates call it).
+func (s *Service) Forget() { s.forget() }
+
 func (s *Service) forget() {
 	s.mu.Lock()
 	clear(s.cache)
@@ -615,7 +626,7 @@ func (s *Service) build(ctx context.Context, slug string, now time.Time) (Public
 	}
 	p.Overall = overall(states)
 
-	ir, err := s.pool.Query(ctx, `SELECT monitor_id, started_at, resolved_at FROM incidents
+	ir, err := s.pool.Query(ctx, `SELECT id, monitor_id, started_at, resolved_at FROM incidents
 		WHERE monitor_id = ANY($1) AND (resolved_at IS NULL OR resolved_at >= $2) ORDER BY started_at DESC LIMIT $3`,
 		ids, now.AddDate(0, 0, -IncidentDays), maxIncidents)
 	if err != nil {
@@ -623,14 +634,40 @@ func (s *Service) build(ctx context.Context, slug string, now time.Time) (Public
 	}
 	defer ir.Close()
 	p.Incidents = []IncidentView{}
+	var incidentIDs []uuid.UUID
 	for ir.Next() {
-		var id uuid.UUID
-		var v IncidentView
-		if err := ir.Scan(&id, &v.StartedAt, &v.ResolvedAt); err != nil {
+		var id, monitorID uuid.UUID
+		v := IncidentView{Updates: []UpdateView{}}
+		if err := ir.Scan(&id, &monitorID, &v.StartedAt, &v.ResolvedAt); err != nil {
 			return Public{}, err
 		}
-		v.Monitor = names[id]
+		v.Monitor = names[monitorID]
+		incidentIDs = append(incidentIDs, id)
 		p.Incidents = append(p.Incidents, v)
 	}
-	return p, ir.Err()
+	if err := ir.Err(); err != nil {
+		return Public{}, err
+	}
+	ir.Close()
+
+	// Only the status, the text and the time: never who posted it.
+	ur, err := s.pool.Query(ctx, `SELECT incident_id, status, message, created_at FROM incident_updates
+		WHERE incident_id = ANY($1) ORDER BY created_at DESC, id`, incidentIDs)
+	if err != nil {
+		return Public{}, err
+	}
+	defer ur.Close()
+	at := make(map[uuid.UUID]int, len(incidentIDs))
+	for i, id := range incidentIDs {
+		at[id] = i
+	}
+	for ur.Next() {
+		var id uuid.UUID
+		var u UpdateView
+		if err := ur.Scan(&id, &u.Status, &u.Message, &u.PostedAt); err != nil {
+			return Public{}, err
+		}
+		p.Incidents[at[id]].Updates = append(p.Incidents[at[id]].Updates, u)
+	}
+	return p, ur.Err()
 }

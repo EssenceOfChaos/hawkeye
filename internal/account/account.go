@@ -116,13 +116,20 @@ type ExportAuth struct {
 }
 
 type ExportIncident struct {
-	ID            uuid.UUID  `json:"id"`
-	MonitorID     uuid.UUID  `json:"monitor_id"`
-	StartedAt     time.Time  `json:"started_at"`
-	ResolvedAt    *time.Time `json:"resolved_at"`
-	Status        string     `json:"status"`
-	CauseCategory *string    `json:"cause_category"`
-	Summary       *string    `json:"summary"`
+	ID            uuid.UUID      `json:"id"`
+	MonitorID     uuid.UUID      `json:"monitor_id"`
+	StartedAt     time.Time      `json:"started_at"`
+	ResolvedAt    *time.Time     `json:"resolved_at"`
+	Status        string         `json:"status"`
+	CauseCategory *string        `json:"cause_category"`
+	Summary       *string        `json:"summary"`
+	Updates       []ExportUpdate `json:"updates"` // the notes the team posted on it, oldest first
+}
+
+type ExportUpdate struct {
+	Status    string    `json:"status"`
+	Message   string    `json:"message"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type ExportWindow struct {
@@ -248,12 +255,34 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 		return err
 	}
 	for rows.Next() {
-		var i ExportIncident
+		i := ExportIncident{Updates: []ExportUpdate{}}
 		if err := rows.Scan(&i.ID, &i.MonitorID, &i.StartedAt, &i.ResolvedAt, &i.Status, &i.CauseCategory, &i.Summary); err != nil {
 			rows.Close()
 			return err
 		}
 		o.Incidents = append(o.Incidents, i)
+	}
+	rows.Close()
+
+	rows, err = s.pool.Query(ctx, `SELECT u.incident_id, u.status, u.message, u.created_at FROM incident_updates u
+		JOIN incidents i ON i.id = u.incident_id JOIN monitors m ON m.id = i.monitor_id WHERE m.organization_id = $1 ORDER BY u.created_at, u.id`, o.ID)
+	if err != nil {
+		return err
+	}
+	at := make(map[uuid.UUID]int, len(o.Incidents))
+	for n, i := range o.Incidents {
+		at[i.ID] = n
+	}
+	for rows.Next() {
+		var id uuid.UUID
+		var u ExportUpdate
+		if err := rows.Scan(&id, &u.Status, &u.Message, &u.CreatedAt); err != nil {
+			rows.Close()
+			return err
+		}
+		if n, ok := at[id]; ok {
+			o.Incidents[n].Updates = append(o.Incidents[n].Updates, u)
+		}
 	}
 	rows.Close()
 

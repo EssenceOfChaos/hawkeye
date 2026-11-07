@@ -23,7 +23,7 @@ internal/queue         durable PostgreSQL job queue (claim / lease / complete / 
 internal/scheduler     finds due monitors, enqueues jobs, jitter, backpressure
 internal/worker        bounded-concurrency polling loops, metrics sampler
 internal/metrics       Prometheus metrics
-internal/incidents     incident engine (opened/resolved inside the result transaction) and incident queries
+internal/incidents     incident engine (opened/resolved inside the result transaction), incident queries, and incident updates (notes posted on an incident, shown on status pages; migration `000032`)
 internal/heartbeats    heartbeat (cron job) monitors: records pings from /ping/<token> as check results (`checks.Store.RecordTx`), and a sweeper in the worker records missed deadlines; never schedules a check
 internal/statuspage public status pages (`/status/<slug>`; migration `000014`, several per organization up to `plans.max_status_pages` since `000022`; 30 s cache; exposes only owner-chosen monitor names, states, daily uptime and incident times), internal/maintenance windows (rule in SQL: `in_maintenance`, migration `000013`; `checks.Store.Record` skips state changes and incidents while one applies), internal/notifications recipients + confirmation, enqueue (idempotent), email rendering, webhook/Slack channels (`channels.go`: sealed URLs, signing, SSRF-safe delivery; migration `000012`), retrying dispatcher
 internal/reports       range resolution (plan-clamped), check-based uptime, bucketed series, check history, dashboard summary
