@@ -30,6 +30,7 @@ import monitoringHawkEye from './assets/brand/monitoring-hawk-eye.webp'
 import audienceFreelancer from './assets/brand/audience-freelancer.png'
 import audienceAgency from './assets/brand/audience-agency.png'
 import audienceBusiness from './assets/brand/audience-business.png'
+import audienceDeveloper from './assets/brand/audience-developer.png'
 import logo from './assets/brand/logo.png'
 import logoWhite from './assets/brand/logo-white.png'
 
@@ -48,7 +49,7 @@ export const brand = {
   /** Real screens of the app with sample data (scripts/screenshots): the dashboard, the incidents list and the alert email. */
   screens: { dashboard: screenDashboard, incidents: screenIncidents, alertEmail: screenAlertEmail },
   /** Who it is for: one person, a group and a storefront, as free-standing gold-edged glyphs on transparent backgrounds. */
-  audience: { freelancer: audienceFreelancer, agency: audienceAgency, business: audienceBusiness },
+  audience: { freelancer: audienceFreelancer, agency: audienceAgency, business: audienceBusiness, developer: audienceDeveloper },
   /** Glossy gold-ringed round badges: each carries its own navy, so they work on any background. */
   icons: {
     websites: iconWebsites,
