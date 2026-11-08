@@ -45,7 +45,8 @@ function setup(info: Record<string, unknown>, approve: () => Promise<Response> =
   return { calls, went }
 }
 
-const base = { client: { name: 'Claude' }, requests_write: true, organizations: orgs, two_factor_code_needed: false, deny_redirect: 'https://claude.ai/api/mcp/auth_callback?error=access_denied&state=s' }
+const base = { client: { name: 'Claude' }, requests_write: true, organizations: orgs, two_factor_code_needed: false,
+  deny_redirect: 'https://claude.ai/api/mcp/auth_callback?error=access_denied&state=s', redirect_host: 'claude.ai', redirect_loopback: false }
 
 describe('ConnectPage', () => {
   it('names the app, lets the person choose, and sends them back with the code', async () => {
@@ -57,6 +58,12 @@ describe('ConnectPage', () => {
     const post = calls.find((c) => c.method === 'POST')!
     expect(post.body).toMatchObject({ organization_id: 'o1', access: 'write', client_id: 'hkc_1', code_challenge: 'c', state: 's' })
     expect(went).toHaveBeenCalledWith('https://claude.ai/api/mcp/auth_callback?code=abc&state=s')
+  })
+
+  it('shows where the person goes back to, and warns about a local address', async () => {
+    setup({ ...base, redirect_host: 'localhost', redirect_loopback: true })
+    expect(await screen.findByText('localhost', { selector: 'strong' })).toBeInTheDocument()
+    expect(screen.getByText(/runs on your own computer/)).toBeInTheDocument()
   })
 
   it('offers only read access when the plan can’t make changes', async () => {
