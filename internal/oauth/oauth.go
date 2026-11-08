@@ -253,12 +253,21 @@ func (s *Service) Validate(ctx context.Context, r AuthorizeRequest) (Validated, 
 	if err != nil {
 		return Validated{}, err
 	}
-	if r.RedirectURI == "" && len(c.RedirectURIs) == 1 {
-		r.RedirectURI = c.RedirectURIs[0]
+	// From here on the redirect URI is the client's registered one (from the database), not the string the request carried: everything that
+	// sends a browser to it then builds on an address we registered, with only query parameters added.
+	registered := ""
+	switch {
+	case r.RedirectURI == "" && len(c.RedirectURIs) == 1:
+		registered = c.RedirectURIs[0]
+	default:
+		if i := slices.Index(c.RedirectURIs, r.RedirectURI); i >= 0 {
+			registered = c.RedirectURIs[i]
+		}
 	}
-	if !slices.Contains(c.RedirectURIs, r.RedirectURI) {
+	if registered == "" {
 		return Validated{}, ErrBadRedirect
 	}
+	r.RedirectURI = registered
 	v := Validated{Request: r, Client: c}
 	switch {
 	case r.ResponseType != "code":
