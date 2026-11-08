@@ -20,9 +20,10 @@ before submitting, since they change.
 | Actionable errors, reasonable response sizes, no conversation data | Done |
 | First-party API on our own domain | Yes |
 | Public documentation | `https://hawkeye.observer/docs/claude` (update after listing, see the end) |
-| Privacy policy | Written; **needs the lawyer's review** (`docs/legal-placeholders.md`) |
-| Test account with realistic data | `scripts/seed_demo.py` (step 4 below) |
-| Tested as a custom connector in claude.ai | **To do**, after deploying (step 5 below) |
+| Privacy policy | Approved by counsel, 2026-11-08 (`docs/legal-placeholders.md`) |
+| Test account with realistic data | `directory-reviewer@hawkeye.observer`, Agency (100%-off coupon), filled with `scripts/seed_demo.py`; demo heartbeats pinged by cron (below) |
+| Tested as a custom connector in claude.ai | Confirmed in the portal |
+| **Submitted** | **2026-11-08.** Watch the portal for status and reviewer feedback |
 
 Not needed for the listing: dynamic client registration and Client ID Metadata Documents (we use Anthropic-held client credentials, which Anthropic
 recommends for directory traffic). Claude Code doesn't use the directory client; it connects with an API key (`/docs/claude`). Supporting Client ID
@@ -40,11 +41,13 @@ Metadata Documents later would let Claude Code and custom connectors connect by 
    (`docs/operations.md#oauth-clients-connecting-claude`):
 
    ```sh
-   docker compose --env-file .env.production -f deploy/docker-compose.prod.yml run --rm --entrypoint /usr/local/bin/oauthclient migrate \
-     create -name Claude -redirect https://claude.ai/api/mcp/auth_callback
+   cd ~/hawkeye
+   docker compose --env-file .env.production -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local-db.yml \
+     run --rm --entrypoint /usr/local/bin/oauthclient migrate create -name Claude -redirect https://claude.ai/api/mcp/auth_callback
    ```
 
-   Keep the client ID and secret in the password manager until step 7; the secret is shown once.
+   Use the same Compose files as `scripts/deploy.sh` (production runs its database from `docker-compose.local-db.yml`; leave that file out with
+   a managed database). Keep the client ID and secret in the password manager; the secret is shown once.
 4. **Make the reviewer account.** Sign up at hawkeye.observer with an address you control (for example `directory-review@…`), verify it, put
    the organization on **Agency** (a complimentary subscription, so write tools and maintenance work), and leave two-factor sign-in **off** for
    it. As its owner, create a **read and write** API key, then fill it:
@@ -55,9 +58,21 @@ Metadata Documents later would let Claude Code and custom connectors connect by 
 
    It adds two clients' worth of monitors (websites, DNS, heartbeats, one paused), a published status page, a weekly maintenance window, and a
    resolved incident with three updates. It can be run again safely. Revoke the API key afterward; the reviewer signs in through OAuth.
-5. **Test as a custom connector in claude.ai** (the portal asks you to confirm this): in Claude, add a custom connector with URL
-   `https://hawkeye.observer/mcp`, open its advanced settings, enter the client ID from step 3 (and the secret), connect, and approve on HawkEye's
-   consent page with the reviewer account. Then ask Claude to call each tool at least once, for example:
+
+   **Keep the demo heartbeats alive.** Nothing pings the two heartbeat monitors after seeding, so "Hourly invoice export" would go down about 70
+   minutes later (opening an incident, alerting the reviewer address and showing on the demo status page). The production server's `deploy`
+   crontab pings both, in two lines tagged `hawkeye-demo-heartbeat` (installed 2026-11-08):
+
+   ```text
+   5 * * * *  curl -fsS -m 10 -o /dev/null https://hawkeye.observer/ping/<hourly invoice export token>
+   30 2 * * * curl -fsS -m 10 -o /dev/null https://hawkeye.observer/ping/<nightly database backup token>
+   ```
+
+   The tokens are on each monitor's page. If the account is rebuilt (or the server is: `scripts/rebuild.sh`), add the lines again.
+5. **Test as a custom connector in claude.ai** (the portal asks you to confirm this): in Claude, add a custom connector named `HawkEye` with URL
+   `https://hawkeye.observer/mcp`, open its advanced settings, enter the client ID from step 3 and the secret (required: HawkEye has no dynamic
+   client registration, so without them connecting fails), connect, and approve on HawkEye's consent page with the reviewer account. Then, in a
+   claude.ai chat with the HawkEye connector turned on, ask Claude to call each tool at least once, for example:
    - "What's the state of my HawkEye monitors?" (`get_account_overview`, `list_monitors`)
    - "Show me the Acme Bakery website monitor" (`get_monitor`), "What was uptime this week?" (`get_uptime`)
    - "List incidents" and "show the invoice export incident" (`list_incidents`, `get_incident`), "List my status pages and maintenance windows"
@@ -67,7 +82,8 @@ Metadata Documents later would let Claude Code and custom connectors connect by 
      (`delete_incident_update`, `delete_maintenance_window`, Claude asks first)
 
    Delete the test monitor and disconnect the app afterward, so the account is as `seed_demo.py` left it.
-6. **Prepare the listing assets:** the icon `web/src/assets/brand/app-icon.png` (256×256 PNG, the gold-ringed badge), and the copy below.
+6. **Prepare the listing assets:** the icon (the portal asks for a URL: `https://hawkeye.observer/icon-192.png`, the gold-ringed badge, 192×192
+   PNG), and the copy below.
 7. **Submit** at claude.ai/directory/manage → **Submit new** → **MCP connector**, from the HawkEye company's paid Claude account, and enter the
    answers below. Afterward, watch the portal for reviewer feedback; escalations go to `mcp-review@anthropic.com`.
 
@@ -105,17 +121,36 @@ Synced from the server. Expect 15 tools, 8 read-only and 7 writes, with no warni
 - **Documentation URL:** `https://hawkeye.observer/docs/claude`
 - **Privacy policy URL:** `https://hawkeye.observer/privacy`
 - **Support contact:** the support address that receives contact-form mail (`CONTACT_TO_ADDRESS` in production)
-- **Icon:** `web/src/assets/brand/app-icon.png`
+- **Icon URL:** `https://hawkeye.observer/icon-192.png`
 - **URL slug:** `hawkeye` (permanent once published)
 
 ### 4. Use cases
 
-- **Primary use cases:** checking which monitors are down and why; reviewing uptime and response times for a site or client; reading incident
-  history; pausing monitors during deploys or planned work; adding new monitors; posting status page updates during an incident; scheduling
-  maintenance windows.
-- **What users need first:** a HawkEye account (sign up free at hawkeye.observer). Reading works on every plan; changes need Pro or Agency, and
-  posting incident updates and scheduling maintenance need the organization's owner.
-- **Reads or writes:** both.
+As submitted (each example works on the reviewer account's data):
+
+1. **Check what's down right now.** See which monitors are failing, since when, and why, across websites, APIs, cron jobs and DNS records.
+   > What's down in HawkEye right now, and how long has it been down?
+2. **Review uptime for a site or client.** Uptime percentages, failed checks and average response times over the last day, week, month or year.
+   > How was uptime for the Acme Bakery website over the last 30 days?
+3. **Investigate an incident.** An incident's timeline, cause and the updates posted on it, and which public status pages show it.
+   > Show me the latest incident on the hourly invoice export and the updates posted on it.
+4. **Pause monitoring during a deploy or planned work.** Pause and resume monitors one at a time or by client tag, or schedule a maintenance
+   window, so planned work doesn't trigger false alerts.
+   > Pause all the Acme Bakery monitors while I deploy, then resume them when I say I'm done.
+5. **Keep customers informed during an outage.** Post an update on an open incident that appears on your public status pages. Claude asks
+   before publishing.
+   > Post an update on the open incident saying we've found the cause and expect a fix within the hour.
+
+**Prerequisites** (shown to reviewers):
+
+> A HawkEye account (sign up free at https://hawkeye.observer/register; no credit card). Connecting opens HawkEye's sign-in and consent page, where
+> you choose the organization and the access Claude gets. Read only works on every plan, including Free. Read and make changes (pausing and adding
+> monitors, scheduling maintenance, posting incident updates) needs a Pro or Agency plan. Posting incident updates and scheduling or deleting
+> maintenance windows also need the organization's owner; members can read, pause, resume and add monitors. People who use two-factor sign-in
+> confirm the connection with a code from their authenticator app. No other setup is needed. For review: the test account in the Test & launch
+> step is the owner of an Agency organization with example data, and has two-factor sign-in turned off.
+
+**Reads or writes:** both.
 
 ### 5. Company
 
@@ -126,6 +161,9 @@ HawkEye, `https://hawkeye.observer`, and the primary contact for review updates.
 - Authentication requirement: **Always required**
 - Authentication method: **OAuth sign-in** → OAuth client: **Anthropic-held client credentials** → client ID from step 3 → **Anthropic holds a
   client secret** → the secret from step 3
+- The portal marks **Installers bring their own OAuth client** as "Detected" (it found no dynamic client registration or Client ID Metadata
+  Document in our metadata). Don't choose it: that mode means each customer creates an OAuth client in HawkEye, which they can't, and Anthropic
+  arranges it by email. The secret choices "Not required" and "Installers provide a client secret" belong to that mode.
 
 ### 7. Data handling
 
@@ -136,12 +174,12 @@ HawkEye, `https://hawkeye.observer`, and the primary contact for review updates.
 
 Reviewer instructions (fill in the account):
 
-> Connect HawkEye from Claude with the URL https://hawkeye.observer/mcp. When HawkEye's sign-in page opens, sign in with the test account below, choose the organization "<organization name>" and "Read and make changes", and select Allow. The account is on the Agency plan and already has monitors for two example clients, a published status page (https://hawkeye.observer/status/hawkeye-demo), a weekly maintenance window, and a resolved incident with updates on the "Hourly invoice export" monitor.
+> In Claude, add a connector with the server URL **https://hawkeye.observer/mcp** (it's an MCP server address for Claude, not a web page; opening it in a browser shows an "UNAUTHENTICATED" error). When you connect, HawkEye's sign-in page opens: sign in with the test account below, choose the organization "<organization name>" and **Read and make changes**, and select **Allow**. You're then returned to Claude, connected.
 >
-> Email: <reviewer address>
+> Email: directory-reviewer@hawkeye.observer
 > Password: <password>
 >
-> Every tool can be tried on this data. Posting an incident update makes it visible on the demo status page; delete it afterward with delete_incident_update. Please don't change the account's password or turn on two-factor sign-in.
+> The account is the owner of an Agency organization with example data: monitors for two example clients, a published status page (https://hawkeye.observer/status/hawkeye-demo), a weekly maintenance window, and a resolved incident with three updates on the "Hourly invoice export" monitor. Every tool can be tried on it. Posting an incident update makes it visible on the demo status page; please delete it afterward with delete_incident_update. Please don't change the password or turn on two-factor sign-in.
 
 Confirm that every tool was run (step 5).
 

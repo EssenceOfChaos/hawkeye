@@ -109,10 +109,19 @@ Clients that may connect to the MCP server by signing in are registered by hand.
 Docker network, so run the command on the server, from the API image (it is built in next to `migrate`), in the deploy folder:
 
 ```sh
-docker compose --env-file .env.production -f deploy/docker-compose.prod.yml run --rm --entrypoint /usr/local/bin/oauthclient migrate \
-  create -name Claude -redirect https://claude.ai/api/mcp/auth_callback
+cd ~/hawkeye
+docker compose --env-file .env.production -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local-db.yml \
+  run --rm --entrypoint /usr/local/bin/oauthclient migrate create -name Claude -redirect https://claude.ai/api/mcp/auth_callback
 # … the same with `list`, or `disable <client-id>` (stops it and revokes every connection it holds)
 ```
+
+Use the same Compose files as `scripts/deploy.sh`: production runs its database from `docker-compose.local-db.yml` (leave it out with a managed
+database).
+
+**Throttling.** Every Claude user's token requests reach `/oauth/token` from Anthropic's servers (`160.79.104.0/21`), so the per-IP limit there
+(`OAUTH_TOKEN_RATE_LIMIT_PER_MIN`, default 1,200) is in effect a ceiling on all of Claude's token traffic. Access tokens last an hour, so it
+covers tens of thousands of connected people. If `HawkEyeOAuthTokenThrottled` fires (`hawkeye_rate_limited_total{scope="oauth-token"}`), raise it
+and redeploy; codes and refresh tokens are 256-bit random values, so the limit only guards against floods.
 
 Locally, against a development database: `DATABASE_URL=... go run ./cmd/oauthclient create …`.
 

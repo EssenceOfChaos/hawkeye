@@ -18,6 +18,10 @@ groups:
         expr: increase(hawkeye_http_panics_total[15m]) > 0
         labels: {severity: ticket}
         annotations: {summary: "A request handler panicked (also reported to the error tracker)"}
+      - alert: HawkEyeOAuthTokenThrottled
+        expr: increase(hawkeye_rate_limited_total{scope="oauth-token"}[10m]) > 0
+        labels: {severity: ticket}
+        annotations: {summary: "OAuth token or revocation requests are being refused by the per-IP limit; Claude users may fail to connect or stay connected", runbook: "docs/operations.md#oauth-clients-connecting-claude"}
       - alert: HawkEyeRateLimiterFailing
         expr: increase(hawkeye_rate_limiter_errors_total[10m]) > 0
         labels: {severity: ticket}

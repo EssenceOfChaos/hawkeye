@@ -395,3 +395,15 @@ func TestOAuthClientRedirectURIsAreStrict(t *testing.T) {
 		t.Fatalf("http on localhost is fine for local tools: %v", err)
 	}
 }
+
+func TestOAuthTokenEndpointLimitIsConfigurable(t *testing.T) {
+	e := newEnvOpts(t, 100000, envOpts{shared: true, oauthPerM: 3})
+	f := newFlow(t, e, false, "")
+	var last int
+	for i := 0; i < 4; i++ {
+		last, _ = tokenRequest(t, e, f, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {"hkr_unknown"}})
+	}
+	if last != 429 {
+		t.Fatalf("the 4th request in a minute with a limit of 3: %d", last)
+	}
+}
