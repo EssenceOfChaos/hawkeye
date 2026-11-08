@@ -203,6 +203,26 @@ FROM users WHERE email_verified_at IS NOT NULL;
 
 Links in the email carry `utm_campaign=weekly_summary`.
 
+### Feature waitlists
+
+"Get notified" sign-ups for coming-soon features (`internal/waitlist`, [API](api.md#feature-waitlists-get-notified)). Only confirmed sign-ups count; unconfirmed ones are dropped by the hourly clean-up once their 48-hour link expires.
+
+```sql
+SELECT feature, count(*) FILTER (WHERE confirmed_at IS NOT NULL) AS confirmed, count(*) FILTER (WHERE confirmed_at IS NULL) AS pending,
+       count(*) FILTER (WHERE user_id IS NOT NULL) AS customers
+FROM waitlist_entries GROUP BY feature ORDER BY confirmed DESC;
+```
+
+**Announcing a launch.** Email each confirmed address for that feature once, including its own removal link (`<APP_BASE_URL>/waitlist/leave?token=<remove_token>`), then delete that feature's rows: the address was given for that one email and nothing else.
+
+```sql
+SELECT email, remove_token FROM waitlist_entries WHERE feature = 'api_workflows' AND confirmed_at IS NOT NULL;
+-- after sending:
+DELETE FROM waitlist_entries WHERE feature = 'api_workflows';
+```
+
+**Adding or removing a feature** takes a migration (the table's `CHECK`), `waitlist.Features`, and the cards in `web/src/components/ComingSoon.tsx`. Remove a feature's card when it launches.
+
 ### Monthly PDF reports
 
 Pro and Agency can download a PDF uptime report for any website (Reports page, or the monitor's page): uptime, confirmed downtime, a day-by-day chart and the incident list for a calendar month in UTC. The PDF is drawn in Go (`internal/reportpdf`, the `go-pdf/fpdf` library), so there is no browser or other program to run, and a report is generated when asked for and never stored. A month is refused if it is older than the plan's history (its results would be partly deleted and the report wrong), and the month in progress is a "so far" report. Agency can add a name and a logo (`organization_branding`); the logo is validated and re-encoded on upload (PNG or JPEG only, 512 KB, 2000 x 2000 pixels, never SVG), and is printed only while the plan includes branding: after a downgrade it is kept but the reports go back to the HawkEye look.

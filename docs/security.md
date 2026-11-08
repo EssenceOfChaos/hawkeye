@@ -180,6 +180,13 @@ See `docs/security-review.md` for the review and residual risks.
   them. That is a request to the client: other clients may not ask, which is why the description of `post_incident_update` says it is public.
 - **No conversation data:** the server stores nothing about the conversation; logs and metrics record the tool, outcome and duration only.
 
+## Feature waitlists (public sign-up form)
+
+- **Anyone can type any address**, so an address entered while signed out only counts once its owner confirms it from an emailed single-use link (48 h, only a SHA-256 hash stored). Signed-in people with a verified address are added at once; typing a different address still needs confirming.
+- **No mail-bombing or enumeration.** Confirmation emails share the per-address email budget used by other auth emails; over it, nothing is sent. The answer is always `check_email`, whether the address was new, pending, already confirmed or over budget, and a filled-in spam trap (`company`) is answered the same and dropped. Per-IP limit: the shared limit plus 20 an hour.
+- **Links ask first.** The confirm and leave pages act only on a button press, so mail scanners that open links can't sign anyone up or off.
+- **Minimal data, limited use.** Feature, address, optional user id, timestamps. Used only to announce that feature; every email carries a removal link (`remove_token`, a random UUID); account deletion and export cover it; unconfirmed rows are deleted by the hourly clean-up.
+
 ## Known gaps
 
 - Console email provider (development) logs verification/reset links; it is refused in production.

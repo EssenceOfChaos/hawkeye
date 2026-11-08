@@ -229,6 +229,21 @@ func TestExpiredCredentialsAreTidied(t *testing.T) {
 	}
 }
 
+func TestUnconfirmedWaitlistSignUpsAreDroppedWhenTheirLinkExpires(t *testing.T) {
+	e := newEnv(t)
+	e.pool.Exec(t.Context(), `INSERT INTO waitlist_entries (feature, email, confirm_token_hash, confirm_expires_at, confirmed_at) VALUES
+		('api_workflows', 'expired@example.com', '\x01', now() - interval '1 minute', NULL),
+		('api_workflows', 'pending@example.com', '\x02', now() + interval '1 day', NULL),
+		('api_workflows', 'confirmed@example.com', NULL, NULL, now() - interval '30 days')`)
+	st, _ := e.job(100).RunOnce(t.Context())
+	if st.Tokens != 1 {
+		t.Fatalf("%+v", st)
+	}
+	if n := e.count(t, `SELECT count(*) FROM waitlist_entries WHERE email <> 'expired@example.com'`); n != 2 || e.count(t, `SELECT count(*) FROM waitlist_entries`) != 2 {
+		t.Fatal("pending and confirmed sign-ups stay")
+	}
+}
+
 func TestCanceledPassStopsPromptly(t *testing.T) {
 	e := newEnv(t)
 	m := e.monitor(t, e.org(t, "free", "active"))

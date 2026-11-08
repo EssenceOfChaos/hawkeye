@@ -658,3 +658,11 @@ main.auth .card p a { font-weight: 600; }
 .recovery-codes { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: .25rem 1.5rem; padding: 0; list-style: none;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 p.warning { color: var(--warn); }
+
+/* "Coming soon" cards on the landing page (components/ComingSoon.tsx): the button or form sits at the bottom of each card. */
+.coming-soon .feature { display: flex; flex-direction: column; gap: .5rem; align-items: flex-start; }
+.coming-soon .feature h3 { margin: .25rem 0 0; }
+.coming-soon .feature > p { flex: 1; }
+.notify-form { display: grid; gap: .5rem; width: 100%; }
+.notify-form input { width: 100%; }
+.notify-form button { justify-self: start; }

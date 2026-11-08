@@ -96,6 +96,8 @@ export const PAGES: readonly PageMeta[] = [
   { path: '/reset-password', title: 'Choose a new password | HawkEye', description: 'Choose a new password for your HawkEye account.', index: false },
   { path: '/confirm-alert-address', title: 'Confirm alert address | HawkEye', description: 'Confirm an email address for HawkEye alerts.', index: false },
   { path: '/unsubscribe', title: 'Stop these emails | HawkEye', description: 'Stop getting-started emails from HawkEye.', index: false },
+  { path: '/waitlist/confirm', title: 'Confirm your spot | HawkEye', description: 'Confirm you want to hear when a HawkEye feature launches.', index: false },
+  { path: '/waitlist/leave', title: 'Leave the list | HawkEye', description: 'Stop hearing about an upcoming HawkEye feature.', index: false },
   { path: '/accept-invite', title: 'Join a team | HawkEye', description: 'Accept an invitation to join a team on HawkEye.', index: false },
 
   // Signed-in app.
