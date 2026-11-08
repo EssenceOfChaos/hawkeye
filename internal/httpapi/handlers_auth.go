@@ -26,6 +26,7 @@ import (
 	"hawkeye/internal/maintenance"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
+	"hawkeye/internal/oauth"
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/regions"
@@ -64,6 +65,7 @@ type handlers struct {
 	emailPerHour  int
 	secureCookies bool
 	apiTokens     *apitokens.Service // nil turns API keys off (DISABLE_API_KEYS)
+	oauth         *oauth.Service     // OAuth for the MCP server; nil turns connecting apps off
 	twoFactor     *twofactor.Service // two-factor sign-in; nil turns its settings off (sign-in still enforces it for accounts that have it)
 	tokenRoutes   map[string]bool    // "METHOD /path" of the routes open to API keys
 }
@@ -105,6 +107,8 @@ func mapError(err error) error {
 	case errors.Is(err, apitokens.ErrTwoFactorRequired):
 		return &APIError{Status: http.StatusForbidden, Code: "TWO_FACTOR_REQUIRED",
 			Message: "This organization requires two-factor sign-in, and this key's owner hasn't set it up. Set it up in HawkEye to use the key again."}
+	case errors.Is(err, oauth.ErrGrantNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Connected app not found."}
 	case errors.Is(err, apitokens.ErrNotFound):
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "API key not found."}
 	case errors.Is(err, apitokens.ErrTooMany):

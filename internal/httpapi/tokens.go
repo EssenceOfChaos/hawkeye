@@ -34,6 +34,8 @@ var (
 		Message: "This API key has expired. Create a new key in HawkEye and use that instead."}
 	errTokenInvalid = &APIError{Status: http.StatusUnauthorized, Code: "UNAUTHENTICATED",
 		Message: "This API key is not valid. Check that it was copied in full and hasn't been revoked."}
+	errTokenAudience = &APIError{Status: http.StatusForbidden, Code: "TOKEN_AUDIENCE",
+		Message: "This token was issued to a connected app for HawkEye's MCP server and can't be used with the API. Create an API key instead."}
 	errTokenScope = &APIError{Status: http.StatusForbidden, Code: "TOKEN_SCOPE",
 		Message: "This API key is read-only. Create a key with write access to make changes."}
 	errTokenOrganization = &APIError{Status: http.StatusForbidden, Code: "TOKEN_ORGANIZATION_MISMATCH",
@@ -85,6 +87,11 @@ func (h *handlers) authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 		if err != nil {
 			return err
 		}
+		// Tokens issued to OAuth clients (Claude's connector) are for the MCP server only, so a token handed to an assistant can't be replayed
+		// against the wider REST API.
+		if p.Kind == apitokens.KindOAuth {
+			return errTokenAudience
+		}
 		ctx := c.Request().Context()
 		if write {
 			if !p.CanWrite() {
@@ -109,16 +116,16 @@ func (h *handlers) keyPrincipal(c *echo.Context, write bool) (apitokens.Principa
 	}
 	raw, ok := bearerToken(c)
 	if !ok {
-		c.Response().Header().Set("WWW-Authenticate", h.bearerChallenge(""))
+		c.Response().Header().Set("WWW-Authenticate", h.bearerChallenge(c, ""))
 		return apitokens.Principal{}, errTokenInvalid
 	}
 	p, err := h.apiTokens.Authenticate(c.Request().Context(), raw)
 	switch {
 	case errors.Is(err, apitokens.ErrExpired):
-		c.Response().Header().Set("WWW-Authenticate", h.bearerChallenge(`error="invalid_token", error_description="The API key has expired"`))
+		c.Response().Header().Set("WWW-Authenticate", h.bearerChallenge(c, `error="invalid_token", error_description="The API key has expired"`))
 		return apitokens.Principal{}, errTokenExpired
 	case errors.Is(err, apitokens.ErrInvalid):
-		c.Response().Header().Set("WWW-Authenticate", h.bearerChallenge(`error="invalid_token"`))
+		c.Response().Header().Set("WWW-Authenticate", h.bearerChallenge(c, `error="invalid_token"`))
 		return apitokens.Principal{}, errTokenInvalid
 	case errors.Is(err, apitokens.ErrTwoFactorRequired):
 		return apitokens.Principal{}, mapError(err)
@@ -138,8 +145,12 @@ func (h *handlers) keyPrincipal(c *echo.Context, write bool) (apitokens.Principa
 }
 
 // bearerChallenge is the WWW-Authenticate value for a refused key, with extra parameters (error=…) appended.
-func (h *handlers) bearerChallenge(extra string) string {
+func (h *handlers) bearerChallenge(c *echo.Context, extra string) string {
 	v := `Bearer realm="HawkEye API"`
+	// On the MCP server, point OAuth clients at the metadata that tells them how to get a token (RFC 9728, MCP authorization).
+	if h.oauth != nil && c.Path() == "/mcp" {
+		v += `, resource_metadata="` + h.resourceMetadataURL() + `"`
+	}
 	if extra != "" {
 		v += ", " + extra
 	}

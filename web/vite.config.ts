@@ -19,6 +19,8 @@ export default defineConfig({
     proxy: {
       '/api/': apiTarget, // the trailing slash keeps app pages such as /api-keys in the app, as Caddy's /api/* does
       '/mcp': apiTarget, // the MCP server (exactly /mcp)
+      '/oauth/': apiTarget, // OAuth endpoints for MCP clients (the consent page itself is /connect, in the app)
+      '/.well-known/oauth-': apiTarget,
       '/healthz': apiTarget,
       '/readyz': apiTarget,
     },

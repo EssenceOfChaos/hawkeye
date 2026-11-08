@@ -37,6 +37,7 @@ import (
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
+	"hawkeye/internal/oauth"
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/ratelimit"
@@ -141,8 +142,10 @@ func run() error {
 
 	freeTools := newFreeTools(cfg.FreeToolsEnabled, log)
 	var apiTokens *apitokens.Service
+	var oauthSvc *oauth.Service // connecting Claude and other MCP clients; its tokens are API tokens, so the same switch turns it off
 	if cfg.APIKeysEnabled {
 		apiTokens = apitokens.NewService(pool, planSvc, mailer, log, cfg.AppBaseURL)
+		oauthSvc = oauth.NewService(pool, planSvc, twoFactorSvc, mailer, log, cfg.AppBaseURL)
 	} else {
 		log.Warn("API keys are turned off (DISABLE_API_KEYS): requests made with a key answer 503")
 	}
@@ -155,6 +158,7 @@ func run() error {
 		SiteCheck:     freeTools.site,
 		APITokens:     apiTokens,
 		TwoFactor:     twoFactorSvc,
+		OAuth:         oauthSvc,
 		AppBaseURL:    cfg.AppBaseURL,
 		Version:       cfg.AppVersion,
 		Invitations:   invitations.NewService(pool, planSvc, mailer, log, cfg.AppBaseURL),

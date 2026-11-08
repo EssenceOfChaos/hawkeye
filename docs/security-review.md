@@ -71,3 +71,8 @@ SQL: all queries are parameterized; the few places that assemble SQL (dynamic `U
     second factor. Someone who loses both their authenticator app and their recovery codes needs support to turn it off after checking who they are
     (`docs/operations.md`). There is no SMS option. Codes are checked with one 30-second step of tolerance either way, so a code stays valid for
     about 90 seconds unless it is used.
+21. **OAuth lets an app keep access for up to 30 days without the person present** (`docs/security.md#oauth`). Refresh tokens rotate and a
+    reused one ends the connection, but a stolen refresh token used before the real client uses it works until the person disconnects the app (the
+    API keys page lists connected apps, and every new connection is emailed). Clients are registered by hand: a leaked client secret lets someone
+    exchange codes they also intercepted, which PKCE prevents, so the secret alone is not enough. There is no dynamic client registration yet, so
+    only clients we register (Claude) can connect.

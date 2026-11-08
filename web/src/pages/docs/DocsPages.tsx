@@ -429,7 +429,9 @@ function ClaudeDocs() {
   --header "Authorization: Bearer $HAWKEYE_API_KEY"`}</Code>
       <p>
         Other MCP clients that can send a header with each request work the same way: the server address is <code>https://hawkeye.observer/mcp</code> and the
-        key goes in the <code>Authorization</code> header. Connecting from the Claude apps’ connector settings, without a key, is not available yet.
+        key goes in the <code>Authorization</code> header. Some apps connect by signing in instead: they send you to a HawkEye page where you choose the organization and the access the app gets (and
+        confirm with your two-factor code if you use one). Connecting from the Claude apps’ own connector settings this way will be available once
+        HawkEye is listed in Claude’s connector directory.
       </p>
 
       <h2 id="tools">What Claude can do</h2>
@@ -452,6 +454,7 @@ function ClaudeDocs() {
 
       <h2 id="safety">Good to know</h2>
       <ul>
+        <li>Apps you connected by signing in are listed under <strong>Connected apps</strong> on the API keys page, where you can disconnect them; HawkEye emails you whenever one is connected.</li>
         <li>A key used with Claude is an ordinary API key: it expires (after 90 days unless you chose otherwise), shows when it was last used, and you can revoke it at any time.</li>
         <li>Changes count toward the key’s limit of 30 a minute, shared with the API.</li>
         <li>Monitor names, incident summaries and updates are text people wrote or that came from your sites; HawkEye tells Claude to treat them as data, not instructions.</li>

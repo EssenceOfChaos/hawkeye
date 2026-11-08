@@ -103,6 +103,21 @@ API keys (`Authorization: Bearer hk_…`) let scripts use the API as a person in
 4. Expiry emails: the worker emails people 7 days before a key expires and when it does (`apitokens.ExpiryJob`, every 15 minutes, on the primary
    worker only). A missing email is in the worker log as `send API key expiry email failed`.
 
+### OAuth clients (connecting Claude)
+
+Clients that may connect to the MCP server by signing in are registered by hand, with the database URL of the environment:
+
+```sh
+DATABASE_URL=... go run ./cmd/oauthclient create -name Claude \
+  -redirect https://claude.ai/api/mcp/auth_callback -redirect https://claude.com/api/mcp/auth_callback
+DATABASE_URL=... go run ./cmd/oauthclient list
+DATABASE_URL=... go run ./cmd/oauthclient disable <client-id>   # stops it and revokes every connection it holds
+```
+
+`create` prints the client ID and secret once; enter both in Anthropic's directory portal (Authentication step), which holds them for Claude.
+Check Anthropic's documentation for the current list of Claude's redirect URIs before registering. The worker deletes used and expired codes and
+refresh tokens hourly, and connections revoked over 30 days ago. `DISABLE_API_KEYS` also stops OAuth (its tokens are API tokens).
+
 ### MCP server
 
 `/mcp` serves Claude Code and other MCP clients with the same API keys (`docs/api.md#mcp-server`). `hawkeye_mcp_tool_calls_total{tool, outcome}`

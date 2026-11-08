@@ -37,6 +37,7 @@ import (
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
+	"hawkeye/internal/oauth"
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/ratelimit"
@@ -117,6 +118,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 	opts.AppBaseURL, opts.Version = "http://app.test", "test"
 	opts.TwoFactor = tf
 	if !o.noAPIKeys {
+		opts.OAuth = oauth.NewService(pool, planSvc, tf, mail, log, "http://app.test")
 		opts.APITokens = apitokens.NewService(pool, planSvc, mail, log, "http://app.test")
 	}
 	return httpapi.New(opts)
