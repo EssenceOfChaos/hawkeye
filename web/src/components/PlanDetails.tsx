@@ -67,7 +67,7 @@ export function PlanDetails({ plan, interval = 'month' }: { plan: Plan; interval
         <li>SSL certificate expiry warnings</li>
         {plan.max_domains !== undefined && <li>Domain expiry warnings for up to {plan.max_domains} domains</li>}
         <li>Email, Slack, Teams, Discord, Telegram and webhook alerts</li>
-        <li>{plan.api_write_enabled ? 'API access with read and write keys' : 'Read-only API access'}</li>
+        <li>{plan.api_write_enabled ? 'API and Claude (MCP) access with read and write keys' : 'Read-only API and Claude (MCP) access'}</li>
         <li>{(plan.max_status_pages ?? 1) > 1 ? `${plan.max_status_pages} public status pages` : 'Public status page'}</li>
         {plan.status_page_white_label
           ? <li>White-label status pages: your clients’ logos and colors, no HawkEye branding</li>

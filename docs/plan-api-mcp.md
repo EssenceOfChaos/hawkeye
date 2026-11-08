@@ -1,6 +1,6 @@
 # Plan: public API, MCP server and Claude connector
 
-Status: **Phase 1 built** (2026-11-07, PR #10); **Phase 2** in PR #11; **Phase 3a (two-factor sign-in) built** (2026-11-08, branch `feat/two-factor`); 3b and 3c proposed.
+Status: **Phase 1 built** (2026-11-07, PR #10); **Phase 2 built** (2026-11-08, PR #11); **Phase 3a (two-factor sign-in) built** (2026-11-08, PR #12); 3b and 3c proposed.
 
 This plan pulls roadmap item #14 (Public API and API keys) forward from Q4 and builds two more things on top of it: an MCP server
 that lets Claude and other AI clients use HawkEye, and a listing in Anthropic's Connectors Directory. It also brings forward roadmap
@@ -127,8 +127,7 @@ token-enabled on purpose or cookie-only, so a new route can't silently become re
 
 - A Streamable HTTP MCP endpoint at `https://hawkeye.observer/mcp`, served by the API process (`cmd/api`), stateless (no MCP
   sessions to store), with a route in `deploy/Caddyfile`.
-- Built with the official Go SDK, `github.com/modelcontextprotocol/go-sdk`. Check its current release and auth helpers when the
-  work starts, and pin it in `go.mod`.
+- Built with the official Go SDK, `github.com/modelcontextprotocol/go-sdk` (v1.8.0).
 - Authentication is the same bearer token from Phase 1 (API keys now, OAuth access tokens in Phase 3). A missing or bad token gets
   `401` with a `WWW-Authenticate` header; Phase 3 adds the `resource_metadata` pointer that OAuth clients follow.
 - **Origin check:** a request with an `Origin` header is rejected unless the origin is on a short allowlist (claude.ai, claude.com;
@@ -161,7 +160,7 @@ it, so `post_incident_update` also says in its description that the update is pu
 | `get_incident` | read | – | One incident with its timeline and posted updates |
 | `list_status_pages` | read | – | Pages, slugs and which monitors they show |
 | `list_maintenance_windows` | read | – | Current and upcoming windows |
-| `pause_monitor` / `resume_monitor` | write | paid | One monitor, or every monitor with a tag (uses the bulk path) |
+| `pause_monitors` / `resume_monitors` | write | paid | Monitors by ID, or every monitor with a tag (uses the bulk path) |
 | `create_monitor` | write | paid | Website, heartbeat or DNS; same validation and plan limits as the API |
 | `post_incident_update` | write | paid, owner | Shown on public status pages, so the description says so plainly |
 | `schedule_maintenance` | write | paid, owner | One-off windows only in the first version |

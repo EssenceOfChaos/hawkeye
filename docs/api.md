@@ -89,6 +89,32 @@ Scripts and tools authenticate with an API key instead: `Authorization: Bearer h
 | `POST /api-keys` | session, verified email | `{name, scope, expires_at?, no_expiry?}` → 201 `{key, token}`. Leave both expiry fields out for 90 days; `expires_at` (RFC 3339) must be 1 hour to 366 days away. A `write` key on a plan without API writes is `403 PLAN_LIMIT_REACHED`. Emails the person that a key was created |
 | `DELETE /api-keys/:id` | session | 204. Your own keys; the owner may revoke anyone's in the organization. 404 for an unknown or already revoked key |
 
+## MCP server
+
+`POST /mcp` (outside `/api/v1`) is a Model Context Protocol server for Claude Code and other MCP clients (`internal/mcpserver`, mounted in
+`internal/httpapi/mcp.go`; public guide at `/docs/claude`). It takes **API keys only** (`Authorization: Bearer hk_…`), authenticated exactly as
+the REST API does: the same errors (`401 UNAUTHENTICATED` / `TOKEN_EXPIRED`, `503 API_KEYS_DISABLED`), the same per-key request budget, and the
+same kill switch. Requests with an `Origin` header must come from `https://claude.ai` or `https://claude.com` (`403 ORIGIN_NOT_ALLOWED`); clients
+that are not browsers send none. It is stateless (no MCP sessions; `GET` and `DELETE` answer 405) and answers in JSON.
+
+| Tool | Kind | Needs | Mirrors |
+|---|---|---|---|
+| `get_account_overview` | read | – | `GET /usage`, `GET /dashboard/summary` |
+| `list_monitors`, `get_monitor` | read | – | `GET /monitors`, `GET /monitors/:id` (never headers, body or credentials) |
+| `get_uptime` | read | – | `GET /monitors/:id/uptime` (or every monitor), presets only |
+| `list_incidents`, `get_incident` | read | – | `GET /incidents`, `GET /incidents/:id/updates` |
+| `list_status_pages`, `list_maintenance_windows` | read | – | `GET /status-pages`, `GET /maintenance-windows` |
+| `pause_monitors`, `resume_monitors` | write | write key, paid plan | `POST /monitors/bulk` (by IDs or by tag name) |
+| `create_monitor` | write | write key, paid plan | `POST /monitors` (website with GET, heartbeat or DNS only) |
+| `post_incident_update`, `delete_incident_update` | write, destructive | write key, paid plan, owner | `POST`/`DELETE /incidents/:id/updates` |
+| `schedule_maintenance` | write | write key, Pro or Agency, owner | `POST /maintenance-windows` (one-off) |
+| `delete_maintenance_window` | write, destructive | write key, paid plan, owner | `DELETE /maintenance-windows/:id` |
+
+Every tool has a title and `readOnlyHint`, or an explicit `destructiveHint`; destructive tools always ask the person first in Claude. A tool that is
+refused returns a tool result with `isError` and a message that says how to fix it, never internal detail. Writes spend the key's write budget
+(30 a minute), **shared with REST writes**. `TestToolsRefuseWhatTheAPIRefuses` runs every write tool next to its REST route for keys of each scope,
+role and plan and fails if the two ever disagree.
+
 ## Endpoints
 
 | Method & path | Auth | Notes |

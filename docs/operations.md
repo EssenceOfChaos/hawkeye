@@ -103,6 +103,13 @@ API keys (`Authorization: Bearer hk_…`) let scripts use the API as a person in
 4. Expiry emails: the worker emails people 7 days before a key expires and when it does (`apitokens.ExpiryJob`, every 15 minutes, on the primary
    worker only). A missing email is in the worker log as `send API key expiry email failed`.
 
+### MCP server
+
+`/mcp` serves Claude Code and other MCP clients with the same API keys (`docs/api.md#mcp-server`). `hawkeye_mcp_tool_calls_total{tool, outcome}`
+counts tool calls (`ok`, `refused` for permission, plan, input and budget refusals, `error` for failures on our side) and
+`hawkeye_mcp_tool_duration_seconds{tool}` their latency; an `error` outcome is also logged as `MCP tool failed` with the tool and organization.
+The per-key limits and `DISABLE_API_KEYS` (see above) apply to it too.
+
 ### Locked out: lost authenticator app and recovery codes
 
 Two-factor sign-in has no email recovery, on purpose. If someone has lost both their phone and their recovery codes, confirm who they are first

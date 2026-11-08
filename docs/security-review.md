@@ -62,7 +62,12 @@ SQL: all queries are parameterized; the few places that assemble SQL (dynamic `U
     a cookie, and that account, billing, team, alert-recipient and key-management routes are session-only. Residual risks: a leaked write key can change
     or delete monitors, status pages and maintenance windows within its owner's role until it is revoked or expires (no audit log yet shows which key did
     what); a key with no expiry lasts until someone revokes it; and without the shared limiter (single process, tests) the per-key limits do not apply.
-19. **Two-factor sign-in has no account recovery by email** (`docs/security.md#two-factor-sign-in`), by design: email alone would undo the
+19. **The MCP server lets an AI assistant act with a person's API key** (`docs/security.md#mcp-server`). It adds no new authority: the same keys,
+    checks and budgets as the REST API, compared tool by tool in a test. Residual risks: an assistant can be talked into calling a write tool by text
+    it reads (a monitor name, an incident summary, a web page in the same conversation), so a read and write key given to an assistant can pause or
+    create monitors, and, for owners, post public incident updates; Claude asks before public and destructive changes, but other clients may not.
+    Give assistants read-only keys unless changes are needed.
+20. **Two-factor sign-in has no account recovery by email** (`docs/security.md#two-factor-sign-in`), by design: email alone would undo the
     second factor. Someone who loses both their authenticator app and their recovery codes needs support to turn it off after checking who they are
     (`docs/operations.md`). There is no SMS option. Codes are checked with one 30-second step of tolerance either way, so a code stays valid for
     about 90 seconds unless it is used.

@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -265,6 +266,13 @@ func TestOwnersCanRequireTwoFactorForTheirOrganization(t *testing.T) {
 	}
 	if r := e.keyClient(t, key).call("GET", "/api/v1/monitors", nil); r.Status != 403 || errCode(r) != "TWO_FACTOR_REQUIRED" {
 		t.Fatalf("the member's key: %d %v", r.Status, r.Body)
+	}
+	mcpReq, _ := http.NewRequest("POST", e.srv.URL+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	mcpReq.Header.Set("Content-Type", "application/json")
+	mcpReq.Header.Set("Accept", "application/json, text/event-stream")
+	mcpReq.Header.Set("Authorization", "Bearer "+key)
+	if res, err := http.DefaultClient.Do(mcpReq); err != nil || res.StatusCode != 403 {
+		t.Fatalf("the member's key on the MCP server: %v %v", res.StatusCode, err)
 	}
 	if r := member.call("GET", "/api/v1/monitors", nil); r.Status != 200 {
 		t.Fatalf("their own organization still works: %d", r.Status)
