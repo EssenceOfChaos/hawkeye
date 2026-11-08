@@ -36,6 +36,7 @@ The app ships `/privacy` and `/terms` pages containing a prominent "PLACEHOLDER 
 |---|---|---|
 | Email, password hash (Argon2id), name | account | until account deletion |
 | Session records (hashed token, expiry; no IP or user agent stored) | sign-in | until expiry/sign-out |
+| Connected apps (OAuth): which app, organization and access the person approved, when, and when it was last used; hashed authorization codes, refresh and access tokens | connecting apps such as Claude | until disconnected (records of revoked connections kept 30 days), codes a minute, access tokens an hour, refresh tokens 30 days |
 | Two-factor sign-in: the authenticator secret (encrypted), when it was turned on, the last code step used, hashed recovery codes, and for 10 minutes during sign-in a hashed challenge | account security | until turned off or account deleted; challenges 10 minutes |
 | API keys: name, access, a short prefix, hashed token, created, last used and expiry dates (no IP or user agent stored) | API access | deleted 30 days after revocation or 90 days after expiry (by the worker), and at once when the person leaves the organization or deletes the account |
 | Monitor URLs/names, check results (status, latency, error class) | the service | per plan: 7 / 90 / 365 days; incidents kept |

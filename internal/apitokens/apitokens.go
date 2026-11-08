@@ -34,6 +34,9 @@ const (
 	ScopeRead  = "read"
 	ScopeWrite = "write"
 
+	KindKey   = "key"          // an API key a person made
+	KindOAuth = "oauth_access" // an access token issued to an OAuth client (internal/oauth)
+
 	// TokenPrefix starts every key, so leaked keys are easy to recognize (in logs, and by secret scanners).
 	TokenPrefix = "hk_"
 	// MaxLiveKeys caps an organization's keys that are not revoked or expired.
@@ -77,6 +80,8 @@ type Key struct {
 // Principal is who a request made with a key acts as.
 type Principal struct {
 	TokenID        uuid.UUID
+	Kind           string    // KindKey, or KindOAuth for an access token issued to an OAuth client (accepted only by the MCP server)
+	GrantID        uuid.UUID // the OAuth grant, for KindOAuth
 	OrganizationID uuid.UUID
 	User           auth.User
 	Role           string // the owner's role in the organization now
@@ -170,7 +175,7 @@ func (s *Service) Create(ctx context.Context, u auth.User, orgID uuid.UUID, in N
 			return err
 		}
 		var live int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM api_tokens WHERE organization_id = $1 AND revoked_at IS NULL
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM api_tokens WHERE organization_id = $1 AND kind = 'key' AND revoked_at IS NULL
 			AND (expires_at IS NULL OR expires_at > $2)`, orgID, now).Scan(&live); err != nil {
 			return err
 		}
@@ -197,7 +202,7 @@ func (s *Service) List(ctx context.Context, orgID, userID uuid.UUID, role string
 	rows, err := s.pool.Query(ctx, `SELECT t.id, t.name, t.scope, t.prefix, u.email, t.user_id = $2, t.created_at, t.last_used_at, t.expires_at,
 			t.expires_at IS NOT NULL AND t.expires_at <= $4
 		FROM api_tokens t JOIN users u ON u.id = t.user_id
-		WHERE t.organization_id = $1 AND t.revoked_at IS NULL AND ($3 OR t.user_id = $2)
+		WHERE t.organization_id = $1 AND t.kind = 'key' AND t.revoked_at IS NULL AND ($3 OR t.user_id = $2)
 		ORDER BY t.created_at DESC, t.id`, orgID, userID, role == organizations.RoleOwner, s.now())
 	if err != nil {
 		return nil, err
@@ -217,7 +222,7 @@ func (s *Service) List(ctx context.Context, orgID, userID uuid.UUID, role string
 // Revoke stops a key at once. People revoke their own keys; an owner can revoke anyone's in the organization.
 func (s *Service) Revoke(ctx context.Context, orgID, keyID, userID uuid.UUID, role string) error {
 	tag, err := s.pool.Exec(ctx, `UPDATE api_tokens SET revoked_at = now()
-		WHERE id = $1 AND organization_id = $2 AND revoked_at IS NULL AND ($4 OR user_id = $3)`, keyID, orgID, userID, role == organizations.RoleOwner)
+		WHERE id = $1 AND organization_id = $2 AND kind = 'key' AND revoked_at IS NULL AND ($4 OR user_id = $3)`, keyID, orgID, userID, role == organizations.RoleOwner)
 	if err != nil {
 		return err
 	}
@@ -242,9 +247,12 @@ func (s *Service) Authenticate(ctx context.Context, raw string) (Principal, erro
 		revoked   *time.Time
 		lastUsed  *time.Time
 		blocked   bool
+		grantID   *uuid.UUID
+		grantOff  bool
 	)
 	// blocked: the organization requires two-factor sign-in and the key's owner is past their grace period without it (internal/twofactor).
-	err := s.pool.QueryRow(ctx, `SELECT t.id, t.organization_id, t.scope, t.expires_at, t.revoked_at, t.last_used_at, m.role,
+	err := s.pool.QueryRow(ctx, `SELECT t.id, t.kind, t.oauth_grant_id, COALESCE(g.revoked_at IS NOT NULL, false),
+			t.organization_id, t.scope, t.expires_at, t.revoked_at, t.last_used_at, m.role,
 			u.id, u.email, u.email_verified_at, u.created_at,
 			o.require_two_factor_since IS NOT NULL AND u.totp_enabled_at IS NULL
 				AND GREATEST(o.require_two_factor_since, m.created_at) + $2::interval <= now()
@@ -252,8 +260,9 @@ func (s *Service) Authenticate(ctx context.Context, raw string) (Principal, erro
 		JOIN organization_members m ON m.organization_id = t.organization_id AND m.user_id = t.user_id
 		JOIN organizations o ON o.id = t.organization_id
 		JOIN users u ON u.id = t.user_id
+		LEFT JOIN oauth_grants g ON g.id = t.oauth_grant_id
 		WHERE t.token_hash = $1 AND u.disabled_at IS NULL`, hash, twofactor.GracePeriod).
-		Scan(&p.TokenID, &p.OrganizationID, &p.Scope, &expiresAt, &revoked, &lastUsed, &p.Role, &p.User.ID, &p.User.Email, &p.User.EmailVerifiedAt, &p.User.CreatedAt,
+		Scan(&p.TokenID, &p.Kind, &grantID, &grantOff, &p.OrganizationID, &p.Scope, &expiresAt, &revoked, &lastUsed, &p.Role, &p.User.ID, &p.User.Email, &p.User.EmailVerifiedAt, &p.User.CreatedAt,
 			&blocked)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Principal{}, ErrInvalid
@@ -262,8 +271,11 @@ func (s *Service) Authenticate(ctx context.Context, raw string) (Principal, erro
 		return Principal{}, fmt.Errorf("authenticate API key: %w", err)
 	}
 	now := s.now()
-	if revoked != nil {
+	if revoked != nil || grantOff {
 		return Principal{}, ErrInvalid
+	}
+	if grantID != nil {
+		p.GrantID = *grantID
 	}
 	if expiresAt != nil && !expiresAt.After(now) {
 		return Principal{}, ErrExpired
@@ -318,4 +330,23 @@ func (s *Service) sendCreated(ctx context.Context, to, orgName string, k Key) {
 	if err := s.mail.Send(ctx, c.Message("", to, "A new HawkEye API key was created")); err != nil {
 		s.log.ErrorContext(ctx, "send API key created email failed", "token_id", k.ID, "error", err)
 	}
+}
+
+// IssueForGrant creates an access token for an OAuth grant (internal/oauth), inside the caller's transaction. It belongs to the grant's person and
+// organization like an API key, but is short-lived, accepted only by the MCP server, and never listed with the person's keys.
+func IssueForGrant(ctx context.Context, tx pgx.Tx, orgID, userID, grantID uuid.UUID, clientName, scope string, expiresAt time.Time) (string, error) {
+	raw, err := newToken()
+	if err != nil {
+		return "", err
+	}
+	name := clientName
+	if utf8.RuneCountInString(name) > 100 {
+		name = string([]rune(name)[:100])
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO api_tokens (organization_id, user_id, kind, name, scope, prefix, token_hash, expires_at, oauth_grant_id)
+		VALUES ($1, $2, 'oauth_access', $3, $4, $5, $6, $7, $8)`, orgID, userID, name, scope, raw[:shownPrefixLen], auth.HashToken(raw), expiresAt, grantID)
+	if err != nil {
+		return "", fmt.Errorf("issue OAuth access token: %w", err)
+	}
+	return raw, nil
 }

@@ -83,14 +83,16 @@ type expiring struct {
 func (j *ExpiryJob) RunOnce(ctx context.Context) (int, error) {
 	now := j.now()
 	sent := 0
-	if _, err := j.pool.Exec(ctx, `DELETE FROM api_tokens WHERE revoked_at < $1::timestamptz - $2::interval OR expires_at < $1::timestamptz - $3::interval`,
+	// OAuth access tokens last an hour and nobody lists them, so they go a day after they expire.
+	if _, err := j.pool.Exec(ctx, `DELETE FROM api_tokens WHERE revoked_at < $1::timestamptz - $2::interval OR expires_at < $1::timestamptz - $3::interval
+		OR (kind = 'oauth_access' AND expires_at < $1::timestamptz - interval '1 day')`,
 		now, KeepRevoked, KeepExpired); err != nil {
 		return sent, fmt.Errorf("delete old API keys: %w", err)
 	}
 	// Keys about to expire: claim the warning, then send it.
 	warn, err := j.claim(ctx, `UPDATE api_tokens t SET expiry_warned_at = $1
 		FROM users u, organizations o
-		WHERE t.id IN (SELECT id FROM api_tokens WHERE revoked_at IS NULL AND expiry_warned_at IS NULL AND expires_at > $1 AND expires_at <= $1 + $2::interval
+		WHERE t.id IN (SELECT id FROM api_tokens WHERE kind = 'key' AND revoked_at IS NULL AND expiry_warned_at IS NULL AND expires_at > $1 AND expires_at <= $1 + $2::interval
 			AND expires_at - created_at > $3::interval ORDER BY expires_at LIMIT $4 FOR UPDATE SKIP LOCKED)
 		  AND u.id = t.user_id AND o.id = t.organization_id AND u.disabled_at IS NULL
 		RETURNING t.id, t.name, t.prefix, t.expires_at, u.email, o.name`, now, WarnBefore, warnMinLifetime, j.batch)
@@ -104,7 +106,7 @@ func (j *ExpiryJob) RunOnce(ctx context.Context) (int, error) {
 	// Keys that have just expired.
 	gone, err := j.claim(ctx, `UPDATE api_tokens t SET expired_notified_at = $1
 		FROM users u, organizations o
-		WHERE t.id IN (SELECT id FROM api_tokens WHERE revoked_at IS NULL AND expired_notified_at IS NULL AND expires_at <= $1 AND expires_at > $1 - $2::interval
+		WHERE t.id IN (SELECT id FROM api_tokens WHERE kind = 'key' AND revoked_at IS NULL AND expired_notified_at IS NULL AND expires_at <= $1 AND expires_at > $1 - $2::interval
 			ORDER BY expires_at LIMIT $3 FOR UPDATE SKIP LOCKED)
 		  AND u.id = t.user_id AND o.id = t.organization_id AND u.disabled_at IS NULL
 		RETURNING t.id, t.name, t.prefix, t.expires_at, u.email, o.name`, now, expiredNoticeWindow, j.batch)

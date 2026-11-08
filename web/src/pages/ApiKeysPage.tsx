@@ -218,6 +218,84 @@ export function ApiKeysPage() {
           <p className="hint">Verify your email address first (see the link we sent you), so a key can be tied to an address you control.</p>
         )
       )}
+      <ConnectedApps isOwner={isOwner} />
     </>
+  )
+}
+
+interface ConnectedApp {
+  id: string
+  client_name: string
+  scope: 'read' | 'write'
+  owner_email: string
+  mine: boolean
+  created_at: string
+  last_used_at: string | null
+}
+
+/** Apps connected through OAuth (such as Claude's connector): what each may do, and a way to disconnect it. */
+function ConnectedApps({ isOwner }: { isOwner: boolean }) {
+  const [apps, setApps] = useState<ConnectedApp[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      setApps((await api<{ connected_apps: ConnectedApp[] }>('GET', '/oauth/connected-apps')).connected_apps)
+    } catch {
+      setApps(null) // optional section: left out if it can't load
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function disconnect(a: ConnectedApp) {
+    const whose = a.mine ? '' : ` It was connected by ${a.owner_email}.`
+    if (!window.confirm(`Disconnect ${a.client_name}? It stops working with HawkEye right away.${whose}`)) return
+    try {
+      await api('DELETE', `/oauth/connected-apps/${a.id}`)
+      setError(null)
+      await load()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'That did not work. Try again.')
+    }
+  }
+
+  if (apps === null) return null
+  return (
+    <section id="connected-apps" aria-labelledby="apps-h">
+      <h2 id="apps-h">Connected apps</h2>
+      <p className="hint">
+        Apps such as Claude that you connected by signing in, rather than with a key. <Link to="/docs/claude">How to connect Claude</Link>
+      </p>
+      {error && <Alert>{error}</Alert>}
+      {apps.length === 0 ? (
+        <p className="hint">No connected apps.</p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <caption className="sr-only">Connected apps</caption>
+            <thead>
+              <tr><th>App</th><th>Access</th>{isOwner && <th>Connected by</th>}<th>Connected</th><th>Last used</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              {apps.map((a) => (
+                <tr key={a.id}>
+                  <td>{a.client_name}</td>
+                  <td>{a.scope === 'write' ? 'Read and write' : 'Read only'}</td>
+                  {isOwner && <td>{a.mine ? 'You' : a.owner_email}</td>}
+                  <td>{day(a.created_at)}</td>
+                  <td>{a.last_used_at ? day(a.last_used_at) : <span className="hint">Not used yet</span>}</td>
+                  <td className="actions">
+                    <button className="danger" onClick={() => void disconnect(a)} aria-label={`Disconnect ${a.client_name}`}>Disconnect</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   )
 }

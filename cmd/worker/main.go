@@ -32,6 +32,7 @@ import (
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/monthlyreport"
 	"hawkeye/internal/notifications"
+	"hawkeye/internal/oauth"
 	"hawkeye/internal/retention"
 	"hawkeye/internal/safehttp"
 	"hawkeye/internal/scheduler"
@@ -174,6 +175,22 @@ func run() error {
 		// Emails before and when API keys expire (account mail, from the alert address).
 		expiryJob := apitokens.NewExpiryJob(pool, mailer, log, cfg.AppBaseURL, 15*time.Minute)
 		spawn(func() { expiryJob.Run(ctx) })
+		// Used and expired OAuth codes and refresh tokens, and connections revoked long ago.
+		oauthPurge := oauth.NewService(pool, nil, nil, mailer, log, cfg.AppBaseURL)
+		spawn(func() {
+			t := time.NewTicker(time.Hour)
+			defer t.Stop()
+			for {
+				if err := oauthPurge.Purge(ctx); err != nil && ctx.Err() == nil {
+					log.Error("OAuth purge failed", "error", err)
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+			}
+		})
 		// Onboarding emails to new accounts with no monitor. They are sent from their own address, so their engagement never affects the alerts' reputation.
 		switch {
 		case !cfg.RunLifecycle:

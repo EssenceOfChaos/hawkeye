@@ -23,6 +23,7 @@ import { MonitorFormPage } from './pages/MonitorFormPage'
 import { StatusPage } from './pages/StatusPage'
 import { TeamPage } from './pages/TeamPage'
 import { ApiKeysPage } from './pages/ApiKeysPage'
+import { ConnectPage } from './pages/ConnectPage'
 import { StatusPageEditor, StatusPagesPage } from './pages/StatusPageSettings'
 import { PrivacyPage, TermsPage } from './pages/LegalPages'
 import { MonitorsPage } from './pages/MonitorsPage'
@@ -46,6 +47,20 @@ function RequireAuth() {
   // Remember where they were going (an emailed "add your first website" link, say) so signing in brings them back to it.
   if (status === 'anonymous') return <Navigate to="/login" replace state={{ from: location.pathname }} />
   return <Layout />
+}
+
+// The consent page for connecting an app (OAuth): signed in, but shown on its own like the sign-in pages, and the whole address (with the app's
+// request in the query) is kept for after signing in.
+function RequireAuthStandalone() {
+  const { status } = useAuth()
+  const location = useLocation()
+  if (status === 'loading') return <p role="status" className="center">Loading…</p>
+  if (status === 'anonymous') return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
+  return (
+    <main className="auth">
+      <Outlet />
+    </main>
+  )
 }
 
 function Lazy({ children }: { children: React.ReactNode }) {
@@ -94,6 +109,9 @@ export function AppRoutes() {
       <Route path="/confirm-alert-address" element={<main className="auth"><ConfirmAlertAddressPage /></main>} />
       <Route path="/unsubscribe" element={<main className="auth"><UnsubscribePage /></main>} />
       <Route path="/accept-invite" element={<main className="auth"><AcceptInvitePage /></main>} />
+      <Route element={<RequireAuthStandalone />}>
+        <Route path="/connect" element={<ConnectPage />} />
+      </Route>
       <Route element={<RequireAuth />}>
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/dashboard" element={<Lazy><DashboardPage /></Lazy>} />

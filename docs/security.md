@@ -149,6 +149,20 @@ See `docs/security-review.md` for the review and residual risks.
 - **Abuse:** 25 live keys per organization; 120 requests and 30 writes a minute per key (shared limiter), on top of per-IP limits; `DISABLE_API_KEYS`
   turns all keys off without affecting sessions (`docs/operations.md#api-key-abuse`).
 
+## OAuth
+
+- **Narrow by design:** one resource (the MCP server), the authorization code grant with **PKCE S256 required**, rotating refresh tokens,
+  revocation. No implicit grant, no passwords at the token endpoint, no dynamic client registration: clients are registered by an operator.
+- **Redirects:** exact match against the client's registered URIs; an unknown client or unregistered redirect is shown as an error and never
+  followed. Responses carry `iss` (RFC 9207), and the request's `state` is passed back untouched.
+- **Consent** is a signed-in page in the app (CSRF-protected API), asks for a fresh two-factor code from people who use it, and emails the person.
+  The consent page can't be framed (`frame-ancestors 'none'`).
+- **Codes** are hashed, single-use and a minute long, bound to the client, redirect URI, PKCE challenge and resource; reuse revokes what the code
+  issued. **Refresh tokens** are hashed and rotate; reuse revokes the connection. Client secrets are hashed.
+- **Access tokens** are API tokens (hashed, an hour long) that only `/mcp` accepts, with the same per-person, per-organization authority,
+  two-factor requirement and budgets as API keys, so an assistant's token can't be replayed against the wider REST API. Revoking a connection,
+  removing the member, or `DISABLE_API_KEYS` ends them at once.
+
 ## MCP server
 
 - **Same authentication as the API:** `/mcp` takes API keys only (a session cookie is not accepted), through the same code as the REST API

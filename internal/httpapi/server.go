@@ -27,6 +27,7 @@ import (
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
+	"hawkeye/internal/oauth"
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/ratelimit"
@@ -71,6 +72,7 @@ type Options struct {
 	SiteCheck     *sitecheck.Service   // free website status checker; nil turns the endpoint off
 	APITokens     *apitokens.Service   // API keys; nil makes key requests answer 503 (DISABLE_API_KEYS) and sessions work as before
 	TwoFactor     *twofactor.Service   // two-factor sign-in settings and organization requirements
+	OAuth         *oauth.Service       // OAuth for the MCP server (connecting Claude); nil turns it off
 	AppBaseURL    string               // public address of the app (status page and ping addresses in MCP tool results)
 	Version       string               // reported by the MCP server
 	MCPOrigins    []string             // browser origins allowed to call /mcp; nil means DefaultMCPOrigins
@@ -183,7 +185,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
 	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies,
-		apiTokens: o.APITokens, twoFactor: o.TwoFactor, tokenRoutes: map[string]bool{}}
+		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, tokenRoutes: map[string]bool{}}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
@@ -458,8 +460,26 @@ func registerAPI(e *echo.Echo, o Options) {
 		v1.POST("/invitations/accept", h.acceptInvitation, h.requireAuth, limit("invite-accept"))
 	}
 
-	// The MCP server (mcp.go): API keys only, outside /api/v1 and its CSRF check. Stateless, so GET and DELETE answer 405.
+	// The MCP server (mcp.go): API keys and OAuth access tokens only, outside /api/v1 and its CSRF check. Stateless, so GET and DELETE answer 405.
 	e.Match([]string{http.MethodPost, http.MethodGet, http.MethodDelete}, "/mcp", h.mcpEndpoint(o))
+
+	// OAuth for the MCP server (oauth.go). Protocol endpoints are outside /api/v1: clients send forms and follow redirects, with no session or CSRF
+	// token. The token and revocation endpoints get their own per-IP budget.
+	e.GET("/.well-known/oauth-authorization-server", h.authorizationServerMetadata)
+	e.GET("/.well-known/oauth-protected-resource", h.protectedResourceMetadata)
+	e.GET("/.well-known/oauth-protected-resource/mcp", h.protectedResourceMetadata)
+	e.GET("/oauth/authorize", h.authorize, limit("oauth-authorize"))
+	var tokenLimit echo.MiddlewareFunc = limit("oauth-token")
+	if h.limits.l != nil {
+		tokenLimit = h.limits.byIP("oauth-token", oauthTokenPerMin, time.Minute)
+	}
+	e.POST("/oauth/token", h.token, tokenLimit)
+	e.POST("/oauth/revoke", h.revokeToken, tokenLimit)
+	// The consent page's API and connected apps: session only.
+	v1.GET("/oauth/authorize", h.oauthAuthorizeInfo, h.requireAuth)
+	v1.POST("/oauth/authorize", h.oauthApprove, h.requireAuth, limit("oauth-consent"))
+	scoped.GET("/oauth/connected-apps", h.listGrants)
+	scoped.DELETE("/oauth/connected-apps/:grantID", h.revokeGrant)
 
 	// Group middleware (authentication, CSRF) also guards each group's catch-all, which made unknown paths answer 401/403 to
 	// anonymous callers. Unknown API paths are simply 404 for everyone.

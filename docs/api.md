@@ -89,6 +89,31 @@ Scripts and tools authenticate with an API key instead: `Authorization: Bearer h
 | `POST /api-keys` | session, verified email | `{name, scope, expires_at?, no_expiry?}` → 201 `{key, token}`. Leave both expiry fields out for 90 days; `expires_at` (RFC 3339) must be 1 hour to 366 days away. A `write` key on a plan without API writes is `403 PLAN_LIMIT_REACHED`. Emails the person that a key was created |
 | `DELETE /api-keys/:id` | session | 204. Your own keys; the owner may revoke anyone's in the organization. 404 for an unknown or already revoked key |
 
+## OAuth (connecting apps to the MCP server)
+
+MCP clients such as Claude can connect by signing in instead of with an API key (`internal/oauth`, migration `000035`, consent page `/connect`).
+HawkEye is an OAuth 2.1 authorization server for exactly one resource, the MCP server, and supports only what MCP clients need.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /.well-known/oauth-protected-resource` (also `…/mcp`) | RFC 9728 metadata: resource `<app>/mcp`, authorization server `<app>` |
+| `GET /.well-known/oauth-authorization-server` | RFC 8414 metadata |
+| `GET /oauth/authorize` | Checks the request and redirects to `/connect`. Unknown clients and unregistered redirect URIs are a 400 here, never a redirect; other problems are sent back to the client's redirect URI (`error=…`) |
+| `POST /oauth/token` | Form-encoded. `authorization_code` (PKCE S256 required, `code_verifier`, the same `redirect_uri`) and `refresh_token`. Client authentication with HTTP Basic or `client_id`/`client_secret` in the form; public clients send `client_id` only |
+| `POST /oauth/revoke` | RFC 7009: an access or refresh token ends its whole connection. 200 for unknown tokens |
+| `GET /api/v1/oauth/authorize?<request>` | Session. What the consent page shows: the client's name, whether it asked for write access, the person's organizations (with `can_write` and `blocked`), and whether a two-factor code is needed |
+| `POST /api/v1/oauth/authorize` | Session + CSRF. `{…request, organization_id, access: read|write, two_factor_code?}` → `{redirect}` (the client's redirect URI with `code`, `state`, `iss`). Emails the person |
+| `GET /api/v1/oauth/connected-apps`, `DELETE /api/v1/oauth/connected-apps/:id` | Session. Live connections in the organization (the owner sees everyone's); disconnecting ends their tokens at once |
+
+- **Clients** are registered by an operator with `cmd/oauthclient` (no dynamic registration). Redirect URIs match exactly.
+- **Codes** last a minute and work once; a second use revokes what the first issued.
+- **Access tokens** are `hk_` tokens of kind `oauth_access`, valid for an hour, accepted **only by `/mcp`** (the REST API answers
+  `403 TOKEN_AUDIENCE`), never listed with API keys, and never sent expiry emails. **Refresh tokens** (`hkr_`) last 30 days and rotate;
+  presenting a used one revokes the connection.
+- **Scope** is `read` or `write`, chosen by the person on the consent page; `write` needs the client to ask for it and the organization's plan to
+  include API writes. Connections follow the person's membership and two-factor requirement exactly like API keys.
+- **`/mcp` 401s** carry `WWW-Authenticate: Bearer …, resource_metadata="<app>/.well-known/oauth-protected-resource/mcp"`.
+
 ## MCP server
 
 `POST /mcp` (outside `/api/v1`) is a Model Context Protocol server for Claude Code and other MCP clients (`internal/mcpserver`, mounted in

@@ -13,6 +13,7 @@ cmd/migrate    applies embedded SQL migrations
 internal/auth          register/login/sessions/password reset/email verification (Argon2id, hashed tokens)
 internal/organizations tenant access; every query scoped by membership; removing members and leaving
 internal/invitations   team invitations: an emailed, single-address link that adds a member (seats are held by pending invitations)
+internal/oauth         OAuth 2.1 for the MCP server: registered clients (cmd/oauthclient), consent, codes with PKCE, rotating refresh tokens, revocation; access tokens are API tokens of their own kind
 internal/mcpserver     the MCP server (POST /mcp, mounted in internal/httpapi/mcp.go): 15 tools over the same services as the REST handlers, acting as the API key's person with the same checks
 internal/twofactor     two-factor sign-in: TOTP (RFC 6238, codes used once), sealed secrets, hashed recovery codes, and an owner's requirement for their organization (7-day grace per member)
 internal/apitokens     API keys: create (shown once, hashed), list, revoke, authenticate as a person in one organization with their current role; emails before and when keys expire (worker)

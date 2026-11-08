@@ -446,3 +446,19 @@ func (s *Service) notify(ctx context.Context, to, preheader, heading, body, note
 		s.log.ErrorContext(ctx, "send two-factor email failed", "error", err)
 	}
 }
+
+// CheckCode verifies a code for someone who is already signed in (for example to approve connecting an app). Like sign-in, each authenticator
+// code works once and a recovery code is used up.
+func (s *Service) CheckCode(ctx context.Context, userID uuid.UUID, address, code string) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		_, err := s.verifyTx(ctx, tx, userID, address, code)
+		return err
+	})
+}
+
+// Enabled reports whether the person uses two-factor sign-in.
+func (s *Service) Enabled(ctx context.Context, userID uuid.UUID) (bool, error) {
+	var on bool
+	err := s.pool.QueryRow(ctx, `SELECT totp_enabled_at IS NOT NULL FROM users WHERE id = $1`, userID).Scan(&on)
+	return on, err
+}
