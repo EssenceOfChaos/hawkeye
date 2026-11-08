@@ -1,4 +1,4 @@
-import { BellAlertIcon, ClockIcon, GlobeAltIcon, RocketLaunchIcon } from '@heroicons/react/24/outline'
+import { BellAlertIcon, ClockIcon, CodeBracketIcon, GlobeAltIcon, RocketLaunchIcon } from '@heroicons/react/24/outline'
 import type { ComponentType, ReactNode, SVGProps } from 'react'
 import { Link, NavLink } from 'react-router'
 import { useAuth } from '../../auth'
@@ -334,11 +334,88 @@ function Alerts() {
   )
 }
 
+function ApiDocs() {
+  return (
+    <>
+      <p>
+        HawkEye’s API lets your own scripts, dashboards and tools read your monitors, uptime and incidents, and on Pro and Agency make changes too: add
+        monitors, pause them during a deploy, post an update on an incident. It is the same API the HawkEye app uses, with an API key instead of a sign-in.
+      </p>
+
+      <h2 id="keys">1. Create an API key</h2>
+      <p>
+        Open <strong>API keys</strong> from the account menu (the person icon) and choose <strong>Create a key</strong>. Give it a name you will recognize,
+        choose its access and when it expires, and copy the key. It starts with <code>hk_</code> and is shown only once: HawkEye keeps just a fingerprint of it.
+      </p>
+      <ul>
+        <li><strong>Read only</strong> keys can list and read everything below. They work on every plan, including Free.</li>
+        <li><strong>Read and write</strong> keys can also make changes. They need Pro or Agency; after a downgrade they keep reading but stop writing.</li>
+      </ul>
+      <p>
+        A key belongs to you and to the organization you made it in. It can do what you can do there and no more: if you are a member rather than the owner,
+        owner-only actions are refused, and if you leave the organization your keys stop working.
+      </p>
+
+      <h2 id="requests">2. Send it with each request</h2>
+      <p>Put the key in the <code>Authorization</code> header. Requests and responses are JSON.</p>
+      <Code>{`curl https://hawkeye.observer/api/v1/monitors \\
+  -H "Authorization: Bearer $HAWKEYE_API_KEY"`}</Code>
+      <p>Pause a monitor before a deploy and resume it afterward (needs a read and write key):</p>
+      <Code>{`curl -X POST https://hawkeye.observer/api/v1/monitors/<monitor-id>/pause \\
+  -H "Authorization: Bearer $HAWKEYE_API_KEY"
+
+curl -X POST https://hawkeye.observer/api/v1/monitors/<monitor-id>/resume \\
+  -H "Authorization: Bearer $HAWKEYE_API_KEY"`}</Code>
+      <p>Add a website monitor:</p>
+      <Code>{`curl -X POST https://hawkeye.observer/api/v1/monitors \\
+  -H "Authorization: Bearer $HAWKEYE_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name": "Shop", "url": "https://shop.example.com", "check_interval_seconds": 60}'`}</Code>
+
+      <h2 id="what">What a key can reach</h2>
+      <ul>
+        <li><strong>Monitors</strong>: list, read, add, edit, delete, pause and resume them, tags and bulk actions, results, uptime and response times.</li>
+        <li><strong>Incidents</strong> and the updates posted on them (posting an update needs the owner, as in the app).</li>
+        <li><strong>Status pages, maintenance windows and domains</strong>, the dashboard summary, check locations and your plan’s usage.</li>
+      </ul>
+      <p>
+        Some things always need you to sign in to HawkEye, so a leaked key can’t be used to take over your account: your password and account settings,
+        billing, your team and invitations, alert destinations, and API keys themselves. A key gets <code>403 SESSION_REQUIRED</code> there.
+      </p>
+
+      <h2 id="expiry">Expiry and revoking</h2>
+      <p>
+        Keys expire after 90 days unless you choose 30 days, a year, a date of your own, or no expiry. HawkEye emails you a week before a key expires and
+        again when it does. An expired key can’t be extended: create a new one and replace it. Revoke a key on the API keys page at any time; it stops
+        working at once. Resetting a forgotten password also revokes your keys, in case someone else made them.
+      </p>
+
+      <h2 id="errors">Errors and limits</h2>
+      <p>Errors come back as <code>{'{"error": {"code": "…", "message": "…"}}'}</code> with a message you can show to a person. The ones specific to keys:</p>
+      <ul>
+        <li><code>401 UNAUTHENTICATED</code>: the key is wrong, incomplete or revoked.</li>
+        <li><code>401 TOKEN_EXPIRED</code>: the key has passed its expiry date.</li>
+        <li><code>403 TOKEN_SCOPE</code>: a read-only key tried to change something.</li>
+        <li><code>403 PLAN_LIMIT_REACHED</code>: the plan doesn’t include the change (for example, writing on Free).</li>
+        <li><code>429 RATE_LIMITED</code>: more than 120 requests, or 30 changes, in a minute with one key. Wait for the number of seconds in <code>Retry-After</code>.</li>
+      </ul>
+
+      <h2 id="safety">Keeping keys safe</h2>
+      <ul>
+        <li>Use a read-only key wherever you only need to read, and one key per tool, so you can revoke one without breaking the rest.</li>
+        <li>Keep keys in a secret store or environment variable, never in code you commit. The <code>hk_</code> start makes a leaked key easy to spot.</li>
+        <li>The API keys page shows when each key was last used. Revoke any you don’t recognize; HawkEye also emails you whenever a key is created.</li>
+      </ul>
+    </>
+  )
+}
+
 export const DOCS: readonly Doc[] = [
   { path: '/docs/getting-started', title: 'Getting started', summary: 'From a new account to your first monitor and alert in a few minutes.', icon: RocketLaunchIcon, body: GettingStarted },
   { path: '/docs/cron-job-monitoring', title: 'Heartbeat (cron job) monitoring', summary: 'Get alerted when a backup, scheduled task or queue worker stops running or fails.', icon: ClockIcon, body: HeartbeatMonitoring },
   { path: '/docs/dns-monitoring', title: 'DNS monitoring', summary: 'Get alerted when a DNS record disappears or stops matching the value you expect.', icon: GlobeAltIcon, body: DnsMonitoring },
   { path: '/docs/alerts', title: 'Alerts', summary: 'Alert channels, routing alerts by client, alert delays, quiet hours and maintenance windows.', icon: BellAlertIcon, body: Alerts },
+  { path: '/docs/api', title: 'API and API keys', summary: 'Use HawkEye from your own scripts and tools: create a key, send requests, and keep keys safe.', icon: CodeBracketIcon, body: ApiDocs },
 ]
 
 function DocsShell({ children }: { children: ReactNode }) {

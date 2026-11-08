@@ -11,8 +11,12 @@ Base path `/api/v1`. JSON only. Operational probes `/healthz` and `/readyz` are 
 | Status | Code | Meaning |
 |---|---|---|
 | 400 | `VALIDATION_ERROR` / `INVALID_JSON` / `INVALID_TOKEN` | bad input; bad or expired verification/reset token |
-| 401 | `UNAUTHENTICATED` / `INVALID_CREDENTIALS` | no/expired session; wrong email or password |
+| 401 | `UNAUTHENTICATED` / `INVALID_CREDENTIALS` | no/expired session, or a wrong, revoked or malformed API key; wrong email or password |
+| 401 | `TOKEN_EXPIRED` | an API key past its expiry date |
 | 403 | `CSRF_INVALID` / `FORBIDDEN` / `EMAIL_NOT_VERIFIED` | missing CSRF header; insufficient role; unverified email |
+| 403 | `SESSION_REQUIRED` / `TOKEN_SCOPE` / `TOKEN_ORGANIZATION_MISMATCH` | an API key on a route not open to keys; a read-only key on a write; `X-Organization-ID` names another organization than the key's |
+| 403 | `API_KEYS_LIMIT` | the organization already has 25 live API keys |
+| 503 | `API_KEYS_DISABLED` | API keys are turned off on this server (`DISABLE_API_KEYS`) |
 | 403 | `PLAN_LIMIT_REACHED` | a plan limit blocks the operation (see below) |
 | 404 | `NOT_FOUND` | unknown resource **or one in another tenant** |
 | 409 | `EMAIL_TAKEN` | registration with an existing email |
@@ -29,6 +33,38 @@ Logout deletes the session; a password reset deletes all of the user's sessions.
 
 **CSRF:** every unsafe request (POST/PATCH/DELETE) must send header `X-CSRF-Token` equal to the `csrf_token` cookie.
 The cookie is set on the first `/api/v1` response, so the SPA should call `GET /auth/me` on load.
+
+### API keys
+
+Scripts and tools authenticate with an API key instead: `Authorization: Bearer hk_…` (`internal/apitokens`, migration `000033`). The public guide is
+`/docs/api`; the design is in `docs/plan-api-mcp.md`.
+
+- **What a key is.** `hk_` followed by 256 random bits. Only its SHA-256 hash is stored, with the first 10 characters (`prefix`) for display. It is
+  returned once, by the request that creates it. A key belongs to **one organization and one person** and has a scope: `read` or `write`.
+- **What it acts as.** The person, in the key's organization (`X-Organization-ID` may be left out; one naming another organization is refused), with
+  the person's role **now**: owner-only routes still need the owner, and the role is read on every request. The key is deleted with the membership (a
+  foreign key), so leaving or being removed takes a person's keys with them.
+- **Writes.** A `read` key gets `403 TOKEN_SCOPE` on POST/PUT/PATCH/DELETE. A `write` key needs a plan with `api_write_enabled` (Pro, Agency),
+  checked on every write: after a downgrade it gets `403 PLAN_LIMIT_REACHED` (`limit_type: api_write`) and keeps reading.
+- **Where keys work.** Only on routes registered through `tokenGroup` in `registerAPI`: monitors and tags (including bulk actions), results, uptime,
+  response times, incidents and incident updates, status pages, maintenance windows, domains, branding and reports, regions, the dashboard,
+  `GET /usage`, `GET /billing/subscription` and `GET /notification-settings/coverage`. Everything else answers `403 SESSION_REQUIRED`: `/auth/*`,
+  `/account/*`, `/organizations/*` (team, invitations, transfer), billing changes, alert recipients (including listing them) and `/api-keys`.
+  `TestEveryRouteIsClassifiedForAPIKeys` lists every route and fails when a new one is not classified.
+- **No CSRF, no cookie.** A request with an `Authorization` header authenticates with the key alone and never with a session cookie that came along,
+  so it skips the CSRF check on routes open to keys (a browser never attaches that header on its own).
+- **Expiry.** 90 days by default; a person may choose a date up to a year ahead, or no expiry. `401 TOKEN_EXPIRED` after it. The worker emails the
+  person 7 days before (skipped for keys made to last 8 days or less) and when it expires (`apitokens.ExpiryJob`).
+- **Revocation.** On the API keys page or `DELETE /api-keys/:id`; immediate. A password **reset** revokes all of the person's keys (someone who took
+  over the account may have made them); changing the password while signed in does not.
+- **Limits.** 25 live keys per organization. With the shared limiter, 120 requests and 30 writes a minute per key (`RATE_LIMITED`, `Retry-After`),
+  on top of the per-IP limits. `last_used_at` is written at most once a minute.
+
+| Method & path | Auth | Notes |
+|---|---|---|
+| `GET /api-keys` | session | `{keys: [{id, name, scope, prefix, owner_email, mine, created_at, last_used_at, expires_at, expired}], max_keys}`, newest first, revoked keys left out. The owner sees every key in the organization; a member sees their own |
+| `POST /api-keys` | session, verified email | `{name, scope, expires_at?, no_expiry?}` → 201 `{key, token}`. Leave both expiry fields out for 90 days; `expires_at` (RFC 3339) must be 1 hour to 366 days away. A `write` key on a plan without API writes is `403 PLAN_LIMIT_REACHED`. Emails the person that a key was created |
+| `DELETE /api-keys/:id` | session | 204. Your own keys; the owner may revoke anyone's in the organization. 404 for an unknown or already revoked key |
 
 ## Endpoints
 

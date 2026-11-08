@@ -16,6 +16,7 @@ internet ─443/80─▶ web (Caddy: TLS, HSTS, CSP, static SPA, proxies /api /h
 ```
 
 - The API also makes outbound connections for the free SSL and website checkers (`/tools`); those go through the same public-address-only policy as monitor checks but are not covered by `deploy/egress-filter.sh` (`docs/security-review.md`, item 12). `DISABLE_FREE_TOOLS=true` turns them off.
+- `DISABLE_API_KEYS=true` turns API keys off (requests made with a key answer 503); browser sessions are unaffected. See `docs/operations.md#api-key-abuse`.
 - Only `web` publishes ports. The metrics ports and PostgreSQL are never published.
 - Containers are read-only, run non-root with all capabilities dropped and `no-new-privileges`. API and worker are distroless.
 - PostgreSQL is **external by default** (managed database recommended). `docker-compose.local-db.yml` adds a single-node Postgres for small installs and the smoke stack.

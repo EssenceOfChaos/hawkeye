@@ -19,13 +19,14 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 - SSL certificate expiry warnings 30, 14, 7 and 1 days before expiry, on every plan.
 - Domain registration expiry warnings on the same schedule, for a number of domains that depends on the plan. Some domain registries do not publish expiry dates; HawkEye says so rather than guessing.
 - Checks from several locations on paid plans, where offered.
+- A public API with API keys: read-only keys on every plan, read and write keys on paid plans. Keys expire after 90 days unless the owner chooses otherwise, and can be revoked at any time.
 
 ## Pages
 
 - [Home, features and pricing](https://hawkeye.observer/)
 - [Sign up](https://hawkeye.observer/register)
 - [Free tools](https://hawkeye.observer/tools): [Is My Website Down?](https://hawkeye.observer/tools/is-website-down) (whether a public site answers, its status code and response time), [SSL Certificate Checker](https://hawkeye.observer/tools/ssl-certificate-checker) (certificate expiry, issuer and trust for any public domain), [Uptime SLA Calculator](https://hawkeye.observer/tools/uptime-sla-calculator) (allowed downtime for an uptime percentage) and [Downtime Cost Calculator](https://hawkeye.observer/tools/downtime-cost-calculator) (revenue at risk from an outage)
-- [Documentation](https://hawkeye.observer/docs): [Getting started](https://hawkeye.observer/docs/getting-started), [Heartbeat (cron job) monitoring](https://hawkeye.observer/docs/cron-job-monitoring), [DNS monitoring](https://hawkeye.observer/docs/dns-monitoring) and [Alerts](https://hawkeye.observer/docs/alerts)
+- [Documentation](https://hawkeye.observer/docs): [Getting started](https://hawkeye.observer/docs/getting-started), [Heartbeat (cron job) monitoring](https://hawkeye.observer/docs/cron-job-monitoring), [DNS monitoring](https://hawkeye.observer/docs/dns-monitoring), [Alerts](https://hawkeye.observer/docs/alerts) and [API and API keys](https://hawkeye.observer/docs/api)
 - [Contact](https://hawkeye.observer/contact)
 - [Privacy Policy](https://hawkeye.observer/privacy)
 - [Terms and Conditions](https://hawkeye.observer/terms)

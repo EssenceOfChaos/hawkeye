@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"hawkeye/internal/account"
+	"hawkeye/internal/apitokens"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
@@ -137,6 +138,12 @@ func run() error {
 	}
 
 	freeTools := newFreeTools(cfg.FreeToolsEnabled, log)
+	var apiTokens *apitokens.Service
+	if cfg.APIKeysEnabled {
+		apiTokens = apitokens.NewService(pool, planSvc, mailer, log, cfg.AppBaseURL)
+	} else {
+		log.Warn("API keys are turned off (DISABLE_API_KEYS): requests made with a key answer 503")
+	}
 	e := httpapi.New(httpapi.Options{
 		Logger: log, DB: pool, RequestTimeout: cfg.RequestTimeout, BodyLimit: cfg.BodyLimit,
 		Auth: authSvc, Orgs: organizations.NewService(pool), Plans: planSvc, Monitors: monitorSvc, Pool: pool, PgPool: pool,
@@ -144,6 +151,7 @@ func run() error {
 		Account:       account.NewService(pool, authSvc, provider, mailer, log, cfg.AppBaseURL),
 		SSLCheck:      freeTools.ssl,
 		SiteCheck:     freeTools.site,
+		APITokens:     apiTokens,
 		Invitations:   invitations.NewService(pool, planSvc, mailer, log, cfg.AppBaseURL),
 		Lifecycle:     lifecycle.NewService(pool),
 		Branding:      branding.NewService(pool),

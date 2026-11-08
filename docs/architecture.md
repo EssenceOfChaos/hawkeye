@@ -13,6 +13,7 @@ cmd/migrate    applies embedded SQL migrations
 internal/auth          register/login/sessions/password reset/email verification (Argon2id, hashed tokens)
 internal/organizations tenant access; every query scoped by membership; removing members and leaving
 internal/invitations   team invitations: an emailed, single-address link that adds a member (seats are held by pending invitations)
+internal/apitokens     API keys: create (shown once, hashed), list, revoke, authenticate as a person in one organization with their current role; emails before and when keys expire (worker)
 internal/plans         plan catalog + the entitlement service (all limit decisions live here)
 internal/monitors      monitor CRUD, validation, soft delete, per-organization scoping
 cmd/worker             monitoring engine process: scheduler + check workers + metrics endpoint (:9090)

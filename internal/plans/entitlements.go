@@ -20,6 +20,7 @@ const (
 	LimitWhiteLabel     = "status_page_white_label"
 	LimitReports        = "reports"
 	LimitBrandedReports = "branded_reports"
+	LimitAPIWrite       = "api_write"
 )
 
 // LimitError is returned when an operation exceeds the organization's plan.
@@ -67,6 +68,8 @@ func (e *LimitError) Message() string {
 		return fmt.Sprintf("A logo, accent color and website link on status pages are not included in your %s plan. Upgrade to give each page its client's look.", e.Plan.Name)
 	case LimitWhiteLabel:
 		return fmt.Sprintf("Hiding \"Powered by HawkEye\" is not included in your %s plan. Upgrade to show status pages under your clients' brands alone.", e.Plan.Name)
+	case LimitAPIWrite:
+		return fmt.Sprintf("Your %s plan can read data through the API but not change it. Upgrade to make changes with API keys, or use a read-only key.", e.Plan.Name)
 	case LimitMaintenance:
 		return fmt.Sprintf("Maintenance windows are not included in your %s plan. Upgrade to silence alerts during planned work.", e.Plan.Name)
 	case LimitReports:
@@ -223,6 +226,19 @@ func (s *Service) CanWhiteLabelStatusPages(ctx context.Context, db DB, orgID uui
 	}
 	if !p.StatusPageWhiteLabel {
 		return s.limitError(ctx, db, LimitWhiteLabel, 0, 0, p)
+	}
+	return nil
+}
+
+// CanWriteViaAPI returns a *LimitError when the plan does not let API keys change data. It guards creating a write key and every write made with one,
+// so a key made on a paid plan stops writing after a downgrade (and works again after an upgrade); reading stays available on every plan.
+func (s *Service) CanWriteViaAPI(ctx context.Context, db DB, orgID uuid.UUID) error {
+	p, err := EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	if !p.APIWriteEnabled {
+		return s.limitError(ctx, db, LimitAPIWrite, 0, 0, p)
 	}
 	return nil
 }

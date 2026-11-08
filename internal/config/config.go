@@ -56,6 +56,9 @@ type Config struct {
 	// FreeToolsEnabled turns the public SSL and website checkers on (the default). DISABLE_FREE_TOOLS=true makes their endpoints answer 503: the
 	// switch to reach for if they are being abused.
 	FreeToolsEnabled bool
+	// APIKeysEnabled lets API keys authenticate (the default). DISABLE_API_KEYS=true makes every request with a key answer 503 while browser sessions
+	// keep working: the switch to reach for if keys are being abused.
+	APIKeysEnabled bool
 
 	EmailProvider    string
 	EmailFromAddress string
@@ -308,6 +311,7 @@ func load(get func(string) string) (Config, error) {
 		AuthRateLimitPerMin: integer("AUTH_RATE_LIMIT_PER_MIN", 10),
 		TrustForwardedFor:   boolean("TRUST_FORWARDED_FOR"),
 		FreeToolsEnabled:    !boolean("DISABLE_FREE_TOOLS"),
+		APIKeysEnabled:      !boolean("DISABLE_API_KEYS"),
 
 		CheckRegions:      str("CHECK_REGIONS", ""),
 		CanaryURLs:        str("CANARY_URLS", ""),

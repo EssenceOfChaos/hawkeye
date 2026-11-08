@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"hawkeye/internal/apitokens"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/branding"
 	"hawkeye/internal/canary"
@@ -170,6 +171,9 @@ func run() error {
 			dispatcher.WithTelegramBot(notifications.NewTelegramBot(cfg.TelegramBotToken, cfg.TelegramWebhookSecret, "", nil))
 		}
 		spawn(func() { dispatcher.Run(ctx) })
+		// Emails before and when API keys expire (account mail, from the alert address).
+		expiryJob := apitokens.NewExpiryJob(pool, mailer, log, cfg.AppBaseURL, 15*time.Minute)
+		spawn(func() { expiryJob.Run(ctx) })
 		// Onboarding emails to new accounts with no monitor. They are sent from their own address, so their engagement never affects the alerts' reputation.
 		switch {
 		case !cfg.RunLifecycle:

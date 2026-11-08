@@ -17,7 +17,7 @@ export default defineConfig({
     fs: process.env.VITEST ? { allow: ['..'] } : undefined,
     port: 3000,
     proxy: {
-      '/api': apiTarget,
+      '/api/': apiTarget, // the trailing slash keeps app pages such as /api-keys in the app, as Caddy's /api/* does
       '/healthz': apiTarget,
       '/readyz': apiTarget,
     },

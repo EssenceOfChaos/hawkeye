@@ -31,9 +31,13 @@ func (h *handlers) clearSessionCookie(c *echo.Context) {
 
 var errUnauthenticated = &APIError{Status: http.StatusUnauthorized, Code: "UNAUTHENTICATED", Message: "Authentication required."}
 
-// requireAuth resolves the session cookie to a user and stores it on the context.
+// requireAuth resolves the session cookie to a user and stores it on the context. A request that carries an Authorization header is an API request,
+// and these routes are not open to API keys (see tokens.go), so it is refused rather than signed in with whatever cookie came along.
 func (h *handlers) requireAuth(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c *echo.Context) error {
+		if hasAuthorization(c) {
+			return errSessionRequired
+		}
 		cookie, err := c.Cookie(sessionCookie)
 		if err != nil {
 			return errUnauthenticated

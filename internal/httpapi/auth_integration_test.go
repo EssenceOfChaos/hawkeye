@@ -18,6 +18,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/account"
+	"hawkeye/internal/apitokens"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
@@ -67,6 +68,7 @@ type envOpts struct {
 	ssl       *sslcheck.Service
 	site      *sitecheck.Service
 	telegram  *notifications.TelegramBot
+	noAPIKeys bool // DISABLE_API_KEYS
 }
 
 func newEnv(t *testing.T, rateLimit int) *env { return newEnvOpts(t, rateLimit, envOpts{}) }
@@ -105,6 +107,9 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 	}
 	if o.shared {
 		opts.Limiter = ratelimit.New(pool)
+	}
+	if !o.noAPIKeys {
+		opts.APITokens = apitokens.NewService(pool, planSvc, mail, log, "http://app.test")
 	}
 	return httpapi.New(opts)
 }

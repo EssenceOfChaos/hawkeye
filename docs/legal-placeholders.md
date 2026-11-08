@@ -36,6 +36,7 @@ The app ships `/privacy` and `/terms` pages containing a prominent "PLACEHOLDER 
 |---|---|---|
 | Email, password hash (Argon2id), name | account | until account deletion |
 | Session records (hashed token, expiry; no IP or user agent stored) | sign-in | until expiry/sign-out |
+| API keys: name, access, a short prefix, hashed token, created, last used and expiry dates (no IP or user agent stored) | API access | deleted 30 days after revocation or 90 days after expiry (by the worker), and at once when the person leaves the organization or deletes the account |
 | Monitor URLs/names, check results (status, latency, error class) | the service | per plan: 7 / 90 / 365 days; incidents kept |
 | Alert recipient emails | alerts | until removed or account deleted |
 | Status page branding: a logo image (validated and re-encoded), accent color and website address per page, shown publicly while the page is published | status pages | until removed, the page is deleted, or account deleted |

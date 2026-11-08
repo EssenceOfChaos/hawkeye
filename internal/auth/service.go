@@ -288,6 +288,11 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 		if err := activateOwnAlertAddress(ctx, tx, userID); err != nil {
 			return err
 		}
+		// A reset is how people get back into an account they may have lost control of, so it also revokes their API keys (someone else may have
+		// made them). Changing the password while signed in leaves keys alone: the person can see and revoke them on the API keys page.
+		if _, err := tx.Exec(ctx, `UPDATE api_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, userID); err != nil {
+			return err
+		}
 		_, err = tx.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1`, userID)
 		return err
 	})

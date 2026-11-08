@@ -17,11 +17,11 @@ const json = (status: number, body: unknown) =>
 const free = { code: 'free', name: 'Free', monthly_price_cents: 0, max_monitors: 5, minimum_check_interval_seconds: 300, history_retention_days: 7, max_domains: 3, max_team_members: 1, max_regions: 1 }
 const pro = {
   code: 'pro', name: 'Pro', monthly_price_cents: 1900, annual_price_cents: 19000, max_monitors: 50, minimum_check_interval_seconds: 60, history_retention_days: 90,
-  max_domains: 25, max_team_members: 1, max_regions: 3, maintenance_enabled: true, reports_enabled: true,
+  max_domains: 25, max_team_members: 1, max_regions: 3, maintenance_enabled: true, reports_enabled: true, api_write_enabled: true,
 }
 const agency = {
   code: 'agency', name: 'Agency', monthly_price_cents: 5900, annual_price_cents: 59000, max_monitors: 200, minimum_check_interval_seconds: 60, history_retention_days: 365,
-  max_domains: 100, max_team_members: 5, max_regions: 3, maintenance_enabled: true, reports_enabled: true, branded_reports_enabled: true,
+  max_domains: 100, max_team_members: 5, max_regions: 3, maintenance_enabled: true, reports_enabled: true, branded_reports_enabled: true, api_write_enabled: true,
 }
 const plans = [free, pro, agency]
 
@@ -82,9 +82,10 @@ describe('pricing cards stay in sync', () => {
       const cards = await cardsOn(ui, signedIn)
       expect(cards.Agency).toEqual(expect.arrayContaining([
         '200 monitors', 'Cron job and DNS monitoring', 'Checks from up to 3 locations', '5 team members', 'Domain expiry warnings for up to 100 domains',
-        'Maintenance windows', 'Monthly PDF uptime reports', 'Branded Reports with name and logo',
+        'Maintenance windows', 'Monthly PDF uptime reports', 'Branded Reports with name and logo', 'API access with read and write keys',
       ]))
       expect(cards.Free).not.toContain('Branded Reports with name and logo')
+      expect(cards.Free).toContain('Read-only API access')
     }
   })
 
