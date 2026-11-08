@@ -7,7 +7,7 @@ import { CookieBanner } from './components/CookieBanner'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
 import { afterLoginPath } from './navigation'
-import { AcceptInvitePage, ConfirmAlertAddressPage, ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage, UnsubscribePage, VerifyEmailPage } from './pages/AuthPages'
+import { AcceptInvitePage, ConfirmAlertAddressPage, ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage, UnsubscribePage, VerifyEmailPage, WaitlistConfirmPage, WaitlistLeavePage } from './pages/AuthPages'
 import { AccountPage } from './pages/AccountPage'
 import { ContactPage } from './pages/ContactPage'
 import { DocPage, DocsIndexPage } from './pages/docs/DocsPages'
@@ -108,6 +108,8 @@ export function AppRoutes() {
       <Route path="/reset-password" element={<main className="auth"><ResetPasswordPage /></main>} />
       <Route path="/confirm-alert-address" element={<main className="auth"><ConfirmAlertAddressPage /></main>} />
       <Route path="/unsubscribe" element={<main className="auth"><UnsubscribePage /></main>} />
+      <Route path="/waitlist/confirm" element={<main className="auth"><WaitlistConfirmPage /></main>} />
+      <Route path="/waitlist/leave" element={<main className="auth"><WaitlistLeavePage /></main>} />
       <Route path="/accept-invite" element={<main className="auth"><AcceptInvitePage /></main>} />
       <Route element={<RequireAuthStandalone />}>
         <Route path="/connect" element={<ConnectPage />} />

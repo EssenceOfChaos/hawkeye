@@ -558,6 +558,18 @@ left alone until then (see *Alert routing, alert delay and quiet hours*).
 | `GET /contact/categories` | – | the triage topics: `{categories: [{code, label, hint, priority}]}` |
 | `POST /contact` | – (session optional) | `{category, name, email, subject, message, url?}` → 202 `{reference}`. Emails the support inbox with Reply-To = `email`; a signed-in sender's account id and plan are added by the server. 400 `VALIDATION_ERROR` with `details.fields`; 429 when rate-limited; 503 `CONTACT_UNAVAILABLE` if delivery failed. A non-empty `company` field (spam trap) is answered 202 and silently dropped. |
 
+## Feature waitlists ("Get notified")
+
+Sign-ups for coming-soon features from the landing page's "Coming soon" section (`internal/waitlist`). Features: `api_workflows` (multi-step API checks), `status_page_domains` (status pages on your own domain), `status_page_subscribers` (email updates for status page visitors).
+
+| Method & path | Auth | Notes |
+|---|---|---|
+| `POST /waitlist` | – (session optional) | `{feature, email?, company?}`. Signed in with a verified address and no other `email` → 200 `{status: "added" \| "already"}`, on the list at once. Otherwise → 202 `{status: "check_email"}` and a confirmation email (link valid 48 h); the answer is the same whether or not the address was already on the list, over its email budget, or the `company` spam trap was filled in, so it never reveals who signed up. 400 `VALIDATION_ERROR` for an unknown feature or bad address; 429 when rate-limited (per IP: the shared limit plus 20 an hour). |
+| `POST /waitlist/confirm` | – | `{token}` from the email → 200 `{feature}` (its name). 400 `INVALID_TOKEN` if used, expired or unknown. |
+| `POST /waitlist/leave` | – | `{token}` from any waitlist email → 204, removing that sign-up. Unknown tokens also get 204. |
+
+The pages at `/waitlist/confirm` and `/waitlist/leave` ask before calling these, because mail scanners open links. The account export lists an address's sign-ups (`waitlists`), and deleting the account removes every sign-up with its address.
+
 ## Free tools
 
 | Method & path | Auth | Notes |

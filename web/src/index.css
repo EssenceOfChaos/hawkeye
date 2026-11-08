@@ -668,3 +668,11 @@ p.warning { color: var(--warn); }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; box-sizing: border-box; border: 1px solid var(--line); border-radius: .5rem; color: var(--muted); text-decoration: none; }
 .icon-button svg { width: 1.25rem; height: 1.25rem; }
 .icon-button:hover, .icon-button:focus-visible { color: var(--gold); border-color: var(--gold); }
+
+/* "Coming soon" cards on the landing page (components/ComingSoon.tsx): the button or form sits at the bottom of each card. */
+.coming-soon .feature { display: flex; flex-direction: column; gap: .5rem; align-items: flex-start; }
+.coming-soon .feature h3 { margin: .25rem 0 0; }
+.coming-soon .feature > p { flex: 1; }
+.notify-form { display: grid; gap: .5rem; width: 100%; }
+.notify-form input { width: 100%; }
+.notify-form button { justify-self: start; }

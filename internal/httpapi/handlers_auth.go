@@ -35,6 +35,7 @@ import (
 	"hawkeye/internal/statuspage"
 	"hawkeye/internal/twofactor"
 	"hawkeye/internal/validation"
+	"hawkeye/internal/waitlist"
 )
 
 type handlers struct {
@@ -66,6 +67,7 @@ type handlers struct {
 	secureCookies bool
 	apiTokens     *apitokens.Service // nil turns API keys off (DISABLE_API_KEYS)
 	oauth         *oauth.Service     // OAuth for the MCP server; nil turns connecting apps off
+	waitlist      *waitlist.Service  // coming-soon feature waitlists; nil turns them off
 	twoFactor     *twofactor.Service // two-factor sign-in; nil turns its settings off (sign-in still enforces it for accounts that have it)
 	tokenRoutes   map[string]bool    // "METHOD /path" of the routes open to API keys
 }

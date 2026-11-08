@@ -484,7 +484,7 @@ func TestEveryRouteIsClassifiedForAPIKeys(t *testing.T) {
 		"POST /api/v1/auth/register", "POST /api/v1/auth/login", "POST /api/v1/auth/login/two-factor", "POST /api/v1/auth/forgot-password", "POST /api/v1/auth/reset-password",
 		"POST /api/v1/auth/verify-email", "POST /api/v1/auth/logout", "GET /api/v1/plans", "GET /api/v1/public/status/:slug",
 		"GET /api/v1/public/status/:slug/logo", "POST /api/v1/tools/ssl-check", "POST /api/v1/tools/site-check", "GET /api/v1/contact/categories",
-		"POST /api/v1/contact", "POST /api/v1/notification-settings/confirm", "POST /api/v1/lifecycle/unsubscribe", "POST /api/v1/invitations/preview",
+		"POST /api/v1/contact", "POST /api/v1/waitlist", "POST /api/v1/waitlist/confirm", "POST /api/v1/waitlist/leave", "POST /api/v1/notification-settings/confirm", "POST /api/v1/lifecycle/unsubscribe", "POST /api/v1/invitations/preview",
 		"POST /api/v1/webhooks/stripe",
 	)
 

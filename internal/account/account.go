@@ -19,6 +19,7 @@ import (
 	"hawkeye/internal/email"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/validation"
+	"hawkeye/internal/waitlist"
 )
 
 var (
@@ -42,10 +43,11 @@ func NewService(pool *pgxpool.Pool, a *auth.Service, provider billing.Provider, 
 // ---- export
 
 type Export struct {
-	ExportedAt    time.Time   `json:"exported_at"`
-	Notes         []string    `json:"notes"`
-	User          ExportUser  `json:"user"`
-	Organizations []ExportOrg `json:"organizations"`
+	ExportedAt    time.Time        `json:"exported_at"`
+	Notes         []string         `json:"notes"`
+	User          ExportUser       `json:"user"`
+	Organizations []ExportOrg      `json:"organizations"`
+	Waitlists     []waitlist.Entry `json:"waitlists"` // coming-soon features the account's address asked to hear about
 }
 
 type ExportUser struct {
@@ -185,6 +187,11 @@ func (s *Service) Export(ctx context.Context, userID uuid.UUID) (Export, error) 
 		Scan(&out.User.ID, &out.User.Email, &out.User.EmailVerifiedAt, &out.User.CreatedAt); err != nil {
 		return out, err
 	}
+	wl, err := waitlist.ForAddress(ctx, s.pool, out.User.Email)
+	if err != nil {
+		return out, err
+	}
+	out.Waitlists = wl
 	rows, err := s.pool.Query(ctx, `SELECT o.id, o.name, m.role, o.created_at,
 			COALESCE(p.code, 'free'), COALESCE(s.status, 'active'), s.current_period_end, COALESCE(s.cancel_at_period_end, false)
 		FROM organization_members m JOIN organizations o ON o.id = m.organization_id
@@ -436,6 +443,10 @@ func (s *Service) Delete(ctx context.Context, user auth.User, password, confirmE
 			if _, err := tx.Exec(ctx, `DELETE FROM organizations WHERE id = ANY($1)`, doomed); err != nil {
 				return err
 			}
+		}
+		// Waitlist sign-ups made with this address while signed out aren't tied to the account, so they go by address.
+		if _, err := tx.Exec(ctx, `DELETE FROM waitlist_entries WHERE email = lower($1)`, user.Email); err != nil {
+			return err
 		}
 		_, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, user.ID)
 		return err

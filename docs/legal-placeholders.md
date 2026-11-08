@@ -52,6 +52,7 @@ The app ships `/privacy` and `/terms` pages containing a prominent "PLACEHOLDER 
 | Billing: Stripe customer ID, subscription state | billing | until account deletion; Stripe keeps its own records (tax/accounting law) |
 | Webhook event payload copies | idempotency/debugging | 90/180 days |
 | Rate-limit counters (hashed keys) | abuse protection | 24 h |
+| Feature waitlist sign-ups (feature, email, account id if signed in, timestamps) | tell the person once when that feature launches | unconfirmed: deleted after the 48 h link expires; confirmed: until the launch email is sent, they remove themselves, or the account is deleted. Added 2026-11-08; disclosed in the Privacy Policy (sections 2, 3 and 5); not yet reviewed by counsel |
 | Contact-form messages (name, email, message, optional website, account id/plan if signed in) | support | live in the support mailbox, not the database; decide a deletion period |
 | Server logs (request ids, no bodies; tokens redacted) | operations | set by your log retention |
 
