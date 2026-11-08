@@ -108,6 +108,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 	if o.shared {
 		opts.Limiter = ratelimit.New(pool)
 	}
+	opts.AppBaseURL, opts.Version = "http://app.test", "test"
 	if !o.noAPIKeys {
 		opts.APITokens = apitokens.NewService(pool, planSvc, mail, log, "http://app.test")
 	}

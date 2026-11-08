@@ -16,6 +16,19 @@ type Filter struct {
 	From, To  *time.Time // bounds on started_at
 	Limit     int
 	Offset    int
+	id        *uuid.UUID // Get only
+}
+
+// Get returns one incident of the organization, or ErrIncidentNotFound (also for another organization's incident).
+func Get(ctx context.Context, pool *pgxpool.Pool, orgID, incidentID uuid.UUID) (Incident, error) {
+	list, _, err := List(ctx, pool, orgID, Filter{id: &incidentID, Limit: 1})
+	if err != nil {
+		return Incident{}, err
+	}
+	if len(list) == 0 {
+		return Incident{}, ErrIncidentNotFound
+	}
+	return list[0], nil
 }
 
 // List returns one page of incidents (newest first) and the total count. Tenant scoping is by organization
@@ -23,6 +36,10 @@ type Filter struct {
 func List(ctx context.Context, pool *pgxpool.Pool, orgID uuid.UUID, f Filter) ([]Incident, int, error) {
 	where := `m.organization_id = $1`
 	args := []any{orgID}
+	if f.id != nil {
+		args = append(args, *f.id)
+		where += fmt.Sprintf(" AND i.id = $%d", len(args))
+	}
 	add := func(cond string, v any) {
 		args = append(args, v)
 		where += fmt.Sprintf(" AND "+cond, len(args))

@@ -24,6 +24,9 @@ type APIMetrics struct {
 	LimiterErrs prometheus.Counter     // the shared limiter's database failed (requests were let through)
 	Panics      prometheus.Counter
 	EmailSkips  *prometheus.CounterVec // reason: rate_limited
+	// MCP server (internal/mcpserver): tool calls by tool name and outcome (ok, refused, error), and how long they took.
+	MCPToolCalls    *prometheus.CounterVec
+	MCPToolDuration *prometheus.HistogramVec
 }
 
 func NewAPI() *APIMetrics {
@@ -34,13 +37,16 @@ func NewAPI() *APIMetrics {
 		Requests: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_http_requests_total", Help: "HTTP requests by method, route template and status code."}, []string{"method", "route", "code"}),
 		Duration: prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "hawkeye_http_request_duration_seconds", Help: "Request latency by route template.",
 			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30}}, []string{"route"}),
-		InFlight:    prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_http_requests_in_flight", Help: "Requests currently being served."}),
-		RateLimited: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_rate_limited_total", Help: "Requests rejected by a rate limit, by scope."}, []string{"scope"}),
-		LimiterErrs: prometheus.NewCounter(prometheus.CounterOpts{Name: "hawkeye_rate_limiter_errors_total", Help: "Shared rate limiter failures (fail-open)."}),
-		Panics:      prometheus.NewCounter(prometheus.CounterOpts{Name: "hawkeye_http_panics_total", Help: "Panics recovered in request handlers."}),
-		EmailSkips:  prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_email_actions_suppressed_total", Help: "Emails not sent because an address hit its hourly limit."}, []string{"action"}),
+		InFlight:     prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_http_requests_in_flight", Help: "Requests currently being served."}),
+		RateLimited:  prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_rate_limited_total", Help: "Requests rejected by a rate limit, by scope."}, []string{"scope"}),
+		LimiterErrs:  prometheus.NewCounter(prometheus.CounterOpts{Name: "hawkeye_rate_limiter_errors_total", Help: "Shared rate limiter failures (fail-open)."}),
+		Panics:       prometheus.NewCounter(prometheus.CounterOpts{Name: "hawkeye_http_panics_total", Help: "Panics recovered in request handlers."}),
+		EmailSkips:   prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_email_actions_suppressed_total", Help: "Emails not sent because an address hit its hourly limit."}, []string{"action"}),
+		MCPToolCalls: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_mcp_tool_calls_total", Help: "MCP tool calls by tool and outcome (ok, refused, error)."}, []string{"tool", "outcome"}),
+		MCPToolDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "hawkeye_mcp_tool_duration_seconds", Help: "MCP tool call latency by tool.",
+			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}}, []string{"tool"}),
 	}
-	r.MustRegister(m.Requests, m.Duration, m.InFlight, m.RateLimited, m.LimiterErrs, m.Panics, m.EmailSkips)
+	r.MustRegister(m.Requests, m.Duration, m.InFlight, m.RateLimited, m.LimiterErrs, m.Panics, m.EmailSkips, m.MCPToolCalls, m.MCPToolDuration)
 	m.App = newOn(r)
 	return m
 }

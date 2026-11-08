@@ -1,4 +1,4 @@
-import { BellAlertIcon, ClockIcon, CodeBracketIcon, GlobeAltIcon, RocketLaunchIcon } from '@heroicons/react/24/outline'
+import { BellAlertIcon, ChatBubbleLeftRightIcon, ClockIcon, CodeBracketIcon, GlobeAltIcon, RocketLaunchIcon } from '@heroicons/react/24/outline'
 import type { ComponentType, ReactNode, SVGProps } from 'react'
 import { Link, NavLink } from 'react-router'
 import { useAuth } from '../../auth'
@@ -372,6 +372,8 @@ curl -X POST https://hawkeye.observer/api/v1/monitors/<monitor-id>/resume \\
   -H "Content-Type: application/json" \\
   -d '{"name": "Shop", "url": "https://shop.example.com", "check_interval_seconds": 60}'`}</Code>
 
+      <p>To use HawkEye from Claude or another AI assistant instead, see <Link to="/docs/claude">Use HawkEye with Claude</Link>.</p>
+
       <h2 id="what">What a key can reach</h2>
       <ul>
         <li><strong>Monitors</strong>: list, read, add, edit, delete, pause and resume them, tags and bulk actions, results, uptime and response times.</li>
@@ -410,12 +412,61 @@ curl -X POST https://hawkeye.observer/api/v1/monitors/<monitor-id>/resume \\
   )
 }
 
+function ClaudeDocs() {
+  return (
+    <>
+      <p>
+        HawkEye has an MCP server, so AI assistants that support the Model Context Protocol, such as Claude Code, can read your monitoring and, if you allow
+        it, make changes for you. Ask “what’s down right now?”, “how was uptime for the shop this month?” or “pause the Acme monitors while I deploy”.
+      </p>
+
+      <h2 id="connect">Connect Claude Code</h2>
+      <p>
+        Create an <Link to="/docs/api">API key</Link> (account menu, then <strong>API keys</strong>). Choose <strong>Read only</strong> to let Claude look but not
+        touch, or <strong>Read and write</strong> (Pro and Agency) to let it make changes too. Then run:
+      </p>
+      <Code>{`claude mcp add --transport http hawkeye https://hawkeye.observer/mcp \\
+  --header "Authorization: Bearer $HAWKEYE_API_KEY"`}</Code>
+      <p>
+        Other MCP clients that can send a header with each request work the same way: the server address is <code>https://hawkeye.observer/mcp</code> and the
+        key goes in the <code>Authorization</code> header. Connecting from the Claude apps’ connector settings, without a key, is not available yet.
+      </p>
+
+      <h2 id="tools">What Claude can do</h2>
+      <ul>
+        <li><strong>Read</strong> (any key): an account overview, your monitors and their state, uptime and response times, incidents and their updates, status pages and maintenance windows.</li>
+        <li><strong>Pause and resume monitors</strong>, one by one or every monitor with a tag, and <strong>add monitors</strong> (website, heartbeat or DNS).</li>
+        <li><strong>Post updates on incidents</strong> and <strong>schedule maintenance</strong> (the organization’s owner only, as in the app), and delete them again.</li>
+      </ul>
+      <p>
+        Claude acts as you, in the organization the key belongs to, with your permissions, and no more. It can’t see or change your password, billing, team,
+        alert destinations or API keys. It never sees monitor credentials, custom headers or request bodies.
+      </p>
+
+      <h2 id="confirm">Claude asks before public or destructive changes</h2>
+      <p>
+        Posting an incident update publishes it on your status pages at once, so it is marked as a change Claude must ask you about first, along with
+        deleting an update or a maintenance window. You see exactly what will be posted before it is. Reading never needs your approval; other changes
+        follow your Claude permission settings.
+      </p>
+
+      <h2 id="safety">Good to know</h2>
+      <ul>
+        <li>A key used with Claude is an ordinary API key: it expires (after 90 days unless you chose otherwise), shows when it was last used, and you can revoke it at any time.</li>
+        <li>Changes count toward the key’s limit of 30 a minute, shared with the API.</li>
+        <li>Monitor names, incident summaries and updates are text people wrote or that came from your sites; HawkEye tells Claude to treat them as data, not instructions.</li>
+      </ul>
+    </>
+  )
+}
+
 export const DOCS: readonly Doc[] = [
   { path: '/docs/getting-started', title: 'Getting started', summary: 'From a new account to your first monitor and alert in a few minutes.', icon: RocketLaunchIcon, body: GettingStarted },
   { path: '/docs/cron-job-monitoring', title: 'Heartbeat (cron job) monitoring', summary: 'Get alerted when a backup, scheduled task or queue worker stops running or fails.', icon: ClockIcon, body: HeartbeatMonitoring },
   { path: '/docs/dns-monitoring', title: 'DNS monitoring', summary: 'Get alerted when a DNS record disappears or stops matching the value you expect.', icon: GlobeAltIcon, body: DnsMonitoring },
   { path: '/docs/alerts', title: 'Alerts', summary: 'Alert channels, routing alerts by client, alert delays, quiet hours and maintenance windows.', icon: BellAlertIcon, body: Alerts },
   { path: '/docs/api', title: 'API and API keys', summary: 'Use HawkEye from your own scripts and tools: create a key, send requests, and keep keys safe.', icon: CodeBracketIcon, body: ApiDocs },
+  { path: '/docs/claude', title: 'Use HawkEye with Claude', summary: 'Connect Claude Code (or another MCP client) to check what is down, look at uptime and pause monitors by asking.', icon: ChatBubbleLeftRightIcon, body: ClaudeDocs },
 ]
 
 function DocsShell({ children }: { children: ReactNode }) {
