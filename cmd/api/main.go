@@ -152,6 +152,8 @@ func run() error {
 		SSLCheck:      freeTools.ssl,
 		SiteCheck:     freeTools.site,
 		APITokens:     apiTokens,
+		AppBaseURL:    cfg.AppBaseURL,
+		Version:       cfg.AppVersion,
 		Invitations:   invitations.NewService(pool, planSvc, mailer, log, cfg.AppBaseURL),
 		Lifecycle:     lifecycle.NewService(pool),
 		Branding:      branding.NewService(pool),

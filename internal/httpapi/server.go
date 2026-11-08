@@ -69,6 +69,9 @@ type Options struct {
 	SSLCheck      *sslcheck.Service    // free SSL checker; nil turns the endpoint off
 	SiteCheck     *sitecheck.Service   // free website status checker; nil turns the endpoint off
 	APITokens     *apitokens.Service   // API keys; nil makes key requests answer 503 (DISABLE_API_KEYS) and sessions work as before
+	AppBaseURL    string               // public address of the app (status page and ping addresses in MCP tool results)
+	Version       string               // reported by the MCP server
+	MCPOrigins    []string             // browser origins allowed to call /mcp; nil means DefaultMCPOrigins
 	PgPool        *pgxpool.Pool
 	Pool          plans.DB
 
@@ -444,6 +447,9 @@ func registerAPI(e *echo.Echo, o Options) {
 		v1.POST("/invitations/preview", h.previewInvitation, limit("invite-preview"))
 		v1.POST("/invitations/accept", h.acceptInvitation, h.requireAuth, limit("invite-accept"))
 	}
+
+	// The MCP server (mcp.go): API keys only, outside /api/v1 and its CSRF check. Stateless, so GET and DELETE answer 405.
+	e.Match([]string{http.MethodPost, http.MethodGet, http.MethodDelete}, "/mcp", h.mcpEndpoint(o))
 
 	// Group middleware (authentication, CSRF) also guards each group's catch-all, which made unknown paths answer 401/403 to
 	// anonymous callers. Unknown API paths are simply 404 for everyone.

@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/apitokens"
+	"hawkeye/internal/mcpserver"
 )
 
 // API keys (internal/apitokens). A request that sends an Authorization header is an API request: it authenticates with the key alone, never with the
@@ -21,7 +22,7 @@ const principalKey = "api_principal"
 // Per-key budgets (with the shared limiter), on top of the per-IP limits every request has.
 const (
 	tokenRequestsPerMin = 120
-	tokenWritesPerMin   = 30
+	tokenWritesPerMin   = mcpserver.WritesPerMinute // one budget for REST writes and MCP tool writes (same limiter key)
 )
 
 var (
@@ -79,36 +80,12 @@ func (h *handlers) authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 		if !h.opensToTokens(c) {
 			return errSessionRequired
 		}
-		if h.apiTokens == nil {
-			return errTokensDisabled
-		}
-		raw, ok := bearerToken(c)
-		if !ok {
-			c.Response().Header().Set("WWW-Authenticate", `Bearer realm="HawkEye API"`)
-			return errTokenInvalid
-		}
-		ctx := c.Request().Context()
-		p, err := h.apiTokens.Authenticate(ctx, raw)
-		switch {
-		case errors.Is(err, apitokens.ErrExpired):
-			c.Response().Header().Set("WWW-Authenticate", `Bearer realm="HawkEye API", error="invalid_token", error_description="The API key has expired"`)
-			return errTokenExpired
-		case errors.Is(err, apitokens.ErrInvalid):
-			c.Response().Header().Set("WWW-Authenticate", `Bearer realm="HawkEye API", error="invalid_token"`)
-			return errTokenInvalid
-		case err != nil:
+		write := unsafeMethod(c.Request().Method)
+		p, err := h.keyPrincipal(c, write)
+		if err != nil {
 			return err
 		}
-		write := unsafeMethod(c.Request().Method)
-		if h.limits.l != nil {
-			id := p.TokenID.String()
-			if !h.limits.allow(c, "token", id, tokenRequestsPerMin, time.Minute) {
-				return errRateLimited
-			}
-			if write && !h.limits.allow(c, "token-write", id, tokenWritesPerMin, time.Minute) {
-				return errRateLimited
-			}
-		}
+		ctx := c.Request().Context()
 		if write {
 			if !p.CanWrite() {
 				return errTokenScope
@@ -122,6 +99,49 @@ func (h *handlers) authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 		c.Set(principalKey, p)
 		return next(c)
 	}
+}
+
+// keyPrincipal authenticates the API key in the Authorization header and spends one unit of its request budget (and of its write budget when
+// write is set). It is shared by the REST API and the MCP endpoint, so both refuse the same keys with the same errors.
+func (h *handlers) keyPrincipal(c *echo.Context, write bool) (apitokens.Principal, error) {
+	if h.apiTokens == nil {
+		return apitokens.Principal{}, errTokensDisabled
+	}
+	raw, ok := bearerToken(c)
+	if !ok {
+		c.Response().Header().Set("WWW-Authenticate", h.bearerChallenge(""))
+		return apitokens.Principal{}, errTokenInvalid
+	}
+	p, err := h.apiTokens.Authenticate(c.Request().Context(), raw)
+	switch {
+	case errors.Is(err, apitokens.ErrExpired):
+		c.Response().Header().Set("WWW-Authenticate", h.bearerChallenge(`error="invalid_token", error_description="The API key has expired"`))
+		return apitokens.Principal{}, errTokenExpired
+	case errors.Is(err, apitokens.ErrInvalid):
+		c.Response().Header().Set("WWW-Authenticate", h.bearerChallenge(`error="invalid_token"`))
+		return apitokens.Principal{}, errTokenInvalid
+	case err != nil:
+		return apitokens.Principal{}, err
+	}
+	if h.limits.l != nil {
+		id := p.TokenID.String()
+		if !h.limits.allow(c, "token", id, tokenRequestsPerMin, time.Minute) {
+			return apitokens.Principal{}, errRateLimited
+		}
+		if write && !h.limits.allow(c, "token-write", id, tokenWritesPerMin, time.Minute) {
+			return apitokens.Principal{}, errRateLimited
+		}
+	}
+	return p, nil
+}
+
+// bearerChallenge is the WWW-Authenticate value for a refused key, with extra parameters (error=…) appended.
+func (h *handlers) bearerChallenge(extra string) string {
+	v := `Bearer realm="HawkEye API"`
+	if extra != "" {
+		v += ", " + extra
+	}
+	return v
 }
 
 // resolveToken sets the organization and role for a request made with an API key: the key's organization, and the owner's role in it now.

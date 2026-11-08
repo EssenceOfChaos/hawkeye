@@ -132,6 +132,23 @@ See `docs/security-review.md` for the review and residual risks.
 - **Abuse:** 25 live keys per organization; 120 requests and 30 writes a minute per key (shared limiter), on top of per-IP limits; `DISABLE_API_KEYS`
   turns all keys off without affecting sessions (`docs/operations.md#api-key-abuse`).
 
+## MCP server
+
+- **Same authentication as the API:** `/mcp` takes API keys only (a session cookie is not accepted), through the same code as the REST API
+  (`keyPrincipal`): expired, revoked and unknown keys are refused, the per-key budgets apply, and `DISABLE_API_KEYS` turns it off.
+- **Same authority as the API:** every tool acts as the key's person in the key's organization, with their current role. Writes need a write key,
+  a plan with API writes, and the owner role where the REST route needs it; `TestToolsRefuseWhatTheAPIRefuses` compares every write tool with
+  its REST route for each kind of key. Tool writes share the key's write budget with REST writes. No tool reaches account, billing, team, alert
+  destination or key settings.
+- **Origins:** a request with an `Origin` header is refused unless it comes from Claude's web apps (DNS-rebinding and cross-site guard); the key is
+  still required.
+- **Output:** small structured results; never monitor credentials, headers, request bodies or response bodies. Names, incident summaries and
+  update messages are returned as data fields, and the server's instructions tell clients they are data, not instructions (prompt injection from
+  a monitored site or a team member's text). Tool descriptions say what a tool does and never tell the model how to behave otherwise.
+- **Confirmation:** posting and deleting incident updates and deleting maintenance windows are marked destructive, so Claude asks before running
+  them. That is a request to the client: other clients may not ask, which is why the description of `post_incident_update` says it is public.
+- **No conversation data:** the server stores nothing about the conversation; logs and metrics record the tool, outcome and duration only.
+
 ## Known gaps
 
 - Console email provider (development) logs verification/reset links; it is refused in production.

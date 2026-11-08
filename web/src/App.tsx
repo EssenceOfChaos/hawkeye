@@ -85,6 +85,7 @@ export function AppRoutes() {
       <Route path="/docs/dns-monitoring" element={<DocPage path="/docs/dns-monitoring" />} />
       <Route path="/docs/alerts" element={<DocPage path="/docs/alerts" />} />
       <Route path="/docs/api" element={<DocPage path="/docs/api" />} />
+      <Route path="/docs/claude" element={<DocPage path="/docs/claude" />} />
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />

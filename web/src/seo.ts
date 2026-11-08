@@ -82,6 +82,7 @@ export const PAGES: readonly PageMeta[] = [
     index: true,
   },
   { path: '/docs/alerts', title: 'Alerts, Routing & Quiet Hours | HawkEye Docs', description: 'Send HawkEye alerts by email, Slack, Teams, Discord, Telegram or webhook, route them by client, and set alert delays and quiet hours.', index: true },
+  { path: '/docs/claude', title: 'Use HawkEye with Claude (MCP) | HawkEye Docs', description: 'Connect Claude Code or another MCP client to HawkEye with an API key: ask what is down, check uptime, pause monitors and post incident updates.', index: true },
   { path: '/docs/api', title: 'API & API Keys | HawkEye Docs', description: 'Use the HawkEye API from scripts and tools: create a read-only or read and write API key, send requests, handle errors and keep keys safe.', index: true },
   { path: '/contact', title: 'Contact HawkEye', description: 'Questions about HawkEye website and API monitoring? Send us a message and we will get back to you.', index: true },
   { path: '/privacy', title: 'Privacy Policy | HawkEye', description: 'What personal information HawkEye collects, how it is used and shared, how long it is kept, and your privacy rights.', index: true },
