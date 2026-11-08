@@ -46,6 +46,7 @@ import (
 	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
 	"hawkeye/internal/twofactor"
+	"hawkeye/internal/waitlist"
 )
 
 func main() {
@@ -159,6 +160,7 @@ func run() error {
 		APITokens:     apiTokens,
 		TwoFactor:     twoFactorSvc,
 		OAuth:         oauthSvc,
+		Waitlist:      waitlist.NewService(pool, mailer, log, cfg.AppBaseURL),
 		AppBaseURL:    cfg.AppBaseURL,
 		Version:       cfg.AppVersion,
 		Invitations:   invitations.NewService(pool, planSvc, mailer, log, cfg.AppBaseURL),

@@ -46,6 +46,7 @@ import (
 	"hawkeye/internal/statuspage"
 	"hawkeye/internal/testutil"
 	"hawkeye/internal/twofactor"
+	"hawkeye/internal/waitlist"
 )
 
 type env struct {
@@ -118,6 +119,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 	}
 	opts.AppBaseURL, opts.Version = "http://app.test", "test"
 	opts.TwoFactor = tf
+	opts.Waitlist = waitlist.NewService(pool, mail, log, "http://app.test")
 	opts.OAuthTokenPerMin = o.oauthPerM
 	if !o.noAPIKeys {
 		opts.OAuth = oauth.NewService(pool, planSvc, tf, mail, log, "http://app.test")

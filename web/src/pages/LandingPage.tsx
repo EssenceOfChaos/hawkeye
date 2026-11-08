@@ -6,6 +6,7 @@ import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { CookieSettingsButton } from '../components/CookieBanner'
 import { IntervalToggle, PlanDetails } from '../components/PlanDetails'
+import { ComingSoon } from '../components/ComingSoon'
 import { ProductShots } from '../components/ProductShots'
 import { Reveal } from '../components/Reveal'
 import { inScope, parallax, prefersReducedMotion, rotateScramble } from '../motion'
@@ -332,6 +333,8 @@ export function LandingPage() {
           ))}
         </Reveal>
       </section>
+
+      <ComingSoon />
 
       <section aria-labelledby="pricing-h" className="section">
         <h2 id="pricing-h">Simple plans. Clear visibility.</h2>

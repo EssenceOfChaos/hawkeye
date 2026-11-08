@@ -36,6 +36,7 @@ import (
 	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
 	"hawkeye/internal/twofactor"
+	"hawkeye/internal/waitlist"
 )
 
 // Pinger reports whether a dependency (PostgreSQL) is usable.
@@ -73,6 +74,7 @@ type Options struct {
 	APITokens     *apitokens.Service   // API keys; nil makes key requests answer 503 (DISABLE_API_KEYS) and sessions work as before
 	TwoFactor     *twofactor.Service   // two-factor sign-in settings and organization requirements
 	OAuth         *oauth.Service       // OAuth for the MCP server (connecting Claude); nil turns it off
+	Waitlist      *waitlist.Service    // "Get notified" waitlists for coming-soon features; nil turns them off
 	AppBaseURL    string               // public address of the app (status page and ping addresses in MCP tool results)
 	Version       string               // reported by the MCP server
 	MCPOrigins    []string             // browser origins allowed to call /mcp; nil means DefaultMCPOrigins
@@ -186,7 +188,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
 	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies,
-		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, tokenRoutes: map[string]bool{}}
+		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, tokenRoutes: map[string]bool{}}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
@@ -328,6 +330,14 @@ func registerAPI(e *echo.Echo, o Options) {
 	}
 	v1.POST("/tools/ssl-check", h.sslCheck, toolLimits("ssl-check")...)
 	v1.POST("/tools/site-check", h.siteCheck, toolLimits("site-check")...)
+	// "Get notified" waitlists for coming-soon features: public, with the contact form's per-IP limits plus a per-address email budget.
+	waitlistLimits := []echo.MiddlewareFunc{limit("waitlist")}
+	if h.limits.l != nil {
+		waitlistLimits = append(waitlistLimits, h.limits.byIP("waitlist:hour", 20, time.Hour))
+	}
+	v1.POST("/waitlist", h.joinWaitlist, waitlistLimits...)
+	v1.POST("/waitlist/confirm", h.confirmWaitlist, limit("waitlist-confirm"))
+	v1.POST("/waitlist/leave", h.leaveWaitlist, limit("waitlist-leave"))
 	v1.GET("/contact/categories", h.contactCategories)
 	v1.POST("/contact", h.submitContact, contactLimits...)
 	// Called from the confirmation email by a recipient who may not have an account.

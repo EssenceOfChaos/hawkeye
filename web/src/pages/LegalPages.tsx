@@ -28,7 +28,7 @@ const SUPPORT = 'customer_support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 5, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 8, 2026</p>
       <p>
         HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -57,6 +57,7 @@ export function PrivacyPage() {
         <li>If you use PDF reports on the Agency plan: the name and logo image you add to put on them. We check the image and store a cleaned copy, and print it on your reports.</li>
         <li>If you join a team and choose to receive its alerts: your email address is added to that team’s alert recipients, and its owner can see it. It is removed when you leave the team or are removed from it, and you can turn it off or remove it yourself at any time.</li>
         <li>If you brand a status page: the logo image, accent color and website address you add to it. We check the image and store a cleaned copy, and show these on that page while it is published.</li>
+        <li>Feature sign-ups. If you ask to be told when an upcoming feature launches (“Get notified”), we receive your email address, which feature you chose, and, if you are signed in, your account identifier. An address entered while signed out is only kept if you confirm it from the email we send.</li>
         <li>Communications you send to us. If you use our contact form we receive the name, email address, subject, message, and optional website address you enter and, if you are signed in, your account identifier and plan.</li>
       </ul>
       <p>
@@ -168,6 +169,7 @@ export function PrivacyPage() {
         <li>If you have not added a website yet, send up to three short getting-started emails during your first ten days. Each one has an unsubscribe link, and unsubscribing does not affect alerts or account and security emails.</li>
         <li>Each Monday, email you a short summary of the past week for each team you belong to that monitors websites: uptime, incidents, the slowest sites, and certificates and domains about to expire. It is on by default; turn it off under Account → Email preferences or with the link in the email, which does not affect alerts or account and security emails.</li>
         <li>Produce monthly uptime reports from your monitoring results and, if you turn that on, email them as PDF files to the owners of your workspace.</li>
+        <li>If you asked to hear about an upcoming feature, email you when it launches. We use that address for nothing else, and each email has a link that removes it.</li>
         <li>Respond to support requests.</li>
         <li>Maintain, troubleshoot, and improve the reliability and performance of the Service.</li>
         <li>Detect fraud, abuse, unauthorized access, and security incidents.</li>
@@ -249,6 +251,7 @@ export function PrivacyPage() {
         <li><strong>Copies of Stripe event notifications</strong> are deleted after 90 days (180 days if processing failed).</li>
         <li><strong>Rate-limit counters</strong> are deleted within 24 hours.</li>
         <li><strong>Report name and logo</strong> are deleted when you remove them or close your account. Reports themselves are generated when you ask for them or on the 1st of the month, are not stored by us, and, once emailed, are in your mailbox.</li>
+        <li><strong>Feature sign-ups</strong> that are not confirmed are deleted once the 48-hour confirmation link expires. Confirmed sign-ups are kept until we have emailed you about that feature’s launch, you remove yourself with the link in our email, or you close your account, whichever is first.</li>
         <li><strong>Support messages</strong> are kept in our support mailbox for as long as needed to help you and to keep a record of the request.</li>
         <li><strong>Backups:</strong> we keep routine backups for disaster recovery for up to about 60 days. Data you delete from the live Service can remain in backups until they expire, and is not used for any other purpose. Stored monitor credentials remain encrypted in backups, and the encryption key is kept separately from them.</li>
         <li><strong>Billing records:</strong> Stripe keeps the transaction records it is legally required to keep. We keep only the identifiers and subscription state described in Section 2D, and delete them when you delete your account.</li>

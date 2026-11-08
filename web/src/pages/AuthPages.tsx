@@ -427,3 +427,70 @@ export function AcceptInvitePage() {
     </section>
   )
 }
+
+/**
+ * Opened from the link in a waitlist confirmation email ("Get notified" on the landing page). Like unsubscribing, it asks before it acts: mail
+ * scanners open every link in a message, and that alone must never sign anyone up.
+ */
+export function WaitlistConfirmPage() {
+  const token = useTokenFromUrl()
+  const [state, setState] = useState<'ask' | 'working' | 'ok' | 'failed'>(token ? 'ask' : 'failed')
+  const [feature, setFeature] = useState('')
+
+  async function confirm() {
+    setState('working')
+    try {
+      const r = await api<{ feature: string }>('POST', '/waitlist/confirm', { token })
+      setFeature(r.feature)
+      setState('ok')
+    } catch {
+      setState('failed')
+    }
+  }
+
+  return (
+    <section className="card narrow">
+      <BrandMark />
+      <h1>Confirm your spot</h1>
+      {(state === 'ask' || state === 'working') && (
+        <>
+          <p>Confirm and we’ll email you once, when the feature you asked about is ready. We won’t use your address for anything else.</p>
+          <button type="button" onClick={() => void confirm()} disabled={state === 'working'}>Confirm</button>
+        </>
+      )}
+      {state === 'ok' && <p role="status">You’re on the list for {feature}. We’ll email you when it’s ready. <Link to="/">Back to HawkEye</Link></p>}
+      {state === 'failed' && <Alert>This link is invalid or has expired. Sign up again on the <Link to="/#soon-h">home page</Link>.</Alert>}
+    </section>
+  )
+}
+
+/** Opened from the "take this address off the list" link in a waitlist email. Asks first, for the same reason as above. */
+export function WaitlistLeavePage() {
+  const token = useTokenFromUrl()
+  const [state, setState] = useState<'ask' | 'working' | 'ok' | 'failed'>(token ? 'ask' : 'failed')
+
+  async function leave() {
+    setState('working')
+    try {
+      await api('POST', '/waitlist/leave', { token })
+      setState('ok')
+    } catch {
+      setState('failed')
+    }
+  }
+
+  return (
+    <section className="card narrow">
+      <BrandMark />
+      <h1>Leave the list?</h1>
+      {(state === 'ask' || state === 'working') && (
+        <>
+          <p>We won’t email this address when the feature launches, and we’ll delete it from the list.</p>
+          <button type="button" onClick={() => void leave()} disabled={state === 'working'}>Take me off the list</button>
+        </>
+      )}
+      {state === 'ok' && <p role="status">Done. This address is off the list.</p>}
+      {state === 'failed' && <Alert>This link is not valid. Please <Link to="/contact">contact us</Link> and we will remove you.</Alert>}
+    </section>
+  )
+}

@@ -190,6 +190,11 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 		st.Tokens += n
 		note(err)
 	}
+	// Waitlist sign-ups nobody confirmed are dropped once their 48-hour link expires (internal/waitlist).
+	n, err := j.batchesNoOrg(ctx, `DELETE FROM waitlist_entries WHERE id IN (
+		SELECT id FROM waitlist_entries WHERE confirmed_at IS NULL AND confirm_expires_at < $1 LIMIT $2)`, j.now())
+	st.Tokens += n
+	note(err)
 
 	// Records of sent weekly summaries only need to cover the week being sent; keep a quarter for investigation.
 	st.SentEmails, err2 = j.batchesNoOrg(ctx, `DELETE FROM weekly_summaries WHERE (user_id, organization_id, week) IN (
