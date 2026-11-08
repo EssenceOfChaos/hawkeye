@@ -126,6 +126,12 @@ describe('ApiKeysPage', () => {
     expect(calls.some((c) => c.m === 'DELETE' && c.url.endsWith('/api-keys/k1'))).toBe(true)
   })
 
+  it('tells a member the owner can see their keys', async () => {
+    setup({ role: 'member', keys: [key()] })
+    expect(await screen.findByText(/owner can also see them and revoke them/)).toBeInTheDocument()
+    expect(screen.queryByText('Made by')).not.toBeInTheDocument()
+  })
+
   it('needs a verified address to create keys', async () => {
     setup({ verified: false })
     await screen.findByText('No API keys yet.')

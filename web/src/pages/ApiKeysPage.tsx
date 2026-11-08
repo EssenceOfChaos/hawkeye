@@ -168,6 +168,7 @@ export function ApiKeysPage() {
         </div>
       )}
       {keys && isOwner && <p className="hint">You see every key in this organization because you own it, and you can revoke any of them. Up to {max} keys.</p>}
+      {keys && !isOwner && <p className="hint">These are your keys. The organization’s owner can also see them and revoke them.</p>}
 
       {!disabled && keys && (
         verified ? (
