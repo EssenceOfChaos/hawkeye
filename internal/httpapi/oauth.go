@@ -97,7 +97,7 @@ func (h *handlers) authorize(c *echo.Context) error {
 		return err
 	}
 	if v.RedirectError != nil {
-		return c.Redirect(http.StatusFound, h.oauth.ErrorRedirect(v.Request, v.RedirectError))
+		return c.Redirect(http.StatusFound, h.oauth.ErrorRedirect(v, v.RedirectError))
 	}
 	return c.Redirect(http.StatusFound, h.oauth.Issuer()+"/connect?"+v.Request.Query().Encode())
 }
@@ -160,7 +160,7 @@ func (h *handlers) oauthAuthorizeInfo(c *echo.Context) error {
 		return err
 	}
 	if v.RedirectError != nil {
-		return c.JSON(http.StatusOK, map[string]any{"error_redirect": h.oauth.ErrorRedirect(v.Request, v.RedirectError)})
+		return c.JSON(http.StatusOK, map[string]any{"error_redirect": h.oauth.ErrorRedirect(v, v.RedirectError)})
 	}
 	u := currentUser(c)
 	list, err := h.orgs.List(ctx, u.ID)
@@ -190,7 +190,7 @@ func (h *handlers) oauthAuthorizeInfo(c *echo.Context) error {
 		"requests_write":         v.Request.RequestsWrite(),
 		"organizations":          orgs,
 		"two_factor_code_needed": needCode,
-		"deny_redirect":          h.oauth.ErrorRedirect(v.Request, &oauth.Error{Code: "access_denied", Description: "The person declined."}),
+		"deny_redirect":          h.oauth.ErrorRedirect(v, &oauth.Error{Code: "access_denied", Description: "The person declined."}),
 	})
 }
 

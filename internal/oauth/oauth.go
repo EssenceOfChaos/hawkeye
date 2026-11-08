@@ -242,6 +242,9 @@ type Validated struct {
 	Request       AuthorizeRequest
 	Client        Client
 	RedirectError *Error
+	// RedirectURI is the client's registered redirect URI that the request named, read from the database. Every redirect to the client is
+	// built from it, never from the request's own copy.
+	RedirectURI string
 }
 
 func (s *Service) resourceOK(r string) bool {
@@ -269,7 +272,7 @@ func (s *Service) Validate(ctx context.Context, r AuthorizeRequest) (Validated, 
 		return Validated{}, ErrBadRedirect
 	}
 	r.RedirectURI = registered
-	v := Validated{Request: r, Client: c}
+	v := Validated{Request: r, Client: c, RedirectURI: registered}
 	switch {
 	case r.ResponseType != "code":
 		v.RedirectError = oerr(400, "unsupported_response_type", "Only the authorization code flow is supported.")
@@ -288,19 +291,19 @@ func (s *Service) Validate(ctx context.Context, r AuthorizeRequest) (Validated, 
 	return v, nil
 }
 
-// RedirectWith builds the client redirect carrying params, the state and the issuer (RFC 9207).
-func (s *Service) RedirectWith(r AuthorizeRequest, params url.Values) string {
-	if r.State != "" {
-		params.Set("state", r.State)
+// RedirectWith builds the client redirect carrying params, the state and the issuer (RFC 9207), on the registered redirect URI.
+func (s *Service) RedirectWith(v Validated, params url.Values) string {
+	if v.Request.State != "" {
+		params.Set("state", v.Request.State)
 	}
 	params.Set("iss", s.issuer)
 	// Registered redirect URIs never have a query of their own (CreateClient refuses them), so the response parameters always start one.
-	return r.RedirectURI + "?" + params.Encode()
+	return v.RedirectURI + "?" + params.Encode()
 }
 
 // ErrorRedirect sends an error back to the client.
-func (s *Service) ErrorRedirect(r AuthorizeRequest, e *Error) string {
-	return s.RedirectWith(r, url.Values{"error": {e.Code}, "error_description": {e.Description}})
+func (s *Service) ErrorRedirect(v Validated, e *Error) string {
+	return s.RedirectWith(v, url.Values{"error": {e.Code}, "error_description": {e.Description}})
 }
 
 // Approval is what the person chose on the consent page.
@@ -356,13 +359,13 @@ func (s *Service) Approve(ctx context.Context, u auth.User, v Validated, a Appro
 		return "", err
 	}
 	_, err = s.pool.Exec(ctx, `INSERT INTO oauth_codes (code_hash, client_id, organization_id, user_id, scope, redirect_uri, code_challenge, resource, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9)`, auth.HashToken(code), v.Client.ID, a.OrganizationID, u.ID, a.Scope, v.Request.RedirectURI,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9)`, auth.HashToken(code), v.Client.ID, a.OrganizationID, u.ID, a.Scope, v.RedirectURI,
 		v.Request.CodeChallenge, v.Request.Resource, s.now().Add(CodeTTL))
 	if err != nil {
 		return "", fmt.Errorf("store authorization code: %w", err)
 	}
 	s.sendConnected(ctx, u.Email, v.Client.Name, a)
-	return s.RedirectWith(v.Request, url.Values{"code": {code}}), nil
+	return s.RedirectWith(v, url.Values{"code": {code}}), nil
 }
 
 // ---- Token endpoint.
