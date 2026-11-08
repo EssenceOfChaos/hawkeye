@@ -105,13 +105,16 @@ API keys (`Authorization: Bearer hk_…`) let scripts use the API as a person in
 
 ### OAuth clients (connecting Claude)
 
-Clients that may connect to the MCP server by signing in are registered by hand, with the database URL of the environment:
+Clients that may connect to the MCP server by signing in are registered by hand. The production database is reachable only inside the server's
+Docker network, so run the command on the server, from the API image (it is built in next to `migrate`), in the deploy folder:
 
 ```sh
-DATABASE_URL=... go run ./cmd/oauthclient create -name Claude -redirect https://claude.ai/api/mcp/auth_callback
-DATABASE_URL=... go run ./cmd/oauthclient list
-DATABASE_URL=... go run ./cmd/oauthclient disable <client-id>   # stops it and revokes every connection it holds
+docker compose --env-file .env.production -f deploy/docker-compose.prod.yml run --rm --entrypoint /usr/local/bin/oauthclient migrate \
+  create -name Claude -redirect https://claude.ai/api/mcp/auth_callback
+# … the same with `list`, or `disable <client-id>` (stops it and revokes every connection it holds)
 ```
+
+Locally, against a development database: `DATABASE_URL=... go run ./cmd/oauthclient create …`.
 
 `create` prints the client ID and secret once; enter both in Anthropic's directory portal (Authentication step), which holds them for Claude.
 Claude's web, desktop and mobile apps all use that one redirect URI (claude.com/docs/connectors/building/authentication, checked

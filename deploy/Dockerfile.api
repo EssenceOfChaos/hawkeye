@@ -5,11 +5,13 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api \
- && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/oauthclient ./cmd/oauthclient
 
 # distroless: no shell, no package manager, runs as an unprivileged user. Pin by digest in your registry for reproducible builds.
 FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=build /out/api /out/migrate /usr/local/bin/
+# oauthclient registers OAuth clients (Claude); run it on the server like migrate (docs/operations.md#oauth-clients-connecting-claude).
+COPY --from=build /out/api /out/migrate /out/oauthclient /usr/local/bin/
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 CMD ["/usr/local/bin/api", "healthcheck"]
 ENTRYPOINT ["/usr/local/bin/api"]
