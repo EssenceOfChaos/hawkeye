@@ -71,6 +71,7 @@ type envOpts struct {
 	site      *sitecheck.Service
 	telegram  *notifications.TelegramBot
 	noAPIKeys bool             // DISABLE_API_KEYS
+	oauthPerM int              // OAUTH_TOKEN_RATE_LIMIT_PER_MIN (0: the default)
 	clock     func() time.Time // two-factor codes and grace periods (nil: the real clock)
 }
 
@@ -117,6 +118,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 	}
 	opts.AppBaseURL, opts.Version = "http://app.test", "test"
 	opts.TwoFactor = tf
+	opts.OAuthTokenPerMin = o.oauthPerM
 	if !o.noAPIKeys {
 		opts.OAuth = oauth.NewService(pool, planSvc, tf, mail, log, "http://app.test")
 		opts.APITokens = apitokens.NewService(pool, planSvc, mail, log, "http://app.test")

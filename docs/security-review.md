@@ -40,7 +40,8 @@ SQL: all queries are parameterized; the few places that assemble SQL (dynamic `U
 
 ## Residual risks and launch blockers
 
-1. **Privacy policy and Terms** are now written but have not had attorney review (`docs/legal-placeholders.md`). Blocker until reviewed.
+1. **Privacy policy and Terms**: reviewed and approved by counsel on 2026-11-08 (`docs/legal-placeholders.md`). Resolved; have counsel look again
+   when a feature collects a new kind of personal data.
 2. **`deploy/egress-filter.sh` is untested on Linux.** The application-level SSRF guard is tested, but run `scripts/verify-egress.sh` on the real host; without the firewall a bug in `safehttp` would be exploitable.
 3. **No independent penetration test**; no formal audit log.
 4. `govulncheck` lists one vulnerability in an unused `x/crypto/openpgp` package with no upstream fix; not reachable from our code, accepted.

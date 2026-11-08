@@ -17,9 +17,10 @@ import (
 // OAuth for the MCP server (internal/oauth). The protocol endpoints (/oauth/*, /.well-known/*) sit outside /api/v1: clients call them with forms and
 // redirects, not with a session and CSRF token. The consent step is a page in the app (/connect) that uses two session-only API routes.
 
-const (
-	oauthTokenPerMin = 60 // per IP, for the token and revocation endpoints
-)
+// defaultOAuthTokenPerMin is the per-IP budget for the token and revocation endpoints when OAUTH_TOKEN_RATE_LIMIT_PER_MIN isn't set. Claude calls
+// them from Anthropic's servers for all of its users, so the limit is generous: codes and refresh tokens are 256-bit random values, so it only has
+// to stop floods, not guessing.
+const defaultOAuthTokenPerMin = 1200
 
 var errOAuthOff = &APIError{Status: http.StatusServiceUnavailable, Code: "OAUTH_UNAVAILABLE", Message: "Connecting apps isn't available on this server right now."}
 

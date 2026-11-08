@@ -88,6 +88,7 @@ type Options struct {
 	Metrics                 *metrics.APIMetrics // request metrics (exposed on a separate private port by the caller)
 	Limiter                 *ratelimit.Limiter  // shared (database-backed) rate limits; nil falls back to per-process limits
 	GlobalRateLimitPerMin   int                 // per-IP requests per minute for the whole API (per process); 0 disables
+	OAuthTokenPerMin        int                 // per-IP requests per minute to /oauth/token and /oauth/revoke (shared limiter); 0 means 1200
 	EmailActionLimitPerHour int                 // emails per hour per target address for forgot-password/confirmations
 	Errors                  errtrack.Reporter   // error tracking; nil = disabled
 }
@@ -471,7 +472,11 @@ func registerAPI(e *echo.Echo, o Options) {
 	e.GET("/oauth/authorize", h.authorize, limit("oauth-authorize"))
 	var tokenLimit echo.MiddlewareFunc = limit("oauth-token")
 	if h.limits.l != nil {
-		tokenLimit = h.limits.byIP("oauth-token", oauthTokenPerMin, time.Minute)
+		perMin := o.OAuthTokenPerMin
+		if perMin < 1 {
+			perMin = defaultOAuthTokenPerMin
+		}
+		tokenLimit = h.limits.byIP("oauth-token", perMin, time.Minute)
 	}
 	e.POST("/oauth/token", h.token, tokenLimit)
 	e.POST("/oauth/revoke", h.revokeToken, tokenLimit)

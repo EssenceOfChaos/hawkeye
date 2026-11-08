@@ -30,6 +30,8 @@ var (
 		Message: "This endpoint can't be used with an API key. Sign in to HawkEye to use it."}
 	errTokensDisabled = &APIError{Status: http.StatusServiceUnavailable, Code: "API_KEYS_DISABLED",
 		Message: "API keys are turned off on this server right now. Try again later."}
+	errNoCredentials = &APIError{Status: http.StatusUnauthorized, Code: "UNAUTHENTICATED",
+		Message: "This is HawkEye's MCP server for Claude and other MCP clients, not a web page. Add this address as a connector in Claude, or send an API key in the Authorization header."}
 	errTokenExpired = &APIError{Status: http.StatusUnauthorized, Code: "TOKEN_EXPIRED",
 		Message: "This API key has expired. Create a new key in HawkEye and use that instead."}
 	errTokenInvalid = &APIError{Status: http.StatusUnauthorized, Code: "UNAUTHENTICATED",
@@ -113,6 +115,12 @@ func (h *handlers) authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 func (h *handlers) keyPrincipal(c *echo.Context, write bool) (apitokens.Principal, error) {
 	if h.apiTokens == nil {
 		return apitokens.Principal{}, errTokensDisabled
+	}
+	if !hasAuthorization(c) {
+		// Nothing was sent: most likely someone opened /mcp in a browser. Say what the address is for; the 401 and its header still start sign-in
+		// for an MCP client.
+		c.Response().Header().Set("WWW-Authenticate", h.bearerChallenge(c, ""))
+		return apitokens.Principal{}, errNoCredentials
 	}
 	raw, ok := bearerToken(c)
 	if !ok {

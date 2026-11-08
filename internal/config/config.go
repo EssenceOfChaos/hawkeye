@@ -70,10 +70,13 @@ type Config struct {
 	SMTPTLS          string
 	SMTPCAFile       string
 
-	APIMetricsPort          int
-	GlobalRateLimitPerMin   int
-	EmailActionLimitPerHour int
-	AllowInsecureDatabase   bool
+	APIMetricsPort        int
+	GlobalRateLimitPerMin int
+	// OAuthTokenRateLimitPerMin caps requests to /oauth/token and /oauth/revoke per client IP address. Every Claude user's token requests come from
+	// Anthropic's servers (a small address range), so this is in effect a ceiling on all Claude traffic, not a per-person limit: keep it generous.
+	OAuthTokenRateLimitPerMin int
+	EmailActionLimitPerHour   int
+	AllowInsecureDatabase     bool
 
 	SentryDSN  string
 	AppVersion string
@@ -368,10 +371,11 @@ func load(get func(string) string) (Config, error) {
 		SMTPTLS:       str("SMTP_TLS", "starttls"),
 		SMTPCAFile:    str("SMTP_CA_FILE", ""),
 
-		APIMetricsPort:          integer("API_METRICS_PORT", 9091),
-		GlobalRateLimitPerMin:   integer("GLOBAL_RATE_LIMIT_PER_MIN", 600),
-		EmailActionLimitPerHour: integer("EMAIL_ACTION_LIMIT_PER_HOUR", 3),
-		AllowInsecureDatabase:   boolean("ALLOW_INSECURE_DATABASE"),
+		APIMetricsPort:            integer("API_METRICS_PORT", 9091),
+		GlobalRateLimitPerMin:     integer("GLOBAL_RATE_LIMIT_PER_MIN", 600),
+		OAuthTokenRateLimitPerMin: integer("OAUTH_TOKEN_RATE_LIMIT_PER_MIN", 1200),
+		EmailActionLimitPerHour:   integer("EMAIL_ACTION_LIMIT_PER_HOUR", 3),
+		AllowInsecureDatabase:     boolean("ALLOW_INSECURE_DATABASE"),
 
 		SentryDSN:        str("SENTRY_DSN", ""),
 		AppVersion:       str("APP_VERSION", "dev"),
@@ -430,6 +434,9 @@ func load(get func(string) string) (Config, error) {
 	}
 	if c.GlobalRateLimitPerMin < 1 {
 		errs = append(errs, errors.New("GLOBAL_RATE_LIMIT_PER_MIN: must be at least 1"))
+	}
+	if c.OAuthTokenRateLimitPerMin < 1 {
+		errs = append(errs, errors.New("OAUTH_TOKEN_RATE_LIMIT_PER_MIN: must be at least 1"))
 	}
 	if c.EmailActionLimitPerHour < 1 {
 		errs = append(errs, errors.New("EMAIL_ACTION_LIMIT_PER_HOUR: must be at least 1"))

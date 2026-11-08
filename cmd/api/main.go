@@ -175,7 +175,7 @@ func run() error {
 		TelegramBot:   telegramBot,
 		SecureCookies: cfg.IsProduction(), AuthRateLimitPerMin: cfg.AuthRateLimitPerMin, TrustForwardedFor: cfg.TrustForwardedFor,
 		HSTS: cfg.IsProduction(), Metrics: apiMetrics, Limiter: ratelimit.New(pool), Errors: reporter,
-		GlobalRateLimitPerMin: cfg.GlobalRateLimitPerMin, EmailActionLimitPerHour: cfg.EmailActionLimitPerHour,
+		GlobalRateLimitPerMin: cfg.GlobalRateLimitPerMin, OAuthTokenPerMin: cfg.OAuthTokenRateLimitPerMin, EmailActionLimitPerHour: cfg.EmailActionLimitPerHour,
 	})
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),

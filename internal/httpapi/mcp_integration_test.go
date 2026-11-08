@@ -383,11 +383,13 @@ func TestMCPEndpointAuthentication(t *testing.T) {
 		return ""
 	}
 
-	if res, m := post(nil); res.StatusCode != 401 || !strings.HasPrefix(res.Header.Get("WWW-Authenticate"), "Bearer") || code(m) != "UNAUTHENTICATED" {
+	if res, m := post(nil); res.StatusCode != 401 || !strings.HasPrefix(res.Header.Get("WWW-Authenticate"), "Bearer") || code(m) != "UNAUTHENTICATED" ||
+		!strings.Contains(m["error"].(map[string]any)["message"].(string), "MCP server for Claude") {
 		t.Fatalf("no key: %d %v", res.StatusCode, m)
 	}
-	if res, _ := post(map[string]string{"Authorization": "Bearer hk_" + strings.Repeat("A", 43)}); res.StatusCode != 401 {
-		t.Fatalf("unknown key: %d", res.StatusCode)
+	if res, m := post(map[string]string{"Authorization": "Bearer hk_" + strings.Repeat("A", 43)}); res.StatusCode != 401 ||
+		!strings.Contains(m["error"].(map[string]any)["message"].(string), "not valid") {
+		t.Fatalf("unknown key: %d %v", res.StatusCode, m)
 	}
 	// A session cookie is not enough: /mcp takes keys only.
 	sess, _ := http.NewRequest("POST", e.srv.URL+"/mcp", strings.NewReader(`{}`))
