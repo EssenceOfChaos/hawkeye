@@ -339,3 +339,69 @@ func count(t *testing.T, e *env, q string, args ...any) int {
 	}
 	return n
 }
+
+// A ping updates the monitor row more than once in its transaction, so, like recording a website check, it needs KEY SHARE on the organization part
+// way through (PostgreSQL re-checks foreign keys on a row's second update). A status page save holds the organization and then needs KEY SHARE on the
+// monitor; the ping must hold the monitor with FOR NO KEY UPDATE so the two can't deadlock (see checks.Store.Record).
+func TestPingDoesNotDeadlockWithAStatusPageSave(t *testing.T) {
+	e, _ := newEnv(t)
+	m := e.heartbeat("Backups")
+	ctx := t.Context()
+	var pageID uuid.UUID
+	if err := e.pool.QueryRow(ctx, `INSERT INTO status_pages (organization_id, slug, title, published) VALUES ($1, 'acme', 'Acme', true) RETURNING id`, e.org).Scan(&pageID); err != nil {
+		t.Fatal(err)
+	}
+	page, err := e.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer page.Rollback(t.Context())
+	if _, err := page.Exec(ctx, `SELECT 1 FROM organizations WHERE id = $1 FOR UPDATE`, e.org); err != nil {
+		t.Fatal(err)
+	}
+
+	pinged := make(chan error, 1)
+	go func() {
+		_, err := e.svc.Ping(t.Context(), m.Heartbeat.PingToken, heartbeats.Ping{Method: "GET"})
+		pinged <- err
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var waiting int
+		if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the ping never waited for the organization")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	inserted := make(chan error, 1)
+	go func() {
+		_, err := page.Exec(ctx, `INSERT INTO status_page_monitors (page_id, monitor_id, position) VALUES ($1, $2, 0)`, pageID, m.ID)
+		inserted <- err
+	}()
+	select {
+	case err := <-inserted:
+		if err != nil {
+			t.Fatalf("status page save: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the status page save is stuck behind the ping")
+	}
+	if err := page.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-pinged:
+		if err != nil {
+			t.Fatalf("ping: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the ping never finished")
+	}
+}

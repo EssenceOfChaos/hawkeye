@@ -71,7 +71,7 @@ func (s *Service) Ping(ctx context.Context, token string, p Ping) (counted bool,
 		var period, grace int
 		var now time.Time
 		err := tx.QueryRow(ctx, `SELECT id, organization_id, enabled, check_interval_seconds, heartbeat_grace_seconds, now() FROM monitors
-			WHERE ping_token = $1 AND kind = 'heartbeat' AND deleted_at IS NULL FOR UPDATE`, token).Scan(&id, &orgID, &enabled, &period, &grace, &now)
+			WHERE ping_token = $1 AND kind = 'heartbeat' AND deleted_at IS NULL FOR NO KEY UPDATE`, token).Scan(&id, &orgID, &enabled, &period, &grace, &now)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
