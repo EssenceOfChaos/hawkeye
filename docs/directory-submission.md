@@ -36,10 +36,12 @@ Metadata Documents later would let Claude Code and custom connectors connect by 
    (two-factor secrets are sealed with it). Check `https://hawkeye.observer/.well-known/oauth-authorization-server` and
    `https://hawkeye.observer/.well-known/oauth-protected-resource/mcp` answer, and that `POST /mcp` without a token answers `401` with a
    `WWW-Authenticate: Bearer … resource_metadata=…` header.
-3. **Register Claude** against the production database (`docs/operations.md#oauth-clients-connecting-claude`):
+3. **Register Claude** on the production server, in the deploy folder, once a release with `oauthclient` in the API image is deployed
+   (`docs/operations.md#oauth-clients-connecting-claude`):
 
    ```sh
-   DATABASE_URL=… APP_BASE_URL=https://hawkeye.observer go run ./cmd/oauthclient create -name Claude -redirect https://claude.ai/api/mcp/auth_callback
+   docker compose --env-file .env.production -f deploy/docker-compose.prod.yml run --rm --entrypoint /usr/local/bin/oauthclient migrate \
+     create -name Claude -redirect https://claude.ai/api/mcp/auth_callback
    ```
 
    Keep the client ID and secret in the password manager until step 7; the secret is shown once.

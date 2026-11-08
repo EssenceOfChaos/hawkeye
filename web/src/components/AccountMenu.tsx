@@ -52,7 +52,7 @@ export function AccountMenu({ email, onLogout }: { email: string; onLogout: () =
         // tabIndex keeps a click on the panel's own text inside the menu, so it does not count as focus leaving.
         <div id="account-menu-panel" className="account-panel" tabIndex={-1}>
           <p className="account-email">
-            Signed in as <strong>{email}</strong>
+            Signed in as <strong title={email}>{email}</strong>
           </p>
           <NavLink to="/account" className={link} onClick={() => setOpenAt(null)}>Account settings</NavLink>
           <NavLink to="/team" className={link} onClick={() => setOpenAt(null)}>Team</NavLink>
