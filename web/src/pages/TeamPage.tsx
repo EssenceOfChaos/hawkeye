@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type SubmitEvent } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, type Invitation, type Member, type Usage } from '../api'
 import { Alert } from '../components/Alert'
@@ -6,6 +6,7 @@ import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
+import { RequireTwoFactorCard } from '../components/TwoFactor'
 
 const day = (iso: string) => new Date(iso).toLocaleDateString([], { dateStyle: 'medium' })
 
@@ -61,7 +62,7 @@ export function TeamPage() {
     }
   }
 
-  async function invite(e: FormEvent) {
+  async function invite(e: SubmitEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)
@@ -85,7 +86,7 @@ export function TeamPage() {
     void run(() => api('DELETE', `/organizations/${orgId}/members/${m.user_id}`), `${m.email} was removed.`)
   }
 
-  async function transfer(e: FormEvent) {
+  async function transfer(e: SubmitEvent) {
     e.preventDefault()
     const to = members?.find((m) => m.user_id === newOwner)
     if (!to || !orgId) return
@@ -209,6 +210,8 @@ export function TeamPage() {
           </div>
         </section>
       )}
+
+      {isOwner && orgId && <RequireTwoFactorCard orgID={orgId} />}
 
       {isOwner && members && members.some((m) => m.role !== 'owner') && (
         <section className="card narrow-left" aria-labelledby="transfer-h">

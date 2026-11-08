@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type SubmitEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { api, ApiError } from '../api'
 import { afterLoginPath } from '../navigation'
@@ -46,19 +46,70 @@ function FormError({ error }: { error: ApiError | null }) {
 }
 
 export function LoginPage() {
-  const { login } = useAuth()
+  const { login, completeTwoFactor } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const { error, busy, run } = useSubmit()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  // Set after a correct password for an account with two-factor sign-in: the second step asks for a code.
+  const [challenge, setChallenge] = useState<string | null>(null)
+  const [code, setCode] = useState('')
+  const [useRecovery, setUseRecovery] = useState(false)
 
-  function onSubmit(e: FormEvent) {
+  function onSubmit(e: SubmitEvent) {
     e.preventDefault()
     void run(async () => {
-      await login(email, password)
+      const r = await login(email, password)
+      if (r.challenge) {
+        setChallenge(r.challenge)
+        return
+      }
       navigate(afterLoginPath(location.state))
     })
+  }
+
+  function onCode(e: SubmitEvent) {
+    e.preventDefault()
+    void run(async () => {
+      try {
+        const r = await completeTwoFactor(challenge!, code)
+        navigate(r.usedRecoveryCode ? '/account#two-factor' : afterLoginPath(location.state))
+      } catch (err) {
+        // A timed-out or used-up step starts over from the password.
+        if (err instanceof ApiError && err.code === 'SIGN_IN_EXPIRED') {
+          setChallenge(null)
+          setCode('')
+        }
+        throw err
+      }
+    })
+  }
+
+  if (challenge) {
+    return (
+      <section className="card narrow">
+        <BrandMark />
+        <h1>Enter your code</h1>
+        <p>{useRecovery ? 'Enter one of the recovery codes you saved when you set up two-factor sign-in. Each works once.' : 'Open your authenticator app and enter the 6-digit code for HawkEye.'}</p>
+        <form onSubmit={onCode}>
+          {useRecovery ? (
+            <Field label="Recovery code" autoComplete="off" autoCapitalize="off" spellCheck={false} required value={code}
+              onChange={(e) => setCode(e.target.value)} placeholder="xxxx-xxxx-xxxx-xxxx" />
+          ) : (
+            <Field label="Code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]{6,7}" maxLength={7} required autoFocus value={code}
+              onChange={(e) => setCode(e.target.value)} placeholder="123456" />
+          )}
+          <FormError error={error} />
+          <button type="submit" disabled={busy}>Continue</button>
+        </form>
+        <p>
+          <button type="button" className="linklike" onClick={() => { setUseRecovery(!useRecovery); setCode('') }}>
+            {useRecovery ? 'Use a code from your authenticator app' : 'Lost your phone? Use a recovery code'}
+          </button>
+        </p>
+      </section>
+    )
   }
   return (
     <section className="card narrow">
@@ -83,7 +134,7 @@ export function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
-  function onSubmit(e: FormEvent) {
+  function onSubmit(e: SubmitEvent) {
     e.preventDefault()
     void run(async () => {
       await register(email, password)
@@ -113,7 +164,7 @@ export function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
 
-  function onSubmit(e: FormEvent) {
+  function onSubmit(e: SubmitEvent) {
     e.preventDefault()
     void run(async () => {
       await api('POST', '/auth/forgot-password', { email })
@@ -144,7 +195,7 @@ export function ResetPasswordPage() {
   const [password, setPassword] = useState('')
   const [done, setDone] = useState(false)
 
-  function onSubmit(e: FormEvent) {
+  function onSubmit(e: SubmitEvent) {
     e.preventDefault()
     void run(async () => {
       await api('POST', '/auth/reset-password', { token, password })

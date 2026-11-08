@@ -8,9 +8,10 @@ import { useAuth } from '../auth'
 import { useDismiss } from '../hooks'
 import { AccountMenu } from './AccountMenu'
 import { BrandMark } from './Brand'
+import { TwoFactorRequirementNotice } from './TwoFactor'
 
 export function Layout() {
-  const { user, logout, refresh, organization, organizations, selectOrganization } = useAuth()
+  const { user, logout, refresh, organization, organizations, selectOrganization, twoFactor } = useAuth()
   const [resent, setResent] = useState(false)
   const [openIncidents, setOpenIncidents] = useState(0)
   const { pathname } = useLocation()
@@ -120,8 +121,11 @@ export function Layout() {
         </Alert>
       )}
       {/* Keyed by organization, so switching reloads every page's data for the one chosen rather than showing the last one's. */}
+      {/* An organization that requires two-factor sign-in is closed to a member without it once their grace period ends: the notice takes the
+          place of the page, except the account page, where they set it up. Their account and other organizations work as usual. */}
       <main key={organization?.id}>
-        <Outlet />
+        <TwoFactorRequirementNotice />
+        {organization?.two_factor_blocked && !twoFactor?.enabled && pathname !== '/account' ? null : <Outlet />}
       </main>
       <footer className="app-footer">
         <Link to="/contact">Contact</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link> · <CookieSettingsButton />

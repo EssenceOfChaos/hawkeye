@@ -96,6 +96,8 @@ func (h *handlers) authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 		case errors.Is(err, apitokens.ErrInvalid):
 			c.Response().Header().Set("WWW-Authenticate", `Bearer realm="HawkEye API", error="invalid_token"`)
 			return errTokenInvalid
+		case errors.Is(err, apitokens.ErrTwoFactorRequired):
+			return mapError(err)
 		case err != nil:
 			return err
 		}

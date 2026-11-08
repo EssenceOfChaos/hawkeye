@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type SubmitEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { api, ApiError } from '../api'
 import { Alert } from '../components/Alert'
@@ -8,6 +8,7 @@ import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
 import { Appear } from '../components/Appear'
 import { Toggle } from '../components/Toggle'
+import { TwoFactorCard } from '../components/TwoFactor'
 
 function msg(e: unknown): string {
   return e instanceof ApiError ? e.message : 'That did not work. Try again.'
@@ -22,7 +23,7 @@ function ChangePassword() {
   const [done, setDone] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  async function submit(e: FormEvent) {
+  async function submit(e: SubmitEvent) {
     e.preventDefault()
     setDone(false)
     setError(null)
@@ -112,7 +113,7 @@ function DeleteAccount({ email }: { email: string }) {
   const [busy, setBusy] = useState(false)
   const matches = typed.trim().toLowerCase() === email.toLowerCase()
 
-  async function submit(e: FormEvent) {
+  async function submit(e: SubmitEvent) {
     e.preventDefault()
     if (!window.confirm('Permanently delete your account and all of its data? This cannot be undone.')) return
     setBusy(true)
@@ -223,6 +224,7 @@ export function AccountPage() {
 
       <EmailPreferencesCard />
       <ChangePassword />
+      <TwoFactorCard />
       <ExportData />
       <DeleteAccount email={user.email} />
     </>

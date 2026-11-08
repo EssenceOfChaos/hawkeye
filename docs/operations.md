@@ -103,6 +103,21 @@ API keys (`Authorization: Bearer hk_…`) let scripts use the API as a person in
 4. Expiry emails: the worker emails people 7 days before a key expires and when it does (`apitokens.ExpiryJob`, every 15 minutes, on the primary
    worker only). A missing email is in the worker log as `send API key expiry email failed`.
 
+### Locked out: lost authenticator app and recovery codes
+
+Two-factor sign-in has no email recovery, on purpose. If someone has lost both their phone and their recovery codes, confirm who they are first
+(they can reset their password through email, which proves the mailbox; also ask for something only the account holder knows, such as their plan,
+recent invoices or monitor names). Then turn it off for them:
+
+```sql
+BEGIN;
+UPDATE users SET totp_secret = NULL, totp_pending_secret = NULL, totp_enabled_at = NULL, totp_last_step = NULL WHERE email = '<address>';
+DELETE FROM recovery_codes WHERE user_id = (SELECT id FROM users WHERE email = '<address>');
+COMMIT;
+```
+
+If they own an organization that requires two-factor sign-in, they set it up again the next time they open it. Ask them to turn it back on.
+
 ### Settings were not refreshed (secret manager)
 
 Symptoms: the deploy log says `the secret manager is unreachable`, `rejected our credentials`, or `the secrets are not acceptable`; or a change made in Infisical did not reach the server.

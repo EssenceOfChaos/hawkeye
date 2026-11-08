@@ -649,3 +649,9 @@ main.auth .card p a { font-weight: 600; }
   .mon-hero::after { background: linear-gradient(180deg, #020b17f2 0%, #020b17cc 55%, #020b1788 100%); }
   .mon-earth::after { background: linear-gradient(180deg, #020b17f5 0%, #020b17d0 60%, #020b1790 100%); }
 }
+
+/* Two-factor sign-in (components/TwoFactor.tsx): the QR code stays black on white in both themes so every phone can read it. */
+.qr { background: #fff; padding: 8px; border-radius: 8px; display: block; margin: .5rem 0 1rem; image-rendering: pixelated; }
+.recovery-codes { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: .25rem 1.5rem; padding: 0; list-style: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+p.warning { color: var(--warn); }

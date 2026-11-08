@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v5"
 
@@ -31,6 +32,7 @@ import (
 	"hawkeye/internal/sitecheck"
 	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
+	"hawkeye/internal/twofactor"
 	"hawkeye/internal/validation"
 )
 
@@ -62,6 +64,7 @@ type handlers struct {
 	emailPerHour  int
 	secureCookies bool
 	apiTokens     *apitokens.Service // nil turns API keys off (DISABLE_API_KEYS)
+	twoFactor     *twofactor.Service // two-factor sign-in; nil turns its settings off (sign-in still enforces it for accounts that have it)
 	tokenRoutes   map[string]bool    // "METHOD /path" of the routes open to API keys
 }
 
@@ -99,6 +102,9 @@ func mapError(err error) error {
 	case errors.As(err, &ve):
 		return &APIError{Status: http.StatusBadRequest, Code: "VALIDATION_ERROR",
 			Message: "One or more fields are invalid.", Details: map[string]any{"fields": ve.Fields}}
+	case errors.Is(err, apitokens.ErrTwoFactorRequired):
+		return &APIError{Status: http.StatusForbidden, Code: "TWO_FACTOR_REQUIRED",
+			Message: "This organization requires two-factor sign-in, and this key's owner hasn't set it up. Set it up in HawkEye to use the key again."}
 	case errors.Is(err, apitokens.ErrNotFound):
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "API key not found."}
 	case errors.Is(err, apitokens.ErrTooMany):
@@ -210,6 +216,9 @@ func (h *handlers) login(c *echo.Context) error {
 		return errRateLimited
 	}
 	u, session, err := h.auth.Login(c.Request().Context(), in.Email, in.Password)
+	if handled, rerr := h.secondFactorChallenge(c, err); handled {
+		return rerr
+	}
 	if err != nil {
 		return mapError(err)
 	}
@@ -282,11 +291,34 @@ func (h *handlers) resendVerification(c *echo.Context) error {
 	return c.NoContent(http.StatusAccepted)
 }
 
+// meOrganization is an organization as /auth/me lists it: the caller's role, and what its two-factor requirement means for them.
+type meOrganization struct {
+	organizations.Organization
+	twofactor.Requirement
+}
+
 func (h *handlers) me(c *echo.Context) error {
 	u := currentUser(c)
-	orgs, err := h.orgs.List(c.Request().Context(), u.ID)
+	ctx := c.Request().Context()
+	orgs, err := h.orgs.List(ctx, u.ID)
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"user": u, "organizations": orgs})
+	reqs := map[uuid.UUID]twofactor.Requirement{}
+	var tf *twofactor.Status
+	if h.twoFactor != nil {
+		if reqs, err = h.twoFactor.ForUser(ctx, u.ID); err != nil {
+			return err
+		}
+		st, err := h.twoFactor.Status(ctx, u.ID)
+		if err != nil {
+			return err
+		}
+		tf = &st
+	}
+	out := make([]meOrganization, len(orgs))
+	for i, o := range orgs {
+		out[i] = meOrganization{o, reqs[o.ID]}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"user": u, "organizations": out, "two_factor": tf})
 }

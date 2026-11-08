@@ -1,6 +1,6 @@
 # Plan: public API, MCP server and Claude connector
 
-Status: **Phase 1 built** (2026-11-07, branch `feat/public-api-keys`); Phases 2 and 3 proposed.
+Status: **Phase 1 built** (2026-11-07, PR #10); **Phase 2** in PR #11; **Phase 3a (two-factor sign-in) built** (2026-11-08, branch `feat/two-factor`); 3b and 3c proposed.
 
 This plan pulls roadmap item #14 (Public API and API keys) forward from Q4 and builds two more things on top of it: an MCP server
 that lets Claude and other AI clients use HawkEye, and a listing in Anthropic's Connectors Directory. It also brings forward roadmap

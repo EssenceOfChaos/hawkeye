@@ -61,6 +61,7 @@ export function PlanDetails({ plan, interval = 'month' }: { plan: Plan; interval
         <li>{plan.history_retention_days} days of history</li>
         {(plan.max_regions ?? 1) > 1 && <li>Checks from up to {plan.max_regions} locations</li>}
         {(plan.max_team_members ?? 1) > 1 && <li>{plan.max_team_members} team members</li>}
+        {(plan.max_team_members ?? 1) > 1 && <li>Require two-factor sign-in for your team</li>}
         <li>Website and API monitoring</li>
         <li>Cron job and DNS monitoring</li>
         <li>SSL certificate expiry warnings</li>

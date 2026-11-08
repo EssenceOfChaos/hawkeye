@@ -173,6 +173,15 @@ func (h *handlers) transferOwnership(c *echo.Context) error {
 		return err
 	}
 	ctx := c.Request().Context()
+	if h.twoFactor != nil {
+		// The new owner must not be shut out of the organization they now own.
+		if r, err := h.twoFactor.For(ctx, in.UserID, id); err != nil {
+			return err
+		} else if r.Required && r.GraceEndsAt != nil {
+			return &APIError{Status: http.StatusConflict, Code: "NEW_OWNER_NEEDS_TWO_FACTOR",
+				Message: "This organization requires two-factor sign-in, and that member hasn't set it up yet. Ask them to, then transfer ownership."}
+		}
+	}
 	newOwner, err := h.invitations.Transfer(ctx, id, currentUser(c), in.UserID, in.ConfirmName)
 	if err != nil {
 		return mapError(err)

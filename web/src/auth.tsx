@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { api, ApiError, ORGANIZATION_LOST_EVENT, setApiOrganization, type Organization, type User } from './api'
+import { api, ApiError, ORGANIZATION_LOST_EVENT, setApiOrganization, type Organization, type TwoFactorStatus, type User } from './api'
 import { trackEvent, trackRegistration } from './analytics'
 
 interface AuthState {
@@ -11,7 +11,12 @@ interface AuthState {
   organization: Organization | null
   /** Switch to another of `organizations`. Pages reload their data for it. */
   selectOrganization(id: string): void
-  login(email: string, password: string): Promise<void>
+  /** Whether the person uses two-factor sign-in (null while unknown, or when the server doesn't offer it). */
+  twoFactor: TwoFactorStatus | null
+  /** Signs in with a password. For an account with two-factor sign-in it returns the challenge to pass to completeTwoFactor; no session exists yet. */
+  login(email: string, password: string): Promise<{ challenge?: string }>
+  /** Finishes a two-factor sign-in with a code or a recovery code. Reports whether a recovery code was used. */
+  completeTwoFactor(challenge: string, code: string): Promise<{ usedRecoveryCode: boolean }>
   register(email: string, password: string): Promise<void>
   logout(): Promise<void>
   /** Reloads who is signed in and their organizations. `select` makes that organization the active one (one just joined is not in the list yet). */
@@ -60,15 +65,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [activeId, setActiveId] = useState<string | null>(storedOrganization)
+  const [twoFactor, setTwoFactor] = useState<TwoFactorStatus | null>(null)
 
   const refresh = useCallback(async (select?: string) => {
     if (select) storeOrganization(select)
     try {
-      const r = await api<{ user: User; organizations: Organization[] }>('GET', '/auth/me')
+      const r = await api<{ user: User; organizations: Organization[]; two_factor?: TwoFactorStatus | null }>('GET', '/auth/me')
       // The header is set before anything is rendered for the new state, so no page ever fetches for the wrong organization.
       const active = pickOrganization(r.organizations, storedOrganization())
       actFor(r.organizations, active)
       setUser(r.user)
+      setTwoFactor(r.two_factor ?? null)
       setOrganizations(r.organizations)
       setActiveId(active?.id ?? null)
       setStatus('authenticated')
@@ -111,9 +118,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         actFor(organizations, next)
         setActiveId(next.id)
       },
+      twoFactor,
       login: async (email, password) => {
-        await api('POST', '/auth/login', { email, password })
+        const r = await api<{ two_factor_required?: boolean; challenge?: string }>('POST', '/auth/login', { email, password })
+        if (r?.two_factor_required && r.challenge) return { challenge: r.challenge }
         await refresh()
+        return {}
+      },
+      completeTwoFactor: async (challenge, code) => {
+        const r = await api<{ used_recovery_code?: boolean }>('POST', '/auth/login/two-factor', { challenge, code })
+        await refresh()
+        return { usedRecoveryCode: Boolean(r?.used_recovery_code) }
       },
       register: async (email, password) => {
         await api('POST', '/auth/register', { email, password })
@@ -131,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus('anonymous')
       },
     }),
-    [status, user, organizations, organization, refresh],
+    [status, user, organizations, organization, twoFactor, refresh],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
