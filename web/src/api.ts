@@ -36,6 +36,25 @@ export interface Plan {
   reports_enabled?: boolean
   /** The organization's own name and logo on those reports (Agency). */
   branded_reports_enabled?: boolean
+  /** API keys may change data (Pro and Agency). Reading through the API is on every plan. */
+  api_write_enabled?: boolean
+}
+
+/** An API key as listed. The token itself is only ever in the response that creates the key. */
+export interface ApiKey {
+  id: string
+  name: string
+  scope: 'read' | 'write'
+  /** The first characters of the token, so people can tell keys apart. */
+  prefix: string
+  owner_email: string
+  /** Made by the person viewing the page. */
+  mine: boolean
+  created_at: string
+  last_used_at: string | null
+  /** Null when the owner chose no expiry. */
+  expires_at: string | null
+  expired: boolean
 }
 
 /** What the Reports page edits: the name and logo printed on PDF reports, and the monthly email switch. */

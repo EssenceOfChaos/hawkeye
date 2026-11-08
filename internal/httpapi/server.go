@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v5/middleware"
 
 	"hawkeye/internal/account"
+	"hawkeye/internal/apitokens"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
@@ -67,6 +68,7 @@ type Options struct {
 	Branding      *branding.Service    // report branding and PDF reports; nil turns those endpoints off
 	SSLCheck      *sslcheck.Service    // free SSL checker; nil turns the endpoint off
 	SiteCheck     *sitecheck.Service   // free website status checker; nil turns the endpoint off
+	APITokens     *apitokens.Service   // API keys; nil makes key requests answer 503 (DISABLE_API_KEYS) and sessions work as before
 	PgPool        *pgxpool.Pool
 	Pool          plans.DB
 
@@ -175,12 +177,17 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies}
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies,
+		apiTokens: o.APITokens, tokenRoutes: map[string]bool{}}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
 		// session, and the unguessable token in the URL is the only thing that authorizes it (and all it can do is unsubscribe).
-		Skipper:        func(c *echo.Context) bool { return c.Path() == "/api/v1/lifecycle/unsubscribe" },
+		// API requests authenticate with a key in the Authorization header, which a browser never attaches on its own, so they need no CSRF token. They
+		// skip it only on routes open to keys: anywhere else the header gets 403 SESSION_REQUIRED and the cookie is never used (see tokens.go).
+		Skipper: func(c *echo.Context) bool {
+			return c.Path() == "/api/v1/lifecycle/unsubscribe" || (hasAuthorization(c) && h.opensToTokens(c))
+		},
 		TokenLookup:    "header:X-CSRF-Token",
 		CookieName:     "csrf_token",
 		CookiePath:     "/",
@@ -188,7 +195,10 @@ func registerAPI(e *echo.Echo, o Options) {
 		CookieHTTPOnly: false,
 		CookieSameSite: http.SameSiteLaxMode,
 		CookieMaxAge:   86400,
-		ErrorHandler: func(*echo.Context, error) error {
+		ErrorHandler: func(c *echo.Context, _ error) error {
+			if hasAuthorization(c) {
+				return errSessionRequired // an API key on a route not open to keys: say so, rather than asking a script for a CSRF token
+			}
 			return &APIError{Status: http.StatusForbidden, Code: "CSRF_INVALID", Message: "Missing or invalid CSRF token."}
 		},
 	}))
@@ -329,84 +339,92 @@ func registerAPI(e *echo.Echo, o Options) {
 		acct.PUT("/email-preferences", h.putEmailPreferences)
 	}
 
-	scoped := v1.Group("", h.requireAuth, h.resolveOrg)
-	scoped.GET("/usage", h.usage)
-	scoped.GET("/monitors", h.listMonitors)
-	scoped.POST("/monitors", h.createMonitor)
-	scoped.POST("/monitors/bulk", h.bulkMonitors)
-	scoped.GET("/tags", h.listTags)
-	scoped.POST("/tags", h.createTag)
-	scoped.PATCH("/tags/:tagID", h.updateTag)
-	scoped.DELETE("/tags/:tagID", h.deleteTag)
-	scoped.GET("/monitors/:monitorID", h.getMonitor)
-	scoped.PATCH("/monitors/:monitorID", h.updateMonitor)
-	scoped.DELETE("/monitors/:monitorID", h.deleteMonitor)
-	scoped.POST("/monitors/:monitorID/pause", h.pauseMonitor)
-	scoped.POST("/monitors/:monitorID/resume", h.resumeMonitor)
+	// Tenant-scoped routes take a session or an API key. Routes registered through api are open to keys; routes registered on scoped directly are
+	// session-only (billing changes, alert recipients, API key management), as is every other group.
+	scoped := v1.Group("", h.authenticate, h.resolveOrg)
+	api := tokenGroup{g: scoped, h: h}
+	api.GET("/usage", h.usage)
+	api.GET("/monitors", h.listMonitors)
+	api.POST("/monitors", h.createMonitor)
+	api.POST("/monitors/bulk", h.bulkMonitors)
+	api.GET("/tags", h.listTags)
+	api.POST("/tags", h.createTag)
+	api.PATCH("/tags/:tagID", h.updateTag)
+	api.DELETE("/tags/:tagID", h.deleteTag)
+	api.GET("/monitors/:monitorID", h.getMonitor)
+	api.PATCH("/monitors/:monitorID", h.updateMonitor)
+	api.DELETE("/monitors/:monitorID", h.deleteMonitor)
+	api.POST("/monitors/:monitorID/pause", h.pauseMonitor)
+	api.POST("/monitors/:monitorID/resume", h.resumeMonitor)
 	if h.badges != nil {
-		scoped.POST("/monitors/:monitorID/badge", h.enableBadge, requireOwner)
-		scoped.DELETE("/monitors/:monitorID/badge", h.disableBadge, requireOwner)
+		api.POST("/monitors/:monitorID/badge", h.enableBadge, requireOwner)
+		api.DELETE("/monitors/:monitorID/badge", h.disableBadge, requireOwner)
 	}
 	if h.heartbeats != nil {
-		scoped.GET("/monitors/:monitorID/pings", h.heartbeatPings)
-		scoped.POST("/monitors/:monitorID/ping-token", h.rotatePingToken)
+		api.GET("/monitors/:monitorID/pings", h.heartbeatPings)
+		api.POST("/monitors/:monitorID/ping-token", h.rotatePingToken)
 	}
-	scoped.GET("/monitors/:monitorID/incidents", h.listMonitorIncidents)
-	scoped.GET("/incidents", h.listIncidents)
-	scoped.GET("/incidents/:incidentID/updates", h.listIncidentUpdates)
-	scoped.POST("/incidents/:incidentID/updates", h.postIncidentUpdate, requireOwner, limit("incident-update"))
-	scoped.DELETE("/incidents/:incidentID/updates/:updateID", h.deleteIncidentUpdate, requireOwner)
+	api.GET("/monitors/:monitorID/incidents", h.listMonitorIncidents)
+	api.GET("/incidents", h.listIncidents)
+	api.GET("/incidents/:incidentID/updates", h.listIncidentUpdates)
+	api.POST("/incidents/:incidentID/updates", h.postIncidentUpdate, requireOwner, limit("incident-update"))
+	api.DELETE("/incidents/:incidentID/updates/:updateID", h.deleteIncidentUpdate, requireOwner)
 
 	// Billing: any member can see the plan; changes need the owner and a verified email.
-	scoped.GET("/billing/subscription", h.billingSubscription)
+	api.GET("/billing/subscription", h.billingSubscription)
 	scoped.POST("/billing/checkout-session", h.billingCheckout, requireOwner, requireVerifiedEmail)
 	scoped.POST("/billing/portal-session", h.billingPortal, requireOwner, requireVerifiedEmail)
 	scoped.POST("/billing/cancel-subscription", h.billingCancel, requireOwner, requireVerifiedEmail)
 	scoped.POST("/billing/sync", h.billingSync, requireOwner)
 	if h.branding != nil {
 		// PDF reports and their branding (Pro and Agency; the plan is checked in each handler).
-		scoped.GET("/branding", h.brandingView)
-		scoped.PUT("/branding", h.putBranding, requireOwner)
-		scoped.GET("/branding/logo", h.getLogo)
-		scoped.PUT("/branding/logo", h.putLogo, requireOwner, limit("branding"))
-		scoped.DELETE("/branding/logo", h.deleteLogo, requireOwner)
-		scoped.GET("/monitors/:monitorID/report.pdf", h.monitorReportPDF, limit("report"))
+		api.GET("/branding", h.brandingView)
+		api.PUT("/branding", h.putBranding, requireOwner)
+		api.GET("/branding/logo", h.getLogo)
+		api.PUT("/branding/logo", h.putLogo, requireOwner, limit("branding"))
+		api.DELETE("/branding/logo", h.deleteLogo, requireOwner)
+		api.GET("/monitors/:monitorID/report.pdf", h.monitorReportPDF, limit("report"))
 	}
-	scoped.GET("/monitors/:monitorID/results", h.monitorResults)
-	scoped.GET("/monitors/:monitorID/uptime", h.monitorUptime)
-	scoped.GET("/monitors/:monitorID/response-times", h.monitorResponseTimes)
-	scoped.GET("/dashboard/summary", h.dashboardSummary)
-	scoped.GET("/dashboard/recent-incidents", h.dashboardRecentIncidents)
-	scoped.GET("/dashboard/response-times", h.dashboardResponseTimes)
+	api.GET("/monitors/:monitorID/results", h.monitorResults)
+	api.GET("/monitors/:monitorID/uptime", h.monitorUptime)
+	api.GET("/monitors/:monitorID/response-times", h.monitorResponseTimes)
+	api.GET("/dashboard/summary", h.dashboardSummary)
+	api.GET("/dashboard/recent-incidents", h.dashboardRecentIncidents)
+	api.GET("/dashboard/response-times", h.dashboardResponseTimes)
 
 	// Alert recipients: any member can view; only owners change them; adding a recipient needs a verified
 	// email and is rate-limited because it causes mail to be sent to a third party.
-	scoped.GET("/regions", h.listRegions)
-	scoped.GET("/monitors/:monitorID/regions", h.monitorRegions)
-	scoped.GET("/status-pages", h.listStatusPages)
-	scoped.POST("/status-pages", h.createStatusPage, requireOwner)
-	scoped.GET("/status-pages/:pageID", h.getStatusPage)
-	scoped.PUT("/status-pages/:pageID", h.updateStatusPage, requireOwner)
-	scoped.DELETE("/status-pages/:pageID", h.deleteStatusPage, requireOwner)
-	scoped.GET("/status-pages/:pageID/logo", h.getStatusPageLogo)
-	scoped.PUT("/status-pages/:pageID/logo", h.putStatusPageLogo, requireOwner, limit("branding"))
-	scoped.DELETE("/status-pages/:pageID/logo", h.deleteStatusPageLogo, requireOwner)
-	scoped.GET("/maintenance-windows", h.listMaintenance)
-	scoped.POST("/maintenance-windows", h.createMaintenance, requireOwner)
-	scoped.DELETE("/maintenance-windows/:windowID", h.deleteMaintenance, requireOwner)
-	scoped.GET("/domains", h.listDomains)
-	scoped.POST("/domains", h.createDomain, requireOwner)
-	scoped.DELETE("/domains/:domainID", h.deleteDomain, requireOwner)
-	scoped.GET("/notification-settings", h.listSettings)
+	api.GET("/regions", h.listRegions)
+	api.GET("/monitors/:monitorID/regions", h.monitorRegions)
+	api.GET("/status-pages", h.listStatusPages)
+	api.POST("/status-pages", h.createStatusPage, requireOwner)
+	api.GET("/status-pages/:pageID", h.getStatusPage)
+	api.PUT("/status-pages/:pageID", h.updateStatusPage, requireOwner)
+	api.DELETE("/status-pages/:pageID", h.deleteStatusPage, requireOwner)
+	api.GET("/status-pages/:pageID/logo", h.getStatusPageLogo)
+	api.PUT("/status-pages/:pageID/logo", h.putStatusPageLogo, requireOwner, limit("branding"))
+	api.DELETE("/status-pages/:pageID/logo", h.deleteStatusPageLogo, requireOwner)
+	api.GET("/maintenance-windows", h.listMaintenance)
+	api.POST("/maintenance-windows", h.createMaintenance, requireOwner)
+	api.DELETE("/maintenance-windows/:windowID", h.deleteMaintenance, requireOwner)
+	api.GET("/domains", h.listDomains)
+	api.POST("/domains", h.createDomain, requireOwner)
+	api.DELETE("/domains/:domainID", h.deleteDomain, requireOwner)
+	scoped.GET("/notification-settings", h.listSettings) // lists alert destinations, so it stays session-only
 	scoped.POST("/notification-settings", h.createSetting, requireOwner, requireVerifiedEmail, limit("create-alert"))
 	scoped.POST("/notification-settings/telegram-link", h.telegramLink, requireOwner, requireVerifiedEmail, limit("create-alert"))
 	// A member may turn off or remove their own address (the handlers restrict them to it); everything else about recipients is the owner's.
 	scoped.PATCH("/notification-settings/:settingID", h.updateSetting)
 	scoped.PUT("/notification-settings/:settingID/routing", h.setRouting, requireOwner)
-	scoped.GET("/notification-settings/coverage", h.alertCoverage)
+	api.GET("/notification-settings/coverage", h.alertCoverage)
 	scoped.DELETE("/notification-settings/:settingID", h.deleteSetting)
 	scoped.POST("/notification-settings/:settingID/test", h.testSetting, requireOwner, requireVerifiedEmail, limit("create-alert"))
 	scoped.POST("/notification-settings/:settingID/resend-confirmation", h.resendSettingConfirmation, requireOwner, requireVerifiedEmail, limit("resend-alert"))
+
+	// API key management needs a session: a key can't make, list or revoke keys. With keys turned off these answer 503, so the page can say why.
+	scoped.GET("/api-keys", h.listAPIKeys)
+	scoped.POST("/api-keys", h.createAPIKey, requireVerifiedEmail, limit("api-key"))
+	scoped.DELETE("/api-keys/:keyID", h.revokeAPIKey)
 
 	org := v1.Group("/organizations", h.requireAuth)
 	org.GET("", h.listOrgs)

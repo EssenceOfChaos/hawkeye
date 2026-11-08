@@ -1,6 +1,6 @@
 # Plan: public API, MCP server and Claude connector
 
-Status: **proposed** (drafted 2026-11-07). Nothing here is built yet.
+Status: **Phase 1 built** (2026-11-07, branch `feat/public-api-keys`); Phases 2 and 3 proposed.
 
 This plan pulls roadmap item #14 (Public API and API keys) forward from Q4 and builds two more things on top of it: an MCP server
 that lets Claude and other AI clients use HawkEye, and a listing in Anthropic's Connectors Directory. It also brings forward roadmap
@@ -105,13 +105,14 @@ groups with the cookie-only middleware, not with a deny list, so new routes are 
   reusing the weekly summary's once-only email pattern. An expired key answers `401 TOKEN_EXPIRED`, not the generic
   `UNAUTHENTICATED`, so a broken script says why it broke. Expiry can't be extended; make a new key instead.
 - Creating a key emails its owner ("A new API key, *name*, was created"), in the style of the change-password notice.
-- Changing the password and deleting the account revoke that person's keys; leaving or being removed from the organization disables
-  them (the role check fails) and a cleanup deletes them.
+- A password **reset** and deleting the account revoke that person's keys; leaving or being removed from the organization deletes them (a
+  foreign key to the membership). Changing the password while signed in leaves keys working, the way most services treat personal tokens:
+  the person can see and revoke them on the API keys page.
 - UI: an **API keys** section in Settings (a new page next to `TeamPage.tsx`), with name, scope, prefix, created and last used.
 
 ### Kill switch
 
-`DISABLE_API_TOKENS=true` makes bearer authentication answer `503` without touching sessions, the same pattern as `DISABLE_FREE_TOOLS`.
+`DISABLE_API_KEYS=true` makes bearer authentication answer `503` without touching sessions, the same pattern as `DISABLE_FREE_TOOLS`.
 
 ### Tests
 

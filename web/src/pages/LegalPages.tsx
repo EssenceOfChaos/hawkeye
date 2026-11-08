@@ -76,6 +76,7 @@ export function PrivacyPage() {
         <li>Maintenance windows you schedule: their names, times, repeat settings, and the monitors they cover. Checks made during a window are recorded and marked as such.</li>
         <li>For HTTPS monitors, the expiry date of the SSL certificate your website presents, and when we last read it. We do not store the certificate itself or any other detail from it.</li>
         <li>Domain names: the registered domain of each monitor’s web address or host name (for example example.com for https://www.example.com) and any domain you add yourself, the registration expiry date a public domain registry reports for it, and when we last looked it up.</li>
+        <li>API keys you create: the name you give each key, its access (read only, or read and write), the first few characters of the key, a one-way fingerprint of the key (we never store the key itself), when it was created and last used, and when it expires.</li>
         <li>Usage counts needed to enforce your plan’s limits.</li>
       </ul>
       <p>
@@ -240,6 +241,7 @@ export function PrivacyPage() {
         <li><strong>Resolved incidents</strong> follow the same plan periods. Incidents that are still open are kept until they are resolved.</li>
         <li><strong>Monitors you delete</strong> are permanently removed after 30 days. Their credentials, custom headers, and request body are erased immediately when you delete them.</li>
         <li><strong>Sessions and one-time links</strong> (sign-in sessions, password-reset and verification links) expire automatically, within 14 days, 1 hour, and 48 hours respectively, and are then removed.</li>
+        <li><strong>API keys</strong> are deleted 30 days after you revoke them, 90 days after they expire, or as soon as you leave the organization or close your account.</li>
         <li><strong>Copies of Stripe event notifications</strong> are deleted after 90 days (180 days if processing failed).</li>
         <li><strong>Rate-limit counters</strong> are deleted within 24 hours.</li>
         <li><strong>Report name and logo</strong> are deleted when you remove them or close your account. Reports themselves are generated when you ask for them or on the 1st of the month, are not stored by us, and, once emailed, are in your mailbox.</li>

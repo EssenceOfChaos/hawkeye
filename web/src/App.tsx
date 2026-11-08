@@ -22,6 +22,7 @@ import { NotificationsPage } from './pages/NotificationsPage'
 import { MonitorFormPage } from './pages/MonitorFormPage'
 import { StatusPage } from './pages/StatusPage'
 import { TeamPage } from './pages/TeamPage'
+import { ApiKeysPage } from './pages/ApiKeysPage'
 import { StatusPageEditor, StatusPagesPage } from './pages/StatusPageSettings'
 import { PrivacyPage, TermsPage } from './pages/LegalPages'
 import { MonitorsPage } from './pages/MonitorsPage'
@@ -83,6 +84,7 @@ export function AppRoutes() {
       <Route path="/docs/cron-job-monitoring" element={<DocPage path="/docs/cron-job-monitoring" />} />
       <Route path="/docs/dns-monitoring" element={<DocPage path="/docs/dns-monitoring" />} />
       <Route path="/docs/alerts" element={<DocPage path="/docs/alerts" />} />
+      <Route path="/docs/api" element={<DocPage path="/docs/api" />} />
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
@@ -98,6 +100,7 @@ export function AppRoutes() {
         <Route path="/account" element={<AccountPage />} />
         <Route path="/incidents" element={<IncidentsPage />} />
         <Route path="/team" element={<TeamPage />} />
+        <Route path="/api-keys" element={<ApiKeysPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/domains" element={<DomainsPage />} />
         <Route path="/maintenance" element={<MaintenancePage />} />

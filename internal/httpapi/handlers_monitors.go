@@ -18,6 +18,12 @@ const orgKey = "organization_id"
 // resolveOrg picks the organization a request acts on and verifies the caller belongs to it.
 func (h *handlers) resolveOrg(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c *echo.Context) error {
+		if isToken, err := resolveToken(c); isToken {
+			if err != nil {
+				return err
+			}
+			return next(c)
+		}
 		ctx := c.Request().Context()
 		u := currentUser(c)
 		if raw := c.Request().Header.Get("X-Organization-ID"); raw != "" {

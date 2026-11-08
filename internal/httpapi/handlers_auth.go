@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/account"
+	"hawkeye/internal/apitokens"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
@@ -59,6 +61,8 @@ type handlers struct {
 	limits        limiterDeps
 	emailPerHour  int
 	secureCookies bool
+	apiTokens     *apitokens.Service // nil turns API keys off (DISABLE_API_KEYS)
+	tokenRoutes   map[string]bool    // "METHOD /path" of the routes open to API keys
 }
 
 type credentials struct {
@@ -95,6 +99,11 @@ func mapError(err error) error {
 	case errors.As(err, &ve):
 		return &APIError{Status: http.StatusBadRequest, Code: "VALIDATION_ERROR",
 			Message: "One or more fields are invalid.", Details: map[string]any{"fields": ve.Fields}}
+	case errors.Is(err, apitokens.ErrNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "API key not found."}
+	case errors.Is(err, apitokens.ErrTooMany):
+		return &APIError{Status: http.StatusForbidden, Code: "API_KEYS_LIMIT",
+			Message: fmt.Sprintf("An organization can have up to %d API keys. Revoke one you no longer use to create another.", apitokens.MaxLiveKeys)}
 	case errors.Is(err, auth.ErrWrongPassword):
 		return &APIError{Status: http.StatusForbidden, Code: "WRONG_PASSWORD", Message: "That password is not correct."}
 	case errors.Is(err, account.ErrSharedOrganization):

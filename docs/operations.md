@@ -89,6 +89,20 @@ Symptoms: `HawkEyeFreeCheckersHeavyUse`, `HawkEyeFreeCheckersTurningPeopleAway` 
 4. To block an address, do it at the host firewall (`ufw deny from <ip>`) or in Caddy. If it keeps recurring, add a bot challenge to the two forms (for example Cloudflare Turnstile; the CSP in `deploy/Caddyfile` needs the script and frame origin) and verify the token in `handlers_tools.go` before calling the checker (`docs/security-review.md`, item 12).
 5. A site owner who complains about requests from us: the requests are `GET /` with `User-Agent: HawkEye-StatusChecker/1.0 (+https://hawkeye.observer/tools/is-website-down)`, at most 5 per host per 10 minutes. Tell them they can block that user agent.
 
+### API key abuse
+
+API keys (`Authorization: Bearer hk_…`) let scripts use the API as a person in one organization (`docs/api.md#api-keys`).
+
+1. `hawkeye_rate_limited_total{scope="token"}` and `{scope="token-write"}` count requests refused by the per-key limits (120 a minute, 30 writes
+   a minute). The request log shows the route and status; a key is never logged, but its owner can see its prefix and when it was last used on
+   the API keys page.
+2. To stop one key: the person (or the organization's owner) revokes it on the API keys page. To do it for them, in SQL:
+   `UPDATE api_tokens SET revoked_at = now() WHERE prefix = 'hk_…' AND revoked_at IS NULL;` (the prefix is the first 10 characters).
+3. To stop all keys at once: set `DISABLE_API_KEYS=true` and restart the API. Every request made with a key answers 503 `API_KEYS_DISABLED`;
+   browser sessions and the app are unaffected, and the API keys page says keys are turned off. Keys work again when it is unset.
+4. Expiry emails: the worker emails people 7 days before a key expires and when it does (`apitokens.ExpiryJob`, every 15 minutes, on the primary
+   worker only). A missing email is in the worker log as `send API key expiry email failed`.
+
 ### Settings were not refreshed (secret manager)
 
 Symptoms: the deploy log says `the secret manager is unreachable`, `rejected our credentials`, or `the secrets are not acceptable`; or a change made in Infisical did not reach the server.

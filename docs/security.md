@@ -114,6 +114,24 @@ See `docs/security-review.md` for the review and residual risks.
 - **State-changing methods** (POST, PUT, PATCH, DELETE) repeat on every check, so they need a verified email address and an interval of at least 5 minutes. This limits abuse of the monitor as a request cannon, but does not make it impossible: the Terms put responsibility for the requests on the customer, and the SSRF protections (public hosts, ports 80/443, no redirects to private addresses) still apply.
 - **Key handling:** one key, no rotation tooling. Rotating or losing it makes stored credentials unreadable and users must re-enter them (`docs/operations.md`).
 
+## API keys
+
+- **Tokens:** `hk_` plus 256 random bits; only a SHA-256 hash is stored, with a 10-character prefix for display. Shown once. Owners are emailed
+  when a key is created.
+- **Authority:** a key acts as one person in one organization, with that person's role read on every request; the row is deleted with the
+  membership (foreign key), so leaving or removal ends a person's keys at once. `read` keys can't use unsafe methods; `write` keys also need a plan
+  with API writes, checked on every write, not only at creation.
+- **Reach:** keys work only on routes registered through `tokenGroup`. Account, password, billing changes, team and invitations, ownership
+  transfer, alert recipients and key management are session-only, so a leaked key can't be turned into account takeover or silence alerts.
+  `TestEveryRouteIsClassifiedForAPIKeys` fails when a route is added without being classified.
+- **No cookie fallback, CSRF:** a request carrying an `Authorization` header authenticates with the key alone; session-only routes refuse it
+  (`SESSION_REQUIRED`) instead of falling back to any cookie that came along. That is why requests with a key can skip the CSRF check on routes
+  open to keys: a browser never attaches that header across sites, and there is no CORS policy that would let a page set it.
+- **Lifetime:** 90 days by default, at most a year ahead, or no expiry when the person explicitly chooses it. A password reset revokes all of the
+  person's keys; a password change while signed in does not.
+- **Abuse:** 25 live keys per organization; 120 requests and 30 writes a minute per key (shared limiter), on top of per-IP limits; `DISABLE_API_KEYS`
+  turns all keys off without affecting sessions (`docs/operations.md#api-key-abuse`).
+
 ## Known gaps
 
 - Console email provider (development) logs verification/reset links; it is refused in production.
