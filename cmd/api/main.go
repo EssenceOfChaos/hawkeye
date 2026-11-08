@@ -44,6 +44,7 @@ import (
 	"hawkeye/internal/sitecheck"
 	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
+	"hawkeye/internal/twofactor"
 )
 
 func main() {
@@ -100,16 +101,17 @@ func run() error {
 	if cfg.EmailProvider == "console" {
 		log.Warn("EMAIL_PROVIDER=console: emails are logged, not delivered (development only)")
 	}
-	authSvc, err := auth.NewService(pool, mailer, log, auth.Config{SessionTTL: cfg.SessionTTL, AppBaseURL: cfg.AppBaseURL})
+	box, err := cfg.SecretBox()
+	if err != nil {
+		return fmt.Errorf("secrets key: %w", err)
+	}
+	twoFactorSvc := twofactor.NewService(pool, box, mailer, log, cfg.AppBaseURL)
+	authSvc, err := auth.NewService(pool, mailer, log, auth.Config{SessionTTL: cfg.SessionTTL, AppBaseURL: cfg.AppBaseURL, TwoFactor: twoFactorSvc})
 	if err != nil {
 		return err
 	}
 
 	planSvc := plans.NewService(cfg.AppBaseURL)
-	box, err := cfg.SecretBox()
-	if err != nil {
-		return fmt.Errorf("secrets key: %w", err)
-	}
 	monitorSvc := monitors.NewService(pool, planSvc, monitors.WithSecretBox(box), monitors.WithRegions(cfg.Regions()), monitors.WithDomainSync(domains.SyncTx))
 	// Credentials saved in plain text by an earlier version are encrypted once, here, before any request is served.
 	if n, err := monitorSvc.EncryptLegacySecrets(ctx); err != nil {
@@ -152,6 +154,7 @@ func run() error {
 		SSLCheck:      freeTools.ssl,
 		SiteCheck:     freeTools.site,
 		APITokens:     apiTokens,
+		TwoFactor:     twoFactorSvc,
 		AppBaseURL:    cfg.AppBaseURL,
 		Version:       cfg.AppVersion,
 		Invitations:   invitations.NewService(pool, planSvc, mailer, log, cfg.AppBaseURL),

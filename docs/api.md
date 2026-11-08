@@ -34,6 +34,29 @@ Logout deletes the session; a password reset deletes all of the user's sessions.
 **CSRF:** every unsafe request (POST/PATCH/DELETE) must send header `X-CSRF-Token` equal to the `csrf_token` cookie.
 The cookie is set on the first `/api/v1` response, so the SPA should call `GET /auth/me` on load.
 
+### Two-factor sign-in
+
+Optional for each person (`internal/twofactor`, migration `000034`). With it on, `POST /auth/login` answers a correct password with
+`200 {two_factor_required: true, challenge}` and **no session**; `POST /auth/login/two-factor {challenge, code}` then checks a code from the
+authenticator app (or a recovery code) and starts the session (`{user, used_recovery_code}`). A challenge lasts 10 minutes and allows 5 wrong codes
+(`401 INVALID_CODE` with `details.tries_left`, then `401 SIGN_IN_EXPIRED`: start again with the password). Each authenticator code works once.
+
+| Method & path | Auth | Notes |
+|---|---|---|
+| `GET /account/two-factor` | session | `{two_factor: {enabled, enabled_at, recovery_codes_left}}` |
+| `POST /account/two-factor/setup` | session | `{password}` → `{setup: {secret, otpauth_uri, qr_code}}` (a PNG data URL). Starting again replaces the pending secret |
+| `POST /account/two-factor/enable` | session | `{code}` from the app → `{recovery_codes: [10]}`, shown once. Emails the person |
+| `POST /account/two-factor/recovery-codes` | session | `{code}` (app or recovery code) → 10 new codes; the old ones stop working |
+| `POST /account/two-factor/disable` | session | `{password, code}` → 204. `409 TWO_FACTOR_REQUIRED_BY_ORGANIZATION` for the owner of an organization that requires it |
+| `GET /organizations/:id/two-factor` | session, owner | `{required, grace_days, members: [{user_id, email, two_factor_enabled, grace_ends_at?, blocked}]}` |
+| `PUT /organizations/:id/two-factor` | session, owner, verified email | `{required}`. Off by default. Turning it on needs the owner to use it (`409 OWNER_NEEDS_TWO_FACTOR`) and emails members without it |
+
+**Organization requirement.** When an owner requires it, each member without it has 7 days from the later of that moment and when they joined.
+After that, every tenant-scoped request for that organization (session or API key, REST or MCP) answers `403 TWO_FACTOR_REQUIRED` until they set
+it up; their account, `/auth/me`, `/account/*`, leaving and their other organizations keep working. `/auth/me` reports `two_factor` and, for each
+organization, `require_two_factor`, `two_factor_grace_ends_at` and `two_factor_blocked`. Ownership can't be transferred to a member who would be
+shut out (`409 NEW_OWNER_NEEDS_TWO_FACTOR`).
+
 ### API keys
 
 Scripts and tools authenticate with an API key instead: `Authorization: Bearer hk_…` (`internal/apitokens`, migration `000033`). The public guide is

@@ -67,3 +67,7 @@ SQL: all queries are parameterized; the few places that assemble SQL (dynamic `U
     it reads (a monitor name, an incident summary, a web page in the same conversation), so a read and write key given to an assistant can pause or
     create monitors, and, for owners, post public incident updates; Claude asks before public and destructive changes, but other clients may not.
     Give assistants read-only keys unless changes are needed.
+20. **Two-factor sign-in has no account recovery by email** (`docs/security.md#two-factor-sign-in`), by design: email alone would undo the
+    second factor. Someone who loses both their authenticator app and their recovery codes needs support to turn it off after checking who they are
+    (`docs/operations.md`). There is no SMS option. Codes are checked with one 30-second step of tolerance either way, so a code stays valid for
+    about 90 seconds unless it is used.

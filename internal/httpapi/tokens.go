@@ -120,6 +120,8 @@ func (h *handlers) keyPrincipal(c *echo.Context, write bool) (apitokens.Principa
 	case errors.Is(err, apitokens.ErrInvalid):
 		c.Response().Header().Set("WWW-Authenticate", h.bearerChallenge(`error="invalid_token"`))
 		return apitokens.Principal{}, errTokenInvalid
+	case errors.Is(err, apitokens.ErrTwoFactorRequired):
+		return apitokens.Principal{}, mapError(err)
 	case err != nil:
 		return apitokens.Principal{}, err
 	}

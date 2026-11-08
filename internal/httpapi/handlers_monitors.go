@@ -35,6 +35,9 @@ func (h *handlers) resolveOrg(next echo.HandlerFunc) echo.HandlerFunc {
 			if err != nil {
 				return mapError(err)
 			}
+			if err := h.blockedByTwoFactor(c, id); err != nil {
+				return err
+			}
 			c.Set(orgKey, id)
 			c.Set(roleKey, o.Role)
 			return next(c)
@@ -54,6 +57,9 @@ func (h *handlers) resolveOrg(next echo.HandlerFunc) echo.HandlerFunc {
 				def = o
 				break
 			}
+		}
+		if err := h.blockedByTwoFactor(c, def.ID); err != nil {
+			return err
 		}
 		c.Set(orgKey, def.ID)
 		c.Set(roleKey, def.Role)

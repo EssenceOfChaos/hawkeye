@@ -81,7 +81,7 @@ describe('pricing cards stay in sync', () => {
     for (const [ui, signedIn] of [[<LandingPage />, false], [<MonitoringLandingPage />, false], [<BillingPage />, true]] as const) {
       const cards = await cardsOn(ui, signedIn)
       expect(cards.Agency).toEqual(expect.arrayContaining([
-        '200 monitors', 'Cron job and DNS monitoring', 'Checks from up to 3 locations', '5 team members', 'Domain expiry warnings for up to 100 domains',
+        '200 monitors', 'Cron job and DNS monitoring', 'Checks from up to 3 locations', '5 team members', 'Require two-factor sign-in for your team', 'Domain expiry warnings for up to 100 domains',
         'Maintenance windows', 'Monthly PDF uptime reports', 'Branded Reports with name and logo', 'API and Claude (MCP) access with read and write keys',
       ]))
       expect(cards.Free).not.toContain('Branded Reports with name and logo')

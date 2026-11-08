@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"hawkeye/internal/email"
+	"hawkeye/internal/twofactor"
 	"hawkeye/internal/validation"
 )
 
@@ -24,6 +25,19 @@ var (
 	ErrEmailTaken         = errors.New("email already registered")
 	ErrInvalidToken       = errors.New("invalid or expired token")
 	ErrUnauthenticated    = errors.New("not authenticated")
+	// ErrChallengeInvalid: the step between password and code expired, was used up by wrong codes, or never existed. Sign in again.
+	ErrChallengeInvalid = errors.New("sign-in timed out")
+)
+
+// SecondFactorRequired is returned by Login for an account with two-factor sign-in: the password was right, and Challenge must be sent back with a
+// code to CompleteSignIn. No session exists yet.
+type SecondFactorRequired struct{ Challenge string }
+
+func (e *SecondFactorRequired) Error() string { return "two-factor code required" }
+
+const (
+	challengeTTL         = 10 * time.Minute
+	maxChallengeAttempts = 5
 )
 
 type User struct {
@@ -41,6 +55,7 @@ type Config struct {
 	VerifyTokenTTL  time.Duration
 	AppBaseURL      string
 	Hasher          Hasher
+	TwoFactor       *twofactor.Service // checks codes for accounts that use two-factor sign-in
 	lastSeenRefresh time.Duration
 }
 
@@ -161,9 +176,10 @@ func (s *Service) Login(ctx context.Context, emailAddr, password string) (User, 
 		u        User
 		hash     string
 		disabled *time.Time
+		totpOn   *time.Time
 	)
-	err := s.pool.QueryRow(ctx, `SELECT `+userCols+`, password_hash, disabled_at FROM users WHERE email = $1`, addr).
-		Scan(&u.ID, &u.Email, &u.EmailVerifiedAt, &u.CreatedAt, &hash, &disabled)
+	err := s.pool.QueryRow(ctx, `SELECT `+userCols+`, password_hash, disabled_at, totp_enabled_at FROM users WHERE email = $1`, addr).
+		Scan(&u.ID, &u.Email, &u.EmailVerifiedAt, &u.CreatedAt, &hash, &disabled, &totpOn)
 	if errors.Is(err, pgx.ErrNoRows) {
 		_, _ = Verify(password, s.dummyHash)
 		return User{}, "", ErrInvalidCredentials
@@ -178,11 +194,82 @@ func (s *Service) Login(ctx context.Context, emailAddr, password string) (User, 
 	if !ok || disabled != nil {
 		return User{}, "", ErrInvalidCredentials
 	}
+	if totpOn != nil {
+		raw, hash, err := newToken()
+		if err != nil {
+			return User{}, "", err
+		}
+		if _, err := s.pool.Exec(ctx, `INSERT INTO login_challenges (token_hash, user_id, expires_at) VALUES ($1, $2, now() + $3::interval)`,
+			hash, u.ID, challengeTTL); err != nil {
+			return User{}, "", fmt.Errorf("create login challenge: %w", err)
+		}
+		return u, "", &SecondFactorRequired{Challenge: raw}
+	}
 	session, err := s.createSession(ctx, u.ID)
 	if err != nil {
 		return User{}, "", err
 	}
 	return u, session, nil
+}
+
+// CompleteSignIn finishes a sign-in that needs a second factor: it checks the code (or a recovery code) against the challenge's account and
+// starts a session. A few wrong codes use the challenge up; an expired or used-up challenge means starting again with the password. It reports
+// how many tries are left after a wrong code, and whether a recovery code was used.
+func (s *Service) CompleteSignIn(ctx context.Context, challenge, code string) (u User, session string, triesLeft int, usedRecovery bool, err error) {
+	if s.cfg.TwoFactor == nil {
+		return User{}, "", 0, false, errors.New("two-factor sign-in is not configured")
+	}
+	hash := HashToken(challenge)
+	badCode := false
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		var attempts int
+		err := tx.QueryRow(ctx, `SELECT c.attempts, `+prefixed("u", userCols)+` FROM login_challenges c JOIN users u ON u.id = c.user_id
+			WHERE c.token_hash = $1 AND c.expires_at > now() AND u.disabled_at IS NULL FOR UPDATE OF c`, hash).
+			Scan(&attempts, &u.ID, &u.Email, &u.EmailVerifiedAt, &u.CreatedAt)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrChallengeInvalid
+		}
+		if err != nil {
+			return err
+		}
+		usedRecovery, err = s.cfg.TwoFactor.VerifyCode(ctx, tx, u.ID, u.Email, code)
+		if errors.Is(err, twofactor.ErrBadCode) {
+			// Record the wrong try and commit it (returning an error would roll it back): a challenge allows only a few.
+			badCode = true
+			attempts++
+			triesLeft = maxChallengeAttempts - attempts
+			if triesLeft <= 0 {
+				_, err = tx.Exec(ctx, `DELETE FROM login_challenges WHERE token_hash = $1`, hash)
+			} else {
+				_, err = tx.Exec(ctx, `UPDATE login_challenges SET attempts = $2 WHERE token_hash = $1`, hash, attempts)
+			}
+			return err
+		}
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `DELETE FROM login_challenges WHERE token_hash = $1 OR expires_at < now()`, hash)
+		return err
+	})
+	if err != nil {
+		return User{}, "", 0, false, err
+	}
+	if badCode {
+		if triesLeft <= 0 {
+			return User{}, "", 0, false, ErrChallengeInvalid
+		}
+		return User{}, "", triesLeft, false, twofactor.ErrBadCode
+	}
+	session, err = s.createSession(ctx, u.ID)
+	return u, session, 0, usedRecovery, err
+}
+
+func prefixed(alias, cols string) string {
+	parts := strings.Split(cols, ", ")
+	for i, p := range parts {
+		parts[i] = alias + "." + p
+	}
+	return strings.Join(parts, ", ")
 }
 
 func (s *Service) createSession(ctx context.Context, userID uuid.UUID) (string, error) {

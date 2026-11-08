@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react'
+import { useState, type ChangeEvent, type SubmitEvent } from 'react'
 import { Link } from 'react-router'
 import { api, apiUpload, ApiError, type BrandingView, type Monitor, type Usage } from '../api'
 import { Alert } from '../components/Alert'
@@ -55,7 +55,7 @@ export function ReportsPage() {
     }
   }
 
-  function saveName(e: FormEvent) {
+  function saveName(e: SubmitEvent) {
     e.preventDefault()
     void change(() => api<BrandingView>('PUT', '/branding', { display_name: shownName }), 'Saved.').then((ok) => ok && setName(null))
   }

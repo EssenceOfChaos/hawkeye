@@ -44,6 +44,7 @@ import (
 	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
 	"hawkeye/internal/testutil"
+	"hawkeye/internal/twofactor"
 )
 
 type env struct {
@@ -68,7 +69,8 @@ type envOpts struct {
 	ssl       *sslcheck.Service
 	site      *sitecheck.Service
 	telegram  *notifications.TelegramBot
-	noAPIKeys bool // DISABLE_API_KEYS
+	noAPIKeys bool             // DISABLE_API_KEYS
+	clock     func() time.Time // two-factor codes and grace periods (nil: the real clock)
 }
 
 func newEnv(t *testing.T, rateLimit int) *env { return newEnvOpts(t, rateLimit, envOpts{}) }
@@ -77,8 +79,12 @@ func newEnv(t *testing.T, rateLimit int) *env { return newEnvOpts(t, rateLimit, 
 func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit int, o envOpts) *echo.Echo {
 	t.Helper()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	tf := twofactor.NewService(pool, testutil.SecretBox(), mail, log, "http://app.test")
+	if o.clock != nil {
+		tf.WithClock(o.clock)
+	}
 	svc, err := auth.NewService(pool, mail, log, auth.Config{
-		AppBaseURL: "http://app.test", Hasher: auth.Hasher{Memory: 8, Time: 1, Threads: 1},
+		AppBaseURL: "http://app.test", Hasher: auth.Hasher{Memory: 8, Time: 1, Threads: 1}, TwoFactor: tf,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -109,6 +115,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 		opts.Limiter = ratelimit.New(pool)
 	}
 	opts.AppBaseURL, opts.Version = "http://app.test", "test"
+	opts.TwoFactor = tf
 	if !o.noAPIKeys {
 		opts.APITokens = apitokens.NewService(pool, planSvc, mail, log, "http://app.test")
 	}

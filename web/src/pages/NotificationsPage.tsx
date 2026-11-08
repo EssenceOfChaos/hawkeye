@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type SubmitEvent } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, type AlertCoverage, type NotificationSetting, type TagSummary, type TelegramLink } from '../api'
 import { Alert } from '../components/Alert'
@@ -264,7 +264,7 @@ export function NotificationsPage() {
     setTesting(null)
   }
 
-  async function add(e: FormEvent) {
+  async function add(e: SubmitEvent) {
     e.preventDefault()
     setBusy(true)
     setFieldErrors({})

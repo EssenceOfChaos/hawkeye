@@ -8,6 +8,19 @@ export interface Organization {
   id: string
   name: string
   role: 'owner' | 'member'
+  /** The owner requires two-factor sign-in of everyone in it. */
+  require_two_factor?: boolean
+  /** When a member without two-factor sign-in is shut out of it; absent when they use it or it isn't required. */
+  two_factor_grace_ends_at?: string
+  /** Shut out now, until they set up two-factor sign-in. */
+  two_factor_blocked?: boolean
+}
+
+/** A person's two-factor sign-in. */
+export interface TwoFactorStatus {
+  enabled: boolean
+  enabled_at: string | null
+  recovery_codes_left: number
 }
 
 export interface Plan {

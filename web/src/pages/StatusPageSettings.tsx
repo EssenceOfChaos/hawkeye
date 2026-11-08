@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type SubmitEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { api, ApiError, apiUpload, type Monitor, type StatusPageConfig, type Usage } from '../api'
 import { readableTextOn } from '../color'
@@ -157,7 +157,7 @@ export function StatusPageEditor() {
     void load()
   }, [load])
 
-  async function save(e: FormEvent) {
+  async function save(e: SubmitEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)

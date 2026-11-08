@@ -26,6 +26,7 @@ import (
 	"hawkeye/internal/email"
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
+	"hawkeye/internal/twofactor"
 	"hawkeye/internal/validation"
 )
 
@@ -54,7 +55,9 @@ var (
 	// ErrExpired is a real key past its expiry date, reported separately so a broken script can say why.
 	ErrExpired  = errors.New("API key expired")
 	ErrNotFound = errors.New("API key not found")
-	ErrTooMany  = errors.New("too many API keys")
+	// ErrTwoFactorRequired: the key's organization requires two-factor sign-in, its owner hasn't set it up, and their grace period is over.
+	ErrTwoFactorRequired = errors.New("two-factor sign-in required")
+	ErrTooMany           = errors.New("too many API keys")
 )
 
 // Key is a key as listed in the app. The token itself is never part of it.
@@ -238,14 +241,20 @@ func (s *Service) Authenticate(ctx context.Context, raw string) (Principal, erro
 		expiresAt *time.Time
 		revoked   *time.Time
 		lastUsed  *time.Time
+		blocked   bool
 	)
+	// blocked: the organization requires two-factor sign-in and the key's owner is past their grace period without it (internal/twofactor).
 	err := s.pool.QueryRow(ctx, `SELECT t.id, t.organization_id, t.scope, t.expires_at, t.revoked_at, t.last_used_at, m.role,
-			u.id, u.email, u.email_verified_at, u.created_at
+			u.id, u.email, u.email_verified_at, u.created_at,
+			o.require_two_factor_since IS NOT NULL AND u.totp_enabled_at IS NULL
+				AND GREATEST(o.require_two_factor_since, m.created_at) + $2::interval <= now()
 		FROM api_tokens t
 		JOIN organization_members m ON m.organization_id = t.organization_id AND m.user_id = t.user_id
+		JOIN organizations o ON o.id = t.organization_id
 		JOIN users u ON u.id = t.user_id
-		WHERE t.token_hash = $1 AND u.disabled_at IS NULL`, hash).
-		Scan(&p.TokenID, &p.OrganizationID, &p.Scope, &expiresAt, &revoked, &lastUsed, &p.Role, &p.User.ID, &p.User.Email, &p.User.EmailVerifiedAt, &p.User.CreatedAt)
+		WHERE t.token_hash = $1 AND u.disabled_at IS NULL`, hash, twofactor.GracePeriod).
+		Scan(&p.TokenID, &p.OrganizationID, &p.Scope, &expiresAt, &revoked, &lastUsed, &p.Role, &p.User.ID, &p.User.Email, &p.User.EmailVerifiedAt, &p.User.CreatedAt,
+			&blocked)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Principal{}, ErrInvalid
 	}
@@ -258,6 +267,9 @@ func (s *Service) Authenticate(ctx context.Context, raw string) (Principal, erro
 	}
 	if expiresAt != nil && !expiresAt.After(now) {
 		return Principal{}, ErrExpired
+	}
+	if blocked {
+		return Principal{}, ErrTwoFactorRequired
 	}
 	// Best effort, and at most once a minute per key, so using a key doesn't add a write to every request.
 	if lastUsed == nil || now.Sub(*lastUsed) >= lastUsedRefresh {

@@ -34,6 +34,7 @@ import (
 	"hawkeye/internal/sitecheck"
 	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
+	"hawkeye/internal/twofactor"
 )
 
 // Pinger reports whether a dependency (PostgreSQL) is usable.
@@ -69,6 +70,7 @@ type Options struct {
 	SSLCheck      *sslcheck.Service    // free SSL checker; nil turns the endpoint off
 	SiteCheck     *sitecheck.Service   // free website status checker; nil turns the endpoint off
 	APITokens     *apitokens.Service   // API keys; nil makes key requests answer 503 (DISABLE_API_KEYS) and sessions work as before
+	TwoFactor     *twofactor.Service   // two-factor sign-in settings and organization requirements
 	AppBaseURL    string               // public address of the app (status page and ping addresses in MCP tool results)
 	Version       string               // reported by the MCP server
 	MCPOrigins    []string             // browser origins allowed to call /mcp; nil means DefaultMCPOrigins
@@ -181,7 +183,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
 	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies,
-		apiTokens: o.APITokens, tokenRoutes: map[string]bool{}}
+		apiTokens: o.APITokens, twoFactor: o.TwoFactor, tokenRoutes: map[string]bool{}}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
@@ -252,6 +254,7 @@ func registerAPI(e *echo.Echo, o Options) {
 	a := v1.Group("/auth")
 	a.POST("/register", h.register, limit("register"))
 	a.POST("/login", h.login, limit("login"))
+	a.POST("/login/two-factor", h.loginTwoFactor, limit("login-two-factor"))
 	a.POST("/forgot-password", h.forgotPassword, limit("forgot"))
 	a.POST("/reset-password", h.resetPassword, limit("reset"))
 	a.POST("/verify-email", h.verifyEmail, limit("verify"))
@@ -337,6 +340,11 @@ func registerAPI(e *echo.Echo, o Options) {
 	acct := v1.Group("/account", h.requireAuth)
 	acct.GET("/export", h.exportData, limit("account-export"))
 	acct.POST("/delete", h.deleteAccount, limit("account-delete"))
+	acct.GET("/two-factor", h.twoFactorStatus)
+	acct.POST("/two-factor/setup", h.twoFactorSetup, limit("two-factor"))
+	acct.POST("/two-factor/enable", h.twoFactorEnable, limit("two-factor"))
+	acct.POST("/two-factor/disable", h.twoFactorDisable, limit("two-factor"))
+	acct.POST("/two-factor/recovery-codes", h.twoFactorRecoveryCodes, limit("two-factor"))
 	if h.lifecycle != nil {
 		acct.GET("/email-preferences", h.emailPreferences)
 		acct.PUT("/email-preferences", h.putEmailPreferences)
@@ -436,6 +444,8 @@ func registerAPI(e *echo.Echo, o Options) {
 	org.GET("/:organizationID/members", h.listMembers)
 	org.DELETE("/:organizationID/members/:userID", h.removeMember)
 	org.POST("/:organizationID/leave", h.leaveOrg)
+	org.GET("/:organizationID/two-factor", h.orgTwoFactor)
+	org.PUT("/:organizationID/two-factor", h.setOrgTwoFactor, requireVerifiedEmail)
 	if h.invitations != nil {
 		// Team invitations. The owner sends them (a verified address, and capped per target address because each one emails a third party);
 		// the invitee previews a link without signing in and accepts it with the account that has the invited address.

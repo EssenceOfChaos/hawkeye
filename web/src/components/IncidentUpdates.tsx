@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type SubmitEvent } from 'react'
 import { api, ApiError, type Incident, type IncidentUpdate, type IncidentUpdateStatus, type StatusPageRef } from '../api'
 import { Alert } from './Alert'
 import { Appear } from './Appear'
@@ -56,7 +56,7 @@ export function IncidentUpdates({ incident, isOwner, onCountChange }: { incident
     onCountChange?.(next.length)
   }
 
-  async function post(e: FormEvent) {
+  async function post(e: SubmitEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)

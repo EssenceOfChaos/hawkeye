@@ -114,6 +114,23 @@ See `docs/security-review.md` for the review and residual risks.
 - **State-changing methods** (POST, PUT, PATCH, DELETE) repeat on every check, so they need a verified email address and an interval of at least 5 minutes. This limits abuse of the monitor as a request cannon, but does not make it impossible: the Terms put responsibility for the requests on the customer, and the SSRF protections (public hosts, ports 80/443, no redirects to private addresses) still apply.
 - **Key handling:** one key, no rotation tooling. Rotating or losing it makes stored credentials unreadable and users must re-enter them (`docs/operations.md`).
 
+## Two-factor sign-in
+
+- **Optional for each person; an owner may require it for their organization** (off by default). TOTP (RFC 6238: SHA-1, 30 s, 6 digits, one step
+  of clock skew either way), tested against the RFC's vectors.
+- **Secrets** are sealed with `SECRETS_ENCRYPTION_KEY`, bound to the user. Setting it up asks for the password again, and the new secret is kept
+  aside until a correct code proves the app works.
+- **Codes work once** (`users.totp_last_step`), so an intercepted code can't be replayed, even within its 30 seconds.
+- **The step after the password** holds no session: only a random challenge (hashed in the database) that lasts 10 minutes and allows 5 wrong codes,
+  on top of per-IP limits on both steps and the per-account login ceiling. A wrong password still gives the same answer as before.
+- **Recovery codes:** 10, 80 random bits each, stored as SHA-256, single use. Using one, making new ones, and turning two-factor sign-in on or off
+  all email the person.
+- **Turning it off** needs the password and a current code; the owner of an organization that requires it can't.
+- **Requirement:** each member without it gets 7 days (from the later of the requirement and their joining); after that the organization refuses
+  their session and their API keys (`apitokens.Authenticate`, so the MCP server too) until they set it up. Ownership can't be transferred to a
+  member who would be shut out.
+- **Password reset doesn't bypass it:** a reset revokes sessions and keys, and the next sign-in still asks for a code.
+
 ## API keys
 
 - **Tokens:** `hk_` plus 256 random bits; only a SHA-256 hash is stored, with a 10-character prefix for display. Shown once. Owners are emailed
