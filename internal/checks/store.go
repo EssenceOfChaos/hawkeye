@@ -67,6 +67,12 @@ func (s *Store) WithRegions(r regions.Set) *Store {
 
 // Record persists a result and updates the monitor's counters and status in one transaction. The monitor
 // row is locked, so concurrent results for one monitor are applied one at a time.
+//
+// The lock is FOR NO KEY UPDATE, not FOR UPDATE: it still serializes results (and monitor edits and deletes still wait for it), but it doesn't
+// block other transactions' foreign key checks (KEY SHARE) on the monitor. That matters because recording updates the monitor row more than once,
+// and PostgreSQL re-checks a row's foreign keys on its second update in a transaction, taking KEY SHARE on the organization. Saving a status page or
+// creating a maintenance window locks the organization and then needs KEY SHARE on its monitors; with FOR UPDATE here the two deadlocked
+// (TestRecordingACheckDoesNotDeadlockWithAStatusPageSave). Callers that lock the monitor themselves (heartbeats) must use FOR NO KEY UPDATE too.
 func (s *Store) Record(ctx context.Context, monitorID uuid.UUID, r Result) (Outcome, error) {
 	var out Outcome
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) (err error) {
@@ -87,7 +93,7 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 		var speed speedSettings
 		err := tx.QueryRow(ctx, `SELECT current_status, consecutive_failures, consecutive_successes, enabled, in_maintenance(organization_id, id, $2), organization_id, regions,
 				slow_threshold_ms, slow_checks, slow_streak, normal_streak, EXISTS (SELECT 1 FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open')
-			FROM monitors WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, monitorID, r.FinishedAt).
+			FROM monitors WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, monitorID, r.FinishedAt).
 			Scan(&out.Before.Status, &out.Before.Failures, &out.Before.Successes, &enabled, &maintenance, &orgID, &chosen,
 				&speed.thresholdMs, &speed.checks, &speed.state.SlowStreak, &speed.state.NormalStreak, &speed.state.Slow)
 		if errors.Is(err, pgx.ErrNoRows) || err == nil && !enabled {

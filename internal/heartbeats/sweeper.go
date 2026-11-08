@@ -134,7 +134,7 @@ func (w *Sweeper) Tick(ctx context.Context) (SweepStats, error) {
 		}
 		rows, err := tx.Query(ctx, `SELECT id, organization_id, check_interval_seconds, heartbeat_grace_seconds, last_ping_at, ping_deadline FROM monitors
 			WHERE kind = 'heartbeat' AND enabled AND deleted_at IS NULL AND ping_deadline <= now()
-			ORDER BY ping_deadline FOR UPDATE SKIP LOCKED LIMIT $1`, w.cfg.Batch)
+			ORDER BY ping_deadline FOR NO KEY UPDATE SKIP LOCKED LIMIT $1`, w.cfg.Batch)
 		if err != nil {
 			return err
 		}
