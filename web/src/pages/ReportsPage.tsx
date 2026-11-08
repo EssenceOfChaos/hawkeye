@@ -1,3 +1,4 @@
+import { ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 import { useState, type ChangeEvent, type SubmitEvent } from 'react'
 import { Link } from 'react-router'
 import { api, apiUpload, ApiError, type BrandingView, type Monitor, type Usage } from '../api'
@@ -115,12 +116,17 @@ export function ReportsPage() {
             </div>
             {monitors.data && monitors.data.monitors.length === 0 && <p>Add a website first, and its report will appear here.</p>}
             {monitors.data && monitors.data.monitors.length > 0 && (
-              <ul className="plain">
+              <ul className="plain report-list">
                 {monitors.data.monitors.map((m) => (
                   <li key={m.id} className="row">
-                    <span>{m.name}</span>
+                    <span className="report-name">{m.name}</span>
                     <span className="spacer" />
-                    <a className="button" href={reportPdfPath(m.id, chosen)} rel="noreferrer">Download PDF</a>
+                    {/* An icon, not a repeated "Download PDF" button: the tooltip says what it does, and the label names the website for screen readers. */}
+                    <span className="d-tooltip d-tooltip-left" data-tip="Download PDF">
+                      <a className="icon-button" href={reportPdfPath(m.id, chosen)} rel="noreferrer" aria-label={`Download PDF for ${m.name}`}>
+                        <ArrowDownTrayIcon aria-hidden="true" />
+                      </a>
+                    </span>
                   </li>
                 ))}
               </ul>

@@ -659,6 +659,16 @@ main.auth .card p a { font-weight: 600; }
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 p.warning { color: var(--warn); }
 
+/* Reports page: one row per website, with a download icon at the right (ReportsPage.tsx). Rows don't wrap, so the icon always stays in line; a long
+   name wraps within its own space instead. */
+.report-list { padding: 0; margin: .5rem 0 0; }
+.report-list li { flex-wrap: nowrap; padding: .35rem 0; border-bottom: 1px solid var(--line); }
+.report-list li:last-child { border-bottom: 0; }
+.report-name { min-width: 0; overflow-wrap: anywhere; }
+.icon-button { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; box-sizing: border-box; border: 1px solid var(--line); border-radius: .5rem; color: var(--muted); text-decoration: none; }
+.icon-button svg { width: 1.25rem; height: 1.25rem; }
+.icon-button:hover, .icon-button:focus-visible { color: var(--gold); border-color: var(--gold); }
+
 /* "Coming soon" cards on the landing page (components/ComingSoon.tsx): the button or form sits at the bottom of each card. */
 .coming-soon .feature { display: flex; flex-direction: column; gap: .5rem; align-items: flex-start; }
 .coming-soon .feature h3 { margin: .25rem 0 0; }
