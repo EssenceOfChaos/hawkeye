@@ -54,14 +54,17 @@ const lastMonth = () => reportMonths(90)[1].value
 describe('ReportsPage', () => {
   it('lists a PDF download per website, defaulting to the last full month', async () => {
     setup({ view: view({ can_report: true, can_brand: true }) })
-    const links = await screen.findAllByRole('link', { name: 'Download PDF' })
+    const links = await screen.findAllByRole('link', { name: /^Download PDF for / })
     expect(links.map((l) => l.getAttribute('href'))).toEqual([
       `/api/v1/monitors/m1/report.pdf?month=${lastMonth()}`,
       `/api/v1/monitors/m2/report.pdf?month=${lastMonth()}`,
     ])
+    // An icon with a "Download PDF" tooltip; the link's label names the website.
+    expect(links[0].closest('.d-tooltip')).toHaveAttribute('data-tip', 'Download PDF')
+    expect(links[0].textContent).toBe('')
     const other = reportMonths(90)[0]
     await userEvent.selectOptions(screen.getByLabelText('Month'), other.value)
-    expect(screen.getAllByRole('link', { name: 'Download PDF' })[0]).toHaveAttribute('href', `/api/v1/monitors/m1/report.pdf?month=${other.value}`)
+    expect(screen.getAllByRole('link', { name: /^Download PDF for / })[0]).toHaveAttribute('href', `/api/v1/monitors/m1/report.pdf?month=${other.value}`)
   })
 
   it('only offers months the plan still keeps history for', async () => {
@@ -73,7 +76,7 @@ describe('ReportsPage', () => {
   it('explains the paid features instead of offering them on the free plan', async () => {
     setup({ view: view({ can_report: false, can_brand: false }) })
     expect(await screen.findByText(/PDF reports are included in the Pro and Agency plans/)).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Download PDF' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Download PDF for / })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Email me the reports every month')).toBeDisabled()
     expect(screen.getByLabelText('Name on reports')).toBeDisabled()
     expect(screen.getByLabelText('Logo')).toBeDisabled()
@@ -82,7 +85,7 @@ describe('ReportsPage', () => {
 
   it('lets Pro download and email reports but says branding is an Agency feature', async () => {
     setup({ view: view({ can_report: true, can_brand: false }) })
-    expect(await screen.findAllByRole('link', { name: 'Download PDF' })).toHaveLength(2)
+    expect(await screen.findAllByRole('link', { name: /^Download PDF for / })).toHaveLength(2)
     expect(screen.getByLabelText('Email me the reports every month')).toBeEnabled()
     expect(screen.getByText(/included in the Agency plan/)).toBeInTheDocument()
     expect(screen.getByLabelText('Name on reports')).toBeDisabled()
@@ -151,7 +154,7 @@ describe('ReportsPage', () => {
 
   it('lets members look but not change', async () => {
     setup({ role: 'member', view: view({ can_report: true, can_brand: true }) })
-    expect(await screen.findAllByRole('link', { name: 'Download PDF' })).toHaveLength(2)
+    expect(await screen.findAllByRole('link', { name: /^Download PDF for / })).toHaveLength(2)
     expect(screen.getByLabelText('Email me the reports every month')).toBeDisabled()
     expect(screen.getByLabelText('Name on reports')).toBeDisabled()
     expect(screen.getByLabelText('Logo')).toBeDisabled()
