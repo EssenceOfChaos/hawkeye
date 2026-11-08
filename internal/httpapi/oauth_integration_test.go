@@ -70,7 +70,8 @@ func consent(t *testing.T, e *env, c *client, f flow, body map[string]any) resp 
 		t.Fatalf("authorize: %d %s", res.StatusCode, loc)
 	}
 	q := strings.TrimPrefix(loc, "http://app.test/connect?")
-	if info := c.call("GET", "/api/v1/oauth/authorize?"+q, nil); info.Status != 200 || info.Body["client"].(map[string]any)["name"] != "Claude" {
+	if info := c.call("GET", "/api/v1/oauth/authorize?"+q, nil); info.Status != 200 || info.Body["client"].(map[string]any)["name"] != "Claude" ||
+		info.Body["redirect_host"] != "claude.ai" || info.Body["redirect_loopback"] != false {
 		t.Fatalf("info: %d %v", info.Status, info.Body)
 	}
 	parsed, _ := url.ParseQuery(q)

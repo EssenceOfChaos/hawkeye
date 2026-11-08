@@ -20,6 +20,10 @@ interface ConsentInfo {
   two_factor_code_needed: boolean
   deny_redirect: string
   error_redirect?: string
+  /** Where the browser goes back to afterward, so the person can see it is the app they expect. */
+  redirect_host?: string
+  /** That address is on this computer only: any program could be listening there. */
+  redirect_loopback?: boolean
 }
 
 /** Sends the browser to the app that asked (its registered redirect address, checked by the server). Kept apart so tests can watch it. */
@@ -128,6 +132,14 @@ export function ConnectPage() {
             <button type="submit" className="primary" disabled={busy || !orgID}>Allow</button>
             <button type="button" disabled={busy} onClick={() => leave.to(info.deny_redirect)}>Deny</button>
           </div>
+          {info.redirect_host && (
+            <p className="hint">After you choose, you’ll go back to <strong>{info.redirect_host}</strong>.</p>
+          )}
+          {info.redirect_loopback && (
+            <Alert tone="warning" role="status">
+              This app runs on your own computer. Only allow it if you just started connecting {name} yourself.
+            </Alert>
+          )}
           <p className="hint">You can disconnect {name} at any time on the API keys page. HawkEye emails you when an app is connected.</p>
         </form>
       )}

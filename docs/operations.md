@@ -108,14 +108,15 @@ API keys (`Authorization: Bearer hk_…`) let scripts use the API as a person in
 Clients that may connect to the MCP server by signing in are registered by hand, with the database URL of the environment:
 
 ```sh
-DATABASE_URL=... go run ./cmd/oauthclient create -name Claude \
-  -redirect https://claude.ai/api/mcp/auth_callback -redirect https://claude.com/api/mcp/auth_callback
+DATABASE_URL=... go run ./cmd/oauthclient create -name Claude -redirect https://claude.ai/api/mcp/auth_callback
 DATABASE_URL=... go run ./cmd/oauthclient list
 DATABASE_URL=... go run ./cmd/oauthclient disable <client-id>   # stops it and revokes every connection it holds
 ```
 
 `create` prints the client ID and secret once; enter both in Anthropic's directory portal (Authentication step), which holds them for Claude.
-Check Anthropic's documentation for the current list of Claude's redirect URIs before registering. The worker deletes used and expired codes and
+Claude's web, desktop and mobile apps all use that one redirect URI (claude.com/docs/connectors/building/authentication, checked
+2026-11-08). Claude Code doesn't use this client: it identifies itself with a Client ID Metadata Document on a loopback redirect, which HawkEye
+doesn't support yet, so Claude Code users connect with an API key instead (`/docs/claude`). The worker deletes used and expired codes and
 refresh tokens hourly, and connections revoked over 30 days ago. `DISABLE_API_KEYS` also stops OAuth (its tokens are API tokens).
 
 ### MCP server

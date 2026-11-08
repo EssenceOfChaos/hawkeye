@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"net/url"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
@@ -191,6 +192,10 @@ func (h *handlers) oauthAuthorizeInfo(c *echo.Context) error {
 		"organizations":          orgs,
 		"two_factor_code_needed": needCode,
 		"deny_redirect":          h.oauth.ErrorRedirect(v, &oauth.Error{Code: "access_denied", Description: "The person declined."}),
+		// The MCP authorization spec asks the consent screen to show where the person is sent back to, and to warn when that is only a local
+		// address (any program on the computer could be listening there).
+		"redirect_host":     redirectHost(v.RedirectURI),
+		"redirect_loopback": isLoopback(v.RedirectURI),
 	})
 }
 
@@ -261,4 +266,20 @@ func (h *handlers) revokeGrant(c *echo.Context) error {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+func redirectHost(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
+
+func isLoopback(raw string) bool {
+	switch redirectHost(raw) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	return false
 }
