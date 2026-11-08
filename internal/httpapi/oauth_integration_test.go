@@ -381,3 +381,16 @@ func TestOAuthConsentAsksForATwoFactorCode(t *testing.T) {
 	code, _ := twofactor.Code(secret, clk.now())
 	codeFrom(t, consent(t, e, owner, f, map[string]any{"organization_id": org, "access": "read", "two_factor_code": code}))
 }
+
+func TestOAuthClientRedirectURIsAreStrict(t *testing.T) {
+	e := newEnv(t, 1000)
+	svc := oauth.NewService(e.pool, nil, nil, &email.Memory{}, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://app.test")
+	for _, bad := range []string{"https://claude.ai/cb?x=1", "https://claude.ai/cb?", "https://claude.ai/cb#frag", "http://claude.ai/cb", "ftp://claude.ai/cb"} {
+		if _, _, err := svc.CreateClient(t.Context(), "Bad", []string{bad}, false); err == nil {
+			t.Errorf("%s should be refused", bad)
+		}
+	}
+	if _, _, err := svc.CreateClient(t.Context(), "Local", []string{"http://localhost:6274/oauth/callback"}, true); err != nil {
+		t.Fatalf("http on localhost is fine for local tools: %v", err)
+	}
+}

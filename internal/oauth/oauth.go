@@ -122,8 +122,9 @@ func (s *Service) client(ctx context.Context, q interface {
 func (s *Service) CreateClient(ctx context.Context, name string, redirects []string, public bool) (Client, string, error) {
 	for _, r := range redirects {
 		u, err := url.Parse(r)
-		if err != nil || u.Fragment != "" || (u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"))) {
-			return Client{}, "", fmt.Errorf("redirect URI %q must be https (or http on localhost) without a fragment", r)
+		if err != nil || u.Fragment != "" || u.RawQuery != "" || u.ForceQuery ||
+			(u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"))) {
+			return Client{}, "", fmt.Errorf("redirect URI %q must be https (or http on localhost) with no query or fragment", r)
 		}
 	}
 	id, err := randomToken("hkc_")
@@ -293,11 +294,8 @@ func (s *Service) RedirectWith(r AuthorizeRequest, params url.Values) string {
 		params.Set("state", r.State)
 	}
 	params.Set("iss", s.issuer)
-	sep := "?"
-	if strings.Contains(r.RedirectURI, "?") {
-		sep = "&"
-	}
-	return r.RedirectURI + sep + params.Encode()
+	// Registered redirect URIs never have a query of their own (CreateClient refuses them), so the response parameters always start one.
+	return r.RedirectURI + "?" + params.Encode()
 }
 
 // ErrorRedirect sends an error back to the client.
