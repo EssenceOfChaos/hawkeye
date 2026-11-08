@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type SubmitEvent } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, type ApiKey, type Usage } from '../api'
 import { Alert } from '../components/Alert'
@@ -79,7 +79,7 @@ export function ApiKeysPage() {
 
   const canWrite = usage?.plan.api_write_enabled ?? false
 
-  async function create(e: FormEvent) {
+  async function create(e: SubmitEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type SubmitEvent } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, type TrackedDomain } from '../api'
 import { Alert } from '../components/Alert'
@@ -52,7 +52,7 @@ export function DomainsPage() {
     void load()
   }, [load])
 
-  async function add(e: FormEvent) {
+  async function add(e: SubmitEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)

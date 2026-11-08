@@ -1,5 +1,5 @@
 import { Alert } from '../components/Alert'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type SubmitEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import {
   api,
@@ -218,7 +218,7 @@ export function MonitorFormPage() {
     }
   }
 
-  async function onSubmit(e: FormEvent) {
+  async function onSubmit(e: SubmitEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)

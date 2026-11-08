@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type SubmitEvent } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError } from '../api'
 import { Alert } from '../components/Alert'
@@ -52,7 +52,7 @@ export function ContactPage() {
   const fields = error?.fields ?? {}
   const selected = categories?.find((c) => c.code === category)
 
-  async function onSubmit(e: FormEvent) {
+  async function onSubmit(e: SubmitEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)

@@ -97,7 +97,7 @@ export function SslCheckerPage() {
   const [report, setReport] = useState<SslReport | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.SubmitEvent) {
     e.preventDefault()
     if (busy) return
     used()
