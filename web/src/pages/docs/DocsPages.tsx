@@ -416,8 +416,29 @@ function ClaudeDocs() {
   return (
     <>
       <p>
-        HawkEye has an MCP server, so AI assistants that support the Model Context Protocol, such as Claude Code, can read your monitoring and, if you allow
+        HawkEye has an MCP server, so Claude and other AI assistants that support the Model Context Protocol can read your monitoring and, if you allow
         it, make changes for you. Ask “what’s down right now?”, “how was uptime for the shop this month?” or “pause the Acme monitors while I deploy”.
+      </p>
+
+      <h2 id="connect-claude">Connect Claude (web, desktop and mobile)</h2>
+      <p>
+        HawkEye is <a href="https://claude.ai/directory/hawkeye" target="_blank" rel="noopener noreferrer">listed in Claude’s connector directory</a>, so
+        there is nothing to install and no key to copy:
+      </p>
+      <ol>
+        <li>
+          Open <a href="https://claude.ai/directory/hawkeye" target="_blank" rel="noopener noreferrer">HawkEye in Claude’s directory</a>, or in Claude
+          open <strong>Customize</strong>, then <strong>Connectors</strong>, and search for <strong>HawkEye</strong>.
+        </li>
+        <li>Choose <strong>Connect</strong>.</li>
+        <li>
+          Sign in to HawkEye (with your two-factor code if you use one), choose the organization Claude may use, and choose <strong>Read only</strong>, or{' '}
+          <strong>Read and write</strong> on Pro and Agency to let Claude make changes too.
+        </li>
+      </ol>
+      <p>
+        On a Claude Team or Enterprise plan, an owner of your Claude organization adds HawkEye from the organization’s connector settings first; then each
+        person connects their own HawkEye account. You can disconnect at any time from Claude or from <strong>Connected apps</strong> on HawkEye’s API keys page.
       </p>
 
       <h2 id="connect">Connect Claude Code</h2>
@@ -429,9 +450,8 @@ function ClaudeDocs() {
   --header "Authorization: Bearer $HAWKEYE_API_KEY"`}</Code>
       <p>
         Other MCP clients that can send a header with each request work the same way: the server address is <code>https://hawkeye.observer/mcp</code> and the
-        key goes in the <code>Authorization</code> header. Some apps connect by signing in instead: they send you to a HawkEye page where you choose the organization and the access the app gets (and
-        confirm with your two-factor code if you use one). Connecting from the Claude apps’ own connector settings this way will be available once
-        HawkEye is listed in Claude’s connector directory.
+        key goes in the <code>Authorization</code> header. Some apps connect by signing in instead, as Claude does: they send you to a HawkEye page where you
+        choose the organization and the access the app gets (and confirm with your two-factor code if you use one).
       </p>
 
       <h2 id="tools">What Claude can do</h2>
@@ -469,7 +489,7 @@ export const DOCS: readonly Doc[] = [
   { path: '/docs/dns-monitoring', title: 'DNS monitoring', summary: 'Get alerted when a DNS record disappears or stops matching the value you expect.', icon: GlobeAltIcon, body: DnsMonitoring },
   { path: '/docs/alerts', title: 'Alerts', summary: 'Alert channels, routing alerts by client, alert delays, quiet hours and maintenance windows.', icon: BellAlertIcon, body: Alerts },
   { path: '/docs/api', title: 'API and API keys', summary: 'Use HawkEye from your own scripts and tools: create a key, send requests, and keep keys safe.', icon: CodeBracketIcon, body: ApiDocs },
-  { path: '/docs/claude', title: 'Use HawkEye with Claude', summary: 'Connect Claude Code (or another MCP client) to check what is down, look at uptime and pause monitors by asking.', icon: ChatBubbleLeftRightIcon, body: ClaudeDocs },
+  { path: '/docs/claude', title: 'Use HawkEye with Claude', summary: 'Connect Claude from its connector directory, or Claude Code with an API key, to check what is down, look at uptime and pause monitors by asking.', icon: ChatBubbleLeftRightIcon, body: ClaudeDocs },
 ]
 
 function DocsShell({ children }: { children: ReactNode }) {
