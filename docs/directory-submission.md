@@ -191,6 +191,17 @@ conversation data collection (none stored), and public documentation (`/docs/cla
 
 ## After the listing is live
 
+**Status:** submitted 2026-11-08; published as a Community listing 2026-11-09: https://claude.ai/directory/hawkeye. Done on 2026-11-09: `/docs/claude` explains adding HawkEye from the
+directory, the landing page has a "Works with Claude" card and FAQ answer, `llms.txt` says so, and Phase 3c is marked done in
+`docs/plan-api-mcp.md`.
+
+**Keep in place while listed:** the reviewer account (`directory-reviewer@hawkeye.observer`, Agency plan, no two-factor), its seeded data and the
+two `hawkeye-demo-heartbeat` cron lines on the server, the Anthropic OAuth client, and `OAUTH_TOKEN_RATE_LIMIT_PER_MIN`. Anthropic re-checks
+listed connectors; a reviewer who finds a broken account or a heartbeat that's down is a reason to delist. Tell Anthropic (through the portal)
+before changing the server URL, the OAuth endpoints, tool names or what a tool does.
+
+Original checklist:
+
 - Update `/docs/claude` (`web/src/pages/docs/DocsPages.tsx`): replace "will be available once HawkEye is listed in Claude's connector directory"
   with how to add HawkEye from Claude's connector directory, and add a "Works with Claude" line to the landing page and `llms.txt` (feature
   sync checklist). Don't advertise it before it is listed.

@@ -19,7 +19,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 - SSL certificate expiry warnings 30, 14, 7 and 1 days before expiry, on every plan.
 - Domain registration expiry warnings on the same schedule, for a number of domains that depends on the plan. Some domain registries do not publish expiry dates; HawkEye says so rather than guessing.
 - Checks from several locations on paid plans, where offered.
-- An MCP server at https://hawkeye.observer/mcp, so Claude Code and other MCP clients can read monitors, uptime and incidents and (with a read and write key) pause monitors, add monitors, post incident updates and schedule maintenance. It uses the same API keys, or MCP clients can connect by signing in (OAuth with PKCE).
+- Works with Claude: HawkEye is listed in Claude's connector directory (https://claude.ai/directory/hawkeye; add it there or in Claude under Customize, then Connectors, and sign in to HawkEye). The MCP server at https://hawkeye.observer/mcp also lets Claude Code and other MCP clients can read monitors, uptime and incidents and (with a read and write key) pause monitors, add monitors, post incident updates and schedule maintenance. It uses the same API keys, or MCP clients can connect by signing in (OAuth with PKCE).
 - Two-factor sign-in with an authenticator app, with recovery codes, on every plan; on a team, the owner can require it for everyone.
 - A public API with API keys: read-only keys on every plan, read and write keys on paid plans. Keys expire after 90 days unless the owner chooses otherwise, and can be revoked at any time.
 

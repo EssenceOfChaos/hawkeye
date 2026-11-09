@@ -1,6 +1,6 @@
 # Plan: public API, MCP server and Claude connector
 
-Status: **Phase 1 built** (2026-11-07, PR #10); **Phase 2 built** (2026-11-08, PR #11); **Phase 3a (two-factor sign-in) built** (2026-11-08, PR #12); **3b (OAuth) built** (2026-11-08, branch `feat/oauth`); 3c (directory submission): runbook, portal answers and listing copy in `docs/directory-submission.md`.
+Status: **Phase 1 built** (2026-11-07, PR #10); **Phase 2 built** (2026-11-08, PR #11); **Phase 3a (two-factor sign-in) built** (2026-11-08, PR #12); **3b (OAuth) built** (2026-11-08, PR #13); **3c (directory submission) done**: submitted 2026-11-08 and published in Claude's connector directory as a Community listing 2026-11-09 (runbook and portal answers in `docs/directory-submission.md`). All phases complete.
 
 This plan pulls roadmap item #14 (Public API and API keys) forward from Q4 and builds two more things on top of it: an MCP server
 that lets Claude and other AI clients use HawkEye, and a listing in Anthropic's Connectors Directory. It also brings forward roadmap
@@ -241,15 +241,15 @@ Rules:
 
 Prerequisites, then the portal at claude.ai/directory/manage:
 
-- [ ] Legal review finished and the Privacy Policy updated (below)
-- [ ] Every tool tested in MCP Inspector and as a custom connector in claude.ai
-- [ ] Public docs page live (Phase 2's page plus OAuth connection steps)
-- [ ] A demo organization with realistic data (a seeding script in `scripts/`: monitors of each type, a past incident with updates,
+- [x] Legal review finished and the Privacy Policy updated (below)
+- [x] Every tool tested in MCP Inspector and as a custom connector in claude.ai
+- [x] Public docs page live (Phase 2's page plus OAuth connection steps)
+- [x] A demo organization with realistic data (a seeding script in `scripts/`: monitors of each type, a past incident with updates,
       a status page, a maintenance window) and reviewer credentials for it, with two-factor sign-in off
-- [ ] Listing copy: name, one-liner (200 characters), description (2,000), categories, icon from `docs/branding.md`, support contact,
+- [x] Listing copy: name, one-liner (200 characters), description (2,000), categories, icon from `docs/branding.md`, support contact,
       allowed link URIs (`https://hawkeye.observer`)
-- [ ] Data handling answers: first-party API, no health data, no sponsored content
-- [ ] The seven compliance acknowledgments
+- [x] Data handling answers: first-party API, no health data, no sponsored content
+- [x] The seven compliance acknowledgments
 
 After submitting: an automatic scan, then a Community listing by default. Watch the portal for reviewer feedback; escalations go to
 `mcp-review@anthropic.com`.
