@@ -60,13 +60,54 @@ The API serves its metrics on a **separate port that is never published or proxi
 
 ## Alerting and external monitoring
 
-`deploy/prometheus-alerts.yml` contains 29 alert rules covering API errors and latency, panics, the shared limiter, database pool pressure, workers not polling, scheduler lag,
+`deploy/prometheus-alerts.yml` contains 34 alert rules covering API errors and latency, panics, the shared limiter, database pool pressure, workers not polling, scheduler lag,
 queue backlog/backpressure, missed checks, dropped jobs, mass check failures (a sign of **our** network problem), stale retention, alert-email backlog/failures, billing
-failures/risk events, and the free checkers (heavy use, people turned away, clients hitting their limits). They are validated with `promtool check rules`, and a unit test fails if a rule names a metric the code does not export.
-Load the file into your Prometheus (or Grafana/Alertmanager) and route `severity: page` alerts to a pager.
+failures/risk events, the free checkers (heavy use, people turned away, clients hitting their limits), and the alerting itself (below). A unit test fails if a rule names a metric
+the code does not export, and `scripts/check-alerting.sh` (run by CI) validates the rules with `promtool`, runs the rule tests in `deploy/prometheus/alerting_test.yml`, and checks the
+Alertmanager configuration with every combination of settings.
 
-Also run an **external** uptime check on `https://<domain>/readyz` from a different provider/region (several free tiers exist), alerting a channel that does not depend on this
-system. A monitoring product must never be the only thing able to notice its own outage. Optional: set `SENTRY_DSN` for error tracking (events are scrubbed of emails, tokens and keys before leaving the process). See *Sentry shows nothing* below to check it.
+### How an alert reaches you
+
+```
+api :9091, worker :9090 ──scrape──▶ Prometheus ──fires──▶ Alertmanager ──▶ Telegram   page: with sound, again every 5 min until it resolves or is silenced
+                                    (rules)                     │                      ticket: silent, again every 12 h
+                                                                └──Watchdog, ~every minute──▶ healthchecks.io ──(its own channels)──▶ you
+server (cron, every minute) ──/readyz answers?──▶ healthchecks.io "HawkEye" check (scripts/heartbeat.sh)
+```
+
+`scripts/deploy.sh` runs Prometheus and Alertmanager (`deploy/docker-compose.monitoring.yml`) next to the app; nothing is published on the host. Each failure has a path that does
+not depend on the thing that failed:
+
+| What breaks | Who tells you |
+|---|---|
+| Something inside the app (the 30 app rules) | Alertmanager, on Telegram |
+| The worker's or API's metrics stop answering | `HawkEyeMetricsUnreachable` / `HawkEyeMetricsMissing`, on Telegram |
+| Prometheus or Alertmanager stops, or Telegram keeps refusing our messages | The Watchdog pings stop; healthchecks.io alerts you |
+| The whole server, the site or the database | `scripts/heartbeat.sh` pings stop or report a failure; healthchecks.io alerts you |
+| A regional worker host | Its own healthchecks.io check (`docs/deployment.md#regional-worker-hosts`) |
+
+**Set it up** (once; each step is a setting in Infisical, applied by the next deploy or `scripts/deploy.sh secrets-only`):
+
+1. **A Telegram bot and chat for our alerts.** Create a bot with @BotFather and put its token in `ALERTS_TELEGRAM_BOT_TOKEN`. A separate bot is best: the customer-facing bot
+   (`TELEGRAM_BOT_TOKEN`, which is used when this is empty) shares Telegram's rate limits with every customer's alerts. Send the bot a message, then read your chat id from
+   `https://api.telegram.org/bot<token>/getUpdates` (`"chat":{"id":…}`; a group's id is negative) and put it in `ALERTS_TELEGRAM_CHAT_ID`.
+2. **Let pages wake you.** Telegram does not repeat a message until it is acknowledged, so Alertmanager does: a page is sent again every 5 minutes while it lasts. On your
+   phone, allow notifications from this chat through Do Not Disturb or Focus (iOS: add Telegram to the Focus's allowed apps; Android: mark the chat's notifications as priority).
+   Tickets are sent silently and never need this.
+3. **The watchdog.** Create a healthchecks.io check named "HawkEye alerting" with a period of 2 minutes and a grace time of 8 minutes, and put its ping URL in
+   `ALERTS_WATCHDOG_URL`. With `HEALTHCHECKS_API_KEY` set you can create it from the server instead:
+   `python3 scripts/regions.py healthcheck "HawkEye alerting" 120 480` (prints the URL). In healthchecks.io, add a **Telegram integration** (its own bot, independent of ours)
+   and a second channel such as email or the mobile app, and make sure it is attached to this check, the "HawkEye" heartbeat check and the regional worker checks.
+4. **The egress filter** lets Prometheus (fixed address 172.30.10.6) read the worker's metrics on the worker network. A server whose filter was applied before this change
+   needs it reapplied once: `sudo systemctl restart hawkeye-egress`, then `scripts/verify-egress.sh`.
+5. **Prove it:** `scripts/alerts.sh targets` (every target `up`), `scripts/alerts.sh test page` (your phone rings within about 30 seconds), and in healthchecks.io the
+   "HawkEye alerting" check shows a ping every minute or two. Repeat the test page after changing the bot, the chat or your phone.
+
+**When a page arrives:** follow the runbook link in the message. `scripts/alerts.sh silence <AlertName> 2h` acknowledges it (the repeats stop; it still resolves normally), and
+`scripts/alerts.sh list` shows what is firing. Alertmanager's log (`docker logs hawkeye-alertmanager-1`) says at startup where alerts go, and warns when a setting is missing.
+
+Without these settings the stack still runs and evaluates every rule, but nothing is delivered, so self-hosted installs can opt out by leaving them empty or by removing
+`deploy/docker-compose.monitoring.yml` from the Compose command. Optional: set `SENTRY_DSN` for error tracking (events are scrubbed of emails, tokens and keys before leaving the process). See *Sentry shows nothing* below to check it.
 
 ## Runbooks
 
@@ -302,6 +343,22 @@ No rows means no enabled, verified recipient existed when the incident opened (c
 `pending` with a future `next_attempt_at` is a retry waiting for backoff; `failed` has the sanitized reason in `last_error`.
 (3) Is a worker running (the dispatcher lives in `cmd/worker`)? In development the email provider is `console`, so mail appears in the worker log, not a mailbox.
 To retry a failed delivery now: `UPDATE notification_deliveries SET status='pending', attempt_count=0, next_attempt_at=now() WHERE id='…';`
+
+These are customers' alerts. For our own alerts not reaching Telegram, see *Metrics unreachable* below and `docker logs hawkeye-alertmanager-1`.
+
+### Metrics unreachable
+
+`HawkEyeMetricsUnreachable`, `HawkEyeMetricsMissing` or `HawkEyeAlertRulesFailing`: some alert rules can no longer fire, so treat this as a blind spot, not noise.
+
+1. `scripts/alerts.sh targets` shows each target and the last scrape error.
+2. `worker` times out or is refused: the egress filter is probably blocking Prometheus. `sudo deploy/egress-filter.sh status` must show a rule with `-s 172.30.10.6/32` and
+   `--dport 9090`; if not, `sudo systemctl restart hawkeye-egress`. Also check that `docker inspect hawkeye-prometheus-1` shows 172.30.10.6 on the `hawkeye_checks` network.
+3. `HawkEyeMetricsMissing` for `api` or `worker`: that container is not running (`docker compose ps`), or it is not on the network Prometheus looks on (`backend` for the API,
+   `checks` for the worker).
+4. `HawkEyeAlertRulesFailing`: `docker logs hawkeye-prometheus-1 | grep -i "rule"` names the rule; fix it in `deploy/prometheus-alerts.yml` and run `scripts/check-alerting.sh`.
+5. healthchecks.io says "HawkEye alerting" is down: Prometheus or Alertmanager is not running (`docker compose ps`), or Telegram keeps refusing our messages (a revoked bot
+   token, or the bot was removed from the chat). `docker logs hawkeye-alertmanager-1 | grep -i telegram` shows Telegram's answer. Fix the setting, deploy `secrets-only`, then
+   `scripts/alerts.sh test page`.
 
 ### Checks are not running
 

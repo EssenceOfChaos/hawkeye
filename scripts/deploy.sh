@@ -24,7 +24,13 @@ main() {
   exec 9>"$ROOT/.deploy.lock"
   flock -n 9 || { echo "another deploy is running" >&2; exit 1; }
 
-  COMPOSE=(docker compose --env-file .env.production -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local-db.yml)
+  # Our own alerting (Prometheus and Alertmanager) comes with the release that has it: a rollback to an older release, without the file, runs
+  # without it (and --remove-orphans stops it) rather than failing.
+  compose() {
+    local files=(-f deploy/docker-compose.prod.yml -f deploy/docker-compose.local-db.yml)
+    [ ! -f deploy/docker-compose.monitoring.yml ] || files+=(-f deploy/docker-compose.monitoring.yml)
+    docker compose --env-file .env.production "${files[@]}" "$@"
+  }
   [ -f .env.production ] || { echo ".env.production is missing" >&2; exit 1; }
   SITE="$(sed -n 's/^SITE_ADDRESS=\([^ #]*\).*/\1/p' .env.production)"
   [ -n "$SITE" ] || { echo "SITE_ADDRESS not found in .env.production" >&2; exit 1; }
@@ -56,7 +62,7 @@ main() {
     fi
     apply_regions || return 1
     sed -i '/^APP_VERSION=/d' .env.production; echo "APP_VERSION=${sha:0:12}" >> .env.production   # shown in logs and Sentry; also tags the images
-    "${COMPOSE[@]}" up -d --build --remove-orphans
+    compose up -d --build --remove-orphans
   }
 
   # The settings as they are now: what a rollback puts back (a new release may bring new settings, and they are part of what failed).
@@ -69,11 +75,11 @@ main() {
     apply_regions
     # The header comment carries the time it was written, so compare the settings themselves.
     if diff -q <(grep -v '^#' .env.production) <(grep -v '^#' .env.production.previous) >/dev/null; then echo "== the settings have not changed: nothing to restart"; exit 0; fi
-    "${COMPOSE[@]}" up -d --remove-orphans
+    compose up -d --remove-orphans
     if healthy; then echo "== settings applied: smoke test passed"; update_regions; exit 0; fi
     echo "!! the site is unhealthy with the new settings; putting the previous ones back" >&2
     cp -p .env.production.previous .env.production
-    "${COMPOSE[@]}" up -d --remove-orphans
+    compose up -d --remove-orphans
     if healthy; then echo "!! rolled back: the previous settings are live again. The new settings did not go out." >&2
     else echo "!! ROLLBACK ALSO FAILED: the site needs attention (docker compose logs on the VM)" >&2; fi
     exit 1
@@ -101,7 +107,7 @@ main() {
   fi
 
   echo "!! deploy of ${TARGET:0:12} failed; rolling back to ${PREVIOUS:0:12}" >&2
-  "${COMPOSE[@]}" logs --tail 40 api web worker >&2 || true
+  compose logs --tail 40 api web worker >&2 || true
   cp -p .env.production.previous .env.production   # the settings that were live, with the code that was live
   release "$PREVIOUS" keep
   if healthy; then echo "!! rolled back: ${PREVIOUS:0:12} is live again. The failed release did not go out." >&2

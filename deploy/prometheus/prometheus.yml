@@ -1,0 +1,23 @@
+# Prometheus for HawkEye's own alerts (deploy/docker-compose.monitoring.yml): it scrapes the API, the worker and Alertmanager on the private
+# networks, evaluates deploy/prometheus-alerts.yml, and hands what fires to Alertmanager. Nothing here is published on the host.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files: [/etc/prometheus/rules/*.yml]
+
+alerting:
+  alertmanagers:
+    - static_configs: [{targets: ["alertmanager:9093"]}]
+
+scrape_configs:
+  # DNS discovery finds every replica when the API or the worker is scaled (docker compose up --scale api=2).
+  - job_name: api
+    dns_sd_configs: [{names: [api], type: A, port: 9091, refresh_interval: 30s}]
+  # Over the worker network: deploy/egress-filter.sh lets exactly this container (172.30.10.6) reach the worker's metrics port there.
+  - job_name: worker
+    dns_sd_configs: [{names: [worker], type: A, port: 9090, refresh_interval: 30s}]
+  - job_name: alertmanager
+    static_configs: [{targets: ["alertmanager:9093"]}]
+  - job_name: prometheus
+    static_configs: [{targets: ["localhost:9090"]}]

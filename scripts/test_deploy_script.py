@@ -105,6 +105,35 @@ class DeployScriptTests(Base):
         self.git(self.repo, "reset", "-q", "--hard", here)
         return sha
 
+    def add_monitoring(self):
+        """A new commit on origin that brings deploy/docker-compose.monitoring.yml (our own alerting). Returns its sha."""
+        here = self.head()
+        self.git(self.repo, "checkout", "-q", "main")
+        self.git(self.repo, "reset", "-q", "--hard", self.sha2)
+        (self.repo / "deploy/docker-compose.monitoring.yml").write_text("services: {}\n")
+        self.commit("monitoring")
+        self.git(self.repo, "push", "-q", "origin", "main")
+        sha = self.head()
+        self.git(self.repo, "reset", "-q", "--hard", here)
+        return sha
+
+    # ---- our own alerting ----
+
+    def test_a_release_with_the_monitoring_file_starts_prometheus_and_alertmanager_too(self):
+        r = self.deploy(self.add_monitoring(), no_creds=True)
+        self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+        ups = [c for c in self.docker_calls() if " up -d" in c]
+        self.assertTrue(ups and all("-f deploy/docker-compose.monitoring.yml" in c for c in ups), ups)
+
+    def test_a_rollback_to_a_release_without_the_monitoring_file_still_starts(self):
+        self.api.secrets["SMOKE"] = "fail"
+        r = self.deploy(self.add_monitoring())
+        self.assertEqual(r.returncode, 1)
+        self.assertEqual(self.head(), self.sha1)
+        ups = [c for c in self.docker_calls() if " up -d" in c]
+        self.assertIn("-f deploy/docker-compose.monitoring.yml", ups[0], "the failed release ran with it")
+        self.assertNotIn("monitoring", ups[-1], "the release rolled back to has no such file, so compose must not be given it")
+
     # ---- regional workers ----
 
     def test_workers_are_updated_after_a_healthy_deploy(self):

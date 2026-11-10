@@ -1,0 +1,59 @@
+# Alertmanager configuration for HawkEye's own alerts (deploy/docker-compose.monitoring.yml). It is a TEMPLATE: entrypoint.sh renders it into
+# /tmp at every start, filling in the Telegram chat and dropping each block between "#@begin NAME" and "#@end" whose settings are missing.
+#
+#   severity: page    -> Telegram with sound, sent again every 5 minutes until it resolves or you silence it (scripts/alerts.sh silence NAME 2h)
+#   severity: ticket  -> Telegram silently (no sound), repeated twice a day while it lasts
+#   alertname Watchdog -> a POST to healthchecks.io about every minute. It always fires, so when the pings stop, Prometheus, Alertmanager or
+#                         Telegram delivery is broken and healthchecks.io tells you through its own channels (deploy/prometheus-alerts.yml).
+route:
+  receiver: telegram-ticket
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  routes:
+    - matchers: ['alertname="Watchdog"']
+      receiver: watchdog
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 1m
+    - matchers: ['severity="page"']
+      receiver: telegram-page
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 5m
+
+# A page already says it; the ticket for the same alert would only repeat it.
+inhibit_rules:
+  - source_matchers: ['severity="page"']
+    target_matchers: ['severity="ticket"']
+    equal: [alertname]
+
+templates: [/etc/alertmanager/telegram.tmpl]
+
+receivers:
+  - name: telegram-page
+    #@begin telegram
+    telegram_configs:
+      - bot_token_file: /tmp/alertmanager/telegram_token
+        chat_id: __CHAT_ID__
+        parse_mode: ""   # plain text: summaries contain characters that HTML or Markdown would need escaped
+        message: '{{ template "hawkeye.telegram" . }}'
+        send_resolved: true
+    #@end
+  - name: telegram-ticket
+    #@begin telegram
+    telegram_configs:
+      - bot_token_file: /tmp/alertmanager/telegram_token
+        chat_id: __CHAT_ID__
+        parse_mode: ""
+        message: '{{ template "hawkeye.telegram" . }}'
+        disable_notifications: true
+        send_resolved: true
+    #@end
+  - name: watchdog
+    #@begin watchdog
+    webhook_configs:
+      - url_file: /tmp/alertmanager/watchdog_url
+        send_resolved: false
+    #@end
