@@ -252,3 +252,14 @@ func validate(in Input, now time.Time) (Input, error) {
 	}
 	return in, nil
 }
+
+// LogDetails is what the security log keeps about a new window: when, for how long, how often, and how many monitors it silences.
+func (w Window) LogDetails() map[string]any {
+	d := map[string]any{"starts_at": w.StartsAt, "duration_minutes": w.DurationMinutes, "repeat": w.Repeat}
+	if w.AllMonitors {
+		d["monitors"] = "all"
+	} else {
+		d["monitors"] = len(w.MonitorIDs)
+	}
+	return d
+}

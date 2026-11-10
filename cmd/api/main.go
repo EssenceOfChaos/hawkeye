@@ -15,6 +15,7 @@ import (
 
 	"hawkeye/internal/account"
 	"hawkeye/internal/apitokens"
+	"hawkeye/internal/audit"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
@@ -108,7 +109,8 @@ func run() error {
 		return fmt.Errorf("secrets key: %w", err)
 	}
 	twoFactorSvc := twofactor.NewService(pool, box, mailer, log, cfg.AppBaseURL)
-	authSvc, err := auth.NewService(pool, mailer, log, auth.Config{SessionTTL: cfg.SessionTTL, AppBaseURL: cfg.AppBaseURL, TwoFactor: twoFactorSvc})
+	auditLog := audit.New(pool, log).WithMetrics(apiMetrics.AuditWrites)
+	authSvc, err := auth.NewService(pool, mailer, log, auth.Config{SessionTTL: cfg.SessionTTL, AppBaseURL: cfg.AppBaseURL, TwoFactor: twoFactorSvc, Audit: auditLog})
 	if err != nil {
 		return err
 	}
@@ -153,27 +155,29 @@ func run() error {
 	e := httpapi.New(httpapi.Options{
 		Logger: log, DB: pool, RequestTimeout: cfg.RequestTimeout, BodyLimit: cfg.BodyLimit,
 		Auth: authSvc, Orgs: organizations.NewService(pool), Plans: planSvc, Monitors: monitorSvc, Pool: pool, PgPool: pool,
-		Billing:       billingSvc,
-		Account:       account.NewService(pool, authSvc, provider, mailer, log, cfg.AppBaseURL),
-		SSLCheck:      freeTools.ssl,
-		SiteCheck:     freeTools.site,
-		APITokens:     apiTokens,
-		TwoFactor:     twoFactorSvc,
-		OAuth:         oauthSvc,
-		Waitlist:      waitlist.NewService(pool, mailer, log, cfg.AppBaseURL),
-		AppBaseURL:    cfg.AppBaseURL,
-		Version:       cfg.AppVersion,
-		Invitations:   invitations.NewService(pool, planSvc, mailer, log, cfg.AppBaseURL),
-		Lifecycle:     lifecycle.NewService(pool),
-		Branding:      branding.NewService(pool),
-		Contact:       contact.NewService(mailer, log, cfg.SupportAddress, cfg.EmailFromAddress, cfg.AppBaseURL),
-		Maintenance:   maintenance.NewService(pool, planSvc),
-		Domains:       domains.NewService(pool, planSvc),
-		Regions:       cfg.Regions(),
-		StatusPages:   statuspage.NewService(pool, planSvc),
-		Badges:        badges.NewService(pool),
-		Heartbeats:    heartbeats.NewService(pool, checks.NewStore(pool, heartbeats.Thresholds, incidents.Engine{}).WithRegions(cfg.Regions())),
-		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress, notifications.WithSecretBox(box), notifications.WithTelegramBot(telegramBot)),
+		Billing:     billingSvc,
+		Account:     account.NewService(pool, authSvc, provider, mailer, log, cfg.AppBaseURL),
+		SSLCheck:    freeTools.ssl,
+		SiteCheck:   freeTools.site,
+		APITokens:   apiTokens,
+		TwoFactor:   twoFactorSvc,
+		OAuth:       oauthSvc,
+		Waitlist:    waitlist.NewService(pool, mailer, log, cfg.AppBaseURL),
+		Audit:       auditLog,
+		AppBaseURL:  cfg.AppBaseURL,
+		Version:     cfg.AppVersion,
+		Invitations: invitations.NewService(pool, planSvc, mailer, log, cfg.AppBaseURL),
+		Lifecycle:   lifecycle.NewService(pool),
+		Branding:    branding.NewService(pool),
+		Contact:     contact.NewService(mailer, log, cfg.SupportAddress, cfg.EmailFromAddress, cfg.AppBaseURL),
+		Maintenance: maintenance.NewService(pool, planSvc),
+		Domains:     domains.NewService(pool, planSvc),
+		Regions:     cfg.Regions(),
+		StatusPages: statuspage.NewService(pool, planSvc),
+		Badges:      badges.NewService(pool),
+		Heartbeats:  heartbeats.NewService(pool, checks.NewStore(pool, heartbeats.Thresholds, incidents.Engine{}).WithRegions(cfg.Regions())),
+		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress, notifications.WithSecretBox(box), notifications.WithTelegramBot(telegramBot),
+			notifications.WithAudit(auditLog)),
 		TelegramBot:   telegramBot,
 		SecureCookies: cfg.IsProduction(), AuthRateLimitPerMin: cfg.AuthRateLimitPerMin, TrustForwardedFor: cfg.TrustForwardedFor,
 		HSTS: cfg.IsProduction(), Metrics: apiMetrics, Limiter: ratelimit.New(pool), Errors: reporter,

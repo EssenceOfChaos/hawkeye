@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
@@ -172,6 +173,7 @@ func (h *handlers) createMonitor(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	h.recordOrg(c, audit.MonitorCreated, monitorTarget(m), map[string]any{"type": m.Type})
 	return c.JSON(http.StatusCreated, map[string]any{"monitor": m})
 }
 
@@ -203,7 +205,8 @@ func (h *handlers) updateMonitor(c *echo.Context) error {
 		return err
 	}
 	var in monitors.UpdateInput
-	if err := bind(c, &in); err != nil {
+	fields, err := bindFields(c, &in)
+	if err != nil {
 		return err
 	}
 	if err := requireVerifiedForWriteMethod(c, in.Method); err != nil {
@@ -213,6 +216,7 @@ func (h *handlers) updateMonitor(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	h.recordOrg(c, audit.MonitorChanged, monitorTarget(m), map[string]any{"fields": fields})
 	return c.JSON(http.StatusOK, map[string]any{"monitor": m})
 }
 
@@ -221,9 +225,16 @@ func (h *handlers) deleteMonitor(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.monitors.Delete(c.Request().Context(), currentOrg(c), id); err != nil {
+	ctx := c.Request().Context()
+	// Read first so the log can name what was deleted.
+	m, err := h.monitors.Get(ctx, currentOrg(c), id)
+	if err != nil {
 		return mapError(err)
 	}
+	if err := h.monitors.Delete(ctx, currentOrg(c), id); err != nil {
+		return mapError(err)
+	}
+	h.recordOrg(c, audit.MonitorDeleted, monitorTarget(m), nil)
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -236,8 +247,15 @@ func (h *handlers) setEnabled(c *echo.Context, enabled bool) error {
 	if err != nil {
 		return mapError(err)
 	}
+	action := audit.MonitorPaused
+	if enabled {
+		action = audit.MonitorResumed
+	}
+	h.recordOrg(c, action, monitorTarget(m), nil)
 	return c.JSON(http.StatusOK, map[string]any{"monitor": m})
 }
+
+func monitorTarget(m monitors.Monitor) target { return target{"monitor", m.ID.String(), m.Name} }
 
 func (h *handlers) pauseMonitor(c *echo.Context) error  { return h.setEnabled(c, false) }
 func (h *handlers) resumeMonitor(c *echo.Context) error { return h.setEnabled(c, true) }

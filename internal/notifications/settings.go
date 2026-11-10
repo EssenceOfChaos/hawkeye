@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/email"
 	"hawkeye/internal/secrets"
@@ -66,9 +67,14 @@ type Service struct {
 	box        *secrets.Box // seals webhook and chat URLs; without it, adding one fails rather than storing a URL in clear
 	http       *http.Client
 	bot        *TelegramBot // HawkEye's own Telegram bot; nil when not configured
+	audit      *audit.Recorder
 }
 
 type Option func(*Service)
+
+// WithAudit records chats connected and disconnected through HawkEye's Telegram bot in the security log (everything else about alert destinations
+// is recorded by the API's handlers).
+func WithAudit(r *audit.Recorder) Option { return func(s *Service) { s.audit = r } }
 
 // WithTelegramBot enables connecting Telegram chats through HawkEye's own bot.
 func WithTelegramBot(b *TelegramBot) Option { return func(s *Service) { s.bot = b } }

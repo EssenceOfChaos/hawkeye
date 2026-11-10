@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/billing"
 )
 
@@ -75,6 +76,7 @@ func (h *handlers) billingCancel(c *echo.Context) error {
 	if err := h.billing.Cancel(c.Request().Context(), currentOrg(c)); err != nil {
 		return h.billingError(c, err)
 	}
+	h.recordOrg(c, audit.SubscriptionCanceled, target{}, nil)
 	return h.billingSubscriptionAccepted(c)
 }
 

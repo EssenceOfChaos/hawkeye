@@ -4,10 +4,12 @@ import (
 	"context"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/maintenance"
 	"hawkeye/internal/monitors"
@@ -635,9 +637,20 @@ func (s *tools) pause(pause bool) func(context.Context, Caller, PauseInput) (Cha
 		if pause {
 			action = monitors.BulkPause
 		}
+		names, err := s.monitorNames(ctx, c, ids)
+		if err != nil {
+			return ChangeResult{}, err
+		}
 		n, err := s.d.Monitors.Bulk(ctx, c.OrganizationID, monitors.BulkInput{MonitorIDs: ids, Action: action})
 		if err != nil {
 			return ChangeResult{}, err
+		}
+		logged := audit.MonitorResumed
+		if pause {
+			logged = audit.MonitorPaused
+		}
+		for id, name := range names {
+			s.record(ctx, c, logged, "monitor", id.String(), name, nil)
 		}
 		note := "Resumed: checks start again on their usual schedule."
 		if pause {
@@ -688,6 +701,7 @@ func (s *tools) createMonitor(ctx context.Context, c Caller, in CreateMonitorInp
 	if err != nil {
 		return MonitorDetail{}, err
 	}
+	s.record(ctx, c, audit.MonitorCreated, "monitor", m.ID.String(), m.Name, map[string]any{"type": m.Type})
 	return s.detail(m), nil
 }
 
@@ -701,6 +715,8 @@ func (s *tools) postUpdate(ctx context.Context, c Caller, in PostUpdateInput) (P
 		return PostedUpdate{}, err
 	}
 	s.d.StatusPages.Forget() // public pages show it on their next request, not after their cache expires
+	s.record(ctx, c, audit.IncidentUpdatePosted, "incident", id.String(), "", map[string]any{"update_id": u.ID, "status": u.Status,
+		"message": excerpt(u.Message, 200)})
 	urls, err := s.pageURLs(ctx, c, id)
 	if err != nil {
 		return PostedUpdate{}, err
@@ -721,6 +737,7 @@ func (s *tools) deleteUpdate(ctx context.Context, c Caller, in DeleteUpdateInput
 		return Deleted{}, err
 	}
 	s.d.StatusPages.Forget()
+	s.record(ctx, c, audit.IncidentUpdateDeleted, "incident", id.String(), "", map[string]any{"update_id": updateID})
 	return Deleted{Deleted: true}, nil
 }
 
@@ -741,6 +758,7 @@ func (s *tools) scheduleMaintenance(ctx context.Context, c Caller, in ScheduleMa
 	if err != nil {
 		return Window{}, err
 	}
+	s.record(ctx, c, audit.MaintenanceScheduled, "maintenance_window", w.ID.String(), w.Name, w.LogDetails())
 	return windowOut(w), nil
 }
 
@@ -749,8 +767,51 @@ func (s *tools) deleteWindow(ctx context.Context, c Caller, in WindowIDInput) (D
 	if err != nil {
 		return Deleted{}, err
 	}
+	var name string
+	_ = s.d.Pool.QueryRow(ctx, `SELECT name FROM maintenance_windows WHERE id = $1 AND organization_id = $2`, id, c.OrganizationID).Scan(&name)
 	if err := s.d.Maintenance.Delete(ctx, c.OrganizationID, id); err != nil {
 		return Deleted{}, err
 	}
+	s.record(ctx, c, audit.MaintenanceDeleted, "maintenance_window", id.String(), name, nil)
 	return Deleted{Deleted: true}, nil
+}
+
+// record writes a change made through a tool to the organization's security log, as the key or connected app the call used. Details say it came
+// through the MCP server.
+func (s *tools) record(ctx context.Context, c Caller, action, targetType, targetID, targetName string, details map[string]any) {
+	if details == nil {
+		details = map[string]any{}
+	}
+	details["via"] = "mcp"
+	s.d.Audit.Record(ctx, audit.Event{Action: action, OrganizationID: c.OrganizationID, Actor: c.Actor(), TargetType: targetType, TargetID: targetID,
+		TargetName: targetName, Details: details})
+}
+
+// monitorNames maps the organization's monitors among ids to their names, for the log.
+func (s *tools) monitorNames(ctx context.Context, c Caller, ids []uuid.UUID) (map[uuid.UUID]string, error) {
+	rows, err := s.d.Pool.Query(ctx, `SELECT id, name FROM monitors WHERE organization_id = $1 AND id = ANY($2) AND deleted_at IS NULL`, c.OrganizationID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[uuid.UUID]string{}
+	for rows.Next() {
+		var (
+			id   uuid.UUID
+			name string
+		)
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		out[id] = name
+	}
+	return out, rows.Err()
+}
+
+// excerpt is the first n characters of s.
+func excerpt(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	return string([]rune(s)[:n]) + "…"
 }

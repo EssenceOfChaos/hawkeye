@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/heartbeats"
 )
 
@@ -84,5 +85,6 @@ func (h *handlers) rotatePingToken(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	h.recordOrg(c, audit.PingAddressRotated, monitorTarget(m), nil)
 	return c.JSON(http.StatusOK, map[string]any{"monitor": m})
 }

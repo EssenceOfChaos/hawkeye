@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/email"
 	"hawkeye/internal/twofactor"
 	"hawkeye/internal/validation"
@@ -56,6 +57,7 @@ type Config struct {
 	AppBaseURL      string
 	Hasher          Hasher
 	TwoFactor       *twofactor.Service // checks codes for accounts that use two-factor sign-in
+	Audit           *audit.Recorder    // the security log (sign-ins, password changes...); nil records nothing
 	lastSeenRefresh time.Duration
 }
 
@@ -94,6 +96,11 @@ func NewService(pool *pgxpool.Pool, mail email.Sender, log *slog.Logger, cfg Con
 }
 
 func (s *Service) SessionTTL() time.Duration { return s.cfg.SessionTTL }
+
+// record writes an event to the person's own security log.
+func (s *Service) record(ctx context.Context, action string, actor audit.Actor, account uuid.UUID, details map[string]any) {
+	s.cfg.Audit.Record(ctx, audit.Event{Action: action, AccountID: account, Actor: actor, Details: details})
+}
 
 const userCols = `id, email, email_verified_at, created_at`
 
@@ -165,6 +172,7 @@ func (s *Service) Register(ctx context.Context, emailAddr, password string) (Use
 	if err != nil {
 		return User{}, "", err
 	}
+	s.record(ctx, audit.SignedUp, audit.User(user.ID, user.Email), user.ID, nil)
 	return user, session, nil
 }
 
@@ -192,6 +200,10 @@ func (s *Service) Login(ctx context.Context, emailAddr, password string) (User, 
 		s.log.ErrorContext(ctx, "stored password hash unreadable", "user_id", u.ID)
 	}
 	if !ok || disabled != nil {
+		if !ok {
+			// Only for accounts that exist: a typed address that matches nobody is not stored anywhere.
+			s.record(ctx, audit.SignInFailed, audit.Anonymous(), u.ID, map[string]any{"reason": "password"})
+		}
 		return User{}, "", ErrInvalidCredentials
 	}
 	if totpOn != nil {
@@ -209,6 +221,7 @@ func (s *Service) Login(ctx context.Context, emailAddr, password string) (User, 
 	if err != nil {
 		return User{}, "", err
 	}
+	s.record(ctx, audit.SignedIn, audit.User(u.ID, u.Email), u.ID, map[string]any{"method": "password"})
 	return u, session, nil
 }
 
@@ -255,13 +268,22 @@ func (s *Service) CompleteSignIn(ctx context.Context, challenge, code string) (u
 		return User{}, "", 0, false, err
 	}
 	if badCode {
+		s.record(ctx, audit.SignInFailed, audit.Anonymous(), u.ID, map[string]any{"reason": "code"})
 		if triesLeft <= 0 {
 			return User{}, "", 0, false, ErrChallengeInvalid
 		}
 		return User{}, "", triesLeft, false, twofactor.ErrBadCode
 	}
 	session, err = s.createSession(ctx, u.ID)
-	return u, session, 0, usedRecovery, err
+	if err != nil {
+		return User{}, "", 0, false, err
+	}
+	method := "authenticator"
+	if usedRecovery {
+		method = "recovery_code"
+	}
+	s.record(ctx, audit.SignedIn, audit.User(u.ID, u.Email), u.ID, map[string]any{"method": method})
+	return u, session, 0, usedRecovery, nil
 }
 
 func prefixed(alias, cols string) string {
@@ -309,8 +331,17 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, error) 
 }
 
 func (s *Service) Logout(ctx context.Context, token string) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE token_hash = $1`, HashToken(token))
-	return err
+	var u User
+	err := s.pool.QueryRow(ctx, `WITH gone AS (DELETE FROM sessions WHERE token_hash = $1 RETURNING user_id)
+		SELECT u.id, u.email FROM gone JOIN users u ON u.id = gone.user_id`, HashToken(token)).Scan(&u.ID, &u.Email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil // already signed out, or never signed in
+	}
+	if err != nil {
+		return err
+	}
+	s.record(ctx, audit.SignedOut, audit.User(u.ID, u.Email), u.ID, nil)
+	return nil
 }
 
 // ForgotPassword always succeeds from the caller's point of view so that account existence is not revealed.
@@ -362,14 +393,18 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 	if err != nil {
 		return err
 	}
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	var (
+		u       User
+		revoked int64
+	)
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		userID, err := consumeToken(ctx, tx, "password_reset_tokens", token)
 		if err != nil {
 			return err
 		}
 		// Receiving the reset email also proves ownership of the address.
-		if _, err := tx.Exec(ctx, `UPDATE users SET password_hash = $2,
-			email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $1`, userID, hash); err != nil {
+		if err := tx.QueryRow(ctx, `UPDATE users SET password_hash = $2,
+			email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $1 RETURNING id, email`, userID, hash).Scan(&u.ID, &u.Email); err != nil {
 			return err
 		}
 		if err := activateOwnAlertAddress(ctx, tx, userID); err != nil {
@@ -377,26 +412,41 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 		}
 		// A reset is how people get back into an account they may have lost control of, so it also revokes their API keys (someone else may have
 		// made them). Changing the password while signed in leaves keys alone: the person can see and revoke them on the API keys page.
-		if _, err := tx.Exec(ctx, `UPDATE api_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, userID); err != nil {
+		tag, err := tx.Exec(ctx, `UPDATE api_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, userID)
+		if err != nil {
 			return err
 		}
+		revoked = tag.RowsAffected()
 		_, err = tx.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1`, userID)
 		return err
 	})
+	if err != nil {
+		return err
+	}
+	// The person proved they hold the address by following the emailed link, so the reset is theirs.
+	s.record(ctx, audit.PasswordReset, audit.User(u.ID, u.Email), u.ID, map[string]any{"api_keys_revoked": revoked})
+	return nil
 }
 
 // VerifyEmail consumes a verification token and marks the address verified.
 func (s *Service) VerifyEmail(ctx context.Context, token string) error {
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	var u User
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		userID, err := consumeToken(ctx, tx, "email_verification_tokens", token)
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $1`, userID); err != nil {
+		if err := tx.QueryRow(ctx, `UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $1 RETURNING id, email`, userID).
+			Scan(&u.ID, &u.Email); err != nil {
 			return err
 		}
 		return activateOwnAlertAddress(ctx, tx, userID)
 	})
+	if err != nil {
+		return err
+	}
+	s.record(ctx, audit.EmailVerified, audit.User(u.ID, u.Email), u.ID, nil)
+	return nil
 }
 
 // activateOwnAlertAddress verifies the alert destinations that are the user's own email address.
@@ -488,16 +538,19 @@ func (s *Service) ChangePassword(ctx context.Context, user User, currentSessionT
 	if err != nil {
 		return err
 	}
+	var ended int64
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `UPDATE users SET password_hash = $2 WHERE id = $1`, user.ID, hash); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2`, user.ID, HashToken(currentSessionToken))
+		tag, err := tx.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2`, user.ID, HashToken(currentSessionToken))
+		ended = tag.RowsAffected()
 		return err
 	})
 	if err != nil {
 		return fmt.Errorf("change password: %w", err)
 	}
+	s.record(ctx, audit.PasswordChanged, audit.User(user.ID, user.Email), user.ID, map[string]any{"other_sessions_ended": ended})
 	c := email.Content{
 		Preheader: "Your HawkEye password was just changed.", Heading: "Your password was changed",
 		Paragraphs:  []string{"The password for your HawkEye account was just changed, and all other devices were signed out."},

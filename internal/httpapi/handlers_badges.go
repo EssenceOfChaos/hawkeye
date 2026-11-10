@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/badges"
 )
 
@@ -20,6 +21,7 @@ func (h *handlers) enableBadge(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	h.recordOrg(c, audit.BadgeEnabled, h.monitorTargetByID(c, id), nil)
 	return c.JSON(http.StatusOK, map[string]any{"badge_token": token})
 }
 
@@ -31,6 +33,7 @@ func (h *handlers) disableBadge(c *echo.Context) error {
 	if err := h.badges.Disable(c.Request().Context(), currentOrg(c), id); err != nil {
 		return mapError(err)
 	}
+	h.recordOrg(c, audit.BadgeDisabled, h.monitorTargetByID(c, id), nil)
 	return c.NoContent(http.StatusNoContent)
 }
 

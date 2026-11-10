@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/plans"
@@ -54,8 +55,8 @@ func (c Config) withDefaults() Config {
 
 // Stats counts what one pass removed.
 type Stats struct {
-	CheckResults, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits, SentEmails int
-	Skipped                                                                                               bool // another instance holds the lock
+	CheckResults, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits, SentEmails, AuditEvents int
+	Skipped                                                                                                            bool // another instance holds the lock
 }
 
 type Job struct {
@@ -213,6 +214,10 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 			SELECT id FROM billing_webhook_events WHERE status = 'failed' AND received_at < $1 LIMIT $2)`, j.now().Add(-180*24*time.Hour))
 	st.BillingEvents += n2
 	note(berr)
+	// The security log is kept for a year on every plan (internal/audit).
+	st.AuditEvents, err2 = j.batchesNoOrg(ctx, `DELETE FROM audit_events WHERE id IN (
+			SELECT id FROM audit_events WHERE occurred_at < $1 LIMIT $2)`, j.now().Add(-audit.Retention))
+	note(err2)
 
 	j.m.RetentionDeleted.WithLabelValues("check_results").Add(float64(st.CheckResults))
 	j.m.RetentionDeleted.WithLabelValues("incidents").Add(float64(st.Incidents))
@@ -222,6 +227,7 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 	j.m.RetentionDeleted.WithLabelValues("tokens").Add(float64(st.Tokens))
 	j.m.RetentionDeleted.WithLabelValues("billing_events").Add(float64(st.BillingEvents))
 	j.m.RetentionDeleted.WithLabelValues("rate_limits").Add(float64(st.RateLimits))
+	j.m.RetentionDeleted.WithLabelValues("audit_events").Add(float64(st.AuditEvents))
 	return st, firstErr
 }
 

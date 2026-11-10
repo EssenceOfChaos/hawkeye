@@ -90,7 +90,7 @@ export function Layout() {
               ))}
             </select>
           )}
-          <AccountMenu email={user?.email ?? ''} onLogout={() => void logout()} />
+          <AccountMenu email={user?.email ?? ''} owner={organization?.role === 'owner'} onLogout={() => void logout()} />
           {/* Below the width where the links fit on one row the links are behind this button. It is hidden by CSS on wider screens. */}
           <button
             ref={menuButton}

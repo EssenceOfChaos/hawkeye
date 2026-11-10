@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/checks"
@@ -48,6 +49,8 @@ type Export struct {
 	User          ExportUser       `json:"user"`
 	Organizations []ExportOrg      `json:"organizations"`
 	Waitlists     []waitlist.Entry `json:"waitlists"` // coming-soon features the account's address asked to hear about
+	// SecurityLog is the account's own log: sign-ins (and failed ones), password and two-factor changes, data exports (internal/audit).
+	SecurityLog []audit.Entry `json:"security_log"`
 }
 
 type ExportUser struct {
@@ -192,6 +195,9 @@ func (s *Service) Export(ctx context.Context, userID uuid.UUID) (Export, error) 
 		return out, err
 	}
 	out.Waitlists = wl
+	if out.SecurityLog, err = audit.New(s.pool, s.log).AllForAccount(ctx, userID); err != nil {
+		return out, err
+	}
 	rows, err := s.pool.Query(ctx, `SELECT o.id, o.name, m.role, o.created_at,
 			COALESCE(p.code, 'free'), COALESCE(s.status, 'active'), s.current_period_end, COALESCE(s.cancel_at_period_end, false)
 		FROM organization_members m JOIN organizations o ON o.id = m.organization_id

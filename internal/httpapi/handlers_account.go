@@ -7,6 +7,8 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"hawkeye/internal/audit"
+	"hawkeye/internal/organizations"
 	"hawkeye/internal/ratelimit"
 )
 
@@ -44,6 +46,7 @@ func (h *handlers) exportData(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	h.recordAccount(c, audit.DataExported, nil)
 	c.Response().Header().Set("Content-Disposition", `attachment; filename="hawkeye-export.json"`)
 	return c.Blob(http.StatusOK, "application/json", b)
 }
@@ -57,8 +60,20 @@ func (h *handlers) deleteAccount(c *echo.Context) error {
 	if err := bind(c, &in); err != nil {
 		return err
 	}
-	if err := h.account.Delete(c.Request().Context(), currentUser(c), in.Password, in.ConfirmEmail); err != nil {
+	ctx := c.Request().Context()
+	u := currentUser(c)
+	// The account's own log goes with it. The teams it belonged to keep a note that it left (organizations it owned alone are deleted too).
+	orgs, err := h.orgs.List(ctx, u.ID)
+	if err != nil {
+		return err
+	}
+	if err := h.account.Delete(ctx, u, in.Password, in.ConfirmEmail); err != nil {
 		return h.accountError(c, err)
+	}
+	for _, o := range orgs {
+		if o.Role != organizations.RoleOwner {
+			h.recordIn(c, o.ID, audit.MemberLeft, target{"member", u.ID.String(), u.Email}, map[string]any{"account_deleted": true})
+		}
 	}
 	h.clearSessionCookie(c)
 	return c.NoContent(http.StatusNoContent)

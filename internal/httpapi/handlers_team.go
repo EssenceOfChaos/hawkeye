@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/invitations"
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/validation"
@@ -61,6 +62,7 @@ func (h *handlers) createInvitation(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	h.recordIn(c, id, audit.MemberInvited, target{"invitation", inv.ID.String(), inv.Email}, nil)
 	return c.JSON(http.StatusCreated, map[string]any{"invitation": inv})
 }
 
@@ -81,6 +83,7 @@ func (h *handlers) resendInvitation(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	h.recordIn(c, id, audit.InvitationResent, target{"invitation", inv.ID.String(), inv.Email}, nil)
 	return c.JSON(http.StatusOK, map[string]any{"invitation": inv})
 }
 
@@ -93,9 +96,11 @@ func (h *handlers) revokeInvitation(c *echo.Context) error {
 	if err != nil {
 		return mapError(invitations.ErrNotFound)
 	}
+	addr := h.nameIn(c, id, `SELECT email FROM organization_invitations WHERE id = $1 AND organization_id = $2`, invID)
 	if err := h.invitations.Revoke(c.Request().Context(), id, invID); err != nil {
 		return mapError(err)
 	}
+	h.recordIn(c, id, audit.InvitationRevoked, target{"invitation", invID.String(), addr}, nil)
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -108,9 +113,11 @@ func (h *handlers) removeMember(c *echo.Context) error {
 	if err != nil {
 		return mapError(organizations.ErrMemberNotFound)
 	}
+	addr := h.nameIn(c, id, memberEmailQuery, memberID)
 	if err := h.orgs.RemoveMember(c.Request().Context(), currentUser(c).ID, id, memberID); err != nil {
 		return mapError(err)
 	}
+	h.recordIn(c, id, audit.MemberRemoved, target{"member", memberID.String(), addr}, nil)
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -122,6 +129,8 @@ func (h *handlers) leaveOrg(c *echo.Context) error {
 	if err := h.orgs.Leave(c.Request().Context(), currentUser(c).ID, id); err != nil {
 		return mapError(err)
 	}
+	u := currentUser(c)
+	h.recordIn(c, id, audit.MemberLeft, target{"member", u.ID.String(), u.Email}, nil)
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -155,6 +164,8 @@ func (h *handlers) acceptInvitation(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	u := currentUser(c)
+	h.recordIn(c, res.Organization.ID, audit.MemberJoined, target{"member", u.ID.String(), u.Email}, nil)
 	return c.JSON(http.StatusOK, res)
 }
 
@@ -186,6 +197,7 @@ func (h *handlers) transferOwnership(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	h.recordIn(c, id, audit.OwnershipTransferred, target{"member", in.UserID.String(), newOwner}, map[string]any{"from": currentUser(c).Email})
 	if h.billing != nil {
 		if err := h.billing.UpdateCustomerEmail(ctx, id, newOwner); err != nil {
 			h.log.ErrorContext(ctx, "update billing email after ownership transfer failed", "organization_id", id, "error", err)

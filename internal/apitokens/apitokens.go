@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/email"
 	"hawkeye/internal/organizations"
@@ -86,6 +87,16 @@ type Principal struct {
 	User           auth.User
 	Role           string // the owner's role in the organization now
 	Scope          string
+	Name           string // the key's name, or the connected app's for KindOAuth
+}
+
+// Actor is who the security log says acted: the key (or connected app), for the person it belongs to. A connected app is named by its grant, which
+// outlives the hourly access tokens.
+func (p Principal) Actor() audit.Actor {
+	if p.Kind == KindOAuth {
+		return audit.Actor{Type: audit.ActorOAuthApp, UserID: p.User.ID, Email: p.User.Email, CredentialID: p.GrantID, CredentialName: p.Name}
+	}
+	return audit.Actor{Type: audit.ActorAPIKey, UserID: p.User.ID, Email: p.User.Email, CredentialID: p.TokenID, CredentialName: p.Name}
 }
 
 // CanWrite reports whether the key's scope allows changing data. The plan is checked separately (plans.CanWriteViaAPI).
@@ -251,7 +262,7 @@ func (s *Service) Authenticate(ctx context.Context, raw string) (Principal, erro
 		grantOff  bool
 	)
 	// blocked: the organization requires two-factor sign-in and the key's owner is past their grace period without it (internal/twofactor).
-	err := s.pool.QueryRow(ctx, `SELECT t.id, t.kind, t.oauth_grant_id, COALESCE(g.revoked_at IS NOT NULL, false),
+	err := s.pool.QueryRow(ctx, `SELECT t.id, t.kind, t.name, t.oauth_grant_id, COALESCE(g.revoked_at IS NOT NULL, false),
 			t.organization_id, t.scope, t.expires_at, t.revoked_at, t.last_used_at, m.role,
 			u.id, u.email, u.email_verified_at, u.created_at,
 			o.require_two_factor_since IS NOT NULL AND u.totp_enabled_at IS NULL
@@ -262,7 +273,7 @@ func (s *Service) Authenticate(ctx context.Context, raw string) (Principal, erro
 		JOIN users u ON u.id = t.user_id
 		LEFT JOIN oauth_grants g ON g.id = t.oauth_grant_id
 		WHERE t.token_hash = $1 AND u.disabled_at IS NULL`, hash, twofactor.GracePeriod).
-		Scan(&p.TokenID, &p.Kind, &grantID, &grantOff, &p.OrganizationID, &p.Scope, &expiresAt, &revoked, &lastUsed, &p.Role, &p.User.ID, &p.User.Email, &p.User.EmailVerifiedAt, &p.User.CreatedAt,
+		Scan(&p.TokenID, &p.Kind, &p.Name, &grantID, &grantOff, &p.OrganizationID, &p.Scope, &expiresAt, &revoked, &lastUsed, &p.Role, &p.User.ID, &p.User.Email, &p.User.EmailVerifiedAt, &p.User.CreatedAt,
 			&blocked)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Principal{}, ErrInvalid

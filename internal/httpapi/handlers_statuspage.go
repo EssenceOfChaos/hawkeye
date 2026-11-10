@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/branding"
 	"hawkeye/internal/statuspage"
 	"hawkeye/internal/validation"
@@ -66,6 +67,7 @@ func (h *handlers) createStatusPage(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	h.recordOrg(c, audit.StatusPageCreated, statusPageTarget(cfg), map[string]any{"slug": cfg.Slug, "published": cfg.Published})
 	return c.JSON(http.StatusCreated, map[string]any{"status_page": cfg})
 }
 
@@ -82,6 +84,8 @@ func (h *handlers) updateStatusPage(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	h.recordOrg(c, audit.StatusPageChanged, statusPageTarget(cfg), map[string]any{"slug": cfg.Slug, "published": cfg.Published,
+		"monitors": len(cfg.Monitors)})
 	return c.JSON(http.StatusOK, map[string]any{"status_page": cfg})
 }
 
@@ -90,9 +94,11 @@ func (h *handlers) deleteStatusPage(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	title := h.nameOf(c, `SELECT title FROM status_pages WHERE id = $1 AND organization_id = $2`, id)
 	if err := h.statusPages.Delete(c.Request().Context(), currentOrg(c), id); err != nil {
 		return mapError(err)
 	}
+	h.recordOrg(c, audit.StatusPageDeleted, target{"status_page", id.String(), title}, nil)
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -109,6 +115,7 @@ func (h *handlers) putStatusPageLogo(c *echo.Context) error {
 	if err := h.statusPages.SaveLogo(c.Request().Context(), currentOrg(c), id, raw); err != nil {
 		return mapError(err)
 	}
+	h.recordStatusPageLogo(c, id, "uploaded")
 	return h.getStatusPage(c)
 }
 
@@ -120,6 +127,7 @@ func (h *handlers) deleteStatusPageLogo(c *echo.Context) error {
 	if err := h.statusPages.DeleteLogo(c.Request().Context(), currentOrg(c), id); err != nil {
 		return mapError(err)
 	}
+	h.recordStatusPageLogo(c, id, "removed")
 	return h.getStatusPage(c)
 }
 
@@ -151,4 +159,13 @@ func (h *handlers) sendLogo(c *echo.Context, data []byte, ctype string, err erro
 	c.Response().Header().Set("X-Content-Type-Options", "nosniff")
 	c.Response().Header().Set("Content-Security-Policy", "default-src 'none'")
 	return c.Blob(http.StatusOK, ctype, data)
+}
+
+func statusPageTarget(cfg *statuspage.Config) target {
+	return target{"status_page", cfg.ID.String(), cfg.Title}
+}
+
+func (h *handlers) recordStatusPageLogo(c *echo.Context, id uuid.UUID, change string) {
+	title := h.nameOf(c, `SELECT title FROM status_pages WHERE id = $1 AND organization_id = $2`, id)
+	h.recordOrg(c, audit.StatusPageChanged, target{"status_page", id.String(), title}, map[string]any{"logo": change})
 }

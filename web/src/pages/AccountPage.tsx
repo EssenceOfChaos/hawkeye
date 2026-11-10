@@ -9,6 +9,7 @@ import { Field } from '../components/Field'
 import { Appear } from '../components/Appear'
 import { Toggle } from '../components/Toggle'
 import { TwoFactorCard } from '../components/TwoFactor'
+import { SecurityLog } from '../components/SecurityLog'
 
 function msg(e: unknown): string {
   return e instanceof ApiError ? e.message : 'That did not work. Try again.'
@@ -225,6 +226,14 @@ export function AccountPage() {
       <EmailPreferencesCard />
       <ChangePassword />
       <TwoFactorCard />
+      <section className="card" aria-labelledby="activity-h">
+        <h2 id="activity-h">Recent activity</h2>
+        <p className="hint">
+          Sign-ins to your account, including failed ones, and changes to your password and two-factor sign-in. If you see something you don’t recognize,
+          change your password and turn on two-factor sign-in.
+        </p>
+        <SecurityLog path="/account/security-log" pageSize={10} caption="Recent activity on your account" />
+      </section>
       <ExportData />
       <DeleteAccount email={user.email} />
     </>

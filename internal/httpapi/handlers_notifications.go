@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/organizations"
@@ -108,6 +109,7 @@ func (h *handlers) createSetting(c *echo.Context) error {
 		if err != nil {
 			return mapError(err)
 		}
+		h.recordOrg(c, audit.AlertDestinationAdded, settingTarget(s), map[string]any{"channel": s.Channel})
 		out := map[string]any{"notification_setting": s}
 		if secret != "" {
 			out["signing_secret"] = secret
@@ -125,6 +127,7 @@ func (h *handlers) createSetting(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	h.recordOrg(c, audit.AlertDestinationAdded, settingTarget(s), map[string]any{"channel": s.Channel})
 	return c.JSON(http.StatusCreated, map[string]any{"notification_setting": s})
 }
 
@@ -167,6 +170,7 @@ func (h *handlers) updateSetting(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	h.recordOrg(c, audit.AlertDestinationChanged, settingTarget(s), map[string]any{"enabled": s.Enabled})
 	return c.JSON(http.StatusOK, map[string]any{"notification_setting": s})
 }
 
@@ -187,6 +191,7 @@ func (h *handlers) setRouting(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	h.recordOrg(c, audit.AlertDestinationChanged, settingTarget(s), map[string]any{"monitor_scope": s.MonitorScope, "tags": len(s.TagIDs)})
 	return c.JSON(http.StatusOK, map[string]any{"notification_setting": s})
 }
 
@@ -204,9 +209,12 @@ func (h *handlers) deleteSetting(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// The label, never the stored destination: a webhook or chat URL is a secret, and only its masked label is shown anywhere.
+	name := h.nameOf(c, `SELECT COALESCE(label, destination) FROM notification_settings WHERE id = $1 AND organization_id = $2`, id)
 	if err := h.notifications.Delete(c.Request().Context(), currentOrg(c), id, ownOnly(c)); err != nil {
 		return mapError(err)
 	}
+	h.recordOrg(c, audit.AlertDestinationRemoved, target{"alert_destination", id.String(), name}, nil)
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -310,4 +318,9 @@ func (h *handlers) listMonitorIncidents(c *echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"incidents": list, "total": total, "limit": f.Limit, "offset": f.Offset})
+}
+
+// settingTarget names an alert destination for the log by its display label (masked for webhook and chat URLs).
+func settingTarget(s notifications.Setting) target {
+	return target{"alert_destination", s.ID.String(), s.Destination}
 }

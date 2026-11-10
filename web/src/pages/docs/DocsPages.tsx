@@ -407,6 +407,7 @@ curl -X POST https://hawkeye.observer/api/v1/monitors/<monitor-id>/resume \\
         <li>Use a read-only key wherever you only need to read, and one key per tool, so you can revoke one without breaking the rest.</li>
         <li>Keep keys in a secret store or environment variable, never in code you commit. The <code>hk_</code> start makes a leaked key easy to spot.</li>
         <li>The API keys page shows when each key was last used. Revoke any you don’t recognize; HawkEye also emails you whenever a key is created.</li>
+        <li>Every change made with a key is in the organization’s <strong>security log</strong> (account menu, for the owner), with the key’s name, so you can see what a key did.</li>
       </ul>
     </>
   )
@@ -462,7 +463,8 @@ function ClaudeDocs() {
       </ul>
       <p>
         Claude acts as you, in the organization the key belongs to, with your permissions, and no more. It can’t see or change your password, billing, team,
-        alert destinations or API keys. It never sees monitor credentials, custom headers or request bodies.
+        alert destinations or API keys. It never sees monitor credentials, custom headers or request bodies. Every change Claude makes is in the
+        organization’s security log, with the key or connected app it used.
       </p>
 
       <h2 id="confirm">Claude asks before public or destructive changes</h2>

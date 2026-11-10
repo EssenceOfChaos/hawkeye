@@ -195,6 +195,8 @@ describe('the account menu', () => {
     expect(screen.getByRole('link', { name: 'Billing' })).toBeInTheDocument()
     await userEvent.tab() // Team
     await userEvent.tab() // API keys
+    await userEvent.tab() // Security log (owners)
+    expect(screen.getByRole('link', { name: 'Security log' })).toHaveFocus()
     await userEvent.tab() // Billing
     await userEvent.tab() // Log out
     expect(screen.getByRole('button', { name: 'Log out' })).toHaveFocus()

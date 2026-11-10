@@ -187,11 +187,35 @@ See `docs/security-review.md` for the review and residual risks.
 - **Links ask first.** The confirm and leave pages act only on a button press, so mail scanners that open links can't sign anyone up or off.
 - **Minimal data, limited use.** Feature, address, optional user id, timestamps. Used only to announce that feature; every email carries a removal link (`remove_token`, a random UUID); account deletion and export cover it; unconfirmed rows are deleted by the hourly clean-up.
 
+## Security log
+
+`internal/audit`, table `audit_events` (migration `000037`). Two logs: an **organization's** (changes to monitors, status pages, maintenance windows,
+incident updates, alert destinations, API keys, connected apps, the team, the two-factor requirement, the subscription) read by its owner at
+`GET /api/v1/security-log`, and an **account's** (sign-up, sign-ins and failed sign-ins, sign-out, password change and reset, email verification,
+two-factor on and off, new recovery codes, data export) read by that person at `GET /api/v1/account/security-log` and included in their data export.
+Every plan; 365 days (`audit.Retention`, purged by the retention job).
+
+- **Who, with what, from where.** Each event names the actor (a signed-in person, an API key for its person, a connected app for its person, someone
+  not signed in, or HawkEye itself), copies the actor's email and the key's or app's name, and records the IP address (as `c.RealIP()`, so it follows
+  `TRUST_FORWARDED_FOR`), user agent and request id. Changes made through the MCP server are recorded by the tools themselves, marked `via: mcp`.
+- **No secrets.** Details hold a few facts (scope, expiry, the names of the settings an update sent, an incident update's first 200 characters), never
+  values of settings, credentials, tokens or request bodies. Alert destinations are named by their masked label, never their URL.
+- **Not a user-enumeration oracle.** A failed sign-in is recorded only for an account that exists, in that account's own log; the typed address of a
+  failed sign-in for nobody is not stored. Failed attempts are bounded by the per-account sign-in limit, so they can't flood someone's log.
+- **Append-only.** A trigger refuses `UPDATE` on the table; rows go only by retention or with their organization or account. This guards against bugs
+  and app-level tampering, not against someone with database superuser access. The actor is copied, not a foreign key, so a former member's actions
+  stay attributable.
+- **Read access.** The organization's log is owner-only and **session-only**: an API key can't read it, so a leaked key can't learn what was noticed.
+- **Best effort, watched.** Events are written after the change succeeds, outside its transaction, with a context that survives the request ending. A
+  failed write is logged and counted (`hawkeye_audit_writes_total{outcome="error"}`, alert `HawkEyeSecurityLogWritesFailing`) and never fails the
+  request. A crash between the change and the write can lose that one event.
+- **Not recorded:** reads; tag changes; report branding; a connected app revoking its own token at `/oauth/revoke` (the disconnect from HawkEye's
+  page is recorded); and events with no person or organization behind them (scheduled jobs such as API key expiry).
+
 ## Known gaps
 
 - Console email provider (development) logs verification/reset links; it is refused in production.
 - `SESSION_SECRET` is validated but not used for signing (sessions are random DB-backed tokens); reserved.
-- No audit log of security events beyond application logs.
 - Refunds/disputes are surfaced as alerts only; handled manually.
 
 ## Free SSL checker (public, outbound)
