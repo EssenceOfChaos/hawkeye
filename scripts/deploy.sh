@@ -13,7 +13,7 @@
 # already on the server and says so. Without credentials, the existing .env.production is used as it is.
 set -euo pipefail
 # Everything lives in one function that is parsed before it runs: the checkout below replaces this very file, and bash must not read a
-# half-changed script.
+# half-changed script. So a change to this file takes effect one release later: after merging one, deploy again (docs/deployment.md).
 main() {
   cd "$(dirname "$0")/.."
   ROOT="$PWD"
@@ -62,7 +62,11 @@ main() {
     fi
     apply_regions || return 1
     sed -i '/^APP_VERSION=/d' .env.production; echo "APP_VERSION=${sha:0:12}" >> .env.production   # shown in logs and Sentry; also tags the images
-    compose up -d --build --remove-orphans
+    compose up -d --build --remove-orphans || return 1
+    # Prometheus and Alertmanager read their rules and templates once, at start, and a running container keeps seeing the file a checkout replaced
+    # (single-file bind mounts follow the old inode). Restart them so this release's alert rules are the ones evaluated. Not a reason to roll back.
+    [ ! -f deploy/docker-compose.monitoring.yml ] || compose restart prometheus alertmanager >/dev/null ||
+      echo "!! could not restart Prometheus and Alertmanager: they may still use the previous release's alert rules" >&2
   }
 
   # The settings as they are now: what a rollback puts back (a new release may bring new settings, and they are part of what failed).

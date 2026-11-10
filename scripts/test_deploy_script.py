@@ -124,6 +124,15 @@ class DeployScriptTests(Base):
         self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
         ups = [c for c in self.docker_calls() if " up -d" in c]
         self.assertTrue(ups and all("-f deploy/docker-compose.monitoring.yml" in c for c in ups), ups)
+        # A running Prometheus would keep the previous release's rules: the release restarts both, after starting the stack.
+        calls = self.docker_calls()
+        restarts = [i for i, c in enumerate(calls) if c.endswith("restart prometheus alertmanager")]
+        self.assertTrue(restarts and restarts[-1] > calls.index(ups[-1]), calls)
+
+    def test_a_release_without_the_monitoring_file_restarts_nothing_extra(self):
+        r = self.deploy(self.sha2, no_creds=True)
+        self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+        self.assertFalse(any("restart" in c for c in self.docker_calls()), self.docker_calls())
 
     def test_a_rollback_to_a_release_without_the_monitoring_file_still_starts(self):
         self.api.secrets["SMOKE"] = "fail"

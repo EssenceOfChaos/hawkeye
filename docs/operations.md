@@ -104,7 +104,7 @@ not depend on the thing that failed:
    "HawkEye alerting" check shows a ping every minute or two. Repeat the test page after changing the bot, the chat or your phone.
 
 **When a page arrives:** follow the runbook link in the message. `scripts/alerts.sh silence <AlertName> 2h` acknowledges it (the repeats stop; it still resolves normally), and
-`scripts/alerts.sh list` shows what is firing. Alertmanager's log (`docker logs hawkeye-alertmanager-1`) says at startup where alerts go, and warns when a setting is missing.
+`scripts/alerts.sh list` shows what is firing. Prometheus reads `deploy/prometheus-alerts.yml` only at start, so each release restarts it and Alertmanager; after changing rules any other way, run `docker restart hawkeye-prometheus-1`. Alertmanager's log (`docker logs hawkeye-alertmanager-1`) says at startup where alerts go, and warns when a setting is missing.
 
 Without these settings the stack still runs and evaluates every rule, but nothing is delivered, so self-hosted installs can opt out by leaving them empty or by removing
 `deploy/docker-compose.monitoring.yml` from the Compose command. Optional: set `SENTRY_DSN` for error tracking (events are scrubbed of emails, tokens and keys before leaving the process). See *Sentry shows nothing* below to check it.
