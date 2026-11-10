@@ -57,9 +57,11 @@ groups:
         annotations: {summary: "Requests regularly wait for a database connection (pool pressure)"}
 
   - name: hawkeye-monitoring-engine
+    # The API process exports the worker's gauges too (internal/metrics/api.go shares one set), but never sets them: there they stay 0, which reads as
+    # "never polled", "retention never ran" and "canary down". Rules on those gauges must look only at job="worker".
     rules:
       - alert: HawkEyeWorkerNotPolling
-        expr: time() - hawkeye_worker_last_poll_timestamp_seconds > 120
+        expr: time() - max(hawkeye_worker_last_poll_timestamp_seconds{job="worker"}) > 120
         for: 2m
         labels: {severity: page}
         annotations: {summary: "No worker has polled the queue for 2 minutes: monitoring is NOT running", runbook: "docs/operations.md#checks-are-not-running"}
@@ -100,7 +102,7 @@ groups:
         labels: {severity: page}
         annotations: {summary: "Over half of all checks fail: suspect OUR network/DNS/egress, not thousands of customer sites"}
       - alert: HawkEyeRetentionStale
-        expr: time() - hawkeye_retention_last_success_timestamp_seconds > 10800
+        expr: time() - max(hawkeye_retention_last_success_timestamp_seconds{job="worker"}) > 10800
         for: 10m
         labels: {severity: ticket}
         annotations: {summary: "Data retention has not completed for 3 hours: the database will keep growing", runbook: "docs/operations.md#database-growing"}
@@ -139,7 +141,7 @@ groups:
         labels: {severity: page}
         annotations: {summary: "A dispute, refund or fraud warning needs human review in Stripe", runbook: "docs/billing.md"}
       - alert: HawkEyeCanaryImpaired
-        expr: hawkeye_canary_up == 0
+        expr: hawkeye_canary_up{job="worker"} == 0
         for: 3m
         labels: {severity: page}
         annotations: {summary: "A worker cannot reach independent public sites (its own network or DNS is down): check failures that look like network trouble are being discarded, so monitors are not being checked properly", runbook: "docs/operations.md#canary-our-own-network-is-down"}

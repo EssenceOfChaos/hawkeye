@@ -1,4 +1,5 @@
-# Unit tests for the rules that watch the alerting itself (group hawkeye-alerting in deploy/prometheus-alerts.yml).
+# Unit tests for the rules that watch the alerting itself (group hawkeye-alerting in deploy/prometheus-alerts.yml), and for the worker rules that
+# must ignore the API's never-set copies of the worker's gauges.
 # Run with scripts/check-alerting.sh (CI does), which uses promtool from the pinned Prometheus image.
 rule_files: [../prometheus-alerts.yml]
 evaluation_interval: 1m
@@ -66,3 +67,57 @@ tests:
             exp_annotations:
               summary: "Prometheus finds no api container to scrape (stopped, or not on the expected network)"
               runbook: "docs/operations.md#metrics-unreachable"
+
+  # Production on the first day: the API exports the worker's gauges at 0 (never set there), the worker's own are healthy. Nothing may fire.
+  - interval: 1m
+    input_series:
+      - {series: 'hawkeye_worker_last_poll_timestamp_seconds{job="api",instance="172.18.0.3:9091"}', values: '0x240'}
+      - {series: 'hawkeye_retention_last_success_timestamp_seconds{job="api",instance="172.18.0.3:9091"}', values: '0x240'}
+      - {series: 'hawkeye_canary_up{job="api",instance="172.18.0.3:9091"}', values: '0x240'}
+      # The worker polls every few seconds and finishes retention hourly: its timestamps track the clock (promtool starts at Unix time 0).
+      - {series: 'hawkeye_worker_last_poll_timestamp_seconds{job="worker",instance="172.30.10.2:9090"}', values: '0+60x240'}
+      - {series: 'hawkeye_retention_last_success_timestamp_seconds{job="worker",instance="172.30.10.2:9090"}', values: '0+60x240'}
+      - {series: 'hawkeye_canary_up{job="worker",instance="172.30.10.2:9090"}', values: '1x240'}
+    alert_rule_test:
+      - {eval_time: 4h, alertname: HawkEyeWorkerNotPolling, exp_alerts: []}
+      - {eval_time: 4h, alertname: HawkEyeRetentionStale, exp_alerts: []}
+      - {eval_time: 4h, alertname: HawkEyeCanaryImpaired, exp_alerts: []}
+
+  # The worker really stops polling, and its canary reports our network down: both page, even with the API's zeros around.
+  - interval: 1m
+    input_series:
+      - {series: 'hawkeye_worker_last_poll_timestamp_seconds{job="api",instance="172.18.0.3:9091"}', values: '0x30'}
+      - {series: 'hawkeye_worker_last_poll_timestamp_seconds{job="worker",instance="172.30.10.2:9090"}', values: '0+60x10 600x20'}
+      - {series: 'hawkeye_canary_up{job="api",instance="172.18.0.3:9091"}', values: '0x30'}
+      - {series: 'hawkeye_canary_up{job="worker",instance="172.30.10.2:9090"}', values: '1x10 0x20'}
+    alert_rule_test:
+      - {eval_time: 10m, alertname: HawkEyeWorkerNotPolling, exp_alerts: []}
+      - eval_time: 20m
+        alertname: HawkEyeWorkerNotPolling
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "No worker has polled the queue for 2 minutes: monitoring is NOT running"
+              runbook: "docs/operations.md#checks-are-not-running"
+      - eval_time: 20m
+        alertname: HawkEyeCanaryImpaired
+        exp_alerts:
+          - exp_labels: {severity: page, job: worker, instance: "172.30.10.2:9090"}
+            exp_annotations:
+              summary: "A worker cannot reach independent public sites (its own network or DNS is down): check failures that look like network trouble are being discarded, so monitors are not being checked properly"
+              runbook: "docs/operations.md#canary-our-own-network-is-down"
+
+  # Retention stops on the worker: a ticket once it is over 3 hours old.
+  - interval: 5m
+    input_series:
+      - {series: 'hawkeye_retention_last_success_timestamp_seconds{job="api",instance="172.18.0.3:9091"}', values: '0x60'}
+      - {series: 'hawkeye_retention_last_success_timestamp_seconds{job="worker",instance="172.30.10.2:9090"}', values: '0+300x12 3600x48'}
+    alert_rule_test:
+      - {eval_time: 3h, alertname: HawkEyeRetentionStale, exp_alerts: []}
+      - eval_time: 4h30m
+        alertname: HawkEyeRetentionStale
+        exp_alerts:
+          - exp_labels: {severity: ticket}
+            exp_annotations:
+              summary: "Data retention has not completed for 3 hours: the database will keep growing"
+              runbook: "docs/operations.md#database-growing"

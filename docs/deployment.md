@@ -112,6 +112,16 @@ hand on the VM (`scripts/deploy.sh`, defaults to the tip of `origin/main`) or fr
 Rollback only restores the **code**; migrations are forward-only (see Upgrades and Rollback below), which is why every schema change must be expand/contract.
 The script sets `APP_VERSION` in `.env.production` to the commit sha so logs and Sentry releases name the exact version. A release first refreshes the settings from the secret manager (carrying on with the ones already on the server if it cannot be reached, and putting the previous settings back together with the previous code if the release fails); without credentials for the secret manager it uses the existing `.env.production`.
 
+**A change to `scripts/deploy.sh` takes effect one release later.** The script loads itself completely before it checks out the new commit, so that replacing its own file
+mid-run cannot break it. The release that changes the script is therefore deployed by the *previous* copy, and the new copy first runs on the next deploy. Anything the new copy
+adds, such as a new Compose file, is missing after that first release even though the deploy reports success. Example: the release that added
+`docker-compose.monitoring.yml` started without Prometheus and Alertmanager.
+
+When you merge a change to `scripts/deploy.sh`, run one more deploy straight after it: Actions → Deploy → **Run workflow** (leave **Only apply changed settings** unticked),
+or `scripts/deploy.sh` on the VM, which redeploys the tip of `origin/main`. `secrets-only` is not enough: when no setting has changed it stops before restarting anything.
+The scripts it calls after the checkout (`sync-secrets.sh`, `regions.py`, `smoke.sh`, `regional-sync.sh`) run from the new commit, so changes to them take effect in the
+same release. The exception is `backup-offsite.sh`, which runs before the checkout: like `deploy.sh`, it picks up a change one release later.
+
 ## Unknown pages (404)
 
 The web app is a single-page app, so Caddy has to know which addresses are real pages. `@app` in `deploy/Caddyfile` lists them: those get the app shell with
