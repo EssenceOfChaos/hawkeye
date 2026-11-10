@@ -83,7 +83,11 @@ jobs:
         with:
           fetch-depth: 0   # the migration check compares with the base commit
       - name: Shell syntax
-        run: for f in scripts/*.sh deploy/*.sh; do bash -n "$f"; done
+        run: |
+          for f in scripts/*.sh deploy/*.sh; do bash -n "$f"; done
+          sh -n deploy/alertmanager/entrypoint.sh   # busybox sh in the Alertmanager image, not bash
+      - name: Our own alerting (Prometheus rules and their tests, Alertmanager configuration)
+        run: scripts/check-alerting.sh
       - name: Check locations are valid
         run: python3 scripts/regions.py validate
       - name: New migrations work with the previous release

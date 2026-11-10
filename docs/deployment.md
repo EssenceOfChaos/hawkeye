@@ -13,11 +13,16 @@ internet ─443/80─▶ web (Caddy: TLS, HSTS, CSP, static SPA, proxies /api /h
                       │  network "checks" 172.30.10.0/24 (the only network with internet egress for customer URLs)
                       ▼
                   customers' websites
+
+                    prometheus (scrapes api and worker, evaluates deploy/prometheus-alerts.yml; on "backend", "checks" at 172.30.10.6, "alerting")
+                      ▼
+                    alertmanager (network "alerting") ─▶ Telegram (our pages and tickets), healthchecks.io (the watchdog)
 ```
 
 - The API also makes outbound connections for the free SSL and website checkers (`/tools`); those go through the same public-address-only policy as monitor checks but are not covered by `deploy/egress-filter.sh` (`docs/security-review.md`, item 12). `DISABLE_FREE_TOOLS=true` turns them off.
 - `DISABLE_API_KEYS=true` turns API keys off (requests made with a key answer 503); browser sessions are unaffected. See `docs/operations.md#api-key-abuse`.
-- Only `web` publishes ports. The metrics ports and PostgreSQL are never published.
+- Only `web` publishes ports. The metrics ports, Prometheus, Alertmanager and PostgreSQL are never published.
+- `docker-compose.monitoring.yml` adds Prometheus and Alertmanager for **our own** alerts; `scripts/deploy.sh` includes it. Leave it out of the Compose command to run without it.
 - Containers are read-only, run non-root with all capabilities dropped and `no-new-privileges`. API and worker are distroless.
 - PostgreSQL is **external by default** (managed database recommended). `docker-compose.local-db.yml` adds a single-node Postgres for small installs and the smoke stack.
 
@@ -37,7 +42,7 @@ internet ─443/80─▶ web (Caddy: TLS, HSTS, CSP, static SPA, proxies /api /h
 5. Apply the egress firewall on the host and prove it: `sudo ALLOW_TCP=... ALLOW_DNS=... deploy/egress-filter.sh apply`, then `scripts/verify-egress.sh`. **This script has not been tested on Linux by the author; do not skip the verifier.**
 6. Add the Stripe webhook endpoint `https://your-domain/api/v1/webhooks/stripe`, put its signing secret in `STRIPE_WEBHOOK_SECRET`, restart `api` and `worker`.
    For one-tap Telegram alerts, set `TELEGRAM_BOT_TOKEN` (from @BotFather) and `TELEGRAM_WEBHOOK_SECRET` (`openssl rand -hex 32`). Nothing else: the API registers its webhook with Telegram at startup and logs `telegram bot ready`. Only one deployment may use a given bot (Telegram sends its updates to the last webhook registered), so never give a staging or development server the production bot's token.
-7. Load `deploy/prometheus-alerts.yml`, add an external uptime check on `/readyz`, schedule backups (`docs/backup-restore.md`).
+7. Set up our own alerting: add `-f deploy/docker-compose.monitoring.yml` to the Compose command, set `ALERTS_TELEGRAM_BOT_TOKEN`, `ALERTS_TELEGRAM_CHAT_ID` and `ALERTS_WATCHDOG_URL`, and prove it with `scripts/alerts.sh test page` (`docs/operations.md#alerting-and-external-monitoring`). Add an external uptime check on `/readyz` (`scripts/heartbeat.sh` does this with healthchecks.io) and schedule backups (`docs/backup-restore.md`).
 
 ## Email with Resend
 

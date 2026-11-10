@@ -1,4 +1,5 @@
-# Prometheus alerting rules for HawkEye. Scrape the API on :9091 and the worker on :9090 (private ports, never published), then load this file.
+# Prometheus alerting rules for HawkEye. In production, deploy/docker-compose.monitoring.yml runs Prometheus with this file (it scrapes the API on
+# :9091 and the worker on :9090, private ports never published) and Alertmanager, which sends severity page and ticket alerts to Telegram.
 # Pair these with an EXTERNAL uptime check on https://<your-domain>/readyz from a different provider/region: this service must not be the only
 # thing that can notice its own outage. Thresholds assume the default settings; tune them to your plans' check intervals.
 groups:
@@ -150,3 +151,28 @@ groups:
         expr: hawkeye_billing_price_mismatch == 1
         labels: {severity: page}
         annotations: {summary: "A plan's Stripe price does not match the price shown on the site; checkout for that plan is refused until they agree", runbook: "docs/billing.md#price-check"}
+
+  # The alerting itself (deploy/docker-compose.monitoring.yml). A monitoring product must hear about its own monitoring breaking.
+  - name: hawkeye-alerting
+    rules:
+      # Always fires while Prometheus evaluates rules and Telegram delivery works. Alertmanager turns it into a healthchecks.io ping about every
+      # minute, so when Prometheus, Alertmanager or the bot breaks, the pings stop and healthchecks.io alerts through its own channels. A few
+      # failed sends in 15 minutes (a bad token, a removed chat) stop it on purpose; a single retried blip does not.
+      - alert: Watchdog
+        expr: vector(1) unless on() (sum(increase(alertmanager_notifications_failed_total{integration="telegram"}[15m])) > 3)
+        labels: {severity: none}
+        annotations: {summary: "The alerting pipeline is working (this alert always fires; it is the dead-man's switch)"}
+      - alert: HawkEyeMetricsUnreachable
+        expr: up{job=~"api|worker|alertmanager"} == 0
+        for: 5m
+        labels: {severity: page}
+        annotations: {summary: "Prometheus cannot scrape {{ $labels.job }} at {{ $labels.instance }}: its alerts cannot fire", runbook: "docs/operations.md#metrics-unreachable"}
+      - alert: HawkEyeMetricsMissing
+        expr: absent(up{job="api"}) or absent(up{job="worker"})
+        for: 5m
+        labels: {severity: page}
+        annotations: {summary: "Prometheus finds no {{ $labels.job }} container to scrape (stopped, or not on the expected network)", runbook: "docs/operations.md#metrics-unreachable"}
+      - alert: HawkEyeAlertRulesFailing
+        expr: increase(prometheus_rule_evaluation_failures_total[15m]) > 0
+        labels: {severity: ticket}
+        annotations: {summary: "Some alert rules fail to evaluate, so they cannot fire", runbook: "docs/operations.md#metrics-unreachable"}

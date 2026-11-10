@@ -1,0 +1,17 @@
+{{/* The Telegram message for HawkEye's own alerts (alertmanager.yml.tmpl). Plain text; at most 5 alerts per message, so it stays readable. */}}
+{{ define "hawkeye.telegram" -}}
+{{ if eq .Status "firing" }}{{ if eq .CommonLabels.severity "page" }}🚨 PAGE{{ else }}⚠️ Ticket{{ end }}{{ else }}✅ Resolved{{ end }}: {{ .CommonLabels.alertname }}
+{{- $alerts := .Alerts.Firing }}{{ if ne .Status "firing" }}{{ $alerts = .Alerts.Resolved }}{{ end }}
+{{- range $i, $a := $alerts }}{{ if lt $i 5 }}
+
+{{ with $a.Annotations.summary }}{{ . }}{{ else }}(no summary){{ end }}
+{{- with $a.Annotations.runbook }}
+Runbook: {{ . }}{{ end }}
+{{- end }}{{ end }}
+{{- if gt (len $alerts) 5 }}
+
+…and {{ len $alerts }} in total.{{ end }}
+{{- if eq .Status "firing" }}{{ if eq .CommonLabels.severity "page" }}
+
+Repeats every 5 minutes. To acknowledge: scripts/alerts.sh silence {{ .CommonLabels.alertname }} 2h{{ end }}{{ end }}
+{{- end }}

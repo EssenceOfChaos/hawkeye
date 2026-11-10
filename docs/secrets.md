@@ -26,6 +26,7 @@ atomically; a failed run leaves the server exactly as it was. `APP_VERSION` is n
 | Add a new setting | Add it to Infisical, add a line to `deploy/env.manifest` and a documented line to `deploy/.env.production.example` (`scripts/test_fetch_secrets.py` fails if they differ). |
 | Set up a new server | `scripts/rebuild.sh create`, `stage`, `cutover` (`docs/rebuild.md`). `create` gives the new server the credentials file; it fetches everything else itself. |
 | Turn the heartbeat on | Add `HEALTHCHECK_URL=https://hc-ping.com/<uuid>` in Infisical. It reaches `~/.hawkeye-host.env` at the next deploy or settings refresh. |
+| Get our own alerts on Telegram | Add `ALERTS_TELEGRAM_BOT_TOKEN`, `ALERTS_TELEGRAM_CHAT_ID` and `ALERTS_WATCHDOG_URL` in Infisical, apply them (`secrets-only`), then run `scripts/alerts.sh test page` on the server. Only Alertmanager receives them (`docs/operations.md#alerting-and-external-monitoring`). |
 | Rehearse a rebuild | `scripts/rebuild.sh create --workspace drill`, then `stage --workspace drill`, then `destroy --workspace drill`. The rehearsal fetches the same settings. |
 
 ## What happens when something is wrong

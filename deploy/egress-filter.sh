@@ -13,12 +13,15 @@
 #
 # ALLOW_TCP : comma list of ip:port the worker must reach (PostgreSQL, SMTP relay by IP). Use IPs, not names.
 # ALLOW_DNS : comma list of DNS resolver IPs (port 53 udp+tcp).
+# ALLOW_SCRAPE: comma list of ip:port. The container at ip (on the worker network) may open connections to that port of any container on the
+#             worker network, and to nothing else there. Default 172.30.10.6:9090: Prometheus (deploy/docker-compose.monitoring.yml) reading the
+#             worker's metrics. Set it to an empty value to turn this off.
 # WORKER_SUBNET: the worker network's subnet (default 172.30.10.0/24).
 # Rules live in the chains HAWKEYE-WORKER-EGRESS / HAWKEYE-WORKER-INPUT, are removed by `remove`, and are NOT persistent across reboots
 # (re-run at boot, e.g. from a systemd unit ordered after docker.service). IPv6 is not routed to the worker network by default; keep it that way.
 # NOT tested on the development machine (macOS): verify on the real host with scripts/verify-egress.sh.
 set -euo pipefail
-ACTION="${1:-}"; SUBNET="${WORKER_SUBNET:-172.30.10.0/24}"
+ACTION="${1:-}"; SUBNET="${WORKER_SUBNET:-172.30.10.0/24}"; SCRAPE="${ALLOW_SCRAPE-172.30.10.6:9090}"
 EGRESS=HAWKEYE-WORKER-EGRESS; INPUTC=HAWKEYE-WORKER-INPUT
 PRIVATE_RANGES="0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.0.0.0/24 192.0.2.0/24 192.168.0.0/16 198.18.0.0/15 198.51.100.0/24 203.0.113.0/24 224.0.0.0/4 240.0.0.0/4"
 
@@ -44,6 +47,8 @@ case "$ACTION" in
     for e in "${TCP[@]:-}"; do [ -n "$e" ] && ipt -A "$EGRESS" -p tcp -d "${e%:*}" --dport "${e##*:}" -j ACCEPT; done
     IFS=, read -ra DNS <<< "$ALLOW_DNS"
     for d in "${DNS[@]}"; do ipt -A "$EGRESS" -p udp -d "$d" --dport 53 -j ACCEPT; ipt -A "$EGRESS" -p tcp -d "$d" --dport 53 -j ACCEPT; done
+    IFS=, read -ra SCR <<< "$SCRAPE"
+    for e in "${SCR[@]:-}"; do [ -n "$e" ] && ipt -A "$EGRESS" -p tcp -s "${e%:*}" -d "$SUBNET" --dport "${e##*:}" -j ACCEPT; done
     for r in $PRIVATE_RANGES; do ipt -A "$EGRESS" -d "$r" -j DROP; done
     ipt -A "$EGRESS" -j ACCEPT
     ipt -I DOCKER-USER 1 -s "$SUBNET" -j "$EGRESS"
