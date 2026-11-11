@@ -29,7 +29,6 @@ import (
 // Features are the coming-soon features people can sign up for, by key, with the name emails use. Keep in step with the migration's CHECK and the
 // landing page (web/src/components/ComingSoon.tsx).
 var Features = map[string]string{
-	"api_workflows":           "multi-step API checks",
 	"status_page_domains":     "status pages on your own domain",
 	"status_page_subscribers": "email subscribers for status pages",
 }

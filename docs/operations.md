@@ -254,9 +254,6 @@ docker exec hawkeye-db-1 psql -U hawkeye -d monitoring -c "
   SELECT checked_at, success, error_category, error_summary, steps FROM check_results WHERE monitor_id = '<id>' ORDER BY checked_at DESC LIMIT 10"
 ```
 
-The waitlist for multi-step API checks (`api_workflows`) is still in place: send its launch email and delete its rows (*Feature waitlists*), then remove
-the key with a migration.
-
 ### Security log writes failing
 
 `HawkEyeSecurityLogWritesFailing`: changes are succeeding but some are missing from the log. The API logs `could not write to the security log`
@@ -342,9 +339,9 @@ FROM waitlist_entries GROUP BY feature ORDER BY confirmed DESC;
 **Announcing a launch.** Email each confirmed address for that feature once, including its own removal link (`<APP_BASE_URL>/waitlist/leave?token=<remove_token>`), then delete that feature's rows: the address was given for that one email and nothing else.
 
 ```sql
-SELECT email, remove_token FROM waitlist_entries WHERE feature = 'api_workflows' AND confirmed_at IS NOT NULL;
+SELECT email, remove_token FROM waitlist_entries WHERE feature = '<feature>' AND confirmed_at IS NOT NULL;
 -- after sending:
-DELETE FROM waitlist_entries WHERE feature = 'api_workflows';
+DELETE FROM waitlist_entries WHERE feature = '<feature>';
 ```
 
 **Adding or removing a feature** takes a migration (the table's `CHECK`), `waitlist.Features`, and the cards in `web/src/components/ComingSoon.tsx`. Remove a feature's card when it launches.

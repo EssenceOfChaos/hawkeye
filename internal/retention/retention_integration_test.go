@@ -232,9 +232,9 @@ func TestExpiredCredentialsAreTidied(t *testing.T) {
 func TestUnconfirmedWaitlistSignUpsAreDroppedWhenTheirLinkExpires(t *testing.T) {
 	e := newEnv(t)
 	e.pool.Exec(t.Context(), `INSERT INTO waitlist_entries (feature, email, confirm_token_hash, confirm_expires_at, confirmed_at) VALUES
-		('api_workflows', 'expired@example.com', '\x01', now() - interval '1 minute', NULL),
-		('api_workflows', 'pending@example.com', '\x02', now() + interval '1 day', NULL),
-		('api_workflows', 'confirmed@example.com', NULL, NULL, now() - interval '30 days')`)
+		('status_page_domains', 'expired@example.com', '\x01', now() - interval '1 minute', NULL),
+		('status_page_domains', 'pending@example.com', '\x02', now() + interval '1 day', NULL),
+		('status_page_domains', 'confirmed@example.com', NULL, NULL, now() - interval '30 days')`)
 	st, _ := e.job(100).RunOnce(t.Context())
 	if st.Tokens != 1 {
 		t.Fatalf("%+v", st)
