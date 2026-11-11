@@ -74,6 +74,23 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  # HawkEye's own status page (status/), a Cloudflare Worker. Deployed by hand or by Cloudflare, not by this workflow: see docs/operations.md.
+  status-page:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: status
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: status/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
   # The scripts that deploy and that turn the secret manager into the server's settings. They run for real against a fake Infisical, a throwaway
   # git repository and stubs for docker, so a mistake in them fails here and not during a release.
   scripts:

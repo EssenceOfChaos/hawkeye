@@ -86,6 +86,31 @@ func TestProductionRequiresHTTPS(t *testing.T) {
 	}
 }
 
+func TestStatusHeartbeatNeedsBothSettingsAndHTTPSInProduction(t *testing.T) {
+	base := map[string]string{"DATABASE_URL": "postgres://x"}
+	with := func(extra map[string]string) error {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for k, v := range extra {
+			m[k] = v
+		}
+		_, err := load(env(m))
+		return err
+	}
+	if err := with(map[string]string{"STATUS_HEARTBEAT_URL": "https://status.example.com/heartbeat"}); err == nil || !strings.Contains(err.Error(), "set both") {
+		t.Fatalf("a URL without a token: %v", err)
+	}
+	if err := with(map[string]string{"STATUS_HEARTBEAT_URL": "http://localhost:8787/heartbeat", "STATUS_HEARTBEAT_TOKEN": "t"}); err != nil {
+		t.Fatalf("plain http is fine outside production: %v", err)
+	}
+	base = map[string]string{"APP_ENV": "production", "DATABASE_URL": "postgres://x"}
+	if err := with(map[string]string{"STATUS_HEARTBEAT_URL": "http://status.example.com/heartbeat", "STATUS_HEARTBEAT_TOKEN": "t"}); err == nil || !strings.Contains(err.Error(), "STATUS_HEARTBEAT_URL: must use https") {
+		t.Fatalf("plain http in production: %v", err)
+	}
+}
+
 func TestEngineDefaultsAndValidation(t *testing.T) {
 	c, err := load(env(map[string]string{"DATABASE_URL": "postgres://x"}))
 	if err != nil {

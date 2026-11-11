@@ -4,7 +4,7 @@ import { api, ApiError } from '../api'
 import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { Field } from '../components/Field'
-import { brand } from '../brand'
+import { brand, STATUS_URL } from '../brand'
 import { CookieSettingsButton } from '../components/CookieBanner'
 
 interface Category {
@@ -141,7 +141,7 @@ export function ContactPage() {
             )}
           </>
         )}
-        <p className="hint"><Link to="/tools">Free tools</Link> · <Link to="/privacy">Privacy policy</Link> · <Link to="/terms">Terms of service</Link> · <CookieSettingsButton /> · <Link to="/">Home</Link></p>
+        <p className="hint"><a href={STATUS_URL}>HawkEye status</a> · <Link to="/tools">Free tools</Link> · <Link to="/privacy">Privacy policy</Link> · <Link to="/terms">Terms of service</Link> · <CookieSettingsButton /> · <Link to="/">Home</Link></p>
       </main>
     </div>
   )

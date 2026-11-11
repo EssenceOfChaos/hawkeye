@@ -2,7 +2,7 @@ import { BellAlertIcon, ChatBubbleLeftRightIcon, ClockIcon, CodeBracketIcon, Glo
 import type { ComponentType, ReactNode, SVGProps } from 'react'
 import { Link, NavLink } from 'react-router'
 import { useAuth } from '../../auth'
-import { brand } from '../../brand'
+import { brand, STATUS_URL } from '../../brand'
 import { CookieSettingsButton } from '../../components/CookieBanner'
 
 /** A docs article. KEEP IN STEP with the routes in App.tsx, the pages in seo.ts and the @app pattern in deploy/Caddyfile. */
@@ -520,7 +520,8 @@ function DocsShell({ children }: { children: ReactNode }) {
         <main>{children}</main>
       </div>
       <p className="hint">
-        <Link to="/">Home</Link> · <Link to="/tools">Free tools</Link> · <Link to="/contact">Contact us</Link> · <Link to="/privacy">Privacy policy</Link> ·{' '}
+        <Link to="/">Home</Link> · <Link to="/tools">Free tools</Link> · <Link to="/contact">Contact us</Link> · <a href={STATUS_URL}>HawkEye status</a> ·{' '}
+        <Link to="/privacy">Privacy policy</Link> ·{' '}
         <Link to="/terms">Terms of service</Link> · <CookieSettingsButton />
       </p>
     </div>

@@ -39,6 +39,7 @@ internal/account       data export, account deletion, change password
 internal/contact       the public contact form (triage topics, support email, acknowledgment)
 internal/domains       domain registration expiry: RDAP + WHOIS lookup, warnings, per-plan limits (see Domain expiry below)
 internal/regions       the configured check locations (CHECK_REGIONS)
+internal/statusbeat    the primary worker's heartbeat to HawkEye's own status page (status/, a Cloudflare Worker that checks HawkEye from outside)
 internal/ratelimit     shared PostgreSQL fixed-window rate limiter
 internal/canary        tells our own network trouble apart from a customer's site being down
 internal/errtrack      optional Sentry error tracking (scrubbed)

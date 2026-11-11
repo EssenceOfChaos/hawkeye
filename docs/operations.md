@@ -109,6 +109,55 @@ not depend on the thing that failed:
 Without these settings the stack still runs and evaluates every rule, but nothing is delivered, so self-hosted installs can opt out by leaving them empty or by removing
 `deploy/docker-compose.monitoring.yml` from the Compose command. Optional: set `SENTRY_DSN` for error tracking (events are scrubbed of emails, tokens and keys before leaving the process). See *Sentry shows nothing* below to check it.
 
+## HawkEye's status page (status.hawkeye.observer)
+
+Customers check `https://status.hawkeye.observer` when they think HawkEye is down, so it must not run on HawkEye's server. It is a Cloudflare Worker
+(`status/`) with its own database (Cloudflare D1, `hawkeye-status`). Every minute it loads `https://hawkeye.observer/` and
+`/api/v1/plans` from Cloudflare, and reads the newest heartbeat from the primary worker (`internal/statusbeat`), which reports how overdue the oldest
+queued check is. A component is down after two failures in a row, counted from the first; "Monitoring and alerts" is down when heartbeats stop for 3
+minutes or report checks more than 5 minutes overdue. Uptime is computed from those outages, from the day measuring began; nothing before it is
+counted or claimed. Raw check results are kept 14 days, outages and incidents for good.
+
+**Settings.** Cloudflare: the `DB` binding and the route are in `status/wrangler.toml`; the secrets `HEARTBEAT_TOKEN` and `ADMIN_TOKEN` are set with
+`wrangler secret put`. Infisical: `STATUS_HEARTBEAT_URL` (`https://status.hawkeye.observer/heartbeat`) and `STATUS_HEARTBEAT_TOKEN` (the same value as
+`HEARTBEAT_TOKEN`) in `prod`; `ADMIN_TOKEN`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in `staging`, which no server reads, because anything in
+`prod` is copied to the server.
+
+**First deploy** (from a laptop). Keep two files, mode 600, outside the repository: `~/.hawkeye-secrets/status-deploy.env` with
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (who may deploy), and `~/.hawkeye-secrets/status-worker.env` with `HEARTBEAT_TOKEN` and
+`ADMIN_TOKEN` (the Worker's own secrets). Keep them apart: everything in the second file is uploaded to the Worker.
+
+```sh
+cd status && npm ci
+set -a; . ~/.hawkeye-secrets/status-deploy.env; set +a
+npm run migrate                                                       # creates the tables in D1
+npx wrangler deploy --secrets-file ~/.hawkeye-secrets/status-worker.env   # the Worker, its secrets, and status.hawkeye.observer (DNS and certificate)
+```
+
+The secrets go up with the first version, so the page never runs without them (heartbeats would be refused and the history would start with a false
+outage). Later deploys can leave out `--secrets-file`: secrets are kept between versions.
+
+Then add the two `STATUS_HEARTBEAT_*` settings to `prod` in Infisical and run `scripts/deploy.sh secrets-only` (or a normal release); the worker starts
+sending heartbeats and "Monitoring and alerts" turns green within a minute. Later changes to `status/`: `npm run deploy` again (and `npm run migrate`
+when a migration was added), or connect the repository in Cloudflare (Workers Builds, root directory `status`) to deploy on every push to `main`. CI
+type-checks and tests it either way.
+
+**Posting an incident.** Write for customers: what they notice, not what broke inside. Status is `investigating`, `identified`, `monitoring` or
+`resolved` (which closes it). The page shows it within a minute.
+
+```sh
+S=https://status.hawkeye.observer; T="Authorization: Bearer $ADMIN_TOKEN"
+curl -s -X POST $S/api/incidents -H "$T" -H 'Content-Type: application/json' \
+  -d '{"title":"Alerts are delayed","status":"investigating","message":"Some alert emails are arriving late. Checks are running normally."}'
+# → {"id":4}
+curl -s -X POST $S/api/incidents/4/updates -H "$T" -H 'Content-Type: application/json' \
+  -d '{"status":"resolved","message":"Delivery is back to normal. Delayed alerts were all sent."}'
+```
+
+Outages themselves are recorded automatically; an incident note is for explaining one. If a check was wrong (Cloudflare could not reach us but
+customers could), say so in a note rather than deleting the outage: the numbers stay honest. To look at raw results:
+`npx wrangler d1 execute hawkeye-status --remote --command "SELECT * FROM checks ORDER BY at DESC LIMIT 20"`.
+
 ## Runbooks
 
 Each section is linked from an alert in `deploy/prometheus-alerts.yml`.
