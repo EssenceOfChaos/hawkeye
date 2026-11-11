@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/apitokens"
+	"hawkeye/internal/audit"
 	"hawkeye/internal/oauth"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/twofactor"
@@ -234,6 +235,7 @@ func (h *handlers) oauthApprove(c *echo.Context) error {
 	case err != nil:
 		return err
 	}
+	h.recordIn(c, in.OrganizationID, audit.AppConnected, target{"connected_app", v.Client.ID, v.Client.Name}, map[string]any{"scope": in.Access})
 	return c.JSON(http.StatusOK, map[string]string{"redirect": redirect})
 }
 
@@ -259,6 +261,7 @@ func (h *handlers) revokeGrant(c *echo.Context) error {
 	if err != nil {
 		return notFound
 	}
+	name := h.nameOf(c, `SELECT c.name FROM oauth_grants g JOIN oauth_clients c ON c.id = g.client_id WHERE g.id = $1 AND g.organization_id = $2`, id)
 	err = h.oauth.RevokeGrant(c.Request().Context(), currentOrg(c), id, currentUser(c).ID, c.Get(roleKey).(string))
 	if errors.Is(err, oauth.ErrGrantNotFound) {
 		return notFound
@@ -266,6 +269,7 @@ func (h *handlers) revokeGrant(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	h.recordOrg(c, audit.AppDisconnected, target{"connected_app", id.String(), name}, nil)
 	return c.NoContent(http.StatusNoContent)
 }
 

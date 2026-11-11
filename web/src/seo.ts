@@ -111,6 +111,7 @@ export const PAGES: readonly PageMeta[] = [
   { path: '/notifications', title: 'Notifications | HawkEye', description: 'Your HawkEye alert channels.', index: false },
   { path: '/team', title: 'Team | HawkEye', description: 'The people on your HawkEye team.', index: false },
   { path: '/api-keys', title: 'API keys | HawkEye', description: 'Your HawkEye API keys.', index: false },
+  { path: '/security-log', title: 'Security log | HawkEye', description: 'Who changed what in your HawkEye organization.', index: false },
   { path: '/connect', title: 'Connect an app | HawkEye', description: 'Allow an app such as Claude to use your HawkEye account.', index: false },
   { path: '/domains', title: 'Domains | HawkEye', description: 'Your HawkEye domain expiry monitoring.', index: false },
   { path: '/maintenance', title: 'Maintenance windows | HawkEye', description: 'Your HawkEye maintenance windows.', index: false },

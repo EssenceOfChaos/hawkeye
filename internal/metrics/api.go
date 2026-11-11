@@ -27,6 +27,8 @@ type APIMetrics struct {
 	// MCP server (internal/mcpserver): tool calls by tool name and outcome (ok, refused, error), and how long they took.
 	MCPToolCalls    *prometheus.CounterVec
 	MCPToolDuration *prometheus.HistogramVec
+	// Security log (internal/audit): events written, by outcome (ok, error). An error means an action happened but is missing from the log.
+	AuditWrites *prometheus.CounterVec
 }
 
 func NewAPI() *APIMetrics {
@@ -45,8 +47,9 @@ func NewAPI() *APIMetrics {
 		MCPToolCalls: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_mcp_tool_calls_total", Help: "MCP tool calls by tool and outcome (ok, refused, error)."}, []string{"tool", "outcome"}),
 		MCPToolDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "hawkeye_mcp_tool_duration_seconds", Help: "MCP tool call latency by tool.",
 			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}}, []string{"tool"}),
+		AuditWrites: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_audit_writes_total", Help: "Security log events written, by outcome (ok, error)."}, []string{"outcome"}),
 	}
-	r.MustRegister(m.Requests, m.Duration, m.InFlight, m.RateLimited, m.LimiterErrs, m.Panics, m.EmailSkips, m.MCPToolCalls, m.MCPToolDuration)
+	r.MustRegister(m.Requests, m.Duration, m.InFlight, m.RateLimited, m.LimiterErrs, m.Panics, m.EmailSkips, m.MCPToolCalls, m.MCPToolDuration, m.AuditWrites)
 	m.App = newOn(r)
 	return m
 }

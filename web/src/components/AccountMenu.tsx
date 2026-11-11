@@ -3,13 +3,13 @@ import { NavLink, useLocation } from 'react-router'
 import { useDismiss } from '../hooks'
 
 /**
- * The person icon at the right of the header. It opens the account links (settings, team, API keys, billing) and Log out, so the main navigation keeps only
+ * The person icon at the right of the header. It opens the account links (settings, team, API keys, the security log for owners, billing) and Log out, so the main navigation keeps only
  * the pages used every day. While it is closed, hovering or focusing the icon shows the signed-in address in a tooltip; once open, the address is in the menu.
  *
  * It is a disclosure, not an ARIA menu: a plain button that shows or hides a group of ordinary links, so it works with a keyboard and a screen reader without
  * arrow-key handling. It closes on Escape (focus returns to the icon), on a click outside, when focus leaves it, and on any navigation.
  */
-export function AccountMenu({ email, onLogout }: { email: string; onLogout: () => void }) {
+export function AccountMenu({ email, owner = false, onLogout }: { email: string; owner?: boolean; onLogout: () => void }) {
   const { pathname } = useLocation()
   // The page it was opened on, not a flag: it counts as closed as soon as the address changes, with no effect to reset it.
   const [openAt, setOpenAt] = useState<string | null>(null)
@@ -57,6 +57,7 @@ export function AccountMenu({ email, onLogout }: { email: string; onLogout: () =
           <NavLink to="/account" className={link} onClick={() => setOpenAt(null)}>Account settings</NavLink>
           <NavLink to="/team" className={link} onClick={() => setOpenAt(null)}>Team</NavLink>
           <NavLink to="/api-keys" className={link} onClick={() => setOpenAt(null)}>API keys</NavLink>
+          {owner && <NavLink to="/security-log" className={link} onClick={() => setOpenAt(null)}>Security log</NavLink>}
           <NavLink to="/billing" className={link} onClick={() => setOpenAt(null)}>Billing</NavLink>
           <button type="button" className="account-logout" onClick={onLogout}>Log out</button>
         </div>

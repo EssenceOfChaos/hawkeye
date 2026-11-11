@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/incidents"
 )
 
@@ -52,6 +53,8 @@ func (h *handlers) postIncidentUpdate(c *echo.Context) error {
 		return mapError(err)
 	}
 	h.statusPages.Forget() // public pages show it on their next request, not after their cache expires
+	h.recordOrg(c, audit.IncidentUpdatePosted, target{"incident", id.String(), ""},
+		map[string]any{"update_id": u.ID, "status": u.Status, "message": excerpt(u.Message, 200)})
 	return c.JSON(http.StatusCreated, map[string]any{"update": u})
 }
 
@@ -68,5 +71,6 @@ func (h *handlers) deleteIncidentUpdate(c *echo.Context) error {
 		return mapError(err)
 	}
 	h.statusPages.Forget()
+	h.recordOrg(c, audit.IncidentUpdateDeleted, target{"incident", id.String(), ""}, map[string]any{"update_id": updateID})
 	return c.NoContent(http.StatusNoContent)
 }

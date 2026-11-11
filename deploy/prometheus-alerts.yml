@@ -27,6 +27,10 @@ groups:
         expr: increase(hawkeye_rate_limiter_errors_total[10m]) > 0
         labels: {severity: ticket}
         annotations: {summary: "The shared rate limiter's database is failing: limits are being skipped (fail-open)"}
+      - alert: HawkEyeSecurityLogWritesFailing
+        expr: increase(hawkeye_audit_writes_total{outcome="error"}[15m]) > 0
+        labels: {severity: ticket}
+        annotations: {summary: "Changes are being made but some are missing from the security log", runbook: "docs/operations.md#security-log-writes-failing"}
       # The free checkers (SSL certificate checker, website status checker: POST /api/v1/tools/{ssl,site}-check) are public and connect out to hosts
       # visitors name. Ordinary use is a trickle; these fire on sustained volume, on people being turned away, and on bots running into the per-IP
       # limits. If they fire: look at the `ssl check` / `site check` log lines, and consider a bot challenge (docs/operations.md#free-tools-abuse and docs/security-review.md, item 12).

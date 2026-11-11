@@ -41,6 +41,7 @@ func TestEveryMetricInTheAlertRulesIsActuallyExported(t *testing.T) {
 	api.RateLimited.WithLabelValues("global")
 	api.Observe("POST", "/api/v1/tools/ssl-check", 200, 0)
 	api.EmailSkips.WithLabelValues("forgot")
+	api.AuditWrites.WithLabelValues("error")
 	pool, err := pgxpool.New(t.Context(), "postgres://u:p@127.0.0.1:1/none") // connects lazily, so this needs no database
 	if err != nil {
 		t.Fatal(err)

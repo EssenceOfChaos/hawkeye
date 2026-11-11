@@ -28,7 +28,7 @@ const SUPPORT = 'customer_support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 8, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 10, 2026</p>
       <p>
         HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -103,6 +103,13 @@ export function PrivacyPage() {
         codes, and security events. We keep these in server logs to run and secure the Service and diagnose problems. Our web server removes one-time tokens from logged addresses and does
         not log cookies, authorization headers, or the page you came from. Server logs are kept on our hosting server and rotated automatically by size, so they cover roughly the most
         recent days to weeks depending on traffic.
+      </p>
+      <p>
+        We keep a <strong>security log</strong> so you can see what happened to your account and workspace. For sign-ins (including failed attempts on your
+        account), sign-outs, password and two-factor changes and data exports, it records the time, the IP address and browser or tool used, and is shown only to you.
+        For changes in a workspace (to monitors, status pages, maintenance windows, incident updates, alert recipients, API keys, connected apps and the team), it records who made
+        the change (their email address, and the name of the API key or connected app if one was used), what changed, the time, the IP address and browser or tool used, and is
+        shown only to the workspace’s owner. A failed sign-in for an address that has no account is not recorded.
       </p>
       <p>
         To limit abuse we keep short-lived rate-limit counters. They are keyed by a one-way hash of the IP address or email address involved and are deleted within 24 hours.
@@ -250,6 +257,7 @@ export function PrivacyPage() {
         <li><strong>Two-factor sign-in</strong> data is deleted when you turn it off or close your account; the sign-in step expires after 10 minutes.</li>
         <li><strong>Copies of Stripe event notifications</strong> are deleted after 90 days (180 days if processing failed).</li>
         <li><strong>Rate-limit counters</strong> are deleted within 24 hours.</li>
+        <li><strong>Security log</strong> entries are deleted after one year. Your own entries are deleted at once when you close your account; a workspace’s entries are deleted with the workspace, and entries about changes you made in someone else’s workspace (with your email address) stay in that workspace’s log until they are a year old.</li>
         <li><strong>Report name and logo</strong> are deleted when you remove them or close your account. Reports themselves are generated when you ask for them or on the 1st of the month, are not stored by us, and, once emailed, are in your mailbox.</li>
         <li><strong>Feature sign-ups</strong> that are not confirmed are deleted once the 48-hour confirmation link expires. Confirmed sign-ups are kept until we have emailed you about that feature’s launch, you remove yourself with the link in our email, or you close your account, whichever is first.</li>
         <li><strong>Support messages</strong> are kept in our support mailbox for as long as needed to help you and to keep a record of the request.</li>

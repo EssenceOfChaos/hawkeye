@@ -294,3 +294,22 @@ func TestOldBillingEventsAreTrimmedByStatus(t *testing.T) {
 		t.Fatalf("remaining %v, want %v", remaining, want)
 	}
 }
+
+func TestSecurityLogIsKeptForAYear(t *testing.T) {
+	e := newEnv(t)
+	org := e.org(t, "agency", "active")
+	if _, err := e.pool.Exec(t.Context(), `INSERT INTO audit_events (organization_id, action, actor_type, occurred_at)
+		VALUES ($1, 'monitor.created', 'user', now() - interval '366 days'), ($1, 'monitor.deleted', 'user', now() - interval '364 days')`, org); err != nil {
+		t.Fatal(err)
+	}
+	st, err := e.job(1).RunOnce(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.AuditEvents != 1 {
+		t.Fatalf("removed %d events, want the one older than a year", st.AuditEvents)
+	}
+	if n := e.count(t, `SELECT count(*) FROM audit_events WHERE action = 'monitor.deleted'`); n != 1 {
+		t.Fatalf("the event from 364 days ago went too: %d left", n)
+	}
+}

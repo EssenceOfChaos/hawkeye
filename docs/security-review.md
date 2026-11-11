@@ -43,7 +43,8 @@ SQL: all queries are parameterized; the few places that assemble SQL (dynamic `U
 1. **Privacy policy and Terms**: reviewed and approved by counsel on 2026-11-08 (`docs/legal-placeholders.md`). Resolved; have counsel look again
    when a feature collects a new kind of personal data.
 2. **`deploy/egress-filter.sh` is untested on Linux.** The application-level SSRF guard is tested, but run `scripts/verify-egress.sh` on the real host; without the firewall a bug in `safehttp` would be exploitable.
-3. **No independent penetration test**; no formal audit log.
+3. **No independent penetration test.** A security log now records sign-ins and changes (`docs/security.md#security-log`); it is append-only in the
+   application, but a database superuser can still change it, and it is not shipped anywhere off the database.
 4. `govulncheck` lists one vulnerability in an unused `x/crypto/openpgp` package with no upstream fix; not reachable from our code, accepted.
 5. Auth emails are sent synchronously by the API; a slow SMTP relay slows those requests (bounded by timeouts).
 6. Per-account login ceiling can be used to briefly block someone's logins (see `docs/security.md`).
@@ -61,8 +62,8 @@ SQL: all queries are parameterized; the few places that assemble SQL (dynamic `U
 18. **API keys skip CSRF and act without a browser session** (`docs/security.md#api-keys`). The protections are that keys work only on routes
     deliberately opened to them (pinned by a test that walks the whole route table), that a request with an `Authorization` header never falls back to
     a cookie, and that account, billing, team, alert-recipient and key-management routes are session-only. Residual risks: a leaked write key can change
-    or delete monitors, status pages and maintenance windows within its owner's role until it is revoked or expires (no audit log yet shows which key did
-    what); a key with no expiry lasts until someone revokes it; and without the shared limiter (single process, tests) the per-key limits do not apply.
+    or delete monitors, status pages and maintenance windows within its owner's role until it is revoked or expires (the security log names the key behind each
+    change, so what it did can be traced); a key with no expiry lasts until someone revokes it; and without the shared limiter (single process, tests) the per-key limits do not apply.
 19. **The MCP server lets an AI assistant act with a person's API key** (`docs/security.md#mcp-server`). It adds no new authority: the same keys,
     checks and budgets as the REST API, compared tool by tool in a test. Residual risks: an assistant can be talked into calling a write tool by text
     it reads (a monitor name, an incident summary, a web page in the same conversation), so a read and write key given to an assistant can pause or

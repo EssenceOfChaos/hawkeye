@@ -60,7 +60,7 @@ The API serves its metrics on a **separate port that is never published or proxi
 
 ## Alerting and external monitoring
 
-`deploy/prometheus-alerts.yml` contains 34 alert rules covering API errors and latency, panics, the shared limiter, database pool pressure, workers not polling, scheduler lag,
+`deploy/prometheus-alerts.yml` contains 35 alert rules covering API errors and latency, panics, the shared limiter, security log writes, database pool pressure, workers not polling, scheduler lag,
 queue backlog/backpressure, missed checks, dropped jobs, mass check failures (a sign of **our** network problem), stale retention, alert-email backlog/failures, billing
 failures/risk events, the free checkers (heavy use, people turned away, clients hitting their limits), and the alerting itself (below). A unit test fails if a rule names a metric
 the code does not export, and `scripts/check-alerting.sh` (run by CI) validates the rules with `promtool`, runs the rule tests in `deploy/prometheus/alerting_test.yml`, and checks the
@@ -80,7 +80,7 @@ not depend on the thing that failed:
 
 | What breaks | Who tells you |
 |---|---|
-| Something inside the app (the 30 app rules) | Alertmanager, on Telegram |
+| Something inside the app (the 31 app rules) | Alertmanager, on Telegram |
 | The worker's or API's metrics stop answering | `HawkEyeMetricsUnreachable` / `HawkEyeMetricsMissing`, on Telegram |
 | Prometheus or Alertmanager stops, or Telegram keeps refusing our messages | The Watchdog pings stop; healthchecks.io alerts you |
 | The whole server, the site or the database | `scripts/heartbeat.sh` pings stop or report a failure; healthchecks.io alerts you |
@@ -178,6 +178,27 @@ refresh tokens hourly, and connections revoked over 30 days ago. `DISABLE_API_KE
 counts tool calls (`ok`, `refused` for permission, plan, input and budget refusals, `error` for failures on our side) and
 `hawkeye_mcp_tool_duration_seconds{tool}` their latency; an `error` outcome is also logged as `MCP tool failed` with the tool and organization.
 The per-key limits and `DISABLE_API_KEYS` (see above) apply to it too.
+
+### Security log
+
+Owners read their organization's log under **Security log** in the account menu, and everyone reads their own sign-ins on the Account page
+(`docs/security.md#security-log`). For support and investigations, read it on the server:
+
+```
+docker exec hawkeye-db-1 psql -U hawkeye -d monitoring -c "
+  SELECT occurred_at, action, actor_type, actor_email, credential_name, target_type, target_name, details, host(ip)
+  FROM audit_events WHERE organization_id = '<org id>' ORDER BY id DESC LIMIT 50"
+```
+
+Use `account_id = '<user id>'` for a person's own log, `credential_id = '<api key id>'` for everything one key (or, for a connected app, one grant) did,
+and `request_id` to match an event with the API's request log line. Rows can't be changed (`audit_events is append-only`); they are removed after a year.
+
+### Security log writes failing
+
+`HawkEyeSecurityLogWritesFailing`: changes are succeeding but some are missing from the log. The API logs `could not write to the security log`
+with the action and the error. The usual causes are the database refusing writes (disk full, connections exhausted: see *Database growing* and
+`HawkEyeDbPoolSaturated`), or a release that records an action the database's `action` check or the `audit` package doesn't know (a bug: the error
+names the action). Nothing needs replaying; once writes succeed again new events are recorded. Note the window in case someone asks what happened in it.
 
 ### Locked out: lost authenticator app and recovery codes
 

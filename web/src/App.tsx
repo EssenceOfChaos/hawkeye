@@ -23,6 +23,7 @@ import { MonitorFormPage } from './pages/MonitorFormPage'
 import { StatusPage } from './pages/StatusPage'
 import { TeamPage } from './pages/TeamPage'
 import { ApiKeysPage } from './pages/ApiKeysPage'
+import { SecurityLogPage } from './pages/SecurityLogPage'
 import { ConnectPage } from './pages/ConnectPage'
 import { StatusPageEditor, StatusPagesPage } from './pages/StatusPageSettings'
 import { PrivacyPage, TermsPage } from './pages/LegalPages'
@@ -122,6 +123,7 @@ export function AppRoutes() {
         <Route path="/incidents" element={<IncidentsPage />} />
         <Route path="/team" element={<TeamPage />} />
         <Route path="/api-keys" element={<ApiKeysPage />} />
+        <Route path="/security-log" element={<SecurityLogPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/domains" element={<DomainsPage />} />
         <Route path="/maintenance" element={<MaintenancePage />} />

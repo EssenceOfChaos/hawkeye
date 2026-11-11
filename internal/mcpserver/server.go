@@ -23,6 +23,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"hawkeye/internal/apitokens"
+	"hawkeye/internal/audit"
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/maintenance"
 	"hawkeye/internal/metrics"
@@ -52,6 +53,7 @@ type Deps struct {
 	Log         *slog.Logger
 	AppBaseURL  string // for status page and ping addresses
 	Version     string
+	Audit       *audit.Recorder // the security log; nil records nothing
 }
 
 // instructions describes the server to clients. It says what the data is and how much to trust it, nothing about how to behave otherwise.

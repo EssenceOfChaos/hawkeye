@@ -21,6 +21,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 - Checks from several locations on paid plans, where offered.
 - Works with Claude: HawkEye is listed in Claude's connector directory (https://claude.ai/directory/hawkeye; add it there or in Claude under Customize, then Connectors, and sign in to HawkEye). The MCP server at https://hawkeye.observer/mcp also lets Claude Code and other MCP clients can read monitors, uptime and incidents and (with a read and write key) pause monitors, add monitors, post incident updates and schedule maintenance. It uses the same API keys, or MCP clients can connect by signing in (OAuth with PKCE).
 - Two-factor sign-in with an authenticator app, with recovery codes, on every plan; on a team, the owner can require it for everyone.
+- A security log on every plan: the owner sees who changed what in the organization (monitors, status pages, maintenance, incident updates, alert recipients, API keys, connected apps, team), when, from where, and with which API key or connected app; each person sees their own sign-ins, including failed ones. Kept for a year.
 - A public API with API keys: read-only keys on every plan, read and write keys on paid plans. Keys expire after 90 days unless the owner chooses otherwise, and can be revoked at any time.
 
 ## Pages

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/twofactor"
@@ -136,6 +137,7 @@ func (h *handlers) twoFactorEnable(c *echo.Context) error {
 	if err != nil {
 		return mapTwoFactorError(err)
 	}
+	h.recordAccount(c, audit.TwoFactorEnabled, nil)
 	return c.JSON(http.StatusOK, map[string]any{"recovery_codes": codes})
 }
 
@@ -158,6 +160,7 @@ func (h *handlers) twoFactorDisable(c *echo.Context) error {
 	if err := h.twoFactor.Disable(ctx, u.ID, u.Email, in.Code); err != nil {
 		return mapTwoFactorError(err)
 	}
+	h.recordAccount(c, audit.TwoFactorDisabled, nil)
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -176,6 +179,7 @@ func (h *handlers) twoFactorRecoveryCodes(c *echo.Context) error {
 	if err != nil {
 		return mapTwoFactorError(err)
 	}
+	h.recordAccount(c, audit.RecoveryCodesRegenerated, nil)
 	return c.JSON(http.StatusOK, map[string]any{"recovery_codes": codes})
 }
 
@@ -217,6 +221,7 @@ func (h *handlers) setOrgTwoFactor(c *echo.Context) error {
 	if err := h.twoFactor.SetRequired(c.Request().Context(), currentUser(c).ID, id, in.Required); err != nil {
 		return mapTwoFactorError(err)
 	}
+	h.recordIn(c, id, audit.TwoFactorRequirement, target{}, map[string]any{"required": in.Required})
 	return h.orgTwoFactor(c)
 }
 

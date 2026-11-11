@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/organizations"
 
 	"github.com/google/uuid"
@@ -49,9 +50,17 @@ func (h *handlers) updateOrg(c *echo.Context) error {
 	if err := bind(c, &in); err != nil {
 		return err
 	}
-	o, err := h.orgs.Rename(c.Request().Context(), currentUser(c).ID, id, in.Name)
+	ctx := c.Request().Context()
+	before, err := h.orgs.Get(ctx, currentUser(c).ID, id)
 	if err != nil {
 		return mapError(err)
+	}
+	o, err := h.orgs.Rename(ctx, currentUser(c).ID, id, in.Name)
+	if err != nil {
+		return mapError(err)
+	}
+	if before.Name != o.Name {
+		h.recordIn(c, id, audit.OrganizationRenamed, target{"organization", id.String(), o.Name}, map[string]any{"from": before.Name, "to": o.Name})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"organization": o})
 }

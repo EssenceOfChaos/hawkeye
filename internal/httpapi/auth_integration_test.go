@@ -19,6 +19,7 @@ import (
 
 	"hawkeye/internal/account"
 	"hawkeye/internal/apitokens"
+	"hawkeye/internal/audit"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
@@ -86,8 +87,12 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 	if o.clock != nil {
 		tf.WithClock(o.clock)
 	}
+	auditLog := audit.New(pool, log)
+	if o.metrics != nil {
+		auditLog.WithMetrics(o.metrics.AuditWrites)
+	}
 	svc, err := auth.NewService(pool, mail, log, auth.Config{
-		AppBaseURL: "http://app.test", Hasher: auth.Hasher{Memory: 8, Time: 1, Threads: 1}, TwoFactor: tf,
+		AppBaseURL: "http://app.test", Hasher: auth.Hasher{Memory: 8, Time: 1, Threads: 1}, TwoFactor: tf, Audit: auditLog,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -97,22 +102,23 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 		Logger: log, DB: pool, RequestTimeout: 10 * time.Second, BodyLimit: 1_000_000,
 		Auth: svc, Orgs: organizations.NewService(pool), AuthRateLimitPerMin: rateLimit,
 		Plans: planSvc, Monitors: monitors.NewService(pool, planSvc, monitors.WithSecretBox(testutil.SecretBox()), monitors.WithDomainSync(domains.SyncTx)), Pool: pool, PgPool: pool,
-		Notifications: notifications.NewService(pool, mail, log, "http://app.test", "alerts@test", notifications.WithTelegramBot(o.telegram)),
-		TelegramBot:   o.telegram,
-		Maintenance:   maintenance.NewService(pool, planSvc),
-		Domains:       domains.NewService(pool, planSvc),
-		StatusPages:   statuspage.NewService(pool, planSvc),
-		Badges:        badges.NewService(pool),
-		Heartbeats:    heartbeats.NewService(pool, checks.NewStore(pool, heartbeats.Thresholds, incidents.Engine{})),
-		Billing:       billing.NewService(pool, o.provider, o.billingCfg, metrics.New(), log),
-		Account:       account.NewService(pool, svc, o.provider, mail, log, "https://app.example.com"),
-		Contact:       contact.NewService(mail, log, "support@test.example", "alerts@test.example", "https://app.example.com"),
-		Invitations:   invitations.NewService(pool, planSvc, mail, log, "http://app.test"),
-		Lifecycle:     lifecycle.NewService(pool),
-		Branding:      branding.NewService(pool),
-		SSLCheck:      o.ssl,
-		SiteCheck:     o.site,
-		HSTS:          o.hsts, Metrics: o.metrics, Errors: o.reporter, EmailActionLimitPerHour: o.emailPerH, GlobalRateLimitPerMin: o.global,
+		Notifications: notifications.NewService(pool, mail, log, "http://app.test", "alerts@test", notifications.WithTelegramBot(o.telegram),
+			notifications.WithAudit(auditLog)),
+		TelegramBot: o.telegram,
+		Maintenance: maintenance.NewService(pool, planSvc),
+		Domains:     domains.NewService(pool, planSvc),
+		StatusPages: statuspage.NewService(pool, planSvc),
+		Badges:      badges.NewService(pool),
+		Heartbeats:  heartbeats.NewService(pool, checks.NewStore(pool, heartbeats.Thresholds, incidents.Engine{})),
+		Billing:     billing.NewService(pool, o.provider, o.billingCfg, metrics.New(), log),
+		Account:     account.NewService(pool, svc, o.provider, mail, log, "https://app.example.com"),
+		Contact:     contact.NewService(mail, log, "support@test.example", "alerts@test.example", "https://app.example.com"),
+		Invitations: invitations.NewService(pool, planSvc, mail, log, "http://app.test"),
+		Lifecycle:   lifecycle.NewService(pool),
+		Branding:    branding.NewService(pool),
+		SSLCheck:    o.ssl,
+		SiteCheck:   o.site,
+		HSTS:        o.hsts, Metrics: o.metrics, Errors: o.reporter, EmailActionLimitPerHour: o.emailPerH, GlobalRateLimitPerMin: o.global,
 	}
 	if o.shared {
 		opts.Limiter = ratelimit.New(pool)
@@ -120,6 +126,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 	opts.AppBaseURL, opts.Version = "http://app.test", "test"
 	opts.TwoFactor = tf
 	opts.Waitlist = waitlist.NewService(pool, mail, log, "http://app.test")
+	opts.Audit = auditLog
 	opts.OAuthTokenPerMin = o.oauthPerM
 	if !o.noAPIKeys {
 		opts.OAuth = oauth.NewService(pool, planSvc, tf, mail, log, "http://app.test")

@@ -39,7 +39,7 @@ func verifyFromContext(_ context.Context, _ string, req *http.Request) (*auth.To
 
 func (h *handlers) mcpEndpoint(o Options) echo.HandlerFunc {
 	srv := mcpserver.New(mcpserver.Deps{Pool: o.PgPool, Plans: o.Plans, Monitors: o.Monitors, Maintenance: o.Maintenance, StatusPages: o.StatusPages,
-		Limiter: o.Limiter, Metrics: o.Metrics, Log: o.Logger, AppBaseURL: o.AppBaseURL, Version: o.Version})
+		Limiter: o.Limiter, Metrics: o.Metrics, Log: o.Logger, AppBaseURL: o.AppBaseURL, Version: o.Version, Audit: o.Audit})
 	sdk := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	// Keys may have no expiry date (the person chose that), so the SDK must not insist on one; keyPrincipal has already refused expired keys.
 	withCaller := auth.RequireBearerToken(verifyFromContext, &auth.RequireBearerTokenOptions{AllowMissingExpiration: true})(sdk)

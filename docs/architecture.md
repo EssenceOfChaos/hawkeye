@@ -16,6 +16,7 @@ internal/invitations   team invitations: an emailed, single-address link that ad
 internal/oauth         OAuth 2.1 for the MCP server: registered clients (cmd/oauthclient), consent, codes with PKCE, rotating refresh tokens, revocation; access tokens are API tokens of their own kind
 internal/mcpserver     the MCP server (POST /mcp, mounted in internal/httpapi/mcp.go): 15 tools over the same services as the REST handlers, acting as the API key's person with the same checks
 internal/twofactor     two-factor sign-in: TOTP (RFC 6238, codes used once), sealed secrets, hashed recovery codes, and an owner's requirement for their organization (7-day grace per member)
+internal/audit         the security log: append-only events (who, with which key or app, from where), an owner's organization log and each person's account log, 365 days
 internal/apitokens     API keys: create (shown once, hashed), list, revoke, authenticate as a person in one organization with their current role; emails before and when keys expire (worker)
 internal/plans         plan catalog + the entitlement service (all limit decisions live here)
 internal/monitors      monitor CRUD, validation, soft delete, per-organization scoping

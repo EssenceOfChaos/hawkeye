@@ -19,6 +19,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"hawkeye/internal/audit"
 )
 
 // HawkEye's own Telegram bot. A customer connects a chat with two taps: the app gives them a t.me link carrying a one-time code, Telegram opens
@@ -326,11 +328,21 @@ func (s *Service) connectTelegramChat(ctx context.Context, chat telegramChat, co
 	var org uuid.UUID
 	var orgName string
 	var created bool
+	var settingID uuid.UUID
+	who := audit.Actor{Type: audit.ActorSystem}
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		var by *uuid.UUID
 		err := tx.QueryRow(ctx, `UPDATE telegram_connect_codes SET used_at = now()
-			WHERE code_hash = $1 AND used_at IS NULL AND expires_at > now() RETURNING organization_id`, hashToken(code)).Scan(&org)
+			WHERE code_hash = $1 AND used_at IS NULL AND expires_at > now() RETURNING organization_id, created_by`, hashToken(code)).Scan(&org, &by)
 		if err != nil {
 			return err
+		}
+		// The chat is connected by whoever made the link (someone in the chat tapped Start with it).
+		if by != nil {
+			var addr string
+			if tx.QueryRow(ctx, `SELECT email FROM users WHERE id = $1`, *by).Scan(&addr) == nil {
+				who = audit.User(*by, addr)
+			}
 		}
 		if err := tx.QueryRow(ctx, `SELECT name FROM organizations WHERE id = $1 FOR UPDATE`, org).Scan(&orgName); err != nil {
 			return err
@@ -342,10 +354,14 @@ func (s *Service) connectTelegramChat(ctx context.Context, chat telegramChat, co
 		if n >= MaxSettingsPerOrganization {
 			return ErrTooMany
 		}
-		tag, err := tx.Exec(ctx, `INSERT INTO notification_settings (organization_id, channel, hawkeye_bot, destination, label, fingerprint, verified_at)
+		err = tx.QueryRow(ctx, `INSERT INTO notification_settings (organization_id, channel, hawkeye_bot, destination, label, fingerprint, verified_at)
 			VALUES ($1, 'telegram', true, $2, $3, $4, now())
-			ON CONFLICT (organization_id, channel, fingerprint) WHERE fingerprint IS NOT NULL DO NOTHING`, org, chat.id(), chat.label(), telegramFingerprint(chat.id()))
-		created = tag.RowsAffected() == 1
+			ON CONFLICT (organization_id, channel, fingerprint) WHERE fingerprint IS NOT NULL DO NOTHING RETURNING id`,
+			org, chat.id(), chat.label(), telegramFingerprint(chat.id())).Scan(&settingID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil // this chat was already connected
+		}
+		created = err == nil
 		return err
 	})
 	switch {
@@ -359,6 +375,8 @@ func (s *Service) connectTelegramChat(ctx context.Context, chat telegramChat, co
 		return reply(chat, "This chat already receives HawkEye alerts for "+clean(orgName)+"."), nil
 	}
 	s.log.InfoContext(ctx, "telegram chat connected", "organization_id", org, "chat_type", chat.Type)
+	s.audit.Record(ctx, audit.Event{Action: audit.AlertDestinationAdded, OrganizationID: org, Actor: who, TargetType: "alert_destination",
+		TargetID: settingID.String(), TargetName: chat.label(), Details: map[string]any{"channel": ChannelTelegram, "via": "hawkeye_bot"}})
 	return reply(chat, "✅ Connected to HawkEye ("+clean(orgName)+").\n\nThis chat will get an alert when a monitor goes offline and when it recovers, and before SSL certificates and domains expire.\n\nTo stop, send /stop or remove me from the chat."), nil
 }
 
@@ -368,14 +386,37 @@ func (s *Service) forgetTelegramChat(ctx context.Context, chatID string) error {
 }
 
 func (s *Service) forgetTelegramChatCount(ctx context.Context, chatID string) (int64, error) {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM notification_settings WHERE hawkeye_bot AND destination = $1`, chatID)
+	rows, err := s.pool.Query(ctx, `DELETE FROM notification_settings WHERE hawkeye_bot AND destination = $1
+		RETURNING id, organization_id, COALESCE(label, '')`, chatID)
 	if err != nil {
 		return 0, err
 	}
-	if tag.RowsAffected() > 0 {
-		s.log.InfoContext(ctx, "telegram chat disconnected", "destinations", tag.RowsAffected())
+	type gone struct {
+		id, org uuid.UUID
+		label   string
 	}
-	return tag.RowsAffected(), nil
+	var removed []gone
+	for rows.Next() {
+		var g gone
+		if err := rows.Scan(&g.id, &g.org, &g.label); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		removed = append(removed, g)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	for _, g := range removed {
+		// Someone in the chat sent /stop or removed the bot: nobody signed in to HawkEye did it.
+		s.audit.Record(ctx, audit.Event{Action: audit.AlertDestinationRemoved, OrganizationID: g.org, Actor: audit.Actor{Type: audit.ActorSystem},
+			TargetType: "alert_destination", TargetID: g.id.String(), TargetName: g.label, Details: map[string]any{"channel": ChannelTelegram, "via": "hawkeye_bot"}})
+	}
+	if n := len(removed); n > 0 {
+		s.log.InfoContext(ctx, "telegram chat disconnected", "destinations", n)
+	}
+	return int64(len(removed)), nil
 }
 
 func (s *Service) moveTelegramChat(ctx context.Context, from, to string) error {

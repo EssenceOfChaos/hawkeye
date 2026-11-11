@@ -33,6 +33,9 @@ function setup(o: Setup = {}) {
         ? json(200, { user: { id: 'u', email: 'me@example.com', email_verified_at: o.verified === false ? null : '2026-01-01T00:00:00Z' }, organizations: [{ id: 'o', name: 'Org', role: 'owner' }] })
         : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } })
     }
+    if (url.includes('/account/security-log')) {
+      return Promise.resolve(new Response(JSON.stringify({ events: [], next_before: null, categories: ['account'], retention_days: 365 }), { status: 200 }))
+    }
     if (url.includes('/account/export')) return o.exportResponse ? o.exportResponse() : Promise.resolve(new Response('{"user":{}}', { status: 200 }))
     if (url.includes('/account/email-preferences')) {
       if (init?.method === 'PUT') {

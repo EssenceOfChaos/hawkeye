@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 
+	"hawkeye/internal/audit"
 	"hawkeye/internal/monitors"
 )
 
@@ -69,9 +70,49 @@ func (h *handlers) bulkMonitors(c *echo.Context) error {
 	if err := bind(c, &in); err != nil {
 		return err
 	}
-	n, err := h.monitors.Bulk(c.Request().Context(), currentOrg(c), in)
+	ctx := c.Request().Context()
+	// Names first, so deleted monitors can still be named in the log.
+	names, err := h.monitorNames(c, in.MonitorIDs)
+	if err != nil {
+		return err
+	}
+	n, err := h.monitors.Bulk(ctx, currentOrg(c), in)
 	if err != nil {
 		return mapError(err)
 	}
+	action, details := audit.MonitorChanged, map[string]any{"bulk": in.Action}
+	switch in.Action {
+	case monitors.BulkPause:
+		action = audit.MonitorPaused
+	case monitors.BulkResume:
+		action = audit.MonitorResumed
+	case monitors.BulkDelete:
+		action = audit.MonitorDeleted
+	}
+	for id, name := range names {
+		h.recordOrg(c, action, target{"monitor", id.String(), name}, details)
+	}
 	return c.JSON(http.StatusOK, map[string]any{"updated": n})
+}
+
+// monitorNames maps the organization's monitors among ids to their names (unknown and deleted ids are left out).
+func (h *handlers) monitorNames(c *echo.Context, ids []uuid.UUID) (map[uuid.UUID]string, error) {
+	rows, err := h.db.Query(c.Request().Context(), `SELECT id, name FROM monitors WHERE organization_id = $1 AND id = ANY($2) AND deleted_at IS NULL`,
+		currentOrg(c), ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[uuid.UUID]string{}
+	for rows.Next() {
+		var (
+			id   uuid.UUID
+			name string
+		)
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		out[id] = name
+	}
+	return out, rows.Err()
 }

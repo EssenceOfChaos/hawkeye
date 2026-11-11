@@ -13,6 +13,7 @@ import (
 
 	"hawkeye/internal/account"
 	"hawkeye/internal/apitokens"
+	"hawkeye/internal/audit"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
@@ -69,6 +70,7 @@ type handlers struct {
 	oauth         *oauth.Service     // OAuth for the MCP server; nil turns connecting apps off
 	waitlist      *waitlist.Service  // coming-soon feature waitlists; nil turns them off
 	twoFactor     *twofactor.Service // two-factor sign-in; nil turns its settings off (sign-in still enforces it for accounts that have it)
+	audit         *audit.Recorder    // the security log; nil records nothing
 	tokenRoutes   map[string]bool    // "METHOD /path" of the routes open to API keys
 }
 

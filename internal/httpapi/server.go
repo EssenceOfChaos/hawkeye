@@ -13,6 +13,7 @@ import (
 
 	"hawkeye/internal/account"
 	"hawkeye/internal/apitokens"
+	"hawkeye/internal/audit"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
@@ -75,6 +76,7 @@ type Options struct {
 	TwoFactor     *twofactor.Service   // two-factor sign-in settings and organization requirements
 	OAuth         *oauth.Service       // OAuth for the MCP server (connecting Claude); nil turns it off
 	Waitlist      *waitlist.Service    // "Get notified" waitlists for coming-soon features; nil turns them off
+	Audit         *audit.Recorder      // the security log; nil records nothing and turns its pages off
 	AppBaseURL    string               // public address of the app (status page and ping addresses in MCP tool results)
 	Version       string               // reported by the MCP server
 	MCPOrigins    []string             // browser origins allowed to call /mcp; nil means DefaultMCPOrigins
@@ -112,6 +114,7 @@ func New(o Options) *echo.Echo {
 	}
 
 	e.Use(middleware.RequestID())
+	e.Use(auditRequest)
 	if o.Metrics != nil {
 		e.Use(apiMetrics(o.Metrics))
 	}
@@ -188,7 +191,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
 	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies,
-		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, tokenRoutes: map[string]bool{}}
+		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, tokenRoutes: map[string]bool{}}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
@@ -358,6 +361,9 @@ func registerAPI(e *echo.Echo, o Options) {
 	acct.POST("/two-factor/enable", h.twoFactorEnable, limit("two-factor"))
 	acct.POST("/two-factor/disable", h.twoFactorDisable, limit("two-factor"))
 	acct.POST("/two-factor/recovery-codes", h.twoFactorRecoveryCodes, limit("two-factor"))
+	if h.audit != nil {
+		acct.GET("/security-log", h.accountLog)
+	}
 	if h.lifecycle != nil {
 		acct.GET("/email-preferences", h.emailPreferences)
 		acct.PUT("/email-preferences", h.putEmailPreferences)
@@ -449,6 +455,11 @@ func registerAPI(e *echo.Echo, o Options) {
 	scoped.GET("/api-keys", h.listAPIKeys)
 	scoped.POST("/api-keys", h.createAPIKey, requireVerifiedEmail, limit("api-key"))
 	scoped.DELETE("/api-keys/:keyID", h.revokeAPIKey)
+
+	// The organization's security log: the owner's, and session-only, so a leaked key can't read what was done with it.
+	if h.audit != nil {
+		scoped.GET("/security-log", h.organizationLog, requireOwner)
+	}
 
 	org := v1.Group("/organizations", h.requireAuth)
 	org.GET("", h.listOrgs)
