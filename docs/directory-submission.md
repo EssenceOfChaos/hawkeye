@@ -96,7 +96,7 @@ Metadata Documents later would let Claude Code and custom connectors connect by 
 
 ### 2. Tools
 
-Synced from the server. Expect 15 tools, 8 read-only and 7 writes, with no warnings about missing titles or annotations.
+Synced from the server. Expect 17 tools, 8 read-only and 9 writes (`create_workflow` and `test_workflow` were added 2026-11-11 and declare `openWorldHint: true`, because their steps call other services), with no warnings about missing titles or annotations.
 
 ### 3. Listing
 
@@ -111,7 +111,7 @@ Synced from the server. Expect 15 tools, 8 read-only and 7 writes, with no warni
   >
   > Ask Claude what's down right now, how a client's site performed this month, or what happened during last night's outage, and it answers from your live monitors, uptime history and incidents. It can also list your public status pages and maintenance windows.
   >
-  > With read and write access on a Pro or Agency plan, Claude can pause and resume monitors (one at a time or every monitor with a client's tag, for example during a deploy), add website, cron job and DNS monitors, and schedule maintenance. Organization owners can also have Claude post updates on an incident, which appear on their public status pages. Claude always asks before anything public or destructive.
+  > With read and write access on a Pro or Agency plan, Claude can pause and resume monitors (one at a time or every monitor with a client's tag, for example during a deploy), add website, cron job and DNS monitors, set up and test multi-step API checks (such as signing in and then fetching an account; Claude names the secrets a check needs and you enter them in HawkEye, so it never sees a password), and schedule maintenance. Organization owners can also have Claude post updates on an incident, which appear on their public status pages. Claude always asks before anything public or destructive.
   >
   > You choose the organization and the access level when you connect, and you can disconnect at any time from your HawkEye account. The connector acts as you, with your permissions, and never sees passwords, billing, team settings or monitor credentials.
   >
@@ -137,7 +137,10 @@ As submitted (each example works on the reviewer account's data):
 4. **Pause monitoring during a deploy or planned work.** Pause and resume monitors one at a time or by client tag, or schedule a maintenance
    window, so planned work doesn't trigger false alerts.
    > Pause all the Acme Bakery monitors while I deploy, then resume them when I say I'm done.
-5. **Keep customers informed during an outage.** Post an update on an open incident that appears on your public status pages. Claude asks
+5. **Check that an API flow works, not just one address** (added 2026-11-11). Claude writes the steps of a multi-step API check, saves it (it asks
+   first), and runs it to show each step's result. Passwords and keys are named only; the check stays paused until you enter them in HawkEye.
+   > Set up a check that signs in to api.example.com with our monitoring account and then fetches /account, and tell me which secrets to enter.
+6. **Keep customers informed during an outage.** Post an update on an open incident that appears on your public status pages. Claude asks
    before publishing.
    > Post an update on the open incident saying we've found the cause and expect a fix within the hour.
 
@@ -145,7 +148,7 @@ As submitted (each example works on the reviewer account's data):
 
 > A HawkEye account (sign up free at https://hawkeye.observer/register; no credit card). Connecting opens HawkEye's sign-in and consent page, where
 > you choose the organization and the access Claude gets. Read only works on every plan, including Free. Read and make changes (pausing and adding
-> monitors, scheduling maintenance, posting incident updates) needs a Pro or Agency plan. Posting incident updates and scheduling or deleting
+> monitors, setting up multi-step API checks, scheduling maintenance, posting incident updates) needs a Pro or Agency plan. Posting incident updates and scheduling or deleting
 > maintenance windows also need the organization's owner; members can read, pause, resume and add monitors. People who use two-factor sign-in
 > confirm the connection with a code from their authenticator app. No other setup is needed. For review: the test account in the Test & launch
 > step is the owner of an Agency organization with example data, and has two-factor sign-in turned off.

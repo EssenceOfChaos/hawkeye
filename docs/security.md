@@ -114,6 +114,32 @@ See `docs/security-review.md` for the review and residual risks.
 - **State-changing methods** (POST, PUT, PATCH, DELETE) repeat on every check, so they need a verified email address and an interval of at least 5 minutes. This limits abuse of the monitor as a request cannon, but does not make it impossible: the Terms put responsibility for the requests on the customer, and the SSRF protections (public hosts, ports 80/443, no redirects to private addresses) still apply.
 - **Key handling:** one key, no rotation tooling. Rotating or losing it makes stored credentials unreadable and users must re-enter them (`docs/operations.md`).
 
+## Multi-step API checks (workflows)
+
+`internal/checks/workflow.go`, `internal/monitors/workflows.go`. A workflow sends up to 10 requests a run, carrying values from one response into later
+requests.
+
+- **SSRF.** Every step goes through `safehttp`, after substitution and on every redirect, exactly like a website check. On top of that, the API refuses a
+  step whose scheme or host contains a placeholder, so where a step goes is written down, never taken from a response; values are URL-encoded where
+  they are inserted, so they can't add a host either (`TestAValueCantSendAStepSomewhereItMustNotGo`).
+- **Injection.** Substitution is plain text, with no expressions. Values are URL-encoded in addresses and JSON-escaped in JSON bodies; a value with a
+  line break is refused in headers and credentials. Step names, saved-value names and secret names are validated.
+- **Secrets.** Secrets (`monitor_secrets`) and step credentials (`monitor_steps.auth_secret`) are sealed with `SECRETS_ENCRYPTION_KEY`, bound to the
+  monitor (and the secret's name), write-only through the API, and opened only in the worker or for a test run. A value that can't be opened is an
+  operator problem: the job is retried and reported, and no failure is recorded.
+- **Redaction.** Before a run's summary is stored, alerted on or returned, every secret and every saved value (and their URL- and JSON-escaped forms) of
+  4 characters or more is replaced with `[hidden]`, including in step names and the final address (`TestSecretsAndExtractedValuesNeverReachTheResult`;
+  checked to fail with redaction switched off). Only step names, status codes, times and failure reasons are stored, never response content.
+- **Abuse.** Up to 10 steps and 60 seconds a run; steps that write need a verified address and run at most every 5 minutes. `POST
+  /monitors/test-workflow` (requests on demand) is session-only, needs a verified address for writes, and has a per-IP limit and 60 runs an hour per
+  organization, and stops after 25 seconds.
+- **Deletion.** Deleting the monitor deletes its steps and secrets at once, not when the row is purged 30 days later.
+- **Over MCP** (`create_workflow`, `test_workflow`; `internal/mcpserver/workflows.go`). An assistant never handles a secret value: it names the secrets,
+  they are stored as not entered, and the workflow stays paused (resuming is refused) until a person enters them in the app. A step's credentials must be
+  a placeholder, never a literal. `create_workflow` is destructive (Claude asks first), and `test_workflow` refuses drafts that write or use secrets, so
+  text an assistant reads can't make HawkEye send changing requests on demand; it shares the app's hourly test budget. Residual: an assistant can still
+  put a literal key in a header value or body; the tool descriptions say not to, and the security log records who created the workflow and how.
+
 ## Two-factor sign-in
 
 - **Optional for each person; an owner may require it for their organization** (off by default). TOTP (RFC 6238: SHA-1, 30 s, 6 digits, one step

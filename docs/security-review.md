@@ -40,6 +40,11 @@ SQL: all queries are parameterized; the few places that assemble SQL (dynamic `U
 
 ## Residual risks and launch blockers
 
+Multi-step API checks (added 2026-11-11) are reviewed in `docs/security.md#multi-step-api-checks-workflows`. Residual: a customer can point a workflow
+at a third-party API with credentials they hold, as they could with a single API check, and the requests come from our servers; the verified-address and
+5-minute rules for writes, the rate limits and the Terms' "authorized to monitor" clause are the controls. Redaction hides values of 4 characters or
+more only: a shorter secret could appear in a summary that quotes it.
+
 1. **Privacy policy and Terms**: reviewed and approved by counsel on 2026-11-08 (`docs/legal-placeholders.md`). Resolved; have counsel look again
    when a feature collects a new kind of personal data.
 2. **`deploy/egress-filter.sh` is untested on Linux.** The application-level SSRF guard is tested, but run `scripts/verify-egress.sh` on the real host; without the firewall a bug in `safehttp` would be exploitable.

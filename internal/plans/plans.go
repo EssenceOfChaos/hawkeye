@@ -32,18 +32,20 @@ type Plan struct {
 	StatusPageBranding          bool      `json:"status_page_branding"`    // a logo, accent color and website link on status pages
 	StatusPageWhiteLabel        bool      `json:"status_page_white_label"` // hide "Powered by HawkEye" on status pages
 	APIWriteEnabled             bool      `json:"api_write_enabled"`       // API keys may change data (reading through the API is on every plan)
+	MaxWorkflows                int       `json:"max_workflows"`           // multi-step API checks; each also counts as a monitor. 0: none
+	MaxWorkflowSteps            int       `json:"max_workflow_steps"`      // steps per multi-step API check
 	Active                      bool      `json:"-"`
 }
 
 const planCols = `p.id, p.code, p.name, p.monthly_price_cents, p.annual_price_cents, p.max_monitors, p.minimum_check_interval_seconds,
 	p.history_retention_days, p.max_team_members, p.reports_enabled, p.branded_reports_enabled, p.maintenance_enabled, p.max_regions, p.max_domains, p.max_status_pages,
-	p.status_page_branding, p.status_page_white_label, p.api_write_enabled, p.active`
+	p.status_page_branding, p.status_page_white_label, p.api_write_enabled, p.active, p.max_workflows, p.max_workflow_steps`
 
 func scanPlan(row pgx.Row, extra ...any) (Plan, error) {
 	var p Plan
 	dest := append([]any{&p.ID, &p.Code, &p.Name, &p.MonthlyPriceCents, &p.AnnualPriceCents, &p.MaxMonitors, &p.MinimumCheckIntervalSeconds,
 		&p.HistoryRetentionDays, &p.MaxTeamMembers, &p.ReportsEnabled, &p.BrandedReportsEnabled, &p.MaintenanceEnabled, &p.MaxRegions, &p.MaxDomains, &p.MaxStatusPages,
-		&p.StatusPageBranding, &p.StatusPageWhiteLabel, &p.APIWriteEnabled, &p.Active}, extra...)
+		&p.StatusPageBranding, &p.StatusPageWhiteLabel, &p.APIWriteEnabled, &p.Active, &p.MaxWorkflows, &p.MaxWorkflowSteps}, extra...)
 	err := row.Scan(dest...)
 	return p, err
 }

@@ -68,6 +68,8 @@ type Result struct {
 	Region string
 	// FinalURL is where the request ended up after redirects, when a response arrived. Credentials, query and fragment are not included.
 	FinalURL string
+	// Steps is set for multi-step API checks: what each step that ran did (workflow.go). Stored with the result; never response content.
+	Steps []StepOutcome
 }
 
 // Checker runs checks through the SSRF-safe HTTP client.
@@ -89,10 +91,26 @@ func NewChecker(cfg safehttp.Config) *Checker {
 // otherwise any final status below 400 is up. Transport failures (DNS, connect, TLS, timeout) always fail.
 // When the status passes, every assertion must hold on the response body (CatAssertion otherwise).
 func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
+	res, _, err := c.run(ctx, t, nil, false)
+	return res, err
+}
+
+// response is what a workflow step keeps of a response for extracting values: never stored, and gone when the run ends.
+type response struct {
+	header    http.Header
+	cookies   []*http.Cookie
+	body      []byte // read only when asked for, up to MaxBodyBytes
+	truncated bool
+}
+
+// run performs one request as Check describes. jar, when set, sends and keeps cookies across a workflow's steps. With keep, the response's
+// headers, cookies and body are returned for extractions (the body is read even without assertions).
+func (c *Checker) run(ctx context.Context, t Target, jar http.CookieJar, keep bool) (Result, *response, error) {
 	res := Result{CheckedAt: c.now()}
-	finish := func() (Result, error) {
+	var kept *response
+	finish := func() (Result, *response, error) {
 		res.FinishedAt = c.now()
-		return res, nil
+		return res, kept, nil
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, t.Timeout)
@@ -128,6 +146,7 @@ func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
 	}
 
 	client := safehttp.New(c.cfg, t.Timeout)
+	client.Jar = jar
 	if secretHeader := applyAuth(req, t.Auth); secretHeader != "" {
 		// Credentials only go to the monitored host. Go already drops Authorization when a redirect leaves
 		// the domain, but keeps it for subdomains and never knows about a custom API-key header.
@@ -148,7 +167,7 @@ func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
 	res.CertExpiresAt = cert.expiry()
 	if err != nil {
 		if ctx.Err() != nil {
-			return Result{}, ctx.Err() // caller shut down; the outcome says nothing about the site
+			return Result{}, nil, ctx.Err() // caller shut down; the outcome says nothing about the site
 		}
 		if res.CertExpiresAt == nil {
 			res.CertExpiresAt = expiredCertificate(err, c.now())
@@ -164,11 +183,11 @@ func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
 	// The body is only read when assertions need it, and then only up to MaxBodyBytes; it is never stored.
 	var respBody []byte
 	truncated := false
-	if len(t.Assertions) > 0 {
+	if len(t.Assertions) > 0 || keep {
 		respBody, err = io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes+1))
 		if err != nil {
 			if ctx.Err() != nil {
-				return Result{}, ctx.Err()
+				return Result{}, nil, ctx.Err()
 			}
 			res.ErrorCategory, res.ErrorSummary = Classify(err)
 			return finish()
@@ -178,6 +197,9 @@ func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
 		}
 	} else {
 		_, _ = io.CopyN(io.Discard, resp.Body, maxDrainBytes)
+	}
+	if keep {
+		kept = &response{header: resp.Header, cookies: resp.Cookies(), body: respBody, truncated: truncated}
 	}
 
 	if t.ExpectedStatus != nil {

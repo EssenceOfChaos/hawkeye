@@ -84,7 +84,7 @@ type ExportBilling struct {
 
 type ExportMonitor struct {
 	ID                   uuid.UUID `json:"id"`
-	Type                 string    `json:"type"`            // http or heartbeat
+	Type                 string    `json:"type"`            // http, heartbeat, dns or workflow
 	GraceSeconds         *int      `json:"grace_seconds"`   // heartbeats only
 	DNSRecordType        *string   `json:"dns_record_type"` // DNS monitors only
 	DNSExpected          *string   `json:"dns_expected"`    // DNS monitors only
@@ -103,6 +103,8 @@ type ExportMonitor struct {
 	Auth       ExportAuth         `json:"auth"`
 	Assertions []checks.Assertion `json:"assertions"`
 	Regions    []string           `json:"regions"`
+	// Multi-step API checks only: the steps and the names of the secrets, never their values or step credentials.
+	Workflow *monitors.Workflow `json:"workflow,omitempty"`
 	// Slow-response alert settings: a threshold in ms (null: off) and how many checks in a row confirm it.
 	SlowThresholdMs *int `json:"slow_threshold_ms"`
 	SlowChecks      int  `json:"slow_checks"`
@@ -261,6 +263,15 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 		o.Monitors = append(o.Monitors, m)
 	}
 	rows.Close()
+	for i := range o.Monitors {
+		if o.Monitors[i].Type == monitors.TypeWorkflow {
+			w, err := monitors.LoadWorkflow(ctx, s.pool, o.Monitors[i].ID)
+			if err != nil {
+				return err
+			}
+			o.Monitors[i].Workflow = w
+		}
+	}
 
 	rows, err = s.pool.Query(ctx, `SELECT i.id, i.monitor_id, i.started_at, i.resolved_at, i.status, i.cause_category, i.summary
 		FROM incidents i JOIN monitors m ON m.id = i.monitor_id WHERE m.organization_id = $1 ORDER BY i.started_at, i.id`, o.ID)

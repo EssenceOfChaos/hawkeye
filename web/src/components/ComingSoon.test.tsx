@@ -54,11 +54,11 @@ describe('Coming soon', () => {
   it('asks a signed-out visitor for an address, then to confirm it from their inbox', async () => {
     const posts = stub()
     mountSection()
-    await userEvent.click(await screen.findByRole('button', { name: 'Get notified about Multi-step API checks' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Get notified about Status pages on your own domain' }))
     await userEvent.type(screen.getByLabelText('Your email address'), 'visitor@example.com')
     await userEvent.click(screen.getByRole('button', { name: 'Notify me' }))
     expect(await screen.findByText(/Check your inbox/)).toBeInTheDocument()
-    expect(posts).toEqual([{ url: expect.stringContaining('/waitlist'), body: { feature: 'api_workflows', email: 'visitor@example.com', company: '' } }])
+    expect(posts).toEqual([{ url: expect.stringContaining('/waitlist'), body: { feature: 'status_page_domains', email: 'visitor@example.com', company: '' } }])
   })
 
   it('adds a verified, signed-in person in one click', async () => {
@@ -80,7 +80,7 @@ describe('Coming soon', () => {
   it('shows the error when signing up fails', async () => {
     stub({ reply: () => json(400, { error: { code: 'VALIDATION_ERROR', message: 'Enter a valid email address.' } }) })
     mountSection()
-    await userEvent.click(await screen.findByRole('button', { name: 'Get notified about Multi-step API checks' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Get notified about Email updates for status page visitors' }))
     await userEvent.type(screen.getByLabelText('Your email address'), 'a@b.co')
     await userEvent.click(screen.getByRole('button', { name: 'Notify me' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Enter a valid email address.')

@@ -364,6 +364,7 @@ export function MonitorsPage() {
                   <td className="name">
                     <Link to={`/monitors/${m.id}`}>{m.name}</Link>
                     {m.type === 'heartbeat' ? <div className="hint">Cron job heartbeat</div>
+                      : m.workflow ? <div className="hint">Multi-step API check · {m.workflow.steps.length} step{m.workflow.steps.length === 1 ? '' : 's'}</div>
                       : <div className="hint mono">{m.dns ? `${m.dns.record_type} ${m.url}` : m.url}</div>}
                     <TagList tags={m.tags ?? []} />
                   </td>

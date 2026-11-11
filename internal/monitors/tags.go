@@ -325,6 +325,12 @@ func (s *Service) Bulk(ctx context.Context, orgID uuid.UUID, in BulkInput) (int,
 		case BulkPause:
 			_, err = tx.Exec(ctx, `UPDATE monitors SET enabled = false WHERE id = ANY($1)`, ids)
 		case BulkResume:
+			// A workflow whose secrets are not all entered can't run yet; nothing is resumed (all or nothing, like the rest of Bulk).
+			if names, err := unsetSecrets(ctx, tx, ids); err != nil {
+				return err
+			} else if len(names) > 0 {
+				return &ErrSecretsNotSet{Names: names}
+			}
 			// Resuming makes a monitor due immediately instead of waiting out a stale schedule, and gives a heartbeat a full period to ping.
 			var minInterval int
 			if minInterval, err = s.plans.GetMinimumCheckInterval(ctx, tx, orgID); err != nil {

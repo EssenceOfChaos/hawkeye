@@ -242,6 +242,21 @@ docker exec hawkeye-db-1 psql -U hawkeye -d monitoring -c "
 Use `account_id = '<user id>'` for a person's own log, `credential_id = '<api key id>'` for everything one key (or, for a connected app, one grant) did,
 and `request_id` to match an event with the API's request log line. Rows can't be changed (`audit_events is append-only`); they are removed after a year.
 
+### Multi-step API checks
+
+A workflow's failure summary names the failing step. `error_category = 'workflow_config'` means the check is broken, not the customer's API (a value
+no earlier step saved, or a path to save that isn't in the response): point the customer at the step. The worker logs `cannot load workflow` (and counts
+`hawkeye_worker_errors_total{stage="secrets"}`) when a workflow's secrets can't be opened, which is the same `SECRETS_ENCRYPTION_KEY` problem as
+*Stored credentials cannot be opened*. To see what a workflow did recently:
+
+```
+docker exec hawkeye-db-1 psql -U hawkeye -d monitoring -c "
+  SELECT checked_at, success, error_category, error_summary, steps FROM check_results WHERE monitor_id = '<id>' ORDER BY checked_at DESC LIMIT 10"
+```
+
+The waitlist for multi-step API checks (`api_workflows`) is still in place: send its launch email and delete its rows (*Feature waitlists*), then remove
+the key with a migration.
+
 ### Security log writes failing
 
 `HawkEyeSecurityLogWritesFailing`: changes are succeeding but some are missing from the log. The API logs `could not write to the security log`

@@ -108,10 +108,14 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 			region = s.regions.Primary()
 		}
 		summary := truncate(r.ErrorSummary, maxSummaryLen)
+		var steps any // NULL unless a workflow run
+		if len(r.Steps) > 0 {
+			steps = r.Steps
+		}
 		if _, err := tx.Exec(ctx, `INSERT INTO check_results
-			(monitor_id, checked_at, finished_at, success, http_status_code, response_time_ms, error_category, error_summary, in_maintenance, region)
-			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''), $9, $10)`,
-			monitorID, r.CheckedAt, r.FinishedAt, r.Success, r.StatusCode, r.ResponseTimeMs, r.ErrorCategory, summary, maintenance, region); err != nil {
+			(monitor_id, checked_at, finished_at, success, http_status_code, response_time_ms, error_category, error_summary, in_maintenance, region, steps)
+			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''), $9, $10, $11)`,
+			monitorID, r.CheckedAt, r.FinishedAt, r.Success, r.StatusCode, r.ResponseTimeMs, r.ErrorCategory, summary, maintenance, region, steps); err != nil {
 			return fmt.Errorf("insert result: %w", err)
 		}
 

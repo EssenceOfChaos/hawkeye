@@ -51,6 +51,9 @@ export interface Plan {
   branded_reports_enabled?: boolean
   /** API keys may change data (Pro and Agency). Reading through the API is on every plan. */
   api_write_enabled?: boolean
+  /** Multi-step API checks the plan allows (each also counts as a monitor), and steps in each. */
+  max_workflows?: number
+  max_workflow_steps?: number
 }
 
 /** An API key as listed. The token itself is only ever in the response that creates the key. */
@@ -159,7 +162,7 @@ export interface Assertion {
 }
 
 /** A website or API that HawkEye checks, a heartbeat (a cron job or scheduled task that pings HawkEye each time it runs), or a DNS record HawkEye looks up. */
-export type MonitorType = 'http' | 'heartbeat' | 'dns'
+export type MonitorType = 'http' | 'heartbeat' | 'dns' | 'workflow'
 
 export type DnsRecordType = 'A' | 'AAAA' | 'MX' | 'NS' | 'TXT'
 
@@ -209,6 +212,59 @@ export interface Monitor {
   heartbeat: HeartbeatInfo | null
   /** Set for DNS monitors only. */
   dns?: DnsCheck | null
+  /** Set for multi-step API checks only: their steps and the names of their secrets. url is the first step's address. */
+  workflow?: WorkflowInfo | null
+}
+
+/** Where a workflow step reads a value to save for later steps. */
+export type ExtractFrom = 'json_path' | 'header' | 'cookie'
+
+/** Saves a value from a step's response under a name later steps use as {{name}}. */
+export interface Extraction {
+  name: string
+  from: ExtractFrom
+  path: string
+}
+
+/** One step of a multi-step API check, as stored (never its secret). */
+export interface WorkflowStep {
+  name: string
+  method: HttpMethod
+  url: string
+  headers: RequestHeader[]
+  body: string | null
+  auth: MonitorAuth
+  expected_status_code: number | null
+  assertions: Assertion[]
+  extractions: Extraction[]
+  timeout_seconds: number
+}
+
+export interface WorkflowInfo {
+  steps: WorkflowStep[]
+  /** The secrets' names; values are never returned. */
+  secrets: { name: string; set: boolean }[]
+  cookies: boolean
+}
+
+/** What one step of a run did. Never response content or saved values. */
+export interface StepOutcome {
+  name: string
+  success: boolean
+  status_code: number | null
+  response_time_ms: number | null
+  error_category?: string
+  error_summary?: string
+}
+
+/** A test run of an unsaved workflow (POST /monitors/test-workflow). */
+export interface WorkflowRun {
+  success: boolean
+  status_code: number | null
+  response_time_ms: number | null
+  error_category: string | null
+  error_summary: string | null
+  steps: StepOutcome[]
 }
 
 /** What a DNS monitor looks up. */
@@ -498,6 +554,8 @@ export interface CheckResult {
   error_category: string | null
   error_summary: string | null
   region: string
+  /** Multi-step API checks: what each step that ran did. */
+  steps?: StepOutcome[] | null
 }
 
 export interface DashboardSummary {
@@ -525,6 +583,34 @@ export interface MonitorInput {
   slow_threshold_ms?: number | null
   slow_checks?: number
   /** Replaces the monitor's tags. */
+  tag_ids?: string[]
+  alert_delay_minutes?: number
+  quiet_hours?: QuietHours | null
+}
+
+/** One step as sent when saving or testing a multi-step API check. auth.secret left out keeps the step's stored secret (by position). */
+export interface WorkflowStepInput {
+  name: string
+  method: HttpMethod
+  url: string
+  headers: RequestHeader[]
+  body: string | null
+  auth: MonitorAuthInput
+  expected_status_code: number | null
+  assertions: Assertion[]
+  extractions: Extraction[]
+  timeout_seconds: number
+}
+
+/** Creates or edits a multi-step API check. secrets: a value sets one, null removes it, names left out are kept. */
+export interface WorkflowInput {
+  type?: 'workflow' // only when creating
+  name: string
+  steps: WorkflowStepInput[]
+  secrets?: Record<string, string | null>
+  cookies: boolean
+  check_interval_seconds?: number
+  regions?: string[]
   tag_ids?: string[]
   alert_delay_minutes?: number
   quiet_hours?: QuietHours | null

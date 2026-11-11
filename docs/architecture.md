@@ -14,7 +14,7 @@ internal/auth          register/login/sessions/password reset/email verification
 internal/organizations tenant access; every query scoped by membership; removing members and leaving
 internal/invitations   team invitations: an emailed, single-address link that adds a member (seats are held by pending invitations)
 internal/oauth         OAuth 2.1 for the MCP server: registered clients (cmd/oauthclient), consent, codes with PKCE, rotating refresh tokens, revocation; access tokens are API tokens of their own kind
-internal/mcpserver     the MCP server (POST /mcp, mounted in internal/httpapi/mcp.go): 15 tools over the same services as the REST handlers, acting as the API key's person with the same checks
+internal/mcpserver     the MCP server (POST /mcp, mounted in internal/httpapi/mcp.go): 17 tools over the same services as the REST handlers, acting as the API key's person with the same checks
 internal/twofactor     two-factor sign-in: TOTP (RFC 6238, codes used once), sealed secrets, hashed recovery codes, and an owner's requirement for their organization (7-day grace per member)
 internal/audit         the security log: append-only events (who, with which key or app, from where), an owner's organization log and each person's account log, 365 days
 internal/apitokens     API keys: create (shown once, hashed), list, revoke, authenticate as a person in one organization with their current role; emails before and when keys expire (worker)
@@ -23,7 +23,7 @@ internal/monitors      monitor CRUD, validation, soft delete, per-organization s
 cmd/worker             monitoring engine process: scheduler + check workers + metrics endpoint (:9090)
 internal/safehttp      SSRF-safe HTTP client (see docs/security.md)
 internal/publichost    decides whether a typed host name is a public one, for the free tools and DNS monitors
-internal/checks        runs one check (`Check` for websites, `CheckDNS` for DNS records), classifies errors, applies results to monitor state (`Apply`, `Store.Record`)
+internal/checks        runs one check (`Check` for websites, `CheckDNS` for DNS records, `RunWorkflow` for multi-step API checks, in workflow.go: values passed between steps, redaction), classifies errors, applies results to monitor state (`Apply`, `Store.Record`)
 internal/queue         durable PostgreSQL job queue (claim / lease / complete / release)
 internal/scheduler     finds due monitors, enqueues jobs, jitter, backpressure
 internal/worker        bounded-concurrency polling loops, metrics sampler

@@ -12,6 +12,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 - Response-time tracking, uptime reports and incident history.
 - Keyword monitoring: alert when a page stops containing a phrase or starts showing one (with one-click checks for common failures such as a WordPress database error or a parked domain).
 - Embeddable uptime badges for a website or a GitHub README, opt-in per monitor.
+- Multi-step API checks: several requests in a row, such as signing in and then fetching an account with the returned token, with values passed between steps, encrypted secrets, a test run before saving, and alerts that name the failing step. Free includes one of up to 3 steps; Pro 5 and Agency 50, of up to 10 steps.
 - Slow-response alerts: an alert when a site stays slower than a threshold you choose for several checks in a row, and another when it is back to normal.
 - Alerts by email, Slack, Microsoft Teams, Discord or Telegram, or signed JSON webhook, routed per client by tag, with optional alert delays and quiet hours per monitor.
 - Public status pages for your customers: one on the Free plan, several on paid plans (one per client or product), with incident updates you post while you work on a problem.
@@ -19,7 +20,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 - SSL certificate expiry warnings 30, 14, 7 and 1 days before expiry, on every plan.
 - Domain registration expiry warnings on the same schedule, for a number of domains that depends on the plan. Some domain registries do not publish expiry dates; HawkEye says so rather than guessing.
 - Checks from several locations on paid plans, where offered.
-- Works with Claude: HawkEye is listed in Claude's connector directory (https://claude.ai/directory/hawkeye; add it there or in Claude under Customize, then Connectors, and sign in to HawkEye). The MCP server at https://hawkeye.observer/mcp also lets Claude Code and other MCP clients can read monitors, uptime and incidents and (with a read and write key) pause monitors, add monitors, post incident updates and schedule maintenance. It uses the same API keys, or MCP clients can connect by signing in (OAuth with PKCE).
+- Works with Claude: HawkEye is listed in Claude's connector directory (https://claude.ai/directory/hawkeye; add it there or in Claude under Customize, then Connectors, and sign in to HawkEye). The MCP server at https://hawkeye.observer/mcp also lets Claude Code and other MCP clients can read monitors, uptime and incidents and (with a read and write key) pause monitors, add monitors, set up and test multi-step API checks (it names the secrets a check needs; a person enters them in HawkEye), post incident updates and schedule maintenance. It uses the same API keys, or MCP clients can connect by signing in (OAuth with PKCE).
 - Two-factor sign-in with an authenticator app, with recovery codes, on every plan; on a team, the owner can require it for everyone.
 - A security log on every plan: the owner sees who changed what in the organization (monitors, status pages, maintenance, incident updates, alert recipients, API keys, connected apps, team), when, from where, and with which API key or connected app; each person sees their own sign-ins, including failed ones. Kept for a year.
 - A public API with API keys: read-only keys on every plan, read and write keys on paid plans. Keys expire after 90 days unless the owner chooses otherwise, and can be revoked at any time.
@@ -28,6 +29,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 
 - [Home, features and pricing](https://hawkeye.observer/)
 - [Sign up](https://hawkeye.observer/register)
+- [Multi-step API checks guide](https://hawkeye.observer/docs/api-workflows)
 - [HawkEye status](https://status.hawkeye.observer): whether HawkEye itself is up, measured every minute from outside its own servers, with 90 days of uptime and any incidents
 - [Free tools](https://hawkeye.observer/tools): [Is My Website Down?](https://hawkeye.observer/tools/is-website-down) (whether a public site answers, its status code and response time), [SSL Certificate Checker](https://hawkeye.observer/tools/ssl-certificate-checker) (certificate expiry, issuer and trust for any public domain), [Uptime SLA Calculator](https://hawkeye.observer/tools/uptime-sla-calculator) (allowed downtime for an uptime percentage) and [Downtime Cost Calculator](https://hawkeye.observer/tools/downtime-cost-calculator) (revenue at risk from an outage)
 - [Documentation](https://hawkeye.observer/docs): [Getting started](https://hawkeye.observer/docs/getting-started), [Heartbeat (cron job) monitoring](https://hawkeye.observer/docs/cron-job-monitoring), [DNS monitoring](https://hawkeye.observer/docs/dns-monitoring), [Alerts](https://hawkeye.observer/docs/alerts), [API and API keys](https://hawkeye.observer/docs/api) and [Use HawkEye with Claude](https://hawkeye.observer/docs/claude)

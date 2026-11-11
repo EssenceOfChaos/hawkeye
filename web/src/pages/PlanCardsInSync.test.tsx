@@ -14,7 +14,7 @@ afterEach(() => vi.unstubAllGlobals())
 const json = (status: number, body: unknown) =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
 
-const free = { code: 'free', name: 'Free', monthly_price_cents: 0, max_monitors: 5, minimum_check_interval_seconds: 300, history_retention_days: 7, max_domains: 3, max_team_members: 1, max_regions: 1 }
+const free = { code: 'free', name: 'Free', monthly_price_cents: 0, max_monitors: 5, minimum_check_interval_seconds: 300, history_retention_days: 7, max_domains: 3, max_team_members: 1, max_regions: 1, max_workflows: 1, max_workflow_steps: 3 }
 const pro = {
   code: 'pro', name: 'Pro', monthly_price_cents: 1900, annual_price_cents: 19000, max_monitors: 50, minimum_check_interval_seconds: 60, history_retention_days: 90,
   max_domains: 25, max_team_members: 1, max_regions: 3, maintenance_enabled: true, reports_enabled: true, api_write_enabled: true,
@@ -22,6 +22,7 @@ const pro = {
 const agency = {
   code: 'agency', name: 'Agency', monthly_price_cents: 5900, annual_price_cents: 59000, max_monitors: 200, minimum_check_interval_seconds: 60, history_retention_days: 365,
   max_domains: 100, max_team_members: 5, max_regions: 3, maintenance_enabled: true, reports_enabled: true, branded_reports_enabled: true, api_write_enabled: true,
+  max_workflows: 50, max_workflow_steps: 10,
 }
 const plans = [free, pro, agency]
 
@@ -83,7 +84,9 @@ describe('pricing cards stay in sync', () => {
       expect(cards.Agency).toEqual(expect.arrayContaining([
         '200 monitors', 'Cron job and DNS monitoring', 'Checks from up to 3 locations', '5 team members', 'Require two-factor sign-in for your team', 'Domain expiry warnings for up to 100 domains',
         'Maintenance windows', 'Monthly PDF uptime reports', 'Branded Reports with name and logo', 'API and Claude (MCP) access with read and write keys',
+        '50 multi-step API checks of up to 10 steps',
       ]))
+      expect(cards.Free).toContain('One multi-step API check of up to 3 steps')
       expect(cards.Free).not.toContain('Branded Reports with name and logo')
       expect(cards.Free).toContain('Read-only API and Claude (MCP) access')
     }

@@ -23,6 +23,7 @@ import {
   type RequestHeader,
   type QuietHours,
   type TagSummary,
+  type WorkflowInput,
 } from '../api'
 import { Field } from '../components/Field'
 import { KeywordChecks } from '../components/KeywordChecks'
@@ -30,6 +31,8 @@ import { TagPicker } from '../components/Tags'
 import { AlertTiming } from '../components/AlertTiming'
 import { DurationField } from '../components/Heartbeat'
 import { Toggle } from '../components/Toggle'
+import { WorkflowEditor } from '../components/WorkflowEditor'
+import { draftsFrom, newStep, secretsInput, stepsInput, usesWriteMethod, type SecretDraft, type StepDraft } from '../workflowDrafts'
 
 /** The server allows this many checks in total: text checks and JSON checks together. */
 const MAX_CHECKS = 10
@@ -78,7 +81,8 @@ export function MonitorFormPage() {
   const editing = Boolean(monitorID)
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const [kind, setKind] = useState<MonitorType>(params.get('type') === 'heartbeat' ? 'heartbeat' : params.get('type') === 'dns' ? 'dns' : 'http')
+  const requested = params.get('type')
+  const [kind, setKind] = useState<MonitorType>(requested === 'heartbeat' || requested === 'dns' || requested === 'workflow' ? requested : 'http')
   const [period, setPeriod] = useState(86400) // heartbeats: expected time between pings, in seconds
   const [grace, setGrace] = useState(3600)
   const [host, setHost] = useState('') // DNS monitors: the host name to look up
@@ -116,10 +120,18 @@ export function MonitorFormPage() {
   const [tagIDs, setTagIDs] = useState<string[]>([])
   const [alertDelay, setAlertDelay] = useState(0)
   const [quiet, setQuiet] = useState<QuietHours | null>(null)
+  // Multi-step API checks.
+  const [steps, setSteps] = useState<StepDraft[]>(() => [newStep(1)])
+  const [secrets, setSecrets] = useState<SecretDraft[]>([])
+  const [cookies, setCookies] = useState(false)
+  const [maxSteps, setMaxSteps] = useState(3)
 
   useEffect(() => {
-    api<{ usage: { plan: { minimum_check_interval_seconds: number } } }>('GET', '/usage')
-      .then((r) => setMinAllowed(Math.ceil(r.usage.plan.minimum_check_interval_seconds / 60)))
+    api<{ usage: { plan: { minimum_check_interval_seconds: number; max_workflow_steps?: number } } }>('GET', '/usage')
+      .then((r) => {
+        setMinAllowed(Math.ceil(r.usage.plan.minimum_check_interval_seconds / 60))
+        if (r.usage.plan.max_workflow_steps) setMaxSteps(r.usage.plan.max_workflow_steps)
+      })
       .catch(() => undefined)
     api<{ regions: RegionInfo[]; max_regions: number }>('GET', '/regions')
       .then((r) => {
@@ -137,6 +149,12 @@ export function MonitorFormPage() {
         if (m.heartbeat) {
           setPeriod(m.check_interval_seconds)
           setGrace(m.heartbeat.grace_seconds)
+        }
+        if (m.workflow) {
+          const d = draftsFrom(m.workflow)
+          setSteps(d.steps)
+          setSecrets(d.secrets)
+          setCookies(m.workflow.cookies)
         }
         if (m.dns) {
           setHost(m.url)
@@ -177,7 +195,7 @@ export function MonitorFormPage() {
 
   const bodyAllowed = BODY_METHODS.includes(method)
   // POST, PUT, PATCH and DELETE change things on the target, and the request is repeated on every check.
-  const writeMethod = WRITE_METHODS.includes(method)
+  const writeMethod = kind === 'workflow' ? usesWriteMethod(steps) : WRITE_METHODS.includes(method)
   const minIntervalMin = writeMethod ? Math.max(minAllowed, WRITE_MIN_MINUTES) : minAllowed
   const assertionsAllowed = method !== 'HEAD'
   const keepsSecret = storedAuthType === authType
@@ -218,12 +236,34 @@ export function MonitorFormPage() {
     }
   }
 
+  async function onSubmitWorkflow() {
+    const payload: WorkflowInput = {
+      name, steps: stepsInput(steps), secrets: secretsInput(secrets), cookies, tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet,
+    }
+    if (allRegions.length > 1) payload.regions = chosen
+    if (intervalMin !== '') payload.check_interval_seconds = Number(intervalMin) * 60
+    try {
+      if (editing) {
+        await api('PATCH', `/monitors/${monitorID}`, payload)
+        navigate(`/monitors/${monitorID}`)
+      } else {
+        const r = await api<{ monitor: Monitor }>('POST', '/monitors', { ...payload, type: 'workflow' })
+        navigate(`/monitors/${r.monitor.id}`)
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err : new ApiError(0, 'NETWORK', 'Could not reach the server. Try again.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function onSubmit(e: SubmitEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)
     if (kind === 'heartbeat') return onSubmitHeartbeat()
     if (kind === 'dns') return onSubmitDns()
+    if (kind === 'workflow') return onSubmitWorkflow()
     // Text checks first, then JSON checks. Empty text rows are dropped rather than refused.
     const checks: { assertion: Assertion; origin: Origin }[] = [
       ...contains.map((v, row) => ({ v, row })).filter((x) => x.v.trim() !== '')
@@ -306,7 +346,8 @@ export function MonitorFormPage() {
   )
   return (
     <section className="card narrow">
-      <h1>{editing ? 'Edit monitor' : kind === 'heartbeat' ? 'Monitor a cron job or scheduled task' : kind === 'dns' ? 'Monitor a DNS record' : 'Add a website or API to monitor'}</h1>
+      <h1>{editing ? 'Edit monitor' : kind === 'heartbeat' ? 'Monitor a cron job or scheduled task' : kind === 'dns' ? 'Monitor a DNS record'
+        : kind === 'workflow' ? 'Add a multi-step API check' : 'Add a website or API to monitor'}</h1>
       {!editing && (
         <fieldset className="field monitor-kind">
           <legend>What do you want to monitor?</legend>
@@ -321,6 +362,10 @@ export function MonitorFormPage() {
           <label>
             <input type="radio" name="kind" checked={kind === 'dns'} onChange={() => setKind('dns')} /> A DNS record
             <small className="hint"> HawkEye looks it up on a schedule; you are alerted when it disappears or stops matching the value you expect.</small>
+          </label>
+          <label>
+            <input type="radio" name="kind" checked={kind === 'workflow'} onChange={() => setKind('workflow')} /> A multi-step API check
+            <small className="hint"> Several requests in a row, such as sign in, then fetch the account: checks that what your customers do still works.</small>
           </label>
         </fieldset>
       )}
@@ -373,6 +418,31 @@ export function MonitorFormPage() {
           <div className="row">
             <button type="submit" disabled={busy}>{editing ? 'Save changes' : 'Add monitor'}</button>
             <Link to="/monitors">Cancel</Link>
+          </div>
+        </form>
+      )}
+      {loaded && kind === 'workflow' && (
+        <form onSubmit={onSubmit}>
+          <Field label="Name" required maxLength={100} value={name} placeholder="Checkout API" onChange={(e) => setName(e.target.value)} error={f.name} />
+          <TagPicker tags={allTags} selected={tagIDs} onChange={setTagIDs} error={f.tag_ids}
+            onCreated={(t) => setAllTags((ts) => [...ts, t].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())))} />
+          <WorkflowEditor steps={steps} onSteps={setSteps} secrets={secrets} onSecrets={setSecrets} cookies={cookies} onCookies={setCookies}
+            maxSteps={maxSteps} errors={f} />
+          {writeMethod && (
+            <Alert tone="info" role="note">
+              <strong>Some steps change data, and they run on every check.</strong> Point them at endpoints you are authorized to monitor and that are safe to
+              call again and again, such as a test account. This needs a verified email address, and checks run at most every {WRITE_MIN_MINUTES} minutes.
+            </Alert>
+          )}
+          <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f} />
+          {regionPicker}
+          <Field label="Check every (minutes)" type="number" min={minIntervalMin} max={1440} value={intervalMin}
+            onChange={(e) => setIntervalMin(e.target.value)} error={f.check_interval_seconds}
+            hint={writeMethod ? `Checks that change data run at most every ${WRITE_MIN_MINUTES} minutes. Leave empty for the default.`
+              : `Your plan allows checks every ${minAllowed} minute(s) or slower. Leave empty for the default.`} />
+          <div className="row">
+            <button type="submit" disabled={busy}>{editing ? 'Save changes' : 'Add monitor'}</button>
+            <Link to={editing ? `/monitors/${monitorID}` : '/monitors'}>Cancel</Link>
           </div>
         </form>
       )}
