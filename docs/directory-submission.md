@@ -137,7 +137,8 @@ As submitted (each example works on the reviewer account's data):
 4. **Pause monitoring during a deploy or planned work.** Pause and resume monitors one at a time or by client tag, or schedule a maintenance
    window, so planned work doesn't trigger false alerts.
    > Pause all the Acme Bakery monitors while I deploy, then resume them when I say I'm done.
-5. **Check that an API flow works, not just one address** (added 2026-11-11). Claude writes the steps of a multi-step API check, saves it (it asks
+5. **Check that an API flow works, not just one address** (written 2026-11-11; not on the listing: the portal let us update the Description that day
+   but has no way to edit use cases after submission, so adding it means asking mcp-review@anthropic.com). Claude writes the steps of a multi-step API check, saves it (it asks
    first), and runs it to show each step's result. Passwords and keys are named only; the check stays paused until you enter them in HawkEye.
    > Set up a check that signs in to api.example.com with our monitoring account and then fetches /account, and tell me which secrets to enter.
 6. **Keep customers informed during an outage.** Post an update on an open incident that appears on your public status pages. Claude asks

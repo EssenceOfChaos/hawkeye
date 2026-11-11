@@ -606,7 +606,7 @@ left alone until then (see *Alert routing, alert delay and quiet hours*).
 
 ## Feature waitlists ("Get notified")
 
-Sign-ups for coming-soon features from the landing page's "Coming soon" section (`internal/waitlist`). Features: `api_workflows` (multi-step API checks, now built: its card is gone, and the key stays until the launch email has gone to the list), `status_page_domains` (status pages on your own domain), `status_page_subscribers` (email updates for status page visitors).
+Sign-ups for coming-soon features from the landing page's "Coming soon" section (`internal/waitlist`). Features: `status_page_domains` (status pages on your own domain), `status_page_subscribers` (email updates for status page visitors).
 
 | Method & path | Auth | Notes |
 |---|---|---|
