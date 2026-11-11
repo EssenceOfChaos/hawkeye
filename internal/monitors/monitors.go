@@ -131,7 +131,9 @@ type Monitor struct {
 	// fields are unused.
 	Heartbeat *Heartbeat `json:"heartbeat"`
 	// DNS is set for DNS monitors only. For them URL is the host name looked up, and the request fields are unused.
-	DNS       *DNSCheck `json:"dns"`
+	DNS *DNSCheck `json:"dns"`
+	// Workflow is set for multi-step API checks only: their steps and the names of their secrets. URL is the first step's address.
+	Workflow  *Workflow `json:"workflow"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -261,6 +263,13 @@ type CreateInput struct {
 	TagIDs               []uuid.UUID        `json:"tag_ids"`
 	AlertDelayMinutes    *int               `json:"alert_delay_minutes"`
 	QuietHours           *QuietHours        `json:"quiet_hours"`
+	// Multi-step API checks (type workflow) only: the steps, the secrets they use (name -> value), and whether cookies carry from step to step.
+	Steps   []StepInput        `json:"steps"`
+	Secrets map[string]*string `json:"secrets"`
+	Cookies *bool              `json:"cookies"`
+	// SecretNames declares secrets without values: the workflow is created paused, and a person enters the values in the app. Only the MCP server
+	// sets it, so an assistant never handles a password; it is not part of the REST API.
+	SecretNames []string `json:"-"`
 }
 
 type UpdateInput struct {
@@ -283,6 +292,11 @@ type UpdateInput struct {
 	GraceSeconds         *int                 `json:"grace_seconds"`
 	DNSRecordType        *string              `json:"dns_record_type"`
 	DNSExpected          Nullable[string]     `json:"dns_expected"` // null or empty: any answer will do
+	// Multi-step API checks only. Steps replace all the steps (a step's credentials are kept by position when not sent again). Secrets set the
+	// listed values; null removes one; names left out are kept.
+	Steps   *[]StepInput       `json:"steps"`
+	Secrets map[string]*string `json:"secrets"`
+	Cookies *bool              `json:"cookies"`
 }
 
 type ListFilter struct {
@@ -444,6 +458,13 @@ type fields struct {
 	quietStart        *int        // stored form of quiet, set by validate
 	quietEnd          *int
 	quietTZ           *string
+	// Multi-step API checks: what was sent, the stored workflow on update, and the validated result (set by validate).
+	steps       []StepInput
+	newSecrets  map[string]*string
+	declared    []string // secret names without values (MCP)
+	cookies     bool
+	curWorkflow *storedWorkflow
+	draft       workflowDraft
 }
 
 // dnsColumns is the stored form of the DNS fields: NULL unless a DNS monitor, and NULL for "any answer".
@@ -633,6 +654,8 @@ func (f *fields) validate() error {
 		f.validateHeartbeat(bad)
 	case TypeDNS:
 		f.validateDNS(bad)
+	case TypeWorkflow:
+		f.validateWorkflowMonitor(bad)
 	default:
 		f.validateHTTP(bad)
 	}
@@ -696,6 +719,34 @@ func (f *fields) validateDNS(bad map[string]string) {
 		bad["type"] = "DNS monitors make no web request: leave out the headers, body, authentication, assertions and expected status"
 	}
 	f.method, f.headers, f.body, f.assertions = "GET", []checks.Header{}, nil, []checks.Assertion{}
+}
+
+// validateWorkflowMonitor checks a multi-step API check: its steps and secrets, and the settings of the monitor itself. Its requests come from its
+// steps, so the website fields must be left out; the monitor's address becomes the first step's.
+func (f *fields) validateWorkflowMonitor(bad map[string]string) {
+	if strings.TrimSpace(f.url) != "" {
+		bad["url"] = "is not used by multi-step API checks: each step has its own address"
+	}
+	if len(f.headers) > 0 || f.body != nil && *f.body != "" || len(f.assertions) > 0 || f.auth.Type != checks.AuthNone || f.expected != nil {
+		bad["type"] = "multi-step API checks send their requests from their steps: leave out the headers, body, authentication, assertions and expected status"
+	}
+	f.draft = validateWorkflow(f.steps, f.newSecrets, f.declared, f.cookies, f.curWorkflow, bad)
+	f.timeout = workflowTimeoutSeconds
+	f.validateTiming(bad)
+	if t := f.slowThreshold; t != nil && (*t < MinSlowThresholdMs || *t > MaxSlowThresholdMs) {
+		bad["slow_threshold_ms"] = fmt.Sprintf("must be between %d and %d milliseconds (for all the steps together), or null", MinSlowThresholdMs, MaxSlowThresholdMs)
+	}
+	if f.slowChecks < MinSlowChecks || f.slowChecks > MaxSlowChecks {
+		bad["slow_checks"] = fmt.Sprintf("must be between %d and %d", MinSlowChecks, MaxSlowChecks)
+	}
+	if f.draft.usesWriteMethod() && f.interval < MinWriteIntervalSeconds {
+		bad["check_interval_seconds"] = fmt.Sprintf("must be at least %d minutes when a step uses POST, PUT, PATCH or DELETE, because the requests are repeated on every check", MinWriteIntervalSeconds/60)
+	}
+	f.url = ""
+	if len(f.draft.steps) > 0 {
+		f.url = f.draft.steps[0].URL
+	}
+	f.method, f.headers, f.body, f.assertions, f.auth = "GET", []checks.Header{}, nil, []checks.Assertion{}, checks.Auth{Type: checks.AuthNone}
 }
 
 // validateTiming checks the two settings every monitor HawkEye checks itself has.
@@ -794,8 +845,19 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 			if in.DNSExpected != nil {
 				f.dnsExpected = *in.DNSExpected
 			}
+		case TypeWorkflow:
+			f.kind, f.steps, f.newSecrets, f.declared = TypeWorkflow, in.Steps, in.Secrets, in.SecretNames
+			if in.Cookies != nil {
+				f.cookies = *in.Cookies
+			}
+			if in.CheckIntervalSeconds == nil && slices.ContainsFunc(in.Steps, func(st StepInput) bool { return IsWriteMethod(st.Method) }) {
+				f.interval = max(f.interval, MinWriteIntervalSeconds)
+			}
 		default:
-			return validation.New("type", "must be http, heartbeat or dns")
+			return validation.New("type", "must be http, heartbeat, dns or workflow")
+		}
+		if f.kind != TypeWorkflow && (in.Steps != nil || in.Secrets != nil || in.Cookies != nil) {
+			return validation.New("steps", "is only used by multi-step API checks (type workflow)")
 		}
 		if in.Method != nil {
 			f.method = *in.Method
@@ -829,6 +891,14 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		}
 		if err := s.plans.CanCreateMonitor(ctx, tx, orgID); err != nil {
 			return err
+		}
+		if f.kind == TypeWorkflow {
+			if err := s.plans.CanCreateWorkflow(ctx, tx, orgID); err != nil {
+				return err
+			}
+			if err := s.plans.CheckWorkflowSteps(ctx, tx, orgID, len(f.draft.steps)); err != nil {
+				return err
+			}
 		}
 		if in.CheckIntervalSeconds != nil {
 			if err := s.plans.CheckInterval(ctx, tx, orgID, f.interval); err != nil {
@@ -867,6 +937,22 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		if err != nil {
 			return err
 		}
+		if f.kind == TypeWorkflow {
+			if err := s.saveWorkflow(ctx, tx, id, f.draft, nil); err != nil {
+				return err
+			}
+			// Secrets still to be entered: it can't run yet, so it starts paused.
+			if len(f.draft.declared) > 0 {
+				if err := tx.QueryRow(ctx, `UPDATE monitors SET enabled = false WHERE id = $1 RETURNING enabled`, id).Scan(&out.Enabled); err != nil {
+					return err
+				}
+			}
+			one := []Monitor{out}
+			if err := attachWorkflowsTx(ctx, tx, one); err != nil {
+				return err
+			}
+			out = one[0]
+		}
 		if len(tagIDs) > 0 {
 			// The row had to exist before it could be tagged, so its tags are read back separately.
 			if err := setTags(ctx, tx, id, tagIDs); err != nil {
@@ -891,7 +977,14 @@ func (s *Service) Get(ctx context.Context, orgID, id uuid.UUID) (Monitor, error)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Monitor{}, ErrNotFound
 	}
-	return m, err
+	if err != nil {
+		return Monitor{}, err
+	}
+	one := []Monitor{m}
+	if err := attachWorkflows(ctx, s.pool, one); err != nil {
+		return Monitor{}, err
+	}
+	return one[0], nil
 }
 
 // List returns one page of monitors and the total matching count.
@@ -939,7 +1032,14 @@ func (s *Service) List(ctx context.Context, orgID uuid.UUID, f ListFilter) ([]Mo
 		}
 		out = append(out, m)
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	rows.Close()
+	if err := attachWorkflows(ctx, s.pool, out); err != nil {
+		return nil, 0, err
+	}
+	return out, total, nil
 }
 
 func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInput) (Monitor, error) {
@@ -1017,6 +1117,27 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		} else if in.GraceSeconds != nil {
 			return validation.New("grace_seconds", "is only used by heartbeat monitors")
 		}
+		if cur.Type == TypeWorkflow {
+			if f.curWorkflow, err = loadWorkflow(ctx, tx, id); err != nil {
+				return err
+			}
+			f.url, f.cookies, f.newSecrets = "", f.curWorkflow.cookies, in.Secrets
+			f.steps = make([]StepInput, len(f.curWorkflow.steps))
+			for i, st := range f.curWorkflow.steps {
+				f.steps[i] = st.input()
+			}
+			if in.Steps != nil {
+				f.steps = *in.Steps
+			}
+			if in.Cookies != nil {
+				f.cookies = *in.Cookies
+			}
+			if in.URL != nil && *in.URL != "" {
+				return validation.New("url", "is not used by multi-step API checks: each step has its own address")
+			}
+		} else if in.Steps != nil || in.Secrets != nil || in.Cookies != nil {
+			return validation.New("steps", "is only used by multi-step API checks (type workflow)")
+		}
 		var curExpected string
 		if cur.DNS != nil {
 			f.dnsType = cur.DNS.RecordType
@@ -1048,6 +1169,12 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 				return err
 			}
 		}
+		// Only a requested change of steps is checked against the plan's step limit, like the interval.
+		if in.Steps != nil {
+			if err := s.plans.CheckWorkflowSteps(ctx, tx, orgID, len(f.draft.steps)); err != nil {
+				return err
+			}
+		}
 		// Only a requested change of regions is checked against the plan, like the interval.
 		regionsChanged := in.Regions != nil && !slices.Equal(f.regions, cur.Regions)
 		if regionsChanged {
@@ -1058,7 +1185,8 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		// A changed request (target, headers, body, credentials or the DNS record looked up) invalidates the previous health state.
 		reset := f.url != cur.URL || f.method != cur.Method || !slices.Equal(f.headers, cur.Headers) ||
 			!equalPtr(f.body, cur.Body) || f.auth.Type != cur.Auth.Type || f.auth.Username != cur.Auth.Username || f.auth.HeaderName != cur.Auth.HeaderName ||
-			f.auth.Secret != "" || cur.DNS != nil && (f.dnsType != cur.DNS.RecordType || f.dnsExpected != curExpected)
+			f.auth.Secret != "" || cur.DNS != nil && (f.dnsType != cur.DNS.RecordType || f.dnsExpected != curExpected) ||
+			cur.Type == TypeWorkflow && (in.Steps != nil || len(in.Secrets) > 0 || in.Cookies != nil && *in.Cookies != f.curWorkflow.cookies)
 		dnsType, dnsExpected := f.dnsColumns()
 		sealed, err := s.sealSecret(f.auth.Secret, id)
 		if err != nil {
@@ -1104,6 +1232,16 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			f.slowThreshold, f.slowChecks, f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, grace, minInterval, dnsType, dnsExpected), minInterval)
 		if err != nil {
 			return err
+		}
+		if cur.Type == TypeWorkflow {
+			if err := s.saveWorkflow(ctx, tx, id, f.draft, f.curWorkflow); err != nil {
+				return err
+			}
+			one := []Monitor{out}
+			if err := attachWorkflowsTx(ctx, tx, one); err != nil {
+				return err
+			}
+			out = one[0]
 		}
 		// Streaks recorded by each region no longer describe the monitor after its request or its regions changed.
 		if reset || regionsChanged {
@@ -1163,11 +1301,18 @@ func (s *Service) RotatePingToken(ctx context.Context, orgID, id uuid.UUID) (Mon
 	return m, err
 }
 
-// SetEnabled pauses or resumes a monitor.
+// SetEnabled pauses or resumes a monitor. A workflow with secrets not entered yet can't be resumed (*ErrSecretsNotSet).
 func (s *Service) SetEnabled(ctx context.Context, orgID, id uuid.UUID, enabled bool) (Monitor, error) {
 	min, err := s.plans.GetMinimumCheckInterval(ctx, s.pool, orgID)
 	if err != nil {
 		return Monitor{}, err
+	}
+	if enabled {
+		if names, err := unsetSecrets(ctx, s.pool, []uuid.UUID{id}); err != nil {
+			return Monitor{}, err
+		} else if len(names) > 0 {
+			return Monitor{}, &ErrSecretsNotSet{Names: names}
+		}
 	}
 	// Resuming makes the monitor due immediately instead of waiting out a stale schedule; a heartbeat gets a full period (and its grace time) to ping.
 	m, err := scan(s.pool.QueryRow(ctx, `UPDATE monitors SET enabled = $3,
@@ -1176,7 +1321,14 @@ func (s *Service) SetEnabled(ctx context.Context, orgID, id uuid.UUID, enabled b
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Monitor{}, ErrNotFound
 	}
-	return m, err
+	if err != nil {
+		return Monitor{}, err
+	}
+	one := []Monitor{m}
+	if err := attachWorkflows(ctx, s.pool, one); err != nil {
+		return Monitor{}, err
+	}
+	return one[0], nil
 }
 
 // Delete soft-deletes a monitor: it stops counting toward limits and is no longer checked.
@@ -1205,6 +1357,13 @@ func deleteTx(ctx context.Context, tx pgx.Tx, orgID uuid.UUID, ids []uuid.UUID) 
 		return 0, err
 	}
 	if _, err = tx.Exec(ctx, `DELETE FROM monitor_tags WHERE monitor_id = ANY($1)`, ids); err != nil {
+		return 0, err
+	}
+	// A workflow's steps (their headers, bodies and credentials) and secrets go at once too, like a monitor's own request.
+	if _, err = tx.Exec(ctx, `DELETE FROM monitor_steps WHERE monitor_id = ANY($1)`, ids); err != nil {
+		return 0, err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM monitor_secrets WHERE monitor_id = ANY($1)`, ids); err != nil {
 		return 0, err
 	}
 	if _, err = tx.Exec(ctx, `UPDATE incidents SET status = 'resolved', resolved_at = GREATEST(started_at, now())

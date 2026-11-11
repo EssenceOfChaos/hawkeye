@@ -1,6 +1,8 @@
 # Plan: multi-step API checks (synthetic API monitoring)
 
-Status: **proposed** (drafted 2026-11-08). Nothing here is built yet.
+Status: **built** (2026-11-11). Plan limits as recommended (Free 1 workflow of up to 3 steps, Pro 5 of 10, Agency 50 of 10; each counts as a monitor).
+The API is in `docs/api.md` (*Multi-step API checks*), security in `docs/security.md`, and the user guide at `/docs/api-workflows`. Browser checks and
+the "Validating demand" steps are still open.
 
 A multi-step API check (a "workflow") runs a short sequence of HTTP requests in order, carrying values from one response into the next request,
 and fails when any step fails: for example, sign in → fetch the account → check the plan is active. It answers "does the thing my customers do

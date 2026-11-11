@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +19,7 @@ import (
 	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/branding"
+	"hawkeye/internal/checks"
 	"hawkeye/internal/contact"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/heartbeats"
@@ -40,38 +42,39 @@ import (
 )
 
 type handlers struct {
-	telegramBot   *notifications.TelegramBot
-	auth          *auth.Service
-	orgs          *organizations.Service
-	plans         *plans.Service
-	monitors      *monitors.Service
-	pool          plans.DB
-	db            *pgxpool.Pool
-	notifications *notifications.Service
-	maintenance   *maintenance.Service
-	domains       *domains.Service
-	statusPages   *statuspage.Service
-	badges        *badges.Service
-	heartbeats    *heartbeats.Service
-	regions       regions.Set
-	billing       *billing.Service
-	account       *account.Service
-	contact       *contact.Service
-	invitations   *invitations.Service
-	lifecycle     *lifecycle.Service
-	branding      *branding.Service
-	sslcheck      *sslcheck.Service
-	sitecheck     *sitecheck.Service
-	log           *slog.Logger
-	limits        limiterDeps
-	emailPerHour  int
-	secureCookies bool
-	apiTokens     *apitokens.Service // nil turns API keys off (DISABLE_API_KEYS)
-	oauth         *oauth.Service     // OAuth for the MCP server; nil turns connecting apps off
-	waitlist      *waitlist.Service  // coming-soon feature waitlists; nil turns them off
-	twoFactor     *twofactor.Service // two-factor sign-in; nil turns its settings off (sign-in still enforces it for accounts that have it)
-	audit         *audit.Recorder    // the security log; nil records nothing
-	tokenRoutes   map[string]bool    // "METHOD /path" of the routes open to API keys
+	telegramBot     *notifications.TelegramBot
+	auth            *auth.Service
+	orgs            *organizations.Service
+	plans           *plans.Service
+	monitors        *monitors.Service
+	pool            plans.DB
+	db              *pgxpool.Pool
+	notifications   *notifications.Service
+	maintenance     *maintenance.Service
+	domains         *domains.Service
+	statusPages     *statuspage.Service
+	badges          *badges.Service
+	heartbeats      *heartbeats.Service
+	regions         regions.Set
+	billing         *billing.Service
+	account         *account.Service
+	contact         *contact.Service
+	invitations     *invitations.Service
+	lifecycle       *lifecycle.Service
+	branding        *branding.Service
+	sslcheck        *sslcheck.Service
+	sitecheck       *sitecheck.Service
+	log             *slog.Logger
+	limits          limiterDeps
+	emailPerHour    int
+	secureCookies   bool
+	apiTokens       *apitokens.Service // nil turns API keys off (DISABLE_API_KEYS)
+	oauth           *oauth.Service     // OAuth for the MCP server; nil turns connecting apps off
+	waitlist        *waitlist.Service  // coming-soon feature waitlists; nil turns them off
+	twoFactor       *twofactor.Service // two-factor sign-in; nil turns its settings off (sign-in still enforces it for accounts that have it)
+	audit           *audit.Recorder    // the security log; nil records nothing
+	workflowChecker *checks.Checker    // test runs of multi-step API checks; nil turns them off
+	tokenRoutes     map[string]bool    // "METHOD /path" of the routes open to API keys
 }
 
 type credentials struct {
@@ -91,7 +94,12 @@ func bind(c *echo.Context, dst any) error {
 func mapError(err error) error {
 	var ve *validation.Error
 	var le *plans.LimitError
+	var unset *monitors.ErrSecretsNotSet
 	switch {
+	case errors.As(err, &unset):
+		return &APIError{Status: http.StatusConflict, Code: "SECRETS_NOT_SET",
+			Message: "This multi-step API check can't run until its secrets are entered: " + strings.Join(unset.Names, ", ") + ". Edit it in HawkEye to enter them.",
+			Details: map[string]any{"secrets": unset.Names}}
 	case errors.As(err, &le):
 		return limitAPIError(le)
 	case errors.Is(err, monitors.ErrNotFound):

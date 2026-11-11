@@ -10,6 +10,7 @@ import { RangePicker } from '../components/RangePicker'
 import { ResponseChart } from '../components/ResponseChart'
 import { StatusBadge } from '../components/StatusBadge'
 import { AvgResponseTile, StatTile, UptimeHero } from '../components/Uptime'
+import { WorkflowRun } from '../components/WorkflowRun'
 import { availableRanges, formatDateTime, formatMs, RANGE_LABELS, reportMonths, reportPdfPath } from '../format'
 import { useApi } from '../hooks'
 import { formatDuration, IncidentStatus } from './IncidentsPage'
@@ -52,6 +53,8 @@ export function MonitorDetailPage() {
   const results = useApi<{ results: CheckResult[]; total: number }>(`/monitors/${monitorID}/results?range=${range}&limit=${PAGE}&offset=${offset}`)
   const incidents = useApi<{ incidents: Incident[]; total: number }>(`/monitors/${monitorID}/incidents?limit=5`)
   const locations = useApi<{ regions: RegionStatus[] }>(`/monitors/${monitorID}/regions`)
+  // Multi-step API checks: the latest run, whatever the range shown below.
+  const latest = useApi<{ results: CheckResult[] }>(`/monitors/${monitorID}/results?range=24h&limit=1`)
   const several = (locations.data?.regions?.length ?? 0) > 1
 
   if (monitor.error?.status === 404) {
@@ -91,6 +94,12 @@ export function MonitorDetailPage() {
               {hb.last_ping_at ? `last ping ${formatDateTime(hb.last_ping_at)}` : 'no ping yet'}
               {hb.due_by && m.enabled && ` · next ping due by ${formatDateTime(hb.due_by)}`}
             </p>
+          ) : m.workflow ? (
+            <p className="hint">
+              Multi-step API check · {m.workflow.steps.length} step{m.workflow.steps.length === 1 ? '' : 's'} · every{' '}
+              {Math.round(m.effective_check_interval_seconds / 60)} min ·{' '}
+              {m.last_checked_at ? `last run ${formatDateTime(m.last_checked_at)}` : 'not run yet'}
+            </p>
           ) : dns ? (
             <p className="hint">
               {dns.record_type} record of {m.url} · {dns.expected ? `must match ${dns.expected}` : 'any answer will do'} · every{' '}
@@ -109,6 +118,29 @@ export function MonitorDetailPage() {
               Responding slowly since {formatDateTime(m.slow_since)}: responses have been over {m.slow_threshold_ms?.toLocaleString()} ms for{' '}
               {m.slow_checks} checks in a row. The site is online; you will get one alert when response times are back to normal.
             </Alert>
+          )}
+
+          {m.workflow?.secrets.some((s) => !s.set) && (
+            <Alert tone="warning" role="status">
+              This check is paused until its secrets are entered: {m.workflow.secrets.filter((s) => !s.set).map((s) => s.name).join(', ')}.{' '}
+              <Link to={`/monitors/${m.id}/edit`}>Enter them</Link>, then resume it.
+            </Alert>
+          )}
+          {m.workflow && (
+            <section className="card" aria-labelledby="latest-run-h">
+              <h2 id="latest-run-h">Latest run</h2>
+              {latest.data?.results[0]?.steps ? (
+                <>
+                  <p className="hint">
+                    {formatDateTime(latest.data.results[0].checked_at)}
+                    {latest.data.results[0].response_time_ms != null && ` · ${latest.data.results[0].response_time_ms.toLocaleString()} ms in total`}
+                  </p>
+                  <WorkflowRun names={m.workflow.steps.map((st) => st.name)} outcomes={latest.data.results[0].steps} label="Latest run" />
+                </>
+              ) : (
+                <p className="hint">The first run shows here a minute or so after the check is added or changed.</p>
+              )}
+            </section>
           )}
 
           {hb ? <PingSetup monitor={m} onChanged={setChanged} /> : !dns && <CertificateCard monitor={m} />}

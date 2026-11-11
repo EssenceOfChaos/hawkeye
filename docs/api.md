@@ -134,6 +134,16 @@ that are not browsers send none. It is stateless (no MCP sessions; `GET` and `DE
 | `post_incident_update`, `delete_incident_update` | write, destructive | write key, paid plan, owner | `POST`/`DELETE /incidents/:id/updates` |
 | `schedule_maintenance` | write | write key, Pro or Agency, owner | `POST /maintenance-windows` (one-off) |
 | `delete_maintenance_window` | write, destructive | write key, paid plan, owner | `DELETE /maintenance-windows/:id` |
+| `create_workflow` | write, destructive, open world | write key, paid plan | `POST /monitors` with `type: "workflow"`, with secret *names* only (see below) |
+| `test_workflow` | write, open world | write key, paid plan | `POST /monitors/test-workflow`, or a run of a saved workflow by `monitor_id` |
+
+**Multi-step API checks over MCP.** Secret values never pass through an assistant. `create_workflow` takes the names of the secrets its steps use;
+they are stored as declared but not entered (`monitor_secrets.value` NULL), the workflow is saved **paused**, and the result lists `secrets_to_enter` and
+the `edit_url` where a person enters them. Until then resuming it (REST, MCP, bulk) is refused (`409 SECRETS_NOT_SET`). A step's credentials
+(`auth_value`) must be a single placeholder (`{{token}}` or `{{secret.name}}`), never a literal. `create_workflow` is marked destructive, because its steps
+call other services on every run, so Claude asks first; steps that write need a verified address. `test_workflow` runs a saved workflow (its stored
+secrets) or a draft; a draft may not use secrets or POST, PUT, PATCH and DELETE, so an assistant can't make HawkEye change data elsewhere on demand. It
+records no result and shares the app's 60 test runs an hour per organization. `get_monitor` lists a workflow's step names (`workflow_steps`).
 
 Every tool has a title and `readOnlyHint`, or an explicit `destructiveHint`; destructive tools always ask the person first in Claude. A tool that is
 refused returns a tool result with `isError` and a message that says how to fix it, never internal detail. Writes spend the key's write budget
@@ -468,6 +478,42 @@ incidents, routing, alert delay, quiet hours, maintenance, status pages and badg
 for expiry. Alerts say "DNS check failing for" and "is resolving correctly again"; webhook payloads carry `monitor.type: "dns"` and the host name in
 `monitor.url`.
 
+### Multi-step API checks
+
+A multi-step API check (`type: "workflow"`) runs a list of requests in order on each check and fails at the first step that fails
+(`internal/checks/workflow.go`; plan in `docs/plan-synthetic-api.md`). Each counts as a monitor, and the plan also limits how many there are and how many
+steps each may have (`plans.max_workflows`, `max_workflow_steps`: Free 1 of up to 3 steps, Pro 5 of 10, Agency 50 of 10; `PLAN_LIMIT_REACHED`
+otherwise). The monitor's own website fields (`url`, `headers`, `body`, `auth`, `assertions`, `expected_status_code`) must be left out: the monitor's
+`url` becomes the first step's address.
+
+- `steps` (1 to 10): each has `name` (1 to 100 characters), `method`, `url`, `headers`, `body`, `auth`, `expected_status_code`, `assertions` and
+  `timeout_seconds` (1 to 30, default 10), validated as for a website monitor, plus `extractions`: up to 10 values to save from the response for later steps,
+  each `{name, from, path}` where `from` is `json_path` (a path such as `data.token`), `header` (a header name) or `cookie` (a cookie name), and `name`
+  is a letter or `_` followed by up to 39 letters, digits or `_`.
+- Later steps use a saved value as `{{name}}`, and a secret as `{{secret.name}}`, in their `url` path or query, header values, `body` and `auth` username
+  and secret. Every value a step uses must be saved by an earlier step, and every secret must exist (400, on the field). Values can't appear in a
+  step's scheme or host. In an address they are URL-encoded; in a body that starts with `{` or `[` they are JSON-escaped (write `"{{token}}"` in quotes);
+  a value containing a line break is refused in a header or credentials.
+- `secrets`: an object of name to value (1 to 2048 characters; up to 20). Values are write-only: responses list `secrets: [{name, set: true}]`. On PATCH a
+  value replaces that secret, `null` removes it, and names left out are kept.
+- `cookies` (default false): carry cookies from step to step during a run.
+- A step's `auth.secret` is write-only too. On PATCH, `steps` replaces all the steps; a step sent without `auth.secret` keeps the secret stored for the
+  step at the same position, if its `auth.type` is unchanged.
+- A step using POST, PUT, PATCH or DELETE needs a verified address, and the check runs at most every 5 minutes (the default interval is raised to it).
+
+Workflow monitors carry `workflow: {steps, secrets, cookies}` (null for other monitors). A run has 60 seconds in all. Its result is the failing step's,
+with the step named: `"Step 2 (Get account): Received HTTP 401, expected 200"`; `response_time_ms` is the total of the steps, which slow-response alerts
+use. A workflow that can't run as written (a value no step saved, or a path to save that isn't in the response) is `error_category: "workflow_config"`.
+Each result's `steps` (in `GET /monitors/{id}/results`) lists the steps that ran: `{name, success, status_code, response_time_ms, error_category,
+error_summary}`. Secrets and saved values are replaced with `[hidden]` in everything stored or alerted on; response content is never stored.
+
+`POST /monitors/test-workflow` runs an unsaved workflow once and returns `{"result": {success, status_code, response_time_ms, error_category,
+error_summary, steps}}`, storing nothing. The body is `{steps, secrets, cookies}`, validated as above against the plan's step limit; secrets must be sent
+in full (stored ones are never read). It is session-only, needs a verified address for steps that write, and is limited per IP and to 60 runs an hour per
+organization. A run longer than 25 seconds is stopped (`422 TEST_TOO_SLOW`). API keys can create, read, change and delete workflows like other monitors;
+MCP's `get_monitor` lists their step names (`workflow_steps`), and `create_workflow` and `test_workflow` create and try them with secret names only
+(see *MCP server*).
+
 ### Webhook and chat alerts
 
 Every enabled, verified destination receives outage, recovery, certificate-expiry and domain-expiry alerts through the same durable queue as email (retries with backoff, at-least-once). A 2xx is success; 408, 429, 5xx and network errors are retried; any other 4xx (for example 404/410 for a revoked URL) fails the delivery permanently. Requests go through the SSRF-safe client, so private addresses are refused.
@@ -560,7 +606,7 @@ left alone until then (see *Alert routing, alert delay and quiet hours*).
 
 ## Feature waitlists ("Get notified")
 
-Sign-ups for coming-soon features from the landing page's "Coming soon" section (`internal/waitlist`). Features: `api_workflows` (multi-step API checks), `status_page_domains` (status pages on your own domain), `status_page_subscribers` (email updates for status page visitors).
+Sign-ups for coming-soon features from the landing page's "Coming soon" section (`internal/waitlist`). Features: `api_workflows` (multi-step API checks, now built: its card is gone, and the key stays until the launch email has gone to the list), `status_page_domains` (status pages on your own domain), `status_page_subscribers` (email updates for status page visitors).
 
 | Method & path | Auth | Notes |
 |---|---|---|

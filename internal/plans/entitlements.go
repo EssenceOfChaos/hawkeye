@@ -21,6 +21,8 @@ const (
 	LimitReports        = "reports"
 	LimitBrandedReports = "branded_reports"
 	LimitAPIWrite       = "api_write"
+	LimitWorkflows      = "workflows"
+	LimitWorkflowSteps  = "workflow_steps"
 )
 
 // LimitError is returned when an operation exceeds the organization's plan.
@@ -70,6 +72,17 @@ func (e *LimitError) Message() string {
 		return fmt.Sprintf("Hiding \"Powered by HawkEye\" is not included in your %s plan. Upgrade to show status pages under your clients' brands alone.", e.Plan.Name)
 	case LimitAPIWrite:
 		return fmt.Sprintf("Your %s plan can read data through the API but not change it. Upgrade to make changes with API keys, or use a read-only key.", e.Plan.Name)
+	case LimitWorkflows:
+		if e.Limit == 0 {
+			return fmt.Sprintf("Multi-step API checks are not included in your %s plan. Upgrade to check whole sequences of API requests.", e.Plan.Name)
+		}
+		if e.Used > e.Limit {
+			return fmt.Sprintf("Your %s plan includes %d multi-step API check%s but you have %d. Your existing ones keep running; delete %d or upgrade to add another.",
+				e.Plan.Name, e.Limit, map[bool]string{true: "", false: "s"}[e.Limit == 1], e.Used, e.Used-e.Limit+1)
+		}
+		return fmt.Sprintf("Your %s plan includes up to %d multi-step API check%s and all of them are in use.", e.Plan.Name, e.Limit, map[bool]string{true: "", false: "s"}[e.Limit == 1])
+	case LimitWorkflowSteps:
+		return fmt.Sprintf("Your %s plan allows up to %d steps in a multi-step API check.", e.Plan.Name, e.Limit)
 	case LimitMaintenance:
 		return fmt.Sprintf("Maintenance windows are not included in your %s plan. Upgrade to silence alerts during planned work.", e.Plan.Name)
 	case LimitReports:
@@ -246,6 +259,35 @@ func (s *Service) CanWriteViaAPI(ctx context.Context, db DB, orgID uuid.UUID) er
 func countMonitors(ctx context.Context, db DB, orgID uuid.UUID) (n int, err error) {
 	err = db.QueryRow(ctx, `SELECT count(*) FROM monitors WHERE organization_id = $1 AND deleted_at IS NULL`, orgID).Scan(&n)
 	return n, err
+}
+
+// CanCreateWorkflow returns a *LimitError when the plan has no room for another multi-step API check (it also needs room for a monitor:
+// CanCreateMonitor). Call it in the transaction that holds the organization row lock, like CanCreateMonitor.
+func (s *Service) CanCreateWorkflow(ctx context.Context, db DB, orgID uuid.UUID) error {
+	p, err := EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	var used int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM monitors WHERE organization_id = $1 AND kind = 'workflow' AND deleted_at IS NULL`, orgID).Scan(&used); err != nil {
+		return err
+	}
+	if used >= p.MaxWorkflows {
+		return s.limitError(ctx, db, LimitWorkflows, p.MaxWorkflows, used, p)
+	}
+	return nil
+}
+
+// CheckWorkflowSteps returns a *LimitError when a multi-step API check has more steps than the plan allows.
+func (s *Service) CheckWorkflowSteps(ctx context.Context, db DB, orgID uuid.UUID, steps int) error {
+	p, err := EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	if steps > p.MaxWorkflowSteps {
+		return s.limitError(ctx, db, LimitWorkflowSteps, p.MaxWorkflowSteps, steps, p)
+	}
+	return nil
 }
 
 // CanCreateMonitor returns a *LimitError when the organization has no monitor capacity left.

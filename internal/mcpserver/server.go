@@ -24,6 +24,7 @@ import (
 
 	"hawkeye/internal/apitokens"
 	"hawkeye/internal/audit"
+	"hawkeye/internal/checks"
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/maintenance"
 	"hawkeye/internal/metrics"
@@ -54,6 +55,8 @@ type Deps struct {
 	AppBaseURL  string // for status page and ping addresses
 	Version     string
 	Audit       *audit.Recorder // the security log; nil records nothing
+	// WorkflowChecker runs test_workflow (the SSRF-safe checker, as for the app's Run test); nil turns that tool's runs off.
+	WorkflowChecker *checks.Checker
 }
 
 // instructions describes the server to clients. It says what the data is and how much to trust it, nothing about how to behave otherwise.
@@ -194,9 +197,13 @@ func asRefusal(err error) (string, bool) {
 	var r *refusal
 	var ve *validation.Error
 	var le *plans.LimitError
+	var unset *monitors.ErrSecretsNotSet
 	switch {
 	case errors.As(err, &r):
 		return r.msg, true
+	case errors.As(err, &unset):
+		return "A multi-step API check can't run until a person enters its secrets (" + strings.Join(unset.Names, ", ") +
+			") in HawkEye: open the check, choose Edit, and fill them in. Secret values are never sent through this connection.", true
 	case errors.As(err, &le):
 		return le.Message() + " Plans: " + le.UpgradeURL, true
 	case errors.As(err, &ve):

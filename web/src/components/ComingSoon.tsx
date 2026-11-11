@@ -9,11 +9,6 @@ import { Reveal } from './Reveal'
  */
 export const COMING_SOON = [
   {
-    key: 'api_workflows',
-    title: 'Multi-step API checks',
-    text: 'Your site is up, but does sign-in work? Check a sequence of API calls (sign in, fetch the account, check the answer) and get alerted when any step breaks.',
-  },
-  {
     key: 'status_page_domains',
     title: 'Status pages on your own domain',
     text: 'Serve each status page at an address like status.yourbrand.com, with a certificate HawkEye looks after, so clients see your brand, not ours.',

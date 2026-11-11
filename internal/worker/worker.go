@@ -18,6 +18,7 @@ import (
 	"hawkeye/internal/checks"
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/metrics"
+	"hawkeye/internal/monitors"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/queue"
 	"hawkeye/internal/scheduler"
@@ -141,12 +142,13 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 	var timeoutSecs int
 	var dnsType string // set for DNS monitors, whose url is the host name to look up
 	var dnsExpected string
+	var kind string
 	err = w.pool.QueryRow(ctx, `SELECT url, method, expected_status_code, timeout_seconds, enabled,
 		request_headers, COALESCE(request_body, ''), auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''),
-		COALESCE(auth_secret, ''), assertions, COALESCE(dns_record_type, ''), COALESCE(dns_expected, '')
+		COALESCE(auth_secret, ''), assertions, COALESCE(dns_record_type, ''), COALESCE(dns_expected, ''), kind
 		FROM monitors WHERE id = $1 AND deleted_at IS NULL`, job.MonitorID).
 		Scan(&t.URL, &t.Method, &t.ExpectedStatus, &timeoutSecs, &enabled, &t.Headers, &t.Body, &t.Auth.Type,
-			&t.Auth.Username, &t.Auth.HeaderName, &t.Auth.Secret, &t.Assertions, &dnsType, &dnsExpected)
+			&t.Auth.Username, &t.Auth.HeaderName, &t.Auth.Secret, &t.Assertions, &dnsType, &dnsExpected, &kind)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows) || err == nil && !enabled:
 		return true, w.complete(ctx, job) // deleted or paused since it was scheduled
@@ -171,9 +173,21 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 	t.Timeout = time.Duration(timeoutSecs) * time.Second
 
 	var res checks.Result
-	if dnsType != "" {
+	switch {
+	case kind == monitors.TypeWorkflow:
+		wf, werr := monitors.Runnable(ctx, w.pool, w.box, job.MonitorID)
+		if werr != nil {
+			// As with a monitor's own credentials: an operator problem, not a failing service. Retry and report; record nothing.
+			w.m.WorkerErrors.WithLabelValues("secrets").Inc()
+			w.log.ErrorContext(ctx, "cannot load workflow", "monitor_id", job.MonitorID, "error", werr)
+			w.rep.Capture(ctx, fmt.Errorf("monitor %s: load workflow: %w", job.MonitorID, werr), map[string]string{"component": "worker"})
+			w.retry(ctx, job)
+			return true, nil
+		}
+		res, err = w.checker.RunWorkflow(ctx, wf)
+	case dnsType != "":
 		res, err = w.checker.CheckDNS(ctx, checks.DNSTarget{Host: t.URL, RecordType: dnsType, Expected: dnsExpected, Timeout: t.Timeout})
-	} else {
+	default:
 		res, err = w.checker.Check(ctx, t)
 	}
 	if err != nil { // only when ctx was canceled

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strings"
@@ -42,6 +43,7 @@ import (
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/ratelimit"
+	"hawkeye/internal/safehttp"
 	"hawkeye/internal/sitecheck"
 	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
@@ -127,6 +129,11 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 	opts.TwoFactor = tf
 	opts.Waitlist = waitlist.NewService(pool, mail, log, "http://app.test")
 	opts.Audit = auditLog
+	// Test runs reach this test's local servers; every other private address is still refused.
+	opts.WorkflowChecker = checks.NewChecker(safehttp.Config{
+		AllowIP:   func(a netip.Addr) bool { return a == netip.MustParseAddr("127.0.0.1") || safehttp.IsPublicIP(a) },
+		AllowPort: func(int) bool { return true },
+	})
 	opts.OAuthTokenPerMin = o.oauthPerM
 	if !o.noAPIKeys {
 		opts.OAuth = oauth.NewService(pool, planSvc, tf, mail, log, "http://app.test")

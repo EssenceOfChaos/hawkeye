@@ -7,7 +7,7 @@ This is a self-review by the developer of the system, not an independent penetra
 
 | Finding | Fix |
 |---|---|
-| Go stdlib/x-net vulnerabilities in 1.25.x | moved to Go 1.26.10; `govulncheck` reports 0 affecting |
+| Go stdlib/x-net vulnerabilities in 1.25.x | moved to Go 1.26.10, then 1.26.11 (GO-2026-6859, 2026-11-11); `govulncheck` reports 0 affecting |
 | Tokens (password reset/verify) could leak via Caddy logs and Referer | log redaction, `no-referrer`, SPA strips token from URL |
 | Sentry scrubber left the token in `Authorization: Bearer ...` | header pattern added + test |
 | A panic was reported twice (recover and error handler) | marker error; test asserts exact count |
@@ -39,6 +39,11 @@ This is a self-review by the developer of the system, not an independent penetra
 SQL: all queries are parameterized; the few places that assemble SQL (dynamic `UPDATE` column lists, retention table/batch) use fixed identifiers from code, never request data.
 
 ## Residual risks and launch blockers
+
+Multi-step API checks (added 2026-11-11) are reviewed in `docs/security.md#multi-step-api-checks-workflows`. Residual: a customer can point a workflow
+at a third-party API with credentials they hold, as they could with a single API check, and the requests come from our servers; the verified-address and
+5-minute rules for writes, the rate limits and the Terms' "authorized to monitor" clause are the controls. Redaction hides values of 4 characters or
+more only: a shorter secret could appear in a summary that quotes it.
 
 1. **Privacy policy and Terms**: reviewed and approved by counsel on 2026-11-08 (`docs/legal-placeholders.md`). Resolved; have counsel look again
    when a feature collects a new kind of personal data.

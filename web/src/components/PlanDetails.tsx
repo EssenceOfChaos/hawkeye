@@ -63,6 +63,9 @@ export function PlanDetails({ plan, interval = 'month' }: { plan: Plan; interval
         {(plan.max_team_members ?? 1) > 1 && <li>{plan.max_team_members} team members</li>}
         {(plan.max_team_members ?? 1) > 1 && <li>Require two-factor sign-in for your team</li>}
         <li>Website and API monitoring</li>
+        {(plan.max_workflows ?? 0) > 0 && (
+          <li>{plan.max_workflows === 1 ? 'One multi-step API check' : `${plan.max_workflows} multi-step API checks`} of up to {plan.max_workflow_steps} steps</li>
+        )}
         <li>Cron job and DNS monitoring</li>
         <li>SSL certificate expiry warnings</li>
         {plan.max_domains !== undefined && <li>Domain expiry warnings for up to {plan.max_domains} domains</li>}

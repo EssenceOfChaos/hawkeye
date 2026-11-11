@@ -28,7 +28,7 @@ const SUPPORT = 'customer_support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 10, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 11, 2026</p>
       <p>
         HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -69,7 +69,7 @@ export function PrivacyPage() {
       <p>When you configure a website or endpoint for monitoring, we process information needed to operate the Service, which includes:</p>
       <ul>
         <li>Monitor name and URL, and your monitoring settings (such as check interval and accepted status codes).</li>
-        <li>For API checks, the request you configure: the request method, custom headers, a request body, authentication credentials (a username and password, a bearer token, or an API key), and the response checks you define.</li>
+        <li>For API checks, the request you configure: the request method, custom headers, a request body, authentication credentials (a username and password, a bearer token, or an API key), and the response checks you define. For multi-step API checks, the same for each step, the values you choose to pass from one step to the next, and secrets you save for them (such as a test account’s password), which are encrypted like other credentials. For each run we keep each step’s name, status code, time and, if it failed, the reason; we never store what the responses contained, and secrets and passed values are hidden in results and alerts.</li>
         <li>For each check: the time, the HTTP status code, the response time, whether your response checks passed, and a short error category if it failed. To evaluate response checks we read the response (up to the first 1 MB) while the check runs; we do not store its content.</li>
         <li>For heartbeat (cron job) monitors, each ping your job sends to its private ping address: the time, the request method, the IP address and user agent it came from, whether it reported success or failure (and any exit status), and the first 1,000 characters of anything your job sends with it. We keep the last 100 pings of each heartbeat monitor, show them only to your organization, and delete them with the monitor. Do not send passwords or other secrets in a ping.</li>
         <li>Incident and recovery records, alert settings, and records of the notifications we sent.</li>

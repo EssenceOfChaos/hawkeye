@@ -169,6 +169,11 @@ func (h *handlers) createMonitor(c *echo.Context) error {
 	if err := requireVerifiedForWriteMethod(c, in.Method); err != nil {
 		return err
 	}
+	for _, m := range monitors.StepMethods(in.Steps) {
+		if err := requireVerifiedForWriteMethod(c, &m); err != nil {
+			return err
+		}
+	}
 	m, err := h.monitors.Create(c.Request().Context(), currentOrg(c), in)
 	if err != nil {
 		return mapError(err)
@@ -211,6 +216,13 @@ func (h *handlers) updateMonitor(c *echo.Context) error {
 	}
 	if err := requireVerifiedForWriteMethod(c, in.Method); err != nil {
 		return err
+	}
+	if in.Steps != nil {
+		for _, m := range monitors.StepMethods(*in.Steps) {
+			if err := requireVerifiedForWriteMethod(c, &m); err != nil {
+				return err
+			}
+		}
 	}
 	m, err := h.monitors.Update(c.Request().Context(), currentOrg(c), id, in)
 	if err != nil {

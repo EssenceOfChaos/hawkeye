@@ -1,4 +1,4 @@
-import { BellAlertIcon, ChatBubbleLeftRightIcon, ClockIcon, CodeBracketIcon, GlobeAltIcon, RocketLaunchIcon } from '@heroicons/react/24/outline'
+import { ArrowsRightLeftIcon, BellAlertIcon, ChatBubbleLeftRightIcon, ClockIcon, CodeBracketIcon, GlobeAltIcon, RocketLaunchIcon } from '@heroicons/react/24/outline'
 import type { ComponentType, ReactNode, SVGProps } from 'react'
 import { Link, NavLink } from 'react-router'
 import { useAuth } from '../../auth'
@@ -334,6 +334,79 @@ function Alerts() {
   )
 }
 
+function ApiWorkflows() {
+  return (
+    <>
+      <p>
+        A website check tells you an address answers. A multi-step API check tells you something your customers do still works: it sends several
+        requests in a row, such as signing in and then fetching an account with the token the sign-in returned, and fails at the first step that fails.
+        Every plan includes one; paid plans include more and longer ones. Each counts toward your plan’s monitor limit.
+      </p>
+
+      <h2 id="create">Create one</h2>
+      <ol>
+        <li>Choose <strong>Add monitor</strong>, then <strong>A multi-step API check</strong>.</li>
+        <li>For each step, give it a name, a method and an address. <strong>More options</strong> has headers, a body, authentication and checks on the response.</li>
+        <li>Add the passwords and keys the steps need under <strong>Secrets</strong>.</li>
+        <li>Choose <strong>Run test</strong> to try it before saving, then <strong>Add monitor</strong>.</li>
+      </ol>
+
+      <h2 id="values">Passing a value to the next step</h2>
+      <p>
+        Under <strong>Save values for later steps</strong>, a step can keep a value from its response: a JSON path such as <code>data.token</code>, a response
+        header such as <code>Location</code>, or a cookie. Give it a name, such as <code>token</code>, and later steps use it by writing{' '}
+        <code>{'{{token}}'}</code> in their address, header values, body or authentication. A secret is written <code>{'{{secret.password}}'}</code>. The
+        editor lists the values each step can use; click one to copy it.
+      </p>
+      <p>An example, signing in and then checking the account:</p>
+      <ol>
+        <li>
+          <strong>Sign in</strong>: <code>POST https://api.example.com/login</code> with the body{' '}
+          <code>{'{"email": "monitor@example.com", "password": "{{secret.password}}"}'}</code>, saving <code>data.token</code> as <code>token</code>.
+        </li>
+        <li>
+          <strong>Get account</strong>: <code>GET https://api.example.com/account</code> with a bearer token of <code>{'{{token}}'}</code>, expecting status 200
+          and a JSON check that <code>plan</code> equals <code>active</code>.
+        </li>
+      </ol>
+      <p>
+        Values are inserted as text. In a JSON body put them inside quotes, as above; HawkEye escapes them so the body stays valid JSON. In an address
+        they are encoded. A step’s host must be written out in full: values can go in the path and query, never in the host.
+      </p>
+      <p>
+        If the site signs in with a session cookie instead of a token, turn on <strong>Send cookies from earlier steps</strong>. Cookies last for one run
+        and are never stored.
+      </p>
+
+      <h2 id="results">Reading a result</h2>
+      <p>
+        <strong>Run test</strong> and the monitor’s <strong>Latest run</strong> show each step with its status code and time, a ✕ where the run stopped,
+        and the reason. Alerts name the failing step, for example “Step 2 (Get account): Received HTTP 401, expected 200”. When the problem is the check
+        itself, such as a value that no earlier step saves, the result says the test needs fixing, so a broken test reads differently from a broken API.
+        Slow-response alerts use the time of all the steps together.
+      </p>
+
+      <h2 id="safety">Secrets and safety</h2>
+      <ul>
+        <li>Secrets and step credentials are stored encrypted, never shown again, and hidden as <code>[hidden]</code> in results and alerts, along with every value a step saves.</li>
+        <li>HawkEye keeps only each step’s name, status code, time and failure reason, never the responses.</li>
+        <li>Use a test account made for monitoring, not a real person’s, and give it as little access as it needs.</li>
+        <li>
+          Steps that use POST, PUT, PATCH or DELETE are repeated on every check. They need a verified email address, the check runs at most every 5 minutes,
+          and they should only reach endpoints that are safe to call again and again.
+        </li>
+        <li>A run may take up to 60 seconds in total; <strong>Run test</strong> stops after 25.</li>
+      </ul>
+
+      <h2 id="api">From the API</h2>
+      <p>
+        Create one with <code>POST /api/v1/monitors</code> and <code>"type": "workflow"</code>, a list of <code>steps</code> and a <code>secrets</code>{' '}
+        object. See the <Link to="/docs/api">API guide</Link> for keys.
+      </p>
+    </>
+  )
+}
+
 function ApiDocs() {
   return (
     <>
@@ -460,6 +533,11 @@ function ClaudeDocs() {
         <li><strong>Read</strong> (any key): an account overview, your monitors and their state, uptime and response times, incidents and their updates, status pages and maintenance windows.</li>
         <li><strong>Pause and resume monitors</strong>, one by one or every monitor with a tag, and <strong>add monitors</strong> (website, heartbeat or DNS).</li>
         <li><strong>Post updates on incidents</strong> and <strong>schedule maintenance</strong> (the organization’s owner only, as in the app), and delete them again.</li>
+        <li>
+          <strong>Set up and test <Link to="/docs/api-workflows">multi-step API checks</Link></strong>. Claude never sees passwords or keys: it names the
+          secrets a check needs, and the check stays paused until you enter them in HawkEye. Claude asks before saving one, because its steps call your API
+          on every run.
+        </li>
       </ul>
       <p>
         Claude acts as you, in the organization the key belongs to, with your permissions, and no more. It can’t see or change your password, billing, team,
@@ -488,6 +566,7 @@ function ClaudeDocs() {
 export const DOCS: readonly Doc[] = [
   { path: '/docs/getting-started', title: 'Getting started', summary: 'From a new account to your first monitor and alert in a few minutes.', icon: RocketLaunchIcon, body: GettingStarted },
   { path: '/docs/cron-job-monitoring', title: 'Heartbeat (cron job) monitoring', summary: 'Get alerted when a backup, scheduled task or queue worker stops running or fails.', icon: ClockIcon, body: HeartbeatMonitoring },
+  { path: '/docs/api-workflows', title: 'Multi-step API checks', summary: 'Check that a sequence of requests works, such as signing in and fetching an account, and see which step failed.', icon: ArrowsRightLeftIcon, body: ApiWorkflows },
   { path: '/docs/dns-monitoring', title: 'DNS monitoring', summary: 'Get alerted when a DNS record disappears or stops matching the value you expect.', icon: GlobeAltIcon, body: DnsMonitoring },
   { path: '/docs/alerts', title: 'Alerts', summary: 'Alert channels, routing alerts by client, alert delays, quiet hours and maintenance windows.', icon: BellAlertIcon, body: Alerts },
   { path: '/docs/api', title: 'API and API keys', summary: 'Use HawkEye from your own scripts and tools: create a key, send requests, and keep keys safe.', icon: CodeBracketIcon, body: ApiDocs },

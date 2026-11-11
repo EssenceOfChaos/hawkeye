@@ -18,6 +18,7 @@ import (
 	"hawkeye/internal/badges"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/branding"
+	"hawkeye/internal/checks"
 	"hawkeye/internal/contact"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/errtrack"
@@ -77,11 +78,13 @@ type Options struct {
 	OAuth         *oauth.Service       // OAuth for the MCP server (connecting Claude); nil turns it off
 	Waitlist      *waitlist.Service    // "Get notified" waitlists for coming-soon features; nil turns them off
 	Audit         *audit.Recorder      // the security log; nil records nothing and turns its pages off
-	AppBaseURL    string               // public address of the app (status page and ping addresses in MCP tool results)
-	Version       string               // reported by the MCP server
-	MCPOrigins    []string             // browser origins allowed to call /mcp; nil means DefaultMCPOrigins
-	PgPool        *pgxpool.Pool
-	Pool          plans.DB
+	// WorkflowChecker runs test runs of multi-step API checks (POST /monitors/test-workflow); nil turns that endpoint off.
+	WorkflowChecker *checks.Checker
+	AppBaseURL      string   // public address of the app (status page and ping addresses in MCP tool results)
+	Version         string   // reported by the MCP server
+	MCPOrigins      []string // browser origins allowed to call /mcp; nil means DefaultMCPOrigins
+	PgPool          *pgxpool.Pool
+	Pool            plans.DB
 
 	SecureCookies       bool
 	AuthRateLimitPerMin int
@@ -191,7 +194,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
 	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies,
-		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, tokenRoutes: map[string]bool{}}
+		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, workflowChecker: o.WorkflowChecker, tokenRoutes: map[string]bool{}}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
@@ -377,6 +380,13 @@ func registerAPI(e *echo.Echo, o Options) {
 	api.GET("/monitors", h.listMonitors)
 	api.POST("/monitors", h.createMonitor)
 	api.POST("/monitors/bulk", h.bulkMonitors)
+	// Trying out a multi-step API check sends requests from our servers on demand: session only, a verified address, and per-IP and
+	// per-organization budgets.
+	testLimits := []echo.MiddlewareFunc{requireVerifiedEmail, limit("test-workflow")}
+	if h.limits.l != nil {
+		testLimits = append(testLimits, h.limits.by("test-workflow:org", 60, time.Hour, func(c *echo.Context) string { return currentOrg(c).String() }))
+	}
+	scoped.POST("/monitors/test-workflow", h.testWorkflow, testLimits...)
 	api.GET("/tags", h.listTags)
 	api.POST("/tags", h.createTag)
 	api.PATCH("/tags/:tagID", h.updateTag)

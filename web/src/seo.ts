@@ -76,6 +76,12 @@ export const PAGES: readonly PageMeta[] = [
     index: true,
   },
   {
+    path: '/docs/api-workflows',
+    title: 'Multi-Step API Checks | HawkEye Docs',
+    description: 'Monitor an API flow, not just one address: sign in, pass the token to the next request, check the answer, and see which step failed.',
+    index: true,
+  },
+  {
     path: '/docs/dns-monitoring',
     title: 'DNS Monitoring | HawkEye Docs',
     description: 'Get alerted when a DNS record disappears or stops matching the value you expect. Watch A, AAAA, MX, NS and TXT records, including SPF and DMARC.',
