@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { type BillingInterval } from '../api'
 import { useAuth } from '../auth'
-import { brand } from '../brand'
+import { brand, STATUS_URL } from '../brand'
 import { CookieSettingsButton } from '../components/CookieBanner'
 import { IntervalToggle } from '../components/PlanDetails'
 import { ProductShots } from '../components/ProductShots'
@@ -155,6 +155,7 @@ export function MonitoringLandingPage() {
           <Link to="/privacy">Privacy policy</Link>
           <Link to="/terms">Terms of service</Link>
           <Link to="/contact">Contact us</Link>
+          <a href={STATUS_URL}>HawkEye status</a>
           <CookieSettingsButton />
         </nav>
       </footer>

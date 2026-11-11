@@ -74,3 +74,6 @@ export const brand = {
     responseTime: iconResponseTime,
   },
 }
+
+/** HawkEye's own status page. It runs on Cloudflare, separately from HawkEye (status/), so it answers when HawkEye doesn't. */
+export const STATUS_URL = 'https://status.hawkeye.observer'

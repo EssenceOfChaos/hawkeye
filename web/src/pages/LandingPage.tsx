@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { type BillingInterval, type Plan } from '../api'
 import { usePlans } from '../hooks'
 import { useAuth } from '../auth'
-import { brand } from '../brand'
+import { brand, STATUS_URL } from '../brand'
 import { CookieSettingsButton } from '../components/CookieBanner'
 import { IntervalToggle, PlanDetails } from '../components/PlanDetails'
 import { ComingSoon } from '../components/ComingSoon'
@@ -417,6 +417,7 @@ export function LandingPage() {
         <nav aria-label="Company">
           <h6 className="d-footer-title">Company</h6>
           <Link className="d-link d-link-hover" to="/contact">Contact us</Link>
+          <a className="d-link d-link-hover" href={STATUS_URL}>HawkEye status</a>
           <Link className="d-link d-link-hover" to="/privacy">Privacy policy</Link>
           <Link className="d-link d-link-hover" to="/terms">Terms of service</Link>
           <CookieSettingsButton className="d-link d-link-hover" />

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { STATUS_URL } from '../brand'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { CookieSettingsButton } from './CookieBanner'
 import { api, type BillingSubscription } from '../api'
@@ -128,7 +129,7 @@ export function Layout() {
         {organization?.two_factor_blocked && !twoFactor?.enabled && pathname !== '/account' ? null : <Outlet />}
       </main>
       <footer className="app-footer">
-        <Link to="/contact">Contact</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link> · <CookieSettingsButton />
+        <Link to="/contact">Contact</Link> · <a href={STATUS_URL}>Status</a> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link> · <CookieSettingsButton />
       </footer>
     </>
   )

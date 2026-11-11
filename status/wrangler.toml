@@ -1,0 +1,24 @@
+# status.hawkeye.observer: HawkEye's own status page. It runs on Cloudflare, not on HawkEye's server, so it stays up (and keeps measuring) when
+# HawkEye is down. docs/operations.md, "HawkEye's status page", has the setup and the runbook.
+name = "hawkeye-status"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+routes = [{ pattern = "status.hawkeye.observer", custom_domain = true }]
+
+[triggers]
+crons = ["* * * * *"] # one round of checks a minute
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hawkeye-status"
+database_id = "aea905cd-3490-4bf0-bed2-aa12274efed3"
+migrations_dir = "migrations"
+
+[vars]
+SITE = "https://hawkeye.observer"
+
+# Secrets (wrangler secret put NAME), never in this file:
+#   HEARTBEAT_TOKEN  HawkEye's worker signs its heartbeats with it (STATUS_HEARTBEAT_TOKEN on the server)
+#   ADMIN_TOKEN      posts incident notes (kept in Infisical's staging environment, never on the server)

@@ -36,6 +36,7 @@ import (
 	"hawkeye/internal/retention"
 	"hawkeye/internal/safehttp"
 	"hawkeye/internal/scheduler"
+	"hawkeye/internal/statusbeat"
 	"hawkeye/internal/weeklysummary"
 	"hawkeye/internal/worker"
 )
@@ -114,6 +115,11 @@ func run() error {
 	spawn(func() { w.Run(ctx) })
 	if cn != nil {
 		spawn(func() { cn.Run(ctx, cfg.CanaryInterval) })
+	}
+	// HawkEye's public status page: only the primary region's full worker reports, so a regional host can't vouch for the engine.
+	if cfg.StatusHeartbeatURL != "" && !cfg.WorkerChecksOnly && cfg.Region() == cfg.Regions().Primary() {
+		beat := statusbeat.New(pool, cfg.StatusHeartbeatURL, cfg.StatusHeartbeatToken, cfg.Region(), log)
+		spawn(func() { beat.Run(ctx) })
 	}
 	if cfg.RunScheduler {
 		sched := scheduler.New(pool, scheduler.Config{Interval: cfg.SchedulerInterval, Batch: cfg.SchedulerBatch, MaxQueueDepth: cfg.QueueMaxDepth}, m, log).WithReporter(reporter).WithRegions(cfg.Regions())

@@ -104,11 +104,15 @@ type Config struct {
 	NotifyMaxAttempts int
 	// CanaryURLs: comma-separated https endpoints the worker probes to tell its own network trouble from a customer's site being down. Empty uses the
 	// built-in three (Cloudflare, Google, Apple); "off" disables the canary. CanaryInterval is how often it probes in the background.
-	CanaryURLs        string
-	CanaryInterval    time.Duration
-	RunRetention      bool
-	RetentionInterval time.Duration
-	RetentionBatch    int
+	CanaryURLs     string
+	CanaryInterval time.Duration
+	// StatusHeartbeatURL and StatusHeartbeatToken: the primary worker tells HawkEye's public status page (status/, internal/statusbeat) every
+	// minute that checks are running. Both or neither; empty sends nothing.
+	StatusHeartbeatURL   string
+	StatusHeartbeatToken string
+	RunRetention         bool
+	RetentionInterval    time.Duration
+	RetentionBatch       int
 	// Domain expiry lookups (RDAP, WHOIS fallback). A pass looks for due domains every DomainCheckInterval; each domain is looked up again after
 	// DomainRecheckInterval, with DomainLookupPace between lookups so registries are not hammered.
 	RunDomainChecks       bool
@@ -316,26 +320,28 @@ func load(get func(string) string) (Config, error) {
 		FreeToolsEnabled:    !boolean("DISABLE_FREE_TOOLS"),
 		APIKeysEnabled:      !boolean("DISABLE_API_KEYS"),
 
-		CheckRegions:      str("CHECK_REGIONS", ""),
-		CanaryURLs:        str("CANARY_URLS", ""),
-		CanaryInterval:    duration("CANARY_INTERVAL", time.Minute),
-		WorkerRegion:      str("WORKER_REGION", ""),
-		WorkerConcurrency: integer("WORKER_CONCURRENCY", 10),
-		WorkerChecksOnly:  boolean("WORKER_CHECKS_ONLY"),
-		RunScheduler:      !boolean("DISABLE_SCHEDULER"),
-		SchedulerInterval: duration("SCHEDULER_INTERVAL", time.Second),
-		SchedulerBatch:    integer("SCHEDULER_BATCH", 200),
-		QueueMaxDepth:     integer("QUEUE_MAX_DEPTH", 1000),
-		JobLease:          duration("JOB_LEASE", 2*time.Minute),
-		JobMaxAttempts:    integer("JOB_MAX_ATTEMPTS", 3),
-		PollInterval:      duration("WORKER_POLL_INTERVAL", time.Second),
-		FailureThreshold:  integer("FAILURE_THRESHOLD", 2),
-		RecoveryThreshold: integer("RECOVERY_THRESHOLD", 2),
-		WorkerMetricsPort: integer("WORKER_METRICS_PORT", 9090),
-		NotifyMaxAttempts: integer("NOTIFY_MAX_ATTEMPTS", 6),
-		RunRetention:      !boolean("DISABLE_RETENTION"),
-		RetentionInterval: duration("RETENTION_INTERVAL", time.Hour),
-		RetentionBatch:    integer("RETENTION_BATCH", 5000),
+		CheckRegions:         str("CHECK_REGIONS", ""),
+		CanaryURLs:           str("CANARY_URLS", ""),
+		CanaryInterval:       duration("CANARY_INTERVAL", time.Minute),
+		StatusHeartbeatURL:   str("STATUS_HEARTBEAT_URL", ""),
+		StatusHeartbeatToken: str("STATUS_HEARTBEAT_TOKEN", ""),
+		WorkerRegion:         str("WORKER_REGION", ""),
+		WorkerConcurrency:    integer("WORKER_CONCURRENCY", 10),
+		WorkerChecksOnly:     boolean("WORKER_CHECKS_ONLY"),
+		RunScheduler:         !boolean("DISABLE_SCHEDULER"),
+		SchedulerInterval:    duration("SCHEDULER_INTERVAL", time.Second),
+		SchedulerBatch:       integer("SCHEDULER_BATCH", 200),
+		QueueMaxDepth:        integer("QUEUE_MAX_DEPTH", 1000),
+		JobLease:             duration("JOB_LEASE", 2*time.Minute),
+		JobMaxAttempts:       integer("JOB_MAX_ATTEMPTS", 3),
+		PollInterval:         duration("WORKER_POLL_INTERVAL", time.Second),
+		FailureThreshold:     integer("FAILURE_THRESHOLD", 2),
+		RecoveryThreshold:    integer("RECOVERY_THRESHOLD", 2),
+		WorkerMetricsPort:    integer("WORKER_METRICS_PORT", 9090),
+		NotifyMaxAttempts:    integer("NOTIFY_MAX_ATTEMPTS", 6),
+		RunRetention:         !boolean("DISABLE_RETENTION"),
+		RetentionInterval:    duration("RETENTION_INTERVAL", time.Hour),
+		RetentionBatch:       integer("RETENTION_BATCH", 5000),
 
 		RunDomainChecks:       !boolean("DISABLE_DOMAIN_CHECKS"),
 		DomainCheckInterval:   duration("DOMAIN_CHECK_INTERVAL", 10*time.Minute),
@@ -507,6 +513,12 @@ func load(get func(string) string) (Config, error) {
 	}
 	if c.DatabaseURL == "" {
 		errs = append(errs, errors.New("DATABASE_URL: required"))
+	}
+
+	if (c.StatusHeartbeatURL == "") != (c.StatusHeartbeatToken == "") {
+		errs = append(errs, errors.New("STATUS_HEARTBEAT_URL and STATUS_HEARTBEAT_TOKEN: set both, or neither"))
+	} else if c.StatusHeartbeatURL != "" && !strings.HasPrefix(c.StatusHeartbeatURL, "https://") && c.IsProduction() {
+		errs = append(errs, errors.New("STATUS_HEARTBEAT_URL: must use https in production (the token travels with every heartbeat)"))
 	}
 
 	if c.WorkerChecksOnly {
