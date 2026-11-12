@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/attribution"
 	"hawkeye/internal/audit"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/billing"
@@ -51,6 +52,8 @@ type Export struct {
 	Waitlists     []waitlist.Entry `json:"waitlists"` // coming-soon features the account's address asked to hear about
 	// SecurityLog is the account's own log: sign-ins (and failed ones), password and two-factor changes, data exports (internal/audit).
 	SecurityLog []audit.Entry `json:"security_log"`
+	// SignupAttribution is how the account's browser said it found HawkEye when it signed up (internal/attribution), or null.
+	SignupAttribution *attribution.Attribution `json:"signup_attribution"`
 }
 
 type ExportUser struct {
@@ -198,6 +201,9 @@ func (s *Service) Export(ctx context.Context, userID uuid.UUID) (Export, error) 
 	}
 	out.Waitlists = wl
 	if out.SecurityLog, err = audit.New(s.pool, s.log).AllForAccount(ctx, userID); err != nil {
+		return out, err
+	}
+	if out.SignupAttribution, err = attribution.ForUser(ctx, s.pool, userID); err != nil {
 		return out, err
 	}
 	rows, err := s.pool.Query(ctx, `SELECT o.id, o.name, m.role, o.created_at,

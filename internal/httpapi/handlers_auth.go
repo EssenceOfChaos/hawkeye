@@ -14,6 +14,7 @@ import (
 
 	"hawkeye/internal/account"
 	"hawkeye/internal/apitokens"
+	"hawkeye/internal/attribution"
 	"hawkeye/internal/audit"
 	"hawkeye/internal/auth"
 	"hawkeye/internal/badges"
@@ -211,11 +212,15 @@ func mapError(err error) error {
 }
 
 func (h *handlers) register(c *echo.Context) error {
-	var in credentials
+	var in struct {
+		credentials
+		// How the person found HawkEye, as their browser remembered it. Optional; anything unacceptable in it is dropped, never refused.
+		Attribution *attribution.Attribution `json:"attribution"`
+	}
 	if err := bind(c, &in); err != nil {
 		return err
 	}
-	u, session, err := h.auth.Register(c.Request().Context(), in.Email, in.Password)
+	u, session, err := h.auth.Register(c.Request().Context(), in.Email, in.Password, in.Attribution)
 	if err != nil {
 		return mapError(err)
 	}

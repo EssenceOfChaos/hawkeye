@@ -9,6 +9,7 @@
 // and cannot be handed a cleaned one, so it is only loaded, and only sent events, while the address carries nothing beyond a short allow-list
 // (addressIsShareable): a one-time token in a reset, verification or invitation link can never reach it.
 import { useSyncExternalStore } from 'react'
+import { campaignFrom, forgetArrival, label } from './attribution'
 
 const MEASUREMENT_ID = 'G-ZNT8EMTFGY'
 // Google Ads conversion tracking: the account id, and the "Purchase" conversion action's send_to (account id / label).
@@ -31,24 +32,35 @@ const CAMPAIGN_PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term',
 
 // Query parameters the OpenAI pixel may see besides the campaign ones: its own ad click ID, and app parameters that never carry anything personal
 // (/billing?checkout=success after paying, /billing?interval=year from a pricing card).
-const PIXEL_PARAMS = ['oppref', 'checkout', 'interval']
+// ref is the tag directories such as Product Hunt add to their links (?ref=producthunt), allowed while it is a short plain label.
+const PIXEL_PARAMS = ['oppref', 'checkout', 'interval', 'ref']
 
 /** Whether the OpenAI pixel may run on the current address: no fragment, and no query parameter outside the allow-lists. */
 export function addressIsShareable(): boolean {
   if (window.location.hash) return false
-  for (const name of new URLSearchParams(window.location.search).keys()) {
+  const q = new URLSearchParams(window.location.search)
+  for (const name of q.keys()) {
     if (!CAMPAIGN_PARAMS.includes(name) && !PIXEL_PARAMS.includes(name)) return false
   }
+  if (q.has('ref') && !label(q.get('ref'))) return false
   return true
 }
 
-/** The current address reduced to origin, path and the campaign allow-list: safe to send to Google. */
+/**
+ * The current address reduced to origin, path and the campaign allow-list: safe to send to Google. A ?ref= tag (from a directory such as Product
+ * Hunt) is passed as utm_source with utm_medium=referral when the link has no utm_source, since Google Analytics reads only utm_* tags.
+ */
 export function safeLocation(pathname: string): string {
   const current = new URLSearchParams(window.location.search)
   const kept = new URLSearchParams()
   for (const name of CAMPAIGN_PARAMS) {
     const value = current.get(name)
     if (value) kept.set(name, value.slice(0, 200))
+  }
+  const ref = label(current.get('ref'))
+  if (ref && !kept.has('utm_source')) {
+    kept.set('utm_source', campaignFrom(`?ref=${encodeURIComponent(ref)}`).source!)
+    if (!kept.has('utm_medium')) kept.set('utm_medium', 'referral')
   }
   const query = kept.toString()
   return window.location.origin + pathname + (query ? `?${query}` : '')
@@ -165,6 +177,7 @@ export function setChoice(choice: Choice) {
     w()[`ga-disable-${MEASUREMENT_ID}`] = true
     w().oaiq?.('consent', false) // stops the pixel's pings and removes its cookies (deleted below too, in case it is not loaded this visit)
     deleteAnalyticsCookies()
+    forgetArrival() // how this browser found HawkEye (attribution.ts) is analytics too
   }
   emit()
 }

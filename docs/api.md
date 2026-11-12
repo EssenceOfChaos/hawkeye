@@ -154,7 +154,7 @@ role and plan and fails if the two ever disagree.
 
 | Method & path | Auth | Notes |
 |---|---|---|
-| `POST /auth/register` | – | `{email, password}` → 201 `{user}`; creates a personal organization (owner), sends a verification email, starts a session. Password 10–128 chars. |
+| `POST /auth/register` | – | `{email, password, attribution?}` → 201 `{user}`; creates a personal organization (owner), sends a verification email, starts a session. Password 10–128 chars. `attribution` is how the browser found HawkEye (`{source, medium, campaign, click_id, referrer_host, landing_path, first_seen_at}`, all optional, sent by the web app while analytics is on); fields that are not short plain labels are dropped, never refused (`internal/attribution`). |
 | `POST /auth/login` | – | `{email, password}` → `{user}` |
 | `POST /auth/logout` | – | 204; idempotent |
 | `POST /auth/forgot-password` | – | `{email}` → always 202 (no account enumeration). Newest link only; valid 1h. |
