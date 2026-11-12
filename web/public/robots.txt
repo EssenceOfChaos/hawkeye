@@ -2,6 +2,9 @@
 # /monitoring is deliberately NOT listed here: it is a campaign page that asks not to be indexed with a noindex tag, and a crawler
 # that is blocked here could never see that tag. /assets/ stays open because the pages need their scripts and styles to render.
 User-agent: *
+# The pricing cards on the public pages are filled in from this endpoint. A crawler that runs the pages' JavaScript (Google) obeys these rules
+# for the requests a page makes too, so without this line it was shown "Pricing is temporarily unavailable". The more specific rule wins.
+Allow: /api/v1/plans
 Disallow: /api/
 Disallow: /dashboard
 Disallow: /monitors
