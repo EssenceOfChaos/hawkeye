@@ -7,6 +7,16 @@ import { PageIcon } from '../components/Brand'
 import { IncidentUpdates } from '../components/IncidentUpdates'
 import { useAuth } from '../auth'
 
+/** When an incident started. The date and the time each stay on one line: a narrow column puts the time below the date, never "PM" on its own. */
+function StartedAt({ iso }: { iso: string }) {
+  const d = new Date(iso)
+  return (
+    <time dateTime={iso}>
+      <span className="nowrap">{d.toLocaleDateString()},</span> <span className="nowrap">{d.toLocaleTimeString()}</span>
+    </time>
+  )
+}
+
 const PAGE_SIZE = 25
 
 export function formatDuration(seconds: number): string {
@@ -111,7 +121,7 @@ export function IncidentsPage() {
                     <tr>
                       <td><Link to={`/monitors/${i.monitor_id}/edit`}>{i.monitor_name}</Link></td>
                       <td><IncidentStatus status={i.status} /></td>
-                      <td><time dateTime={i.started_at}>{new Date(i.started_at).toLocaleString()}</time></td>
+                      <td><StartedAt iso={i.started_at} /></td>
                       <td>{formatDuration(i.duration_seconds)}{i.status === 'open' && ' so far'}</td>
                       <td>{i.summary ?? (i.cause_category ? CAUSES[i.cause_category] ?? i.cause_category : '—')}</td>
                       <td>

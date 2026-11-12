@@ -54,6 +54,16 @@ describe('IncidentsPage', () => {
     expect(screen.getByText('DNS lookup failed')).toBeInTheDocument()
   })
 
+  it('keeps the start time in one piece, so a narrow column never leaves AM or PM on a line of its own', async () => {
+    renderPage([incident({})])
+    const time = (await screen.findByRole('table')).querySelector('time[datetime="2026-10-12T14:30:00Z"]')!
+    const parts = [...time.querySelectorAll('span')]
+    expect(parts).toHaveLength(2)
+    expect(parts.every((p) => p.classList.contains('nowrap'))).toBe(true)
+    expect(parts[0].textContent).toBe(`${new Date('2026-10-12T14:30:00Z').toLocaleDateString()},`)
+    expect(parts[1].textContent).toBe(new Date('2026-10-12T14:30:00Z').toLocaleTimeString()) // the whole time, with its AM or PM
+  })
+
   it('lets the owner post an update, says where it appears, and suggests the next status', async () => {
     const calls = renderPage([incident({ update_count: 0 })], { pages: [{ title: 'Acme status', slug: 'acme' }] })
     await userEvent.click(await screen.findByRole('button', { name: 'Add update' }))
