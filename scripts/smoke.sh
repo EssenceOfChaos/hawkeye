@@ -43,6 +43,7 @@ check "the website status checker page is served and its endpoint needs the CSRF
 check "the /monitoring campaign page asks not to be indexed, in the HTML" '"${CURL[@]}" "$BASE/monitoring" | grep -q "name=\"robots\" content=\"noindex\""'
 check "sitemap.xml lists the public pages and no signed-in pages" 's=$("${CURL[@]}" "$BASE/sitemap.xml"); echo "$s" | grep -q "<loc>https://hawkeye.observer/contact</loc>" && ! echo "$s" | grep -qE "hawkeye.observer/(dashboard|login|register|monitoring)<"'
 check "the email logo is served as an image" '[ "$(status "$BASE/email/hawkeye-logo.png")" = 200 ] && "${CURL[@]}" -I "$BASE/email/hawkeye-logo.png" | grep -qi "^content-type: image/png"'
+check "robots.txt lets crawlers fetch the plans (the pricing cards render from them) and blocks the rest of the API" 'r=$("${CURL[@]}" "$BASE/robots.txt"); echo "$r" | grep -q "^Allow: /api/v1/plans$" && echo "$r" | grep -q "^Disallow: /api/$"'
 check "contact topics are public"            '[ "$("${CURL[@]}" "$BASE/api/v1/contact/categories" | jq_ "len(d[\"categories\"])")" -ge 5 ]'
 
 echo "== API basics"

@@ -118,6 +118,20 @@ describe('DomainsPage', () => {
     expect(calls.some((c) => c.m === 'DELETE' && c.url.endsWith('/domains/d2'))).toBe(true)
   })
 
+  it('explains, in a mixed list, why a domain from a monitor has no Remove button', async () => {
+    setup({ domains: [domain(), domain({ id: 'd2', name: 'mine.org', manual: true, monitor_count: 0 })] })
+    await screen.findByText('mine.org')
+    const row = screen.getByText('example.com').closest('tr')!
+    expect(within(row).getByText('Tracked for as long as a monitor uses it')).toBeInTheDocument()
+  })
+
+  it('has no Actions column when every domain comes from a monitor', async () => {
+    setup({ domains: [domain(), domain({ id: 'd2', name: 'other.org' })] })
+    await screen.findByText('other.org')
+    expect(screen.queryByRole('columnheader', { name: 'Actions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Stop tracking/ })).not.toBeInTheDocument()
+  })
+
   it('lets members look but not change', async () => {
     setup({ role: 'member', domains: [domain({ manual: true })] })
     expect(await screen.findByText('example.com')).toBeInTheDocument()

@@ -45,6 +45,20 @@ describe('page map', () => {
     for (const p of STATIC_PAGES) expect(p.path === '/' || caddyPattern.test(p.path), p.path).toBe(true)
   })
 
+  it('lets crawlers fetch what the public pages render from (the pricing cards), and nothing else of the API', () => {
+    // Google applies the longest matching rule, and Allow wins a tie. It obeys robots.txt for the requests a page makes while it renders it, so a
+    // blocked /api/v1/plans showed crawlers "Pricing is temporarily unavailable" in place of the plans.
+    const rules = [...robots.matchAll(/^(Allow|Disallow):\s*(\S+)/gm)].map((m) => ({ allow: m[1] === 'Allow', path: m[2] }))
+    const allowed = (url: string) => {
+      const hits = rules.filter((r) => url.startsWith(r.path)).sort((a, b) => b.path.length - a.path.length || Number(b.allow) - Number(a.allow))
+      return hits.length === 0 || hits[0].allow
+    }
+    expect(allowed('/api/v1/plans')).toBe(true)
+    for (const blocked of ['/api/v1/auth/me', '/api/v1/monitors', '/api/v1/plansx', '/api/v1/tools/ssl-check']) {
+      expect(allowed(blocked), blocked).toBe(blocked === '/api/v1/plansx') // a prefix rule: plansx is allowed too, which is harmless (no such route)
+    }
+  })
+
   it('keeps the shell index.html in step with the home entry, and neutral (no canonical or robots tag that other routes would inherit)', () => {
     expect(indexHtml).toContain(`<title>${HOME_TITLE.replaceAll('&', '&amp;')}</title>`)
     expect(indexHtml).toContain(`content="${HOME_DESCRIPTION}"`)

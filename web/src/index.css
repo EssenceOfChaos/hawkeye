@@ -697,3 +697,6 @@ button.value-chip { font: .85rem/1.4 var(--font-mono); padding: .1rem .55rem; bo
 /* Wrap the rows of a step and of the secrets on narrow screens. */
 .workflow-step .kv-row, .workflow-secrets .kv-row { flex-wrap: wrap; }
 .workflow-step .kv-row input, .workflow-step .kv-row select, .workflow-secrets .kv-row input { flex: 1 1 8rem; }
+
+/* Text that must not break inside, such as a time with its AM or PM. */
+.nowrap { white-space: nowrap; }
