@@ -31,6 +31,8 @@ export function DomainsPage() {
   const isOwner = organization?.role === 'owner'
 
   const [items, setItems] = useState<TrackedDomain[] | null>(null)
+  // Only domains added by hand can be removed (those from monitors go when no monitor uses them), so the column appears only when there is one.
+  const canRemove = isOwner && (items ?? []).some((d) => d.manual)
   const [limit, setLimit] = useState(0)
   const [error, setError] = useState<ApiError | string | null>(null)
   const [fields, setFields] = useState<Record<string, string>>({})
@@ -117,7 +119,7 @@ export function DomainsPage() {
             <table>
               <caption className="sr-only">Tracked domains</caption>
               <thead>
-                <tr><th>Domain</th><th>Registration expires</th><th>Status</th><th>Used by</th>{isOwner && <th>Actions</th>}</tr>
+                <tr><th>Domain</th><th>Registration expires</th><th>Status</th><th>Used by</th>{canRemove && <th>Actions</th>}</tr>
               </thead>
               <tbody>
                 {items.map((d) => (
@@ -129,9 +131,11 @@ export function DomainsPage() {
                     <td><Expiry d={d} /></td>
                     <td><DomainBadge domain={d} /></td>
                     <td>{d.monitor_count > 0 ? <Link to="/monitors">{d.monitor_count} monitor{d.monitor_count === 1 ? '' : 's'}</Link> : <span className="hint">No monitors</span>}</td>
-                    {isOwner && (
+                    {canRemove && (
                       <td className="actions">
-                        {d.manual && <button className="danger" onClick={() => void remove(d)} aria-label={`Stop tracking ${d.name}`}>Remove</button>}
+                        {d.manual
+                          ? <button className="danger" onClick={() => void remove(d)} aria-label={`Stop tracking ${d.name}`}>Remove</button>
+                          : <span className="hint" title="Tracked for as long as a monitor uses it">—<span className="sr-only">Tracked for as long as a monitor uses it</span></span>}
                       </td>
                     )}
                   </tr>
