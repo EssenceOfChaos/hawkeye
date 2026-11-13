@@ -59,6 +59,17 @@ func TestReadyz(t *testing.T) {
 	}
 }
 
+func TestProbesAcceptHead(t *testing.T) {
+	for _, path := range []string{"/healthz", "/readyz"} {
+		if rec := do(newApp(fakeDB{}), http.MethodHead, path); rec.Code != http.StatusOK {
+			t.Fatalf("HEAD %s: got %d", path, rec.Code)
+		}
+	}
+	if rec := do(newApp(fakeDB{errors.New("down")}), http.MethodHead, "/readyz"); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("HEAD /readyz with database down: got %d", rec.Code)
+	}
+}
+
 func TestNotFoundUsesErrorEnvelope(t *testing.T) {
 	rec := do(newApp(fakeDB{}), http.MethodGet, "/nope")
 	var body httpapi.ErrorBody
