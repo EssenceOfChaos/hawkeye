@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/http/httptrace"
@@ -68,6 +69,8 @@ type Result struct {
 	Region string
 	// FinalURL is where the request ended up after redirects, when a response arrived. Credentials, query and fragment are not included.
 	FinalURL string
+	// ContentType is the response's media type (lower case, without parameters such as charset), when a response arrived. Not stored.
+	ContentType string
 	// Steps is set for multi-step API checks: what each step that ran did (workflow.go). Stored with the result; never response content.
 	Steps []StepOutcome
 }
@@ -180,6 +183,9 @@ func (c *Checker) run(ctx context.Context, t Target, jar http.CookieJar, keep bo
 	code := resp.StatusCode
 	res.StatusCode, res.ResponseTimeMs = &code, &elapsed
 	res.FinalURL = displayURL(resp.Request.URL)
+	if mt, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type")); err == nil {
+		res.ContentType = mt
+	}
 	// The body is only read when assertions need it, and then only up to MaxBodyBytes; it is never stored.
 	var respBody []byte
 	truncated := false

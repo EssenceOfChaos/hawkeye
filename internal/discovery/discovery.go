@@ -7,7 +7,7 @@
 //   - an API on api.<registered domain>, by its health endpoint or its root;
 //   - mail (MX) records on the registered domain, since email can stop arriving without any sign on the website.
 //
-// Safety: every request goes through the monitoring engine's SSRF-safe client (internal/safehttp: public addresses only, ports 80 and 443, every
+// Safety: every request goes through the monitoring engine's checker (internal/checks) and so its SSRF-safe client (internal/safehttp: public addresses only, ports 80 and 443, every
 // redirect revalidated) and the shared limits of internal/toolguard (cache, concurrency cap, per-host budget). Only GET requests to fixed paths are
 // sent, whatever the customer typed after the domain, and no response body is kept or returned: a response counts as a health endpoint by its status
 // and content type alone.
@@ -19,8 +19,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
-	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -28,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"hawkeye/internal/checks"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/publichost"
 	"hawkeye/internal/safehttp"
@@ -64,7 +63,6 @@ const (
 	requestTimeout = 4 * time.Second
 	totalTimeout   = 15 * time.Second
 	mxTimeout      = 3 * time.Second
-	maxBodyRead    = 16 << 10 // read (and discard) at most this much so the connection closes cleanly
 )
 
 // Proposal is a monitor to create: the fields POST /monitors takes. Everything else keeps the defaults.
@@ -97,19 +95,19 @@ type MXResolver interface {
 }
 
 type Service struct {
-	client *http.Client
-	mx     MXResolver
-	guard  *toolguard.Guard[Report]
-	probe  func() string // the path of the request that tells a real endpoint from a site that answers every path
+	checker *checks.Checker
+	mx      MXResolver
+	guard   *toolguard.Guard[Report]
+	probe   func() string // the path of the request that tells a real endpoint from a site that answers every path
 }
 
 // New builds a Service whose requests follow cfg's destination policy (the zero Config is the strict production policy).
 func New(cfg safehttp.Config) *Service {
 	return &Service{
-		client: safehttp.New(cfg, requestTimeout),
-		mx:     net.DefaultResolver,
-		guard:  toolguard.New[Report](toolguard.Options{Timeout: totalTimeout, Concurrency: 4}),
-		probe:  randomPath,
+		checker: checks.NewChecker(cfg),
+		mx:      net.DefaultResolver,
+		guard:   toolguard.New[Report](toolguard.Options{Timeout: totalTimeout, Concurrency: 4}),
+		probe:   randomPath,
 	}
 }
 
@@ -179,33 +177,28 @@ type response struct {
 	status   int    // 0 when no response arrived
 	html     bool   // the response says it is a web page
 	finalURL string // where redirects ended
-	err      error
+	failure  string // why no response arrived (a checks.Cat* category)
+	err      error  // set only when ctx ended
 }
 
-func (r response) ok() bool { return r.status >= 200 && r.status < 300 }
+func (r response) ok() bool       { return r.status >= 200 && r.status < 300 }
+func (r response) blocked() bool  { return r.failure == checks.CatBlocked }
+func (r response) notFound() bool { return r.failure == checks.CatDNS }
 
+// get sends one GET through the monitoring engine's checker, the one path HawkEye uses to request customer-supplied addresses: the SSRF-safe client
+// (internal/safehttp), redirects revalidated, the body drained but never read.
 func (s *Service) get(ctx context.Context, u string) response {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	res, err := s.checker.Check(ctx, checks.Target{URL: u, Method: http.MethodGet, Timeout: requestTimeout, UserAgent: UserAgent})
 	if err != nil {
 		return response{err: err}
 	}
-	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Accept", "application/json, text/plain;q=0.9, */*;q=0.5")
-	res, err := s.client.Do(req)
-	if err != nil {
-		return response{err: err}
+	r := response{html: res.ContentType == "text/html" || res.ContentType == "application/xhtml+xml", finalURL: res.FinalURL}
+	if res.StatusCode != nil {
+		r.status = *res.StatusCode
+	} else {
+		r.failure = res.ErrorCategory
 	}
-	defer res.Body.Close()
-	_, _ = io.CopyN(io.Discard, res.Body, maxBodyRead)
-	mt, _, _ := mime.ParseMediaType(res.Header.Get("Content-Type"))
-	return response{status: res.StatusCode, html: mt == "text/html" || mt == "application/xhtml+xml", finalURL: res.Request.URL.String()}
-}
-
-func blocked(err error) bool { return errors.Is(err, safehttp.ErrBlocked) }
-
-func notFound(err error) bool {
-	var dnsErr *net.DNSError
-	return errors.As(err, &dnsErr) && dnsErr.IsNotFound
+	return r
 }
 
 // site proposes the home page and, when the host has one, its health endpoint.
@@ -215,7 +208,7 @@ func (s *Service) site(ctx context.Context, t publichost.Target) ([]Suggestion, 
 		home = s.get(ctx, scheme+"://"+t.Host+"/")
 	} else {
 		scheme, home = "https", s.get(ctx, "https://"+t.Host+"/")
-		if home.status == 0 && !blocked(home.err) && !notFound(home.err) && ctx.Err() == nil {
+		if home.status == 0 && !home.blocked() && !home.notFound() && ctx.Err() == nil {
 			// https did not answer: if plain http does, that is the address to monitor.
 			if plain := s.get(ctx, "http://"+t.Host+"/"); plain.status != 0 {
 				scheme, home = "http", plain
@@ -223,9 +216,9 @@ func (s *Service) site(ctx context.Context, t publichost.Target) ([]Suggestion, 
 		}
 	}
 	switch {
-	case blocked(home.err):
+	case home.blocked():
 		return nil, ErrBlocked
-	case notFound(home.err):
+	case home.notFound():
 		return nil, ErrNotFound
 	case home.status == 0 && ctx.Err() != nil && errors.Is(ctx.Err(), context.Canceled):
 		return nil, ctx.Err()
