@@ -127,8 +127,10 @@ func New(o Options) *echo.Echo {
 	e.Use(securityHeaders(o.HSTS))
 	e.Use(middleware.ContextTimeoutWithConfig(middleware.ContextTimeoutConfig{Timeout: o.RequestTimeout}))
 
-	e.GET("/healthz", healthz)
-	e.GET("/readyz", readyz(o.DB, o.Logger))
+	// Probes accept HEAD as well as GET: uptime checkers (UptimeRobot and others) send HEAD by default. net/http drops the body for HEAD.
+	probeMethods := []string{http.MethodGet, http.MethodHead}
+	e.Match(probeMethods, "/healthz", healthz)
+	e.Match(probeMethods, "/readyz", readyz(o.DB, o.Logger))
 
 	if o.Billing != nil {
 		// The provider calls this endpoint, not a browser: no session, no CSRF token. It is authenticated by the signature

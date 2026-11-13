@@ -1,6 +1,6 @@
 # API (Phases 2–8)
 
-Base path `/api/v1`. JSON only. Operational probes `/healthz` and `/readyz` are outside the prefix.
+Base path `/api/v1`. JSON only. Operational probes `/healthz` and `/readyz` are outside the prefix and answer both GET and HEAD.
 
 ## Errors
 

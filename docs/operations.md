@@ -28,7 +28,7 @@ Starts with Phase 4; extended in Phase 8.
 | `hawkeye_worker_last_poll_timestamp_seconds` | alert if older than ~1 minute: workers are not polling |
 
 Monitor the engine from outside the application (an external uptime check on `/healthz` and `/readyz`); the product must never be the
-only thing that can notice its own outage.
+only thing that can notice its own outage. Both probes answer GET and HEAD, so checkers that default to HEAD (UptimeRobot) work as is.
 
 | `hawkeye_notification_deliveries_total{event,result}` | `sent`, `retry`, `failed`, `skipped`. Alert on a sustained `failed` or `retry` rate: email provider trouble |
 | `hawkeye_notification_pending`, `hawkeye_notification_oldest_pending_seconds` | alerts waiting; the oldest due one should stay under a minute or two |
