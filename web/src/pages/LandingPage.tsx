@@ -7,6 +7,7 @@ import { brand, STATUS_URL } from '../brand'
 import { CookieSettingsButton } from '../components/CookieBanner'
 import { IntervalToggle, PlanDetails } from '../components/PlanDetails'
 import { ComingSoon } from '../components/ComingSoon'
+import { MonitoringFlow } from '../components/MonitoringFlow'
 import { ProductShots } from '../components/ProductShots'
 import { Reveal } from '../components/Reveal'
 import { inScope, parallax, prefersReducedMotion, rotateScramble } from '../motion'
@@ -260,6 +261,16 @@ export function LandingPage() {
           height={463}
         />
         </div>
+      </section>
+
+      <section aria-labelledby="how-h" className="section how-it-works">
+        <p className="eyebrow">How it works</p>
+        <h2 id="how-h">From a failed check to the right people.</h2>
+        <p>
+          When a check fails, HawkEye checks again before raising the alarm, so a single blip never wakes anyone. Once the outage is confirmed it alerts you
+          by email, chat or webhook, and tells you again when it’s over.
+        </p>
+        <MonitoringFlow />
       </section>
 
       <ProductShots />

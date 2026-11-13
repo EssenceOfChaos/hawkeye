@@ -247,6 +247,96 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
   .split img { max-width: 50%; }
 }
 
+/* ---- landing: "how it works" animation (components/MonitoringFlow.tsx). Every change keys off the SVG's data-state; the timeline only sets it. ---- */
+.flow-figure { margin: 1.5rem 0 0; }
+.flow-figure figcaption { text-align: right; margin-top: .4rem; }
+.flow { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 1.25rem; background: linear-gradient(135deg, #061222, #0a1b32 55%, #09172b); --bad: var(--down); --good: var(--up); }
+.flow text { fill: var(--text); font-family: var(--font-body); }
+.flow .flow-header { font-family: var(--font-display); font-size: 17px; font-weight: 700; fill: var(--gold); }
+.flow .flow-header-label { fill: var(--muted); }
+.flow .flow-muted { fill: var(--muted); font-size: 13.5px; }
+.flow .flow-gold { fill: var(--gold); }
+.flow .flow-wordmark { font-family: var(--font-display); font-weight: 800; letter-spacing: -.5px; }
+.flow-card { fill: #112841; stroke: #35526e; stroke-width: 1.3; transition: fill .35s, stroke .35s; }
+.flow-icon { color: var(--gold); transition: color .35s; }
+.flow .flow-input-label { font-size: 17px; font-weight: 600; }
+.flow-narrow .flow-input-label { font-size: 11.5px; }
+.flow .flow-input-error { font-size: 13px; font-weight: 700; fill: var(--bad); opacity: 0; transition: opacity .35s; }
+.flow-wire { fill: none; stroke: #54738c; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.flow-wire-out { stroke: var(--gold-lo); stroke-opacity: .7; }
+.flow-wire-bad, .flow-wire-good { stroke-width: 3; opacity: 0; transition: opacity .35s; }
+.flow-wire-bad { stroke: var(--bad); }
+.flow-wire-good { stroke: var(--good); }
+.flow-junction { fill: #112741; stroke: #b99b62; stroke-width: 1.4; }
+.flow-junction-core { fill: var(--gold-hi); }
+.flow-engine { fill: #0f2744; stroke: var(--gold); stroke-width: 2.2; }
+.flow-engine-alarm { fill: none; stroke: var(--bad); stroke-width: 2.8; opacity: 0; transition: opacity .35s; }
+.flow-status-well { fill: #10283b; stroke: #39536c; }
+.flow-status { opacity: 0; transition: opacity .3s; }
+.flow-status-fill.up { fill: #133b36; }
+.flow-status-fill.warn { fill: #4a3a1c; stroke: var(--warn); }
+.flow-status-fill.down { fill: #532833; stroke: var(--bad); }
+.flow-status-icon circle { fill: #20b982; }
+.flow-status-icon.warn circle { fill: var(--warn); }
+.flow-status-icon.down circle { fill: #ef5a64; }
+.flow-status-icon path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.flow .flow-status-title { font-size: 17px; font-weight: 700; }
+.flow .flow-status-detail { font-size: 13.5px; fill: #c4d3e3; }
+.flow-narrow .flow-status-title { font-size: 15px; }
+.flow-narrow .flow-status-detail { font-size: 12px; }
+.flow-check { fill: var(--good); opacity: .85; transition: fill .3s; }
+.flow-divider { stroke: #2c4660; }
+.flow .flow-step { font-weight: 700; letter-spacing: 1.2px; fill: #6f87a2; transition: fill .3s; }
+.flow .flow-output-title { font-size: 16.5px; font-weight: 700; }
+.flow .flow-output-sub { font-size: 11.5px; fill: var(--muted); }
+.flow-narrow .flow-output-title { font-size: 13.5px; }
+.flow-narrow .flow-output-sub { font-size: 10.5px; }
+.flow-pill { opacity: 0; transition: opacity .35s; }
+.flow-pill rect { stroke-width: 1; }
+.flow-pill text { font-size: 11.5px; font-weight: 800; letter-spacing: .6px; }
+.flow-pill-bad rect { fill: #4d2832; stroke: var(--bad); }
+.flow-pill-good rect { fill: #173d33; stroke: var(--good); }
+.flow-dot { fill: #d5b96e; opacity: 0; }
+.flow-pulse { opacity: 0; filter: drop-shadow(0 0 5px currentColor); }
+.flow-pulse-bad { fill: var(--bad); color: var(--bad); }
+.flow-pulse-good { fill: var(--good); color: var(--good); }
+.flow-tracks path { fill: none; stroke: none; }
+
+/* The steady check dots show only while the timeline runs (it sets data-state="healthy" first); the static frame has none. */
+.flow[data-running] .flow-dot { opacity: .85; }
+
+/* Status panel: one message per state. */
+.flow[data-state="healthy"] .on-healthy, .flow[data-state="down"] .on-down, .flow[data-state="failing"] .on-failing,
+.flow[data-state="confirmed"] .on-confirmed, .flow[data-state="alerted"] .on-alerted, .flow[data-state="resolving"] .on-resolving,
+.flow[data-state="recovered"] .on-recovered, .flow[data-state="closed"] .on-closed { opacity: 1; }
+
+/* The API is down from "down" until "resolving". */
+:is(.flow[data-state="down"], .flow[data-state="failing"], .flow[data-state="confirmed"], .flow[data-state="alerted"]) .flow-input-failing .flow-card { fill: #4a202b; stroke: var(--bad); }
+:is(.flow[data-state="down"], .flow[data-state="failing"], .flow[data-state="confirmed"], .flow[data-state="alerted"]) .flow-input-failing .flow-icon { color: var(--bad); }
+:is(.flow[data-state="down"], .flow[data-state="failing"], .flow[data-state="confirmed"], .flow[data-state="alerted"]) .flow-input-error { opacity: 1; }
+:is(.flow[data-state="down"], .flow[data-state="failing"], .flow[data-state="confirmed"], .flow[data-state="alerted"]) > .flow-wire-bad { opacity: 1; }
+.flow[data-state="resolving"] > .flow-wire-good { opacity: 1; }
+
+/* Recent checks: newest on the right. After the first failure the next slot waits (outlined) while HawkEye checks again; the second failure confirms
+   the outage. Back to green once recovered. */
+.flow[data-state="failing"] .flow-check-second { fill: transparent; stroke: var(--muted); stroke-dasharray: 3 3; opacity: .8; }
+:is(.flow[data-state="failing"], .flow[data-state="confirmed"], .flow[data-state="alerted"], .flow[data-state="resolving"]) .flow-check-first,
+:is(.flow[data-state="confirmed"], .flow[data-state="alerted"], .flow[data-state="resolving"]) .flow-check-second { fill: var(--bad); }
+:is(.flow[data-state="confirmed"], .flow[data-state="alerted"], .flow[data-state="resolving"]) .flow-engine-alarm { opacity: 1; }
+
+/* CHECK, CONFIRM, ALERT: the stage HawkEye is at. */
+:is(.flow[data-state="healthy"], .flow[data-state="down"], .flow[data-state="failing"]) .flow-step-check,
+.flow[data-state="confirmed"] .flow-step-confirm,
+:is(.flow[data-state="alerted"], .flow[data-state="resolving"], .flow[data-state="recovered"], .flow[data-state="closed"]) .flow-step-alert { fill: var(--gold); }
+
+/* Alerts: the outage alert from "alerted", the recovery alert once its pulses arrive ("closed"). */
+:is(.flow[data-state="alerted"], .flow[data-state="resolving"], .flow[data-state="recovered"]) .flow-output-card { fill: #4b2732; stroke: var(--bad); }
+:is(.flow[data-state="alerted"], .flow[data-state="resolving"], .flow[data-state="recovered"]) .flow-pill-bad { opacity: 1; }
+.flow[data-state="alerted"] .flow-out-bad { opacity: 1; }
+.flow[data-state="closed"] .flow-output-card { fill: #173d33; stroke: var(--good); }
+.flow[data-state="closed"] .flow-pill-good { opacity: 1; }
+.flow[data-state="closed"] .flow-out-good { opacity: 1; }
+
 /* ---- charts & reports (single series; tokens swap in dark mode) ---- */
 :root { --surface: var(--panel-2); --chart-line: var(--accent); --chart-grid: color-mix(in srgb, currentColor 14%, transparent); --chart-text: color-mix(in srgb, currentColor 62%, transparent); }
 .filters { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; }
