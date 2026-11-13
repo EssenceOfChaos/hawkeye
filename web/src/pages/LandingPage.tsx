@@ -102,7 +102,7 @@ const FEATURES = [
     text: 'Availability, response times, incidents, certificates and domains in one place.',
   },
   {
-    icon: brand.icons.settings,
+    icon: brand.icons.developers,
     title: 'Works with Claude',
     lead: 'Ask “what’s down right now?”',
     text: 'Add HawkEye from Claude’s connector directory to check uptime and incidents, pause monitors and post updates by asking. Claude asks before anything public.',

@@ -3,6 +3,7 @@ import appIcon from './assets/brand/app-icon.png'
 import dashboardLaptop from './assets/brand/dashboard-laptop.webp'
 import iconAnalytics from './assets/brand/icon-analytics.png'
 import iconDashboard from './assets/brand/icon-dashboard.png'
+import iconDevelopers from './assets/brand/icon-developers.png'
 import iconEmail from './assets/brand/icon-email.png'
 import iconHistory from './assets/brand/icon-history.png'
 import iconMaintenance from './assets/brand/icon-maintenance.png'
@@ -61,6 +62,7 @@ export const brand = {
     notifications: iconNotifications,
     ssl: iconSsl,
     dashboard: iconDashboard,
+    developers: iconDevelopers,
     maintenance: iconMaintenance,
     billing: iconBilling,
     team: iconTeam,
