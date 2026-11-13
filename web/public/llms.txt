@@ -6,6 +6,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 
 ## What it does
 
+- Set up from your domain: enter a domain and HawkEye looks at the site from outside and suggests monitors (the home page, a health endpoint such as /healthz, an api subdomain, the domain's MX records); you pick which to add.
 - Website and API monitoring: custom request methods, headers, bodies, Basic/bearer/API-key authentication, and checks of the status code and response content.
 - Cron job (heartbeat) monitoring, on every plan: a job requests its private ping address each time it runs; a late ping, a failure ping or a non-zero exit status opens an incident and alerts you.
 - DNS monitoring, on every plan: HawkEye looks up an A, AAAA, MX, NS or TXT record on a schedule and alerts you when it disappears or stops matching the value you expect.
@@ -20,7 +21,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 - SSL certificate expiry warnings 30, 14, 7 and 1 days before expiry, on every plan.
 - Domain registration expiry warnings on the same schedule, for a number of domains that depends on the plan. Some domain registries do not publish expiry dates; HawkEye says so rather than guessing.
 - Checks from several locations on paid plans, where offered.
-- Works with Claude: HawkEye is listed in Claude's connector directory (https://claude.ai/directory/hawkeye; add it there or in Claude under Customize, then Connectors, and sign in to HawkEye). The MCP server at https://hawkeye.observer/mcp also lets Claude Code and other MCP clients can read monitors, uptime and incidents and (with a read and write key) pause monitors, add monitors, set up and test multi-step API checks (it names the secrets a check needs; a person enters them in HawkEye), post incident updates and schedule maintenance. It uses the same API keys, or MCP clients can connect by signing in (OAuth with PKCE).
+- Works with Claude: HawkEye is listed in Claude's connector directory (https://claude.ai/directory/hawkeye; add it there or in Claude under Customize, then Connectors, and sign in to HawkEye). The MCP server at https://hawkeye.observer/mcp also lets Claude Code and other MCP clients read monitors, uptime and incidents, suggest monitors for a domain, and (with a read and write key) pause monitors, add monitors, set up and test multi-step API checks (it names the secrets a check needs; a person enters them in HawkEye), post incident updates and schedule maintenance. It uses the same API keys, or MCP clients can connect by signing in (OAuth with PKCE).
 - Two-factor sign-in with an authenticator app, with recovery codes, on every plan; on a team, the owner can require it for everyone.
 - A security log on every plan: the owner sees who changed what in the organization (monitors, status pages, maintenance, incident updates, alert recipients, API keys, connected apps, team), when, from where, and with which API key or connected app; each person sees their own sign-ins, including failed ones. Kept for a year.
 - A public API with API keys: read-only keys on every plan, read and write keys on paid plans. Keys expire after 90 days unless the owner chooses otherwise, and can be revoked at any time.

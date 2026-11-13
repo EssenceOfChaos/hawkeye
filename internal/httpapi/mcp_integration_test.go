@@ -90,7 +90,7 @@ func TestMCPListsEveryToolWithTheAnnotationsTheDirectoryRequires(t *testing.T) {
 		t.Fatal(err)
 	}
 	readOnly := []string{"get_account_overview", "list_monitors", "get_monitor", "get_uptime", "list_incidents", "get_incident", "list_status_pages",
-		"list_maintenance_windows"}
+		"list_maintenance_windows", "suggest_monitors"}
 	destructive := []string{"post_incident_update", "delete_incident_update", "delete_maintenance_window", "create_workflow"}
 	additive := []string{"pause_monitors", "resume_monitors", "create_monitor", "schedule_maintenance", "test_workflow"}
 	var names []string

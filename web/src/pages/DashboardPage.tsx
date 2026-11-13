@@ -37,8 +37,9 @@ export function DashboardPage() {
       {s && s.monitors.total === 0 && (
         <section className="card empty">
           <h2>Add your first website</h2>
-          <p>Your watch starts here. Add your first website and let HawkEye begin tracking availability and response times.</p>
-          <Link className="button primary" to="/monitors/new">Add your first website</Link>
+          <p>Your watch starts here. Enter your domain and HawkEye will suggest what to monitor, or add a website yourself.</p>
+          <Link className="button primary" to="/monitors/setup">Set up from your domain</Link>{' '}
+          <Link to="/monitors/new">Add a website yourself</Link>
         </section>
       )}
 

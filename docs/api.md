@@ -129,6 +129,7 @@ that are not browsers send none. It is stateless (no MCP sessions; `GET` and `DE
 | `get_uptime` | read | – | `GET /monitors/:id/uptime` (or every monitor), presets only |
 | `list_incidents`, `get_incident` | read | – | `GET /incidents`, `GET /incidents/:id/updates` |
 | `list_status_pages`, `list_maintenance_windows` | read | – | `GET /status-pages`, `GET /maintenance-windows` |
+| `suggest_monitors` | read, open world | – | `POST /monitors/suggestions`; returns `create_monitor` arguments, creates nothing |
 | `pause_monitors`, `resume_monitors` | write | write key, paid plan | `POST /monitors/bulk` (by IDs or by tag name) |
 | `create_monitor` | write | write key, paid plan | `POST /monitors` (website with GET, heartbeat or DNS only) |
 | `post_incident_update`, `delete_incident_update` | write, destructive | write key, paid plan, owner | `POST`/`DELETE /incidents/:id/updates` |
@@ -188,6 +189,7 @@ malformed ID gives 404) or, if absent, the organization the caller **owns** (the
 | `POST /monitors` | `{name, url, method?, expected_status_code?, check_interval_seconds?, timeout_seconds?, headers?, body?, auth?, assertions?, slow_threshold_ms?, slow_checks?, tag_ids?}` → 201. For a heartbeat (cron job) monitor: `{type: "heartbeat", name, check_interval_seconds?, grace_seconds?, tag_ids?, alert_delay_minutes?, quiet_hours?}`; see *Heartbeat monitors*. For a DNS monitor: `{type: "dns", name, url, dns_record_type?, dns_expected?, check_interval_seconds?, timeout_seconds?, regions?, tag_ids?, alert_delay_minutes?, quiet_hours?}`; see *DNS monitors* |
 | `GET/PATCH/DELETE /monitors/:id` | PATCH is partial; `expected_status_code: null`, `body: null` and `slow_threshold_ms: null` clear them, `headers`, `assertions` and `tag_ids` replace the whole list. DELETE is a soft delete (204) and frees a plan slot |
 | `POST /monitors/:id/pause`, `/resume` | toggles `enabled`; allowed even when over the plan limit |
+| `POST /monitors/suggestions` | `{domain}` → `{domain, suggestions: [{kind, reason, recommended, already_monitored, monitor: {type, name, url, dns_record_type?}}]}`. Creates nothing; see *Set up from a domain* |
 | `POST /monitors/bulk` | `{monitor_ids, action, check_interval_seconds?, tag_ids?}` → `{updated}`. See *Tags and bulk actions* |
 | `GET /monitors/:id/pings` | heartbeats only: the latest pings, newest first (`?limit=` 1–100, default 50) → `{pings: [{id, received_at, kind, exit_status, method, source_ip, user_agent, body, ignored}]}`; 404 for a website monitor |
 | `POST /monitors/:id/ping-token` | heartbeats only: a new ping address → `{monitor}`; the old one stops working at once |
@@ -228,6 +230,26 @@ Validation errors for list items name the item, for example `headers[0].name` or
 **URL rules.** `http`/`https` only, no credentials, ports 80/443 only, no `localhost`/`.local`/`.internal`/single-label hosts,
 no literal private/loopback/link-local/metadata IPs. This is early feedback only; the real SSRF defense (DNS resolution and
 dial-time validation) is in the checker (`internal/safehttp`). Editing the URL, method, headers, body or authentication resets health state to `unknown`.
+
+### Set up from a domain
+
+`POST /monitors/suggestions` (`internal/discovery`) looks at a public site from HawkEye's servers and proposes monitors; the app shows them as a checklist
+and creates the chosen ones with `POST /monitors`, so plan limits and validation are those of adding a monitor by hand. It is a POST so a link or
+prefetch can't make HawkEye contact a site; with an API key it therefore needs a write key on a paid plan, like every POST. Over MCP,
+`suggest_monitors` is a read tool and any key may use it. `kind` is, in this order:
+
+- `website`: the home page, over https (or plain http when only that answers). `recommended` is false when it answered 4xx, which a monitor counts as
+  down; a site that is down (5xx or no answer) is still recommended.
+- `health`: the first of `/readyz`, `/healthz`, `/health`, `/api/health` that answers 2xx with a content type other than HTML. A site that answers a
+  made-up path with 2xx (a single-page app, a catch-all route) is never credited with a health endpoint.
+- `api`: `api.<registered domain>`, by the same health paths, or its root when that answers below 400. Left out when it does not exist or answer.
+- `mail`: a DNS monitor on the registered domain's MX records, when it has any (a null MX is left out).
+
+`already_monitored` is true when one of the organization's monitors checks the same URL (ignoring case and a trailing slash), or, for DNS, the same host
+and record type. Only GET requests to those fixed paths are sent (User-Agent `HawkEye-Setup/1.0`), whatever path the input had, through the checker's
+SSRF-safe client; no response body is kept or returned, and the domain is not stored. Limits: 10 a minute per IP and 30 an hour per organization (shared
+with MCP), plus the free tools' per-host budget (5 fresh lookups per 10 minutes) and a 60 s cache. Errors are the free tools' (400 `INVALID_HOST`, 422
+`HOST_NOT_FOUND` / `HOST_NOT_ALLOWED`, 429 `RATE_LIMITED` / `HOST_RATE_LIMITED`, 503 `BUSY`, 504 `HOST_TIMEOUT`).
 
 ### Tags and bulk actions
 

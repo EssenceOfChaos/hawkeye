@@ -458,7 +458,7 @@ func TestAPIKeyRateLimits(t *testing.T) {
 // test checks the server agrees: keys reach exactly the routes listed here.
 func TestEveryRouteIsClassifiedForAPIKeys(t *testing.T) {
 	tokenRoutes := setOf(
-		"GET /api/v1/usage", "GET /api/v1/monitors", "POST /api/v1/monitors", "POST /api/v1/monitors/bulk",
+		"GET /api/v1/usage", "GET /api/v1/monitors", "POST /api/v1/monitors", "POST /api/v1/monitors/suggestions", "POST /api/v1/monitors/bulk",
 		"GET /api/v1/tags", "POST /api/v1/tags", "PATCH /api/v1/tags/:tagID", "DELETE /api/v1/tags/:tagID",
 		"GET /api/v1/monitors/:monitorID", "PATCH /api/v1/monitors/:monitorID", "DELETE /api/v1/monitors/:monitorID",
 		"POST /api/v1/monitors/:monitorID/pause", "POST /api/v1/monitors/:monitorID/resume",

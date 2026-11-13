@@ -55,6 +55,9 @@ func (h *handlers) toolFailed(c *echo.Context, what, host string, start time.Tim
 // 422 the host is fine as input but cannot be checked (not found, no HTTPS, not allowed); 429/503/504 limits and timeouts. Anything unexpected
 // is returned unchanged.
 func toolError(c *echo.Context, err error) error {
+	if e := setupError(err); e != nil {
+		return e
+	}
 	var invalid *sslcheck.InvalidHostError
 	var limited *sslcheck.TargetLimitedError
 	switch {

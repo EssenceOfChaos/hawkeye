@@ -223,3 +223,17 @@ func TestCustomUserAgentAndFinalURL(t *testing.T) {
 		t.Errorf("no response, no final URL: %q", r3.FinalURL)
 	}
 }
+
+func TestContentTypeIsTheMediaTypeOnly(t *testing.T) {
+	for header, want := range map[string]string{"Text/HTML; charset=utf-8": "text/html", "application/json": "application/json", "": "", "not a type;;": ""} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header()["Content-Type"] = []string{header} // set as is, so an empty or broken value reaches the checker
+			w.Write([]byte("ok"))
+		}))
+		r := check(t, loopbackCfg(), Target{URL: srv.URL})
+		srv.Close()
+		if r.ContentType != want {
+			t.Errorf("Content-Type %q: got %q, want %q", header, r.ContentType, want)
+		}
+	}
+}

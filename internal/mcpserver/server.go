@@ -25,6 +25,7 @@ import (
 	"hawkeye/internal/apitokens"
 	"hawkeye/internal/audit"
 	"hawkeye/internal/checks"
+	"hawkeye/internal/discovery"
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/maintenance"
 	"hawkeye/internal/metrics"
@@ -57,6 +58,8 @@ type Deps struct {
 	Audit       *audit.Recorder // the security log; nil records nothing
 	// WorkflowChecker runs test_workflow (the SSRF-safe checker, as for the app's Run test); nil turns that tool's runs off.
 	WorkflowChecker *checks.Checker
+	// Discovery proposes monitors for a domain (suggest_monitors); nil turns that tool's lookups off.
+	Discovery *discovery.Service
 }
 
 // instructions describes the server to clients. It says what the data is and how much to trust it, nothing about how to behave otherwise.

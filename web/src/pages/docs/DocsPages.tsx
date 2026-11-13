@@ -33,7 +33,12 @@ function GettingStarted() {
         arrives.
       </p>
       <h2 id="monitor">2. Add a monitor</h2>
-      <p>On the <strong>Monitors</strong> page choose <strong>Add monitor</strong>, then pick what to watch:</p>
+      <p>
+        The quickest start is <strong>Set up from your domain</strong> (on the dashboard and the <strong>Monitors</strong> page). Enter your domain and
+        HawkEye looks at your site from the outside and suggests monitors: your home page, a health endpoint such as <code>/healthz</code> if it has one, an
+        API on an <code>api.</code> subdomain, and your email’s MX records. Untick any you don’t want; nothing is added until you confirm.
+      </p>
+      <p>To add one yourself, choose <strong>Add monitor</strong> on the <strong>Monitors</strong> page, then pick what to watch:</p>
       <ul>
         <li>
           <strong>A website or API.</strong> Enter its address. HawkEye requests it on a schedule (every 5 minutes on Free, every minute on paid plans)
@@ -532,6 +537,10 @@ function ClaudeDocs() {
       <ul>
         <li><strong>Read</strong> (any key): an account overview, your monitors and their state, uptime and response times, incidents and their updates, status pages and maintenance windows.</li>
         <li><strong>Pause and resume monitors</strong>, one by one or every monitor with a tag, and <strong>add monitors</strong> (website, heartbeat or DNS).</li>
+        <li>
+          <strong>Suggest monitors for a domain</strong> (any key): Claude asks HawkEye to look at your site, as <Link to="/docs/getting-started#monitor">Set up from
+          your domain</Link> does, and offers the suggestions to you before adding any.
+        </li>
         <li><strong>Post updates on incidents</strong> and <strong>schedule maintenance</strong> (the organization’s owner only, as in the app), and delete them again.</li>
         <li>
           <strong>Set up and test <Link to="/docs/api-workflows">multi-step API checks</Link></strong>. Claude never sees passwords or keys: it names the

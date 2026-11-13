@@ -50,6 +50,7 @@ internal/publichost    reads a visitor's input for the free tools into a public 
 internal/toolguard     abuse limits shared by the free checkers: result cache, concurrency cap, per-host budget, deadline
 internal/sslcheck      the SSL certificate checker: reads and verifies the certificate a host presents on port 443
 internal/sitecheck     the website status checker: one GET / of a public host, with status, timing and verdict
+internal/discovery     "set up from your domain": proposes monitors (home page, health endpoint, api subdomain, MX) from outside
 internal/validation    field-level validation error
 internal/testutil      per-test isolated, migrated PostgreSQL databases
 internal/config    env loading + validation (fails fast, no production fallbacks)
@@ -193,6 +194,10 @@ Public pages that rank in search and lead to sign-up; each ends with a call to a
 | `/tools/is-website-down` | does a site answer: verdict, status code, response time, final address | `POST /api/v1/tools/site-check`, `internal/sitecheck` |
 
 The two checkers are the only public endpoints that connect to a host a visitor names. They share the destination policy of the monitoring engine (`internal/safehttp`), input parsing (`internal/publichost`) and abuse limits (`internal/toolguard`); the endpoints sit behind per-IP limits and CSRF like every POST. The API container makes these connections (see `docs/security-review.md`, item 12, for what that does and does not protect). `DISABLE_FREE_TOOLS=true` switches both off (503); `docs/operations.md#free-tools-abuse` is the runbook. Live checks against real hosts: `SSLCHECK_LIVE=1` and `SITECHECK_LIVE=1` (run on Linux).
+
+Setting up from a domain (`/monitors/setup`, `POST /api/v1/monitors/suggestions`, MCP `suggest_monitors`; `internal/discovery`) is the signed-in
+counterpart: it uses the same client, parsing and limits to propose monitors, and the app creates the chosen ones through `POST /monitors`. It is not
+a free tool, so `DISABLE_FREE_TOOLS` leaves it on.
 
 ## Settings and secrets (`docs/secrets.md`)
 
