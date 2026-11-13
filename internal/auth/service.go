@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/attribution"
 	"hawkeye/internal/audit"
 	"hawkeye/internal/email"
 	"hawkeye/internal/twofactor"
@@ -111,8 +112,9 @@ func scanUser(row pgx.Row) (User, error) {
 }
 
 // Register creates a user, a personal organization (owner membership) on the free plan and a
-// verification token atomically, then starts a session. The verification email is sent after commit.
-func (s *Service) Register(ctx context.Context, emailAddr, password string) (User, string, error) {
+// verification token atomically, then starts a session. The verification email is sent after commit. attr is how the person found HawkEye, as
+// their browser remembered it (nil when it remembered nothing or analytics is off); it is cleaned and stored with the account (internal/attribution).
+func (s *Service) Register(ctx context.Context, emailAddr, password string, attr *attribution.Attribution) (User, string, error) {
 	addr, err := NormalizeEmail(emailAddr)
 	if err != nil {
 		return User{}, "", err
@@ -152,6 +154,9 @@ func (s *Service) Register(ctx context.Context, emailAddr, password string) (Use
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO subscriptions (organization_id, plan_id, status)
 			SELECT $1, id, 'active' FROM plans WHERE code = 'free'`, orgID); err != nil {
+			return err
+		}
+		if err := attribution.Save(ctx, tx, user.ID, attr); err != nil {
 			return err
 		}
 		_, err := tx.Exec(ctx,

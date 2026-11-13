@@ -242,6 +242,20 @@ docker exec hawkeye-db-1 psql -U hawkeye -d monitoring -c "
 Use `account_id = '<user id>'` for a person's own log, `credential_id = '<api key id>'` for everything one key (or, for a connected app, one grant) did,
 and `request_id` to match an event with the API's request log line. Rows can't be changed (`audit_events is append-only`); they are removed after a year.
 
+### Where sign-ups come from
+
+Each new account records how its browser first found HawkEye (`signup_attributions`, `docs/security.md`): the `utm_*` tags or `?ref=` of the link, the
+kind of ad click, the site that linked to us and the landing page. On the server:
+
+```
+scripts/signups.sh        # last 30 days: sign-ups by source (with how many verified and paid), then the 20 most recent
+scripts/signups.sh 7      # last 7 days
+```
+
+"(not recorded)" means the visitor had analytics off (or Global Privacy Control on), or signed up before this was recorded (2026-11-12); "(direct)"
+means no tag and no linking site. To count a campaign properly, give its links tags: `?utm_source=reddit&utm_medium=social&utm_campaign=launch`, or
+`?ref=name` for directories. Google Ads links carry `gclid` (auto-tagging), which shows as source `google`, medium `cpc`, ad click `google_ads`.
+
 ### Multi-step API checks
 
 A workflow's failure summary names the failing step. `error_category = 'workflow_config'` means the check is broken, not the customer's API (a value

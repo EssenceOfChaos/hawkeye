@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, ApiError, ORGANIZATION_LOST_EVENT, setApiOrganization, type Organization, type TwoFactorStatus, type User } from './api'
-import { trackEvent, trackRegistration } from './analytics'
+import { analyticsEnabled, trackEvent, trackRegistration } from './analytics'
+import { attributionForSignup, forgetArrival } from './attribution'
 
 interface AuthState {
   status: 'loading' | 'anonymous' | 'authenticated'
@@ -131,7 +132,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { usedRecoveryCode: Boolean(r?.used_recovery_code) }
       },
       register: async (email, password) => {
-        await api('POST', '/auth/register', { email, password })
+        // How this browser first found HawkEye, recorded with the account (nothing while analytics is off).
+        await api('POST', '/auth/register', { email, password, attribution: attributionForSignup(analyticsEnabled()) })
+        forgetArrival()
         trackEvent('sign_up', { method: 'email' })
         trackRegistration()
         await refresh()

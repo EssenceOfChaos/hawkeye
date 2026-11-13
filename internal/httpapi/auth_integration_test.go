@@ -312,6 +312,47 @@ func TestRegisterValidationAndDuplicates(t *testing.T) {
 	}
 }
 
+func TestRegisterRecordsHowThePersonFoundUs(t *testing.T) {
+	e := newEnv(t, 1000)
+	c := e.newClient(t)
+	r := c.call("POST", "/api/v1/auth/register", map[string]any{"email": "ph@example.com", "password": pw, "attribution": map[string]any{
+		"source": "producthunt", "medium": "referral", "referrer_host": "www.producthunt.com", "landing_path": "/",
+		"campaign":      "someone@example.com", // not a label: dropped, and the sign-up still succeeds
+		"first_seen_at": time.Now().Add(-time.Hour).Format(time.RFC3339)}})
+	if r.Status != 201 {
+		t.Fatalf("register: %d %v", r.Status, r.Body)
+	}
+	var source, medium, referrer, landing string
+	var campaign *string
+	if err := e.pool.QueryRow(t.Context(), `SELECT a.source, a.medium, a.campaign, a.referrer_host, a.landing_path FROM signup_attributions a
+		JOIN users u ON u.id = a.user_id WHERE u.email = 'ph@example.com'`).Scan(&source, &medium, &campaign, &referrer, &landing); err != nil {
+		t.Fatal(err)
+	}
+	if source != "producthunt" || medium != "referral" || campaign != nil || referrer != "www.producthunt.com" || landing != "/" {
+		t.Fatalf("got %s %s %v %s %s", source, medium, campaign, referrer, landing)
+	}
+	exp := c.call("GET", "/api/v1/account/export", nil)
+	if a, _ := exp.Body["signup_attribution"].(map[string]any); a["source"] != "producthunt" {
+		t.Fatalf("the export includes it: %v", exp.Body["signup_attribution"])
+	}
+
+	// Without attribution (analytics off, or nothing remembered) nothing is recorded, and a body of only bad values records nothing either.
+	e.register(t, "plain@example.com")
+	c2 := e.newClient(t)
+	if r := c2.call("POST", "/api/v1/auth/register", map[string]any{"email": "junk@example.com", "password": pw,
+		"attribution": map[string]any{"source": "x=y", "click_id": "raw-gclid-value"}}); r.Status != 201 {
+		t.Fatalf("register with junk attribution: %d %v", r.Status, r.Body)
+	}
+	var n int
+	_ = e.pool.QueryRow(t.Context(), `SELECT count(*) FROM signup_attributions`).Scan(&n)
+	if n != 1 {
+		t.Fatalf("only the first sign-up has attribution, have %d rows", n)
+	}
+	if exp := c2.call("GET", "/api/v1/account/export", nil); exp.Body["signup_attribution"] != nil {
+		t.Fatalf("no attribution exports as null: %v", exp.Body["signup_attribution"])
+	}
+}
+
 func TestUnauthenticatedAccessRejected(t *testing.T) {
 	e := newEnv(t, 1000)
 	c := e.newClient(t)

@@ -28,7 +28,7 @@ const SUPPORT = 'customer_support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 11, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 12, 2026</p>
       <p>
         HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -61,8 +61,8 @@ export function PrivacyPage() {
         <li>Communications you send to us. If you use our contact form we receive the name, email address, subject, message, and optional website address you enter and, if you are signed in, your account identifier and plan.</li>
       </ul>
       <p>
-        We do not ask for your name when you create an account. HawkEye runs its own sign-in system: we do not use a third-party sign-in provider, and we do not currently offer
-        multi-factor authentication.
+        We do not ask for your name when you create an account. HawkEye runs its own sign-in system: we do not use a third-party sign-in provider. You can turn on two-factor
+        sign-in with an authenticator app (see Section 2B for what we store).
       </p>
 
       <h3>B. Website-monitoring information</h3>
@@ -130,6 +130,15 @@ export function PrivacyPage() {
         The pixel is covered by the same opt-out as Google Analytics: when analytics is off, it is not loaded, nothing is sent to OpenAI, and its cookies are deleted. We do not
         use any other advertising or error-tracking service. If that changes, we will update this Policy first.
       </p>
+      <p>
+        <strong>How you found us.</strong> When you visit our website, your browser remembers how you arrived, so that if you create an account we can record it with your
+        account and learn which of our ads, listings and links bring people who sign up. It keeps only the campaign tags in the link you followed (such as{' '}
+        <code>utm_source</code> or <code>ref=producthunt</code>), which kind of ad you clicked (for example, a Google ad, but not the ad’s click identifier), the name of the
+        website that linked to us (such as www.producthunt.com, but not the page), the path of the first page you visited (without its query string), and when you first
+        arrived. It is kept in your browser’s local storage for up to 90 days, sent to us only when you create an account, and then deleted from your browser. We store it with
+        your account, do not share it with anyone, include it in your data export, and delete it with your account. It follows your analytics choice: while analytics is off,
+        nothing is remembered or sent, and turning analytics off deletes what your browser kept.
+      </p>
 
       <h3>D. Subscription and payment information</h3>
       <p>
@@ -154,14 +163,17 @@ export function PrivacyPage() {
           <tr><td><code>_ga</code>, <code>_ga_ZNT8EMTFGY</code></td><td>Set by Google Analytics, unless you turn analytics off, to tell visitors and sessions apart and measure site usage.</td><td>Analytics (opt-out)</td><td>Up to 2 years</td></tr>
           <tr><td><code>_gcl_au</code>, <code>_gcl_aw</code></td><td>Set by the Google tag for Google Ads conversion measurement, unless you turn analytics off, to connect a visit that began with one of our ads to a later purchase. <code>_gcl_aw</code> is set only when you arrive from a Google ad.</td><td>Advertising measurement (opt-out)</td><td>Up to 90 days</td></tr>
           <tr><td><code>__oppref</code></td><td>Set by the OpenAI Ads pixel, unless you turn analytics off, when you arrive from an ad in ChatGPT, to connect that visit to a later sign-up or purchase.</td><td>Advertising measurement (opt-out)</td><td>30 days from your last visit from an OpenAI ad</td></tr>
+          <tr><td><code>hawkeye_first_touch</code> (local storage)</td><td>Remembers how you first arrived (campaign tags, the kind of ad, the linking site and your first page) until you create an account, unless you turn analytics off. Kept by HawkEye only; see “How you found us” in Section C.</td><td>Analytics (opt-out)</td><td>Up to 90 days, or until you create an account</td></tr>
           <tr><td><code>__obref</code></td><td>Set by the OpenAI Ads pixel, unless you turn analytics off: a random reference for your browser on our site, used for the same measurement.</td><td>Advertising measurement (opt-out)</td><td>1 year</td></tr>
         </tbody>
       </table>
       <p>
-        The sign-in, security, and cookie-choice cookies are strictly necessary to provide the Service you ask for. The Google Analytics, Google Ads, and OpenAI Ads measurement cookies are not, so you are free to refuse them: use the “Cookie settings” link at the bottom
-        of our pages and choose “Turn off analytics,” which stops Google Analytics, Google Ads, and OpenAI Ads measurement and deletes their cookies. If your browser sends a Global Privacy Control signal, we treat that as turning analytics off. You can also block or delete cookies in your browser settings, or install Google’s <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener noreferrer">Analytics opt-out browser add-on</a>; the Service works the same without them. Google’s handling of the data is described in its
+        The sign-in, security, and cookie-choice cookies are strictly necessary to provide the Service you ask for. The Google Analytics, Google Ads, and OpenAI Ads measurement cookies, and the record of how you found us, are not, so you are free to refuse them: use the “Cookie settings” link at the bottom
+        of our pages and choose “Turn off analytics,” which stops Google Analytics, Google Ads, and OpenAI Ads measurement, deletes their cookies, and deletes the record of how you found us. If your browser sends a Global Privacy Control signal, we treat that as turning analytics off. You can also block or delete cookies in your browser settings, or install Google’s <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener noreferrer">Analytics opt-out browser add-on</a>; the Service works the same without them. Google’s handling of the data is described in its
         <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">“How Google uses information from sites or apps that use our services”</a> page. When you pay, Stripe’s hosted checkout page may set its own cookies; see Stripe’s
-        policies. Our emails do not contain tracking pixels and we do not track email opens or link clicks.
+        policies. Our emails do not contain tracking pixels, and we do not track whether you open them. Links to HawkEye in our getting-started and weekly summary emails carry campaign
+        tags (<code>utm_source=hawkeye</code>, <code>utm_medium=email</code> and the name of the email), so that, while analytics is on, Google Analytics can count visits that came from those
+        emails. The tags do not identify you, and we do not record which person clicked.
       </p>
       <p>If we add other non-essential cookies, we will update this Policy and, where the law requires, ask for your consent before using them.</p>
 
@@ -185,7 +197,7 @@ export function PrivacyPage() {
       </ul>
       <p>
         Where applicable law requires a legal basis for processing, we rely on: performance of a contract (providing the Service you signed up for); our legitimate interests in operating,
-        securing, and improving the Service, helping new customers get started with it, and preventing abuse, which are not overridden by your rights; compliance with legal obligations; and consent, where we ask for it. Our legitimate interest in understanding how the website is used, and whether our advertising works, is the basis for Google Analytics and Google Ads conversion measurement, and you can opt out at any time. We do not use your
+        securing, and improving the Service, helping new customers get started with it, and preventing abuse, which are not overridden by your rights; compliance with legal obligations; and consent, where we ask for it. Our legitimate interest in understanding how the website is used, and whether our advertising works, is the basis for Google Analytics, Google Ads conversion measurement, and recording how you found us, and you can opt out at any time. We do not use your
         information to target advertising at you and we do not make decisions about you by automated means that have legal or similarly significant effects.
       </p>
 
@@ -257,6 +269,7 @@ export function PrivacyPage() {
         <li><strong>Two-factor sign-in</strong> data is deleted when you turn it off or close your account; the sign-in step expires after 10 minutes.</li>
         <li><strong>Copies of Stripe event notifications</strong> are deleted after 90 days (180 days if processing failed).</li>
         <li><strong>Rate-limit counters</strong> are deleted within 24 hours.</li>
+        <li><strong>How you found us</strong> (Section 2C): kept in your browser for up to 90 days or until you create an account; once you sign up, kept with your account until you delete it.</li>
         <li><strong>Security log</strong> entries are deleted after one year. Your own entries are deleted at once when you close your account; a workspace’s entries are deleted with the workspace, and entries about changes you made in someone else’s workspace (with your email address) stay in that workspace’s log until they are a year old.</li>
         <li><strong>Report name and logo</strong> are deleted when you remove them or close your account. Reports themselves are generated when you ask for them or on the 1st of the month, are not stored by us, and, once emailed, are in your mailbox.</li>
         <li><strong>Feature sign-ups</strong> that are not confirmed are deleted once the 48-hour confirmation link expires. Confirmed sign-ups are kept until we have emailed you about that feature’s launch, you remove yourself with the link in our email, or you close your account, whichever is first.</li>
