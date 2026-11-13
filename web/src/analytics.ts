@@ -194,7 +194,9 @@ export function initAnalytics() {
 }
 
 export function trackPageView(pathname: string) {
-  measure('page_viewed', { type: 'contents' })
+  // OpenAI's pixel drops a "contents" event without a contents list. The page is identified by its path only, which the pixel already reads from the
+  // address: never document.title, which on a public status page is the customer's own text.
+  measure('page_viewed', { type: 'contents', contents: [{ id: pathname, name: pathname, content_type: 'page' }] })
   const gtag = w().gtag
   if (!analyticsEnabled() || typeof gtag !== 'function') return
   gtag('event', 'page_view', {

@@ -183,10 +183,15 @@ describe('OpenAI Ads pixel', () => {
     trackPageView('/dashboard')
     expect(openAIScripts()).toHaveLength(1)
     expect(openAIEvents()).toEqual(['page_viewed'])
+    // OpenAI drops a contents event without a contents list; the page is named by its path only, never the title
+    document.title = 'Acme Corp status'
+    trackPageView('/status/acme')
+    expect(openAICalls().filter((c) => c[0] === 'measure').at(-1)).toEqual(['measure', 'page_viewed', { type: 'contents', contents: [{ id: '/status/acme', name: '/status/acme', content_type: 'page' }] }])
+    expect(JSON.stringify(openAICalls())).not.toContain('Acme Corp')
 
     at('https://hawkeye.observer/accept-invite?token=abc')
     trackPageView('/accept-invite')
-    expect(openAIEvents()).toEqual(['page_viewed'])
+    expect(openAIEvents()).toEqual(['page_viewed', 'page_viewed'])
   })
 
   it('allows only campaign tags, its click id and harmless app parameters in the address', () => {
