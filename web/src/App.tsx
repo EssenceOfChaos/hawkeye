@@ -20,6 +20,7 @@ import { DomainsPage } from './pages/DomainsPage'
 import { MaintenancePage } from './pages/MaintenancePage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { MonitorFormPage } from './pages/MonitorFormPage'
+import { SetupPage } from './pages/SetupPage'
 import { StatusPage } from './pages/StatusPage'
 import { TeamPage } from './pages/TeamPage'
 import { ApiKeysPage } from './pages/ApiKeysPage'
@@ -135,6 +136,7 @@ export function AppRoutes() {
         <Route path="/status-pages/:pageID" element={<StatusPageEditor />} />
         <Route path="/monitors" element={<MonitorsPage />} />
         <Route path="/monitors/new" element={<MonitorFormPage />} />
+        <Route path="/monitors/setup" element={<SetupPage />} />
         <Route path="/monitors/:monitorID" element={<Lazy><MonitorDetailPage /></Lazy>} />
         <Route path="/monitors/:monitorID/edit" element={<MonitorFormPage />} />
       </Route>

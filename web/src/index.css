@@ -103,6 +103,11 @@ button.linklike { border: 0; padding: 0; background: none; color: var(--accent);
 textarea { font: inherit; font-family: 'JetBrains Mono Variable', ui-monospace, monospace; font-size: .9rem; padding: .5rem .8rem; border-radius: .45rem; border: 1px solid #3d516a; background: #08172b; color: inherit; resize: vertical; }
 fieldset.group { border: 1px solid var(--line); border-radius: .5rem; padding: .75rem 1rem 0; margin: 0 0 1rem; min-width: 0; /* a fieldset is otherwise as wide as its content */ }
 fieldset.group legend { font-weight: 600; padding: 0 .35rem; }
+/* "Set up from your domain": one row per suggested monitor, its reason under it, long addresses wrapping instead of widening the page. */
+.suggestions { display: grid; gap: .85rem; padding-bottom: .9rem; }
+.suggestions label { display: grid; grid-template-columns: auto 1fr; column-gap: .6rem; align-items: start; overflow-wrap: anywhere; }
+.suggestions label input { margin-top: .3rem; }
+.suggestions label small { grid-column: 2; display: block; margin-top: .15rem; }
 .kv-row { display: flex; gap: .5rem; align-items: center; margin-bottom: .5rem; }
 .kv-row input, .kv-row select { flex: 1; min-width: 0; }
 .kv-row button { flex: none; }

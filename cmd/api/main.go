@@ -24,6 +24,7 @@ import (
 	"hawkeye/internal/config"
 	"hawkeye/internal/contact"
 	"hawkeye/internal/database"
+	"hawkeye/internal/discovery"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/email"
 	"hawkeye/internal/errtrack"
@@ -159,6 +160,8 @@ func run() error {
 		Account:   account.NewService(pool, authSvc, provider, mailer, log, cfg.AppBaseURL),
 		SSLCheck:  freeTools.ssl,
 		SiteCheck: freeTools.site,
+		// "Set up from your domain" is for signed-in customers, so it stays on when the public free tools are turned off.
+		Discovery: discovery.New(safehttp.Config{}),
 		APITokens: apiTokens,
 		TwoFactor: twoFactorSvc,
 		OAuth:     oauthSvc,

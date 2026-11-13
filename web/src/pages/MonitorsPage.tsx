@@ -291,6 +291,7 @@ export function MonitorsPage() {
         {canAdd ? (
           <>
             <Link className="button" to="/monitors/new">Add monitor</Link>
+            <Link to="/monitors/setup">Set up from a domain</Link>
             <Link to="/monitors/new?type=heartbeat">Monitor a cron job</Link>
             <Link to="/monitors/new?type=dns">Monitor a DNS record</Link>
           </>
@@ -331,8 +332,9 @@ export function MonitorsPage() {
       {monitors?.length === 0 && !filtered && (
         <section className="card empty">
           <h2>Add your first website</h2>
-          <p>Your watch starts here. HawkEye will check it regularly and alert you when an outage is confirmed.</p>
-          <Link className="button" to="/monitors/new">Add your first website</Link>
+          <p>Your watch starts here. Enter your domain and HawkEye will suggest what to monitor, then alert you when an outage is confirmed.</p>
+          <Link className="button" to="/monitors/setup">Set up from your domain</Link>{' '}
+          <Link to="/monitors/new">Add a website yourself</Link>
           <p className="hint">Or <Link to="/monitors/new?type=heartbeat">monitor a cron job or scheduled task</Link>: backups, reports, queue workers.</p>
         </section>
       )}

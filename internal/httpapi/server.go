@@ -20,6 +20,7 @@ import (
 	"hawkeye/internal/branding"
 	"hawkeye/internal/checks"
 	"hawkeye/internal/contact"
+	"hawkeye/internal/discovery"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/heartbeats"
@@ -73,6 +74,7 @@ type Options struct {
 	Branding      *branding.Service    // report branding and PDF reports; nil turns those endpoints off
 	SSLCheck      *sslcheck.Service    // free SSL checker; nil turns the endpoint off
 	SiteCheck     *sitecheck.Service   // free website status checker; nil turns the endpoint off
+	Discovery     *discovery.Service   // "set up from your domain" monitor suggestions; nil turns the endpoint off
 	APITokens     *apitokens.Service   // API keys; nil makes key requests answer 503 (DISABLE_API_KEYS) and sessions work as before
 	TwoFactor     *twofactor.Service   // two-factor sign-in settings and organization requirements
 	OAuth         *oauth.Service       // OAuth for the MCP server (connecting Claude); nil turns it off
@@ -195,7 +197,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, log: o.Logger, secureCookies: o.SecureCookies,
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, discovery: o.Discovery, log: o.Logger, secureCookies: o.SecureCookies,
 		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, workflowChecker: o.WorkflowChecker, tokenRoutes: map[string]bool{}}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
@@ -389,6 +391,13 @@ func registerAPI(e *echo.Echo, o Options) {
 		testLimits = append(testLimits, h.limits.by("test-workflow:org", 60, time.Hour, func(c *echo.Context) string { return currentOrg(c).String() }))
 	}
 	scoped.POST("/monitors/test-workflow", h.testWorkflow, testLimits...)
+	// Setting up from a domain sends a dozen GETs to the named site from our servers: per-IP and per-organization budgets, on top of the per-host
+	// limit inside discovery. Open to API keys, so an assistant can propose monitors too.
+	setupLimits := []echo.MiddlewareFunc{limit("monitor-suggestions")}
+	if h.limits.l != nil {
+		setupLimits = append(setupLimits, h.limits.by("monitor-suggestions:org", 30, time.Hour, func(c *echo.Context) string { return currentOrg(c).String() }))
+	}
+	api.POST("/monitors/suggestions", h.suggestMonitors, setupLimits...)
 	api.GET("/tags", h.listTags)
 	api.POST("/tags", h.createTag)
 	api.PATCH("/tags/:tagID", h.updateTag)

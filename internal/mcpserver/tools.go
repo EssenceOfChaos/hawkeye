@@ -394,6 +394,8 @@ func (s *tools) register(srv *mcp.Server) {
 			"paid plan.", false, false),
 		write, s.createMonitor)
 
+	s.registerSetup(srv)
+
 	add(s, srv, workflowTool("create_workflow", "Create a multi-step API check",
 		"Adds a multi-step API check: requests that run in order on a schedule (for example sign in, then fetch the account), passing values between "+
 			"steps. A step saves a value from its response (save) and later steps use it as {{name}}; secrets are used as {{secret.name}}. Secret "+

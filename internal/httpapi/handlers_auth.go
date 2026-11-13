@@ -22,6 +22,7 @@ import (
 	"hawkeye/internal/branding"
 	"hawkeye/internal/checks"
 	"hawkeye/internal/contact"
+	"hawkeye/internal/discovery"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/heartbeats"
 	"hawkeye/internal/incidents"
@@ -65,6 +66,7 @@ type handlers struct {
 	branding        *branding.Service
 	sslcheck        *sslcheck.Service
 	sitecheck       *sitecheck.Service
+	discovery       *discovery.Service // "set up from your domain" suggestions; nil turns them off
 	log             *slog.Logger
 	limits          limiterDeps
 	emailPerHour    int
