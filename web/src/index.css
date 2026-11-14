@@ -82,6 +82,12 @@ a { color: var(--accent); }
 .card h2 { margin-top: 0; font-size: 1.1rem; }
 .brand-name-form { margin-bottom: .625rem; }
 .empty { text-align: center; padding: 2rem 1rem; }
+/* Two ways to start, split by a daisyUI divider: side by side with a vertical "OR" from 640px (Tailwind's sm, where the divider turns horizontal), stacked below. */
+.empty-actions { display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 1rem 0; }
+.empty-actions .d-divider { width: min(100%, 16rem); margin: .5rem auto; font-size: .8rem; letter-spacing: .1em; color: var(--muted, #a9b9cd); }
+.empty-actions .d-divider::before, .empty-actions .d-divider::after { background-color: color-mix(in srgb, currentColor 35%, transparent); }
+/* Row: tall enough that the vertical lines show above and below "OR" (the button alone is too short for them). */
+@media (min-width: 40rem) { .empty-actions { flex-direction: row; align-items: stretch; min-height: 5.5rem; } .empty-actions > a { align-self: center; } .empty-actions .d-divider { width: auto; margin: 0 1.25rem; } }
 .field { display: flex; flex-direction: column; gap: .25rem; margin-bottom: 1rem; }
 /* .d-toggle is left out: this unlayered rule beats daisyUI's layered CSS, and its padding squeezes the toggle's thumb to nothing. :where() keeps the specificity below a plain `input`, so every override of this rule still wins. */
 :where(input:not(.d-toggle)), select, button, .button { font: inherit; padding: .5rem .8rem; border-radius: .45rem; border: 1px solid #3d516a; background: #08172b; color: inherit; }
@@ -656,6 +662,21 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
 }
 @media (max-width: 380px) { .nf-status { display: none; } }
 @media (prefers-reduced-motion: reduce) { .nf-sweep { animation: none; } .nf-button { transition: none; } .nf-button:hover { transform: none; } }
+/* Scout, the mascot (src/components/Scout.tsx). The gold glow behind him keeps his navy feathers from sinking into the navy page. */
+.scout { display: inline-block; position: relative; width: var(--scout-size, 160px); height: var(--scout-size, 160px); flex: none; }
+.scout::before { content: ""; position: absolute; inset: 8% 4% 0; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, #e8b95e33, #e8b95e14 60%, transparent); }
+.scout img { position: relative; display: block; width: 100%; height: 100%; object-fit: contain; }
+/* Landing hero: Scout stands in front of the laptop's lower-left corner, giving the dashboard a thumbs-up. */
+.hero-art-wrap { grid-area: art; position: relative; }
+.hero-scout { position: absolute; left: -6%; bottom: -8%; width: 36%; height: auto; aspect-ratio: 1; }
+@media (max-width: 480px) { .hero-scout { left: -2%; } }
+/* Empty states: Scout above the heading. */
+.empty-scout { margin: 0 auto .25rem; }
+@media (max-width: 480px) { .empty-scout { width: 112px; height: 112px; } }
+/* 404: Scout beside the radar, gesturing at the number. After .scout, which it overrides. .nf clips overflow, so on narrow screens he overlaps the radar's edge instead. */
+.nf-scout { position: absolute; left: -150px; bottom: -18px; z-index: 3; }
+@media (max-width: 520px) { .nf-scout { width: 104px; height: 104px; left: -58px; bottom: -14px; } }
 
 /* Signed-out account pages (login, sign up, forgot/reset password, confirm address): the same navy, grid and gold glow as the 404 page, always
    dark whatever the system theme. Scoped to main.auth so nothing inside the app is affected. */

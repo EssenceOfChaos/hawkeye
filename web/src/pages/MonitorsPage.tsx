@@ -5,6 +5,7 @@ import { formatDateTime, formatMoney, timeAgo } from '../format'
 import { Alert } from '../components/Alert'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
+import { Scout } from '../components/Scout'
 import { CertBadge } from '../components/Certificate'
 import { StatusBadge } from '../components/StatusBadge'
 import { TagList } from '../components/Tags'
@@ -331,10 +332,14 @@ export function MonitorsPage() {
       {monitors === null && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading monitors…</p>}
       {monitors?.length === 0 && !filtered && (
         <section className="card empty">
+          <Scout pose="wave" size={150} className="empty-scout" />
           <h2>Add your first website</h2>
           <p>Your watch starts here. Enter your domain and HawkEye will suggest what to monitor, then alert you when an outage is confirmed.</p>
-          <Link className="button" to="/monitors/setup">Set up from your domain</Link>{' '}
-          <Link to="/monitors/new">Add a website yourself</Link>
+          <div className="empty-actions">
+            <Link className="button" to="/monitors/setup">Set up from your domain</Link>
+            <div className="d-divider sm:d-divider-horizontal">OR</div>
+            <Link to="/monitors/new">Add a website yourself</Link>
+          </div>
           <p className="hint">Or <Link to="/monitors/new?type=heartbeat">monitor a cron job or scheduled task</Link>: backups, reports, queue workers.</p>
         </section>
       )}

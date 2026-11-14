@@ -10,6 +10,7 @@ import { ComingSoon } from '../components/ComingSoon'
 import { MonitoringFlow } from '../components/MonitoringFlow'
 import { ProductShots } from '../components/ProductShots'
 import { Reveal } from '../components/Reveal'
+import { Scout } from '../components/Scout'
 import { inScope, parallax, prefersReducedMotion, rotateScramble } from '../motion'
 
 // Simple Icons paths (CC0), 24x24.
@@ -192,7 +193,7 @@ export function LandingPage() {
 
   const rootRef = useRef<HTMLDivElement>(null)
   const heroRef = useRef<HTMLElement>(null)
-  const artRef = useRef<HTMLImageElement>(null)
+  const artRef = useRef<HTMLDivElement>(null)
   const scrambleRef = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
@@ -252,14 +253,16 @@ export function LandingPage() {
             <li className="d-badge d-badge-soft d-badge-secondary">Multi-step API checks</li>
           </ul>
         </div>
-        <img
-          ref={artRef}
-          className="hero-art"
-          src={brand.dashboardLaptop}
-          alt="Illustration of a HawkEye dashboard listing monitored websites as online, with an uptime ring and a response-time chart."
-          width={566}
-          height={463}
-        />
+        <div className="hero-art-wrap" ref={artRef}>
+          <img
+            className="hero-art"
+            src={brand.dashboardLaptop}
+            alt="Illustration of a HawkEye dashboard listing monitored websites as online, with an uptime ring and a response-time chart."
+            width={566}
+            height={463}
+          />
+          <Scout pose="check" size={200} className="hero-scout" eager />
+        </div>
         </div>
       </section>
 

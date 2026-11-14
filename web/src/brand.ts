@@ -32,6 +32,10 @@ import audienceFreelancer from './assets/brand/audience-freelancer.png'
 import audienceAgency from './assets/brand/audience-agency.png'
 import audienceBusiness from './assets/brand/audience-business.png'
 import audienceDeveloper from './assets/brand/audience-developer.png'
+import scoutWave from './assets/brand/scout-wave.webp'
+import scoutCheck from './assets/brand/scout-check.webp'
+import scoutAlert from './assets/brand/scout-alert.webp'
+import scoutStand from './assets/brand/scout-stand.webp'
 import logo from './assets/brand/logo.png'
 import logoWhite from './assets/brand/logo-white.png'
 
@@ -45,6 +49,12 @@ export const brand = {
   /** Square app icon with its own navy background; safe on any theme. */
   appIcon,
   dashboardLaptop,
+  /**
+   * Scout, the mascot: a navy and gold hawk, full body, on transparent 640x640 squares with his feet on the bottom edge. Render him with
+   * the Scout component. wave: greeting (onboarding, empty states); check: thumbs-up with a green check (things are fine); stand: neutral,
+   * gesturing with one wing; alert: holding a red warning beacon (use sparingly, never in a real outage alert).
+   */
+  scout: { wave: scoutWave, check: scoutCheck, stand: scoutStand, alert: scoutAlert },
   /** Background art for the /monitoring page: a gold hawk's eye on navy, and the night Earth with connection arcs. No text in either. */
   art: { hawkEye: monitoringHawkEye, earth: monitoringEarth },
   /** Real screens of the app with sample data (scripts/screenshots): the dashboard, the incidents list and the alert email. */
