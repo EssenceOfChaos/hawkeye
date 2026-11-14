@@ -33,6 +33,7 @@ import (
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/heartbeats"
 	"hawkeye/internal/httpapi"
+	"hawkeye/internal/incidentdraft"
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/invitations"
 	"hawkeye/internal/lifecycle"
@@ -75,6 +76,7 @@ type envOpts struct {
 	ssl       *sslcheck.Service
 	site      *sitecheck.Service
 	setup     *discovery.Service
+	drafts    *incidentdraft.Service
 	telegram  *notifications.TelegramBot
 	noAPIKeys bool             // DISABLE_API_KEYS
 	oauthPerM int              // OAUTH_TOKEN_RATE_LIMIT_PER_MIN (0: the default)
@@ -123,6 +125,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 		SSLCheck:    o.ssl,
 		SiteCheck:   o.site,
 		Discovery:   o.setup,
+		Drafts:      o.drafts,
 		HSTS:        o.hsts, Metrics: o.metrics, Errors: o.reporter, EmailActionLimitPerHour: o.emailPerH, GlobalRateLimitPerMin: o.global,
 	}
 	if o.shared {

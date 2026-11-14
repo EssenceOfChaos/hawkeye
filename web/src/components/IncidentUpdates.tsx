@@ -25,7 +25,13 @@ const when = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'med
  * An incident's updates, and (for owners) the form to post one. Updates are public on every published status page that lists the monitor,
  * so the panel says where they will appear, or that nobody outside the team will see them.
  */
-export function IncidentUpdates({ incident, isOwner, onCountChange }: { incident: Incident; isOwner: boolean; onCountChange?: (n: number) => void }) {
+export function IncidentUpdates({ incident, isOwner, canDraft = false, onCountChange }: {
+  incident: Incident
+  isOwner: boolean
+  /** Offer "Draft with AI": the owner turned AI-drafted updates on and the plan includes them. */
+  canDraft?: boolean
+  onCountChange?: (n: number) => void
+}) {
   const [updates, setUpdates] = useState<IncidentUpdate[] | null>(null)
   const [pages, setPages] = useState<StatusPageRef[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -34,6 +40,8 @@ export function IncidentUpdates({ incident, isOwner, onCountChange }: { incident
   const [fieldError, setFieldError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [justPosted, setJustPosted] = useState<string | null>(null)
+  const [drafting, setDrafting] = useState(false)
+  const [drafted, setDrafted] = useState(false)
   const base = `/incidents/${incident.id}/updates`
 
   useEffect(() => {
@@ -66,6 +74,7 @@ export function IncidentUpdates({ incident, isOwner, onCountChange }: { incident
       changed([r.update, ...(updates ?? [])])
       setJustPosted(r.update.id)
       setMessage('')
+      setDrafted(false)
       if (status !== 'resolved') setStatus(status === 'investigating' ? 'identified' : status === 'identified' ? 'monitoring' : 'resolved')
     } catch (err) {
       const fields = err instanceof ApiError ? (err.details?.fields as Record<string, string> | undefined) : undefined
@@ -73,6 +82,22 @@ export function IncidentUpdates({ incident, isOwner, onCountChange }: { incident
       else setError(err instanceof ApiError ? err.message : 'Could not post the update. Try again.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  // Fills the box with a first draft for the chosen status. The person edits it and posts it themselves; replacing their own text asks first.
+  async function draft() {
+    if (message.trim() && !window.confirm('Replace what you have written with a draft?')) return
+    setDrafting(true)
+    setError(null)
+    try {
+      const r = await api<{ message: string }>('POST', `${base}/draft`, { status })
+      setMessage(r.message)
+      setDrafted(true)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not write a draft. Write the update yourself, or try again.')
+    } finally {
+      setDrafting(false)
     }
   }
 
@@ -116,9 +141,17 @@ export function IncidentUpdates({ incident, isOwner, onCountChange }: { incident
               aria-describedby={`${fieldID}-count`} aria-invalid={fieldError ? true : undefined}
               onChange={(e) => setMessage(e.target.value)} />
             <small id={`${fieldID}-count`} className="hint">{left} characters left. Plain text: links and formatting are shown as typed.</small>
+            {drafted && <small className="hint">Written by AI from this incident’s details. Check it says what you want before posting.</small>}
             {fieldError && <small className="error">{fieldError}</small>}
           </div>
-          <button type="submit" disabled={busy || !message.trim()}>{busy ? 'Posting…' : 'Post update'}</button>
+          <div className="row">
+            <button type="submit" disabled={busy || drafting || !message.trim()}>{busy ? 'Posting…' : 'Post update'}</button>
+            {canDraft && (
+              <button type="button" className="linklike" disabled={busy || drafting} onClick={() => void draft()}>
+                {drafting ? 'Drafting…' : 'Draft with AI'}
+              </button>
+            )}
+          </div>
         </form>
       ) : (
         <p className="hint">Only the organization’s owner can post updates.</p>

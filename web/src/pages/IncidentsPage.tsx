@@ -4,6 +4,7 @@ import { api, ApiError, type Incident } from '../api'
 import { Alert } from '../components/Alert'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
+import { AIDraftsSetting, useAIDrafts } from '../components/AIDrafts'
 import { IncidentUpdates } from '../components/IncidentUpdates'
 import { useAuth } from '../auth'
 
@@ -59,6 +60,7 @@ export function IncidentsPage() {
   const [open, setOpen] = useState<string | null>(null)
   const { organization } = useAuth()
   const isOwner = organization?.role === 'owner'
+  const [drafts, setDrafts] = useAIDrafts()
 
   const load = useCallback(async () => {
     try {
@@ -97,6 +99,8 @@ export function IncidentsPage() {
         to tell visitors to your status pages what is happening.
       </p>
 
+      {isOwner && drafts && <AIDraftsSetting state={drafts} onChange={setDrafts} />}
+
       {error && <Alert>{error}</Alert>}
       {items === null && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading incidents…</p>}
       {items?.length === 0 && (
@@ -134,7 +138,7 @@ export function IncidentsPage() {
                     {shown && (
                       <tr className="incident-updates-row" id={`updates-${i.id}`}>
                         <td colSpan={6}>
-                          <IncidentUpdates incident={i} isOwner={isOwner}
+                          <IncidentUpdates incident={i} isOwner={isOwner} canDraft={Boolean(drafts?.available && drafts.included && drafts.enabled)}
                             onCountChange={(count) => setItems((all) => all?.map((x) => (x.id === i.id ? { ...x, update_count: count } : x)) ?? all)} />
                         </td>
                       </tr>

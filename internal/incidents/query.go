@@ -2,10 +2,13 @@ package incidents
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -82,4 +85,46 @@ func List(ctx context.Context, pool *pgxpool.Pool, orgID uuid.UUID, f Filter) ([
 		out = append(out, in)
 	}
 	return out, total, rows.Err()
+}
+
+// Failures describes the failed checks of an incident, for writing about it: the monitor's kind, and the distinct HTTP status codes and check
+// locations (region codes) of its failed checks between the start and the end (or now). At most 20 of each, most recent first.
+func Failures(ctx context.Context, pool *pgxpool.Pool, orgID, incidentID uuid.UUID) (kind string, codes []int, regions []string, err error) {
+	var monitorID uuid.UUID
+	var started time.Time
+	var resolved *time.Time
+	err = pool.QueryRow(ctx, `SELECT m.id, m.kind, i.started_at, i.resolved_at FROM incidents i JOIN monitors m ON m.id = i.monitor_id
+		WHERE i.id = $1 AND m.organization_id = $2`, incidentID, orgID).Scan(&monitorID, &kind, &started, &resolved)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil, nil, ErrIncidentNotFound
+	}
+	if err != nil {
+		return "", nil, nil, err
+	}
+	end := time.Now()
+	if resolved != nil {
+		end = *resolved
+	}
+	rows, err := pool.Query(ctx, `SELECT http_status_code, region, max(checked_at) AS last FROM check_results
+		WHERE monitor_id = $1 AND NOT success AND checked_at >= $2 AND checked_at <= $3
+		GROUP BY http_status_code, region ORDER BY last DESC LIMIT 40`, monitorID, started, end)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var code *int16
+		var region string
+		var last time.Time
+		if err := rows.Scan(&code, &region, &last); err != nil {
+			return "", nil, nil, err
+		}
+		if code != nil && len(codes) < 20 && !slices.Contains(codes, int(*code)) {
+			codes = append(codes, int(*code))
+		}
+		if region != "" && len(regions) < 20 && !slices.Contains(regions, region) {
+			regions = append(regions, region)
+		}
+	}
+	return kind, codes, regions, rows.Err()
 }

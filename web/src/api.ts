@@ -51,6 +51,8 @@ export interface Plan {
   branded_reports_enabled?: boolean
   /** API keys may change data (Pro and Agency). Reading through the API is on every plan. */
   api_write_enabled?: boolean
+  /** AI-drafted incident updates, once the owner turns them on (Pro and Agency). */
+  ai_drafts_enabled?: boolean
   /** Multi-step API checks the plan allows (each also counts as a monitor), and steps in each. */
   max_workflows?: number
   max_workflow_steps?: number

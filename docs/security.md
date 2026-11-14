@@ -258,6 +258,18 @@ Every plan; 365 days (`audit.Retention`, purged by the retention job).
 
 `POST /api/v1/monitors/suggestions` (`internal/discovery`, also MCP `suggest_monitors`) needs a signed-in session or API key, and sends up to about a dozen requests to the named site and its `api.` subdomain, so it has the website checker's protections and more: like that checker it sends every request through the monitoring engine's `checks.Checker`, so through `safehttp` (public addresses only, ports 80 and 443, every redirect revalidated); only `GET` to fixed paths (`/`, a random path that detects sites answering every path, `/readyz`, `/healthz`, `/health`, `/api/health`), whatever the input contained; no custom headers or body; response bodies are drained by the checker (at most 64 KB) and never read, returned or stored, and an endpoint is judged by its status and content type alone; one MX lookup through the system resolver. The User-Agent is `HawkEye-Setup/1.0 (+https://hawkeye.observer/docs/getting-started)`. Limits: `internal/toolguard` (4 concurrent, 5 fresh lookups per host per 10 minutes, 60 s cache, 15 s deadline), 10/minute per IP and 30/hour per organization (shared with MCP). The cached report is shared across organizations, so the per-organization `already_monitored` flags are added to a copy. Nothing is created: the person picks, and each monitor is created through `POST /monitors` with its usual validation and plan limits. The domain is not stored. Tests: `internal/discovery`, `internal/httpapi/setup_integration_test.go`.
 
+## AI-drafted incident updates (outbound to Anthropic)
+
+`POST /api/v1/incidents/:id/updates/draft` (`internal/incidentdraft`) sends incident details to Anthropic's API (`claude-haiku-5-5`) and returns a draft.
+Gates, each checked on every draft: a server key (`ANTHROPIC_API_KEY`; without it the feature is off), the plan (`plans.ai_drafts_enabled`, Pro and
+Agency), the owner's opt-in (`organizations.ai_drafts_enabled`, off by default, changes recorded in the security log), the owner role, and a session
+(API keys and MCP are refused, so a leaked key can't spend model calls). Budgets: per IP, and 60 drafts an hour per organization. What is sent is
+assembled in one place (`draftFacts` in `internal/httpapi/handlers_ai_drafts.go`) and excludes the monitored address, request headers, bodies,
+credentials and response content. Monitor names, earlier updates and failure summaries are untrusted text, so they are sent as JSON inside an
+`<incident>` block that the system prompt says is data, not instructions; the worst a prompt injection can do is a bad draft, which the owner
+reads before posting (nothing is posted automatically). Drafts are cleaned and capped at 700 characters. The key is a secret like
+`SECRETS_ENCRYPTION_KEY` (`deploy/env.manifest`, optional). Tests: `internal/incidentdraft`, `internal/httpapi/ai_drafts_integration_test.go`.
+
 ## DNS monitors (outbound lookups)
 
 A DNS monitor (`internal/checks/dns.go`) sends no traffic to the customer's host: it asks the worker's own resolver for one record. The risk is learning what exists on HawkEye's network, so:

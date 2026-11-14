@@ -25,6 +25,7 @@ import (
 	"hawkeye/internal/discovery"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/heartbeats"
+	"hawkeye/internal/incidentdraft"
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/invitations"
 	"hawkeye/internal/lifecycle"
@@ -66,7 +67,8 @@ type handlers struct {
 	branding        *branding.Service
 	sslcheck        *sslcheck.Service
 	sitecheck       *sitecheck.Service
-	discovery       *discovery.Service // "set up from your domain" suggestions; nil turns them off
+	discovery       *discovery.Service     // "set up from your domain" suggestions; nil turns them off
+	drafts          *incidentdraft.Service // AI-drafted incident updates; nil when the server has no ANTHROPIC_API_KEY
 	log             *slog.Logger
 	limits          limiterDeps
 	emailPerHour    int

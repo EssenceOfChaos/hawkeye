@@ -315,10 +315,23 @@ newest first, with their status, text and time, never who posted them. They are 
 | `GET /incidents/:id/updates` | any member | `{updates: [{id, incident_id, status, message, author_email, created_at}], status_pages: [{title, slug}]}`, newest first. `status_pages` are the published pages that show these updates (empty: only the team sees them). `author_email` is null once that account is gone |
 | `POST /incidents/:id/updates` | owner | `{status, message}` → 201 `{update}`. `status`: `investigating`, `identified`, `monitoring` or `resolved` (a label only: the incident still opens and resolves from the checks). `message`: 1–1,000 characters after trimming; `\r\n` becomes `\n`; control and text-direction characters are refused (400 `VALIDATION_ERROR` on `message`). At most 50 per incident. Works on open and resolved incidents. Rate-limited per IP |
 | `DELETE /incidents/:id/updates/:updateID` | owner | 204 |
+| `POST /incidents/:id/updates/draft` | owner, session | `{status}` → `{message}`: a first draft for that status, written by AI, **not** posted (see *AI-drafted updates*) |
+| `GET /ai-drafts` | any member, session | `{available, included, enabled, model}`: the server has a model configured, the plan includes drafts, and the owner turned them on |
+| `PUT /ai-drafts` | owner, session | `{enabled}` → as `GET`. Turning on needs the plan (403 `PLAN_LIMIT_REACHED`, `limit_type: ai_drafts`) and a configured model (503 `AI_DRAFTS_UNAVAILABLE`). Recorded in the security log |
 
 Another organization's incident, or a malformed id, is a 404. Posting or deleting clears the server's cache of public pages, so the next request shows the
 change; a browser that already loaded a page may keep its copy for up to 30 seconds (`Cache-Control: max-age=30`). Updates go when their incident does
 (retention, or deleting the monitor or the account), are in the account export, and stay without an author when that person's account is deleted.
+
+**AI-drafted updates** (`internal/incidentdraft`, migration `000042`). On Pro and Agency (`plans.ai_drafts_enabled`), once the owner turns them on
+(`organizations.ai_drafts_enabled`, off by default), `POST …/updates/draft` asks **Claude Haiku 5.5** (`claude-haiku-5-5`, effort `low`) for a draft of
+the chosen status and returns it; the owner edits it and posts it with `POST …/updates` as usual. Drafts are never stored or posted by HawkEye. Sent to the
+model: the monitor's name and kind, the incident's start, end and duration, HawkEye's failure category and summary, the distinct HTTP status codes and
+check locations of its failed checks, and the updates already posted. Never the monitor's address, request settings, credentials or response
+content. The prompt treats all of it as data (names and earlier updates are typed by people; summaries may come from the monitored site). Errors:
+409 `AI_DRAFTS_OFF` (not turned on), 403 `PLAN_LIMIT_REACHED` (`ai_drafts`, checked on every draft, so a downgrade stops it at once), 422
+`DRAFT_DECLINED` (the model declined; there is no fallback model for Haiku), 503 `AI_DRAFTS_UNAVAILABLE` (no `ANTHROPIC_API_KEY`, or the model
+could not be reached). Limits: per IP, and 60 drafts an hour per organization. Session only: API keys and MCP get `SESSION_REQUIRED`.
 
 ## Reports, history and the dashboard
 

@@ -80,6 +80,8 @@ type Config struct {
 
 	SentryDSN  string
 	AppVersion string
+	// AnthropicAPIKey turns on AI-drafted incident updates (internal/incidentdraft). Empty: the feature is off and says so.
+	AnthropicAPIKey string
 
 	// Monitoring engine (worker process).
 	// CheckRegions lists where checks can run: "code[:Name],…", the first being the primary. WorkerRegion is the one this worker process serves
@@ -384,6 +386,7 @@ func load(get func(string) string) (Config, error) {
 		AllowInsecureDatabase:     boolean("ALLOW_INSECURE_DATABASE"),
 
 		SentryDSN:        str("SENTRY_DSN", ""),
+		AnthropicAPIKey:  str("ANTHROPIC_API_KEY", ""),
 		AppVersion:       str("APP_VERSION", "dev"),
 		EmailFromAddress: str("EMAIL_FROM_ADDRESS", "alerts@example.com"),
 		SupportAddress:   str("CONTACT_TO_ADDRESS", "support@example.com"),
