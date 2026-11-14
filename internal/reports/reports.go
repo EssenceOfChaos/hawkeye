@@ -139,6 +139,9 @@ type Result struct {
 	Region         string    `json:"region"`         // where the check ran
 	// Steps is set for multi-step API checks: what each step that ran did (name, status, time, and why it failed). Null for other monitors.
 	Steps json.RawMessage `json:"steps"`
+	// TraceID is the trace ID the check sent in its traceparent header, for finding the request in the site's own tracing. Null unless the monitor
+	// has trace context on.
+	TraceID *string `json:"trace_id"`
 }
 
 // Results returns one page of a monitor's check history (newest first) and the total in the range.
@@ -149,7 +152,7 @@ func Results(ctx context.Context, db DB, orgID, monitorID uuid.UUID, r Range, li
 		return nil, 0, err
 	}
 	args = append(args, limit, offset)
-	rows, err := db.Query(ctx, fmt.Sprintf(`SELECT r.id, r.checked_at, r.success, r.http_status_code, r.response_time_ms, r.error_category, r.error_summary, r.in_maintenance, r.region, r.steps
+	rows, err := db.Query(ctx, fmt.Sprintf(`SELECT r.id, r.checked_at, r.success, r.http_status_code, r.response_time_ms, r.error_category, r.error_summary, r.in_maintenance, r.region, r.steps, r.trace_id
 		FROM check_results r JOIN monitors m ON m.id = r.monitor_id WHERE %s
 		ORDER BY r.checked_at DESC, r.id DESC LIMIT $%d OFFSET $%d`, where, len(args)-1, len(args)), args...)
 	if err != nil {
@@ -160,7 +163,7 @@ func Results(ctx context.Context, db DB, orgID, monitorID uuid.UUID, r Range, li
 	for rows.Next() {
 		var x Result
 		var code *int16
-		if err := rows.Scan(&x.ID, &x.CheckedAt, &x.Success, &code, &x.ResponseTimeMs, &x.ErrorCategory, &x.ErrorSummary, &x.InMaintenance, &x.Region, &x.Steps); err != nil {
+		if err := rows.Scan(&x.ID, &x.CheckedAt, &x.Success, &code, &x.ResponseTimeMs, &x.ErrorCategory, &x.ErrorSummary, &x.InMaintenance, &x.Region, &x.Steps, &x.TraceID); err != nil {
 			return nil, 0, err
 		}
 		if code != nil {

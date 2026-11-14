@@ -2,8 +2,10 @@ package checks
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -51,6 +53,9 @@ type Target struct {
 	Assertions     []Assertion
 	// UserAgent replaces the monitoring engine's default. The free website checker names itself so site owners can tell it apart.
 	UserAgent string
+	// TraceContext sends a W3C traceparent header with a new random trace ID, sampled, so the request shows up in the site's own tracing. The ID
+	// is returned in Result.TraceID.
+	TraceContext bool
 }
 
 // Result is the outcome of one completed check. ResponseTimeMs is the time until response headers arrived.
@@ -69,6 +74,8 @@ type Result struct {
 	Region string
 	// FinalURL is where the request ended up after redirects, when a response arrived. Credentials, query and fragment are not included.
 	FinalURL string
+	// TraceID is the trace ID sent in the traceparent header (32 lower-case hex digits), when the target asked for trace context.
+	TraceID string
 	// ContentType is the response's media type (lower case, without parameters such as charset), when a response arrived. Not stored.
 	ContentType string
 	// Steps is set for multi-step API checks: what each step that ran did (workflow.go). Stored with the result; never response content.
@@ -140,6 +147,12 @@ func (c *Checker) run(ctx context.Context, t Target, jar http.CookieJar, keep bo
 	req.Header.Set("User-Agent", userAgent)
 	if t.UserAgent != "" {
 		req.Header.Set("User-Agent", t.UserAgent)
+	}
+	if t.TraceContext {
+		// W3C Trace Context (version 00, sampled): a new trace for each check, with this request as its root span.
+		traceID, spanID := randomHex(16), randomHex(8)
+		req.Header.Set("Traceparent", "00-"+traceID+"-"+spanID+"-01")
+		res.TraceID = traceID
 	}
 
 	// Watch the TLS handshake with the monitored host (not hosts it redirects to) to learn when its certificate expires.
@@ -332,4 +345,18 @@ func Classify(err error) (category, summary string) {
 		return CatConnect, "Could not connect to the server"
 	}
 	return CatOther, "Request failed"
+}
+
+// randomHex returns n random bytes as lower-case hex. Trace Context forbids an all-zero ID; with crypto/rand that can't realistically happen, but
+// it is checked anyway.
+func randomHex(n int) string {
+	b := make([]byte, n)
+	for {
+		_, _ = rand.Read(b)
+		for _, c := range b {
+			if c != 0 {
+				return hex.EncodeToString(b)
+			}
+		}
+	}
 }

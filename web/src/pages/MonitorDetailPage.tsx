@@ -257,7 +257,10 @@ export function MonitorDetailPage() {
                             <td className="num">{formatMs(r.response_time_ms)}</td>
                           </>
                         )}
-                        <td>{r.error_summary ?? ''}</td>
+                        <td>
+                          {r.error_summary ?? ''}
+                          {r.trace_id && <div className="hint">Trace ID <code className="trace-id">{r.trace_id}</code></div>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

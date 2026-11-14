@@ -200,6 +200,8 @@ export interface Monitor {
   slow_checks: number
   /** Set while responses are confirmed slow (a slowdown is open). */
   slow_since: string | null
+  /** Each check sends a W3C traceparent header with a new trace ID (website and API monitors; off by default). */
+  trace_context?: boolean
   /** The public uptime badge's token (/badge/<token>.svg); null while the badge is off. */
   badge_token: string | null
   /** Sorted by name. */
@@ -556,6 +558,8 @@ export interface CheckResult {
   region: string
   /** Multi-step API checks: what each step that ran did. */
   steps?: StepOutcome[] | null
+  /** The trace ID the check sent in its traceparent header, when the monitor has trace context on. */
+  trace_id?: string | null
 }
 
 export interface DashboardSummary {
@@ -582,6 +586,7 @@ export interface MonitorInput {
   regions?: string[]
   slow_threshold_ms?: number | null
   slow_checks?: number
+  trace_context?: boolean
   /** Replaces the monitor's tags. */
   tag_ids?: string[]
   alert_delay_minutes?: number

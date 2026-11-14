@@ -45,7 +45,7 @@ function GettingStarted() {
         <li>
           <strong>A website or API.</strong> Enter its address. HawkEye requests it on a schedule (every 5 minutes on Free, every minute on paid plans)
           and opens an incident when the failure is confirmed by consecutive failed checks, so a single blip never alerts anyone. You can also
-          check for words on the page, check JSON values, send headers or authentication, and get warned about slow responses.
+          check for words on the page, check JSON values, send headers or authentication, get warned about slow responses, and send a trace context header so each check shows up in your tracing tool.
         </li>
         <li>
           <strong>A cron job or scheduled task.</strong> Your job pings HawkEye each time it runs, and HawkEye tells you when a ping is late or the job

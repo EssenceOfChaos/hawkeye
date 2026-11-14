@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -235,5 +236,29 @@ func TestContentTypeIsTheMediaTypeOnly(t *testing.T) {
 		if r.ContentType != want {
 			t.Errorf("Content-Type %q: got %q, want %q", header, r.ContentType, want)
 		}
+	}
+}
+
+func TestTraceContext(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Get("Traceparent"))
+	}))
+	defer srv.Close()
+
+	if r := check(t, loopbackCfg(), Target{URL: srv.URL}); r.TraceID != "" || got[0] != "" {
+		t.Fatalf("off by default: trace ID %q, header %q", r.TraceID, got[0])
+	}
+	format := regexp.MustCompile(`^00-([0-9a-f]{32})-([0-9a-f]{16})-01$`)
+	a := check(t, loopbackCfg(), Target{URL: srv.URL, TraceContext: true})
+	b := check(t, loopbackCfg(), Target{URL: srv.URL, TraceContext: true, Headers: []Header{{Name: "traceparent", Value: "00-" + strings.Repeat("a", 32) + "-" + strings.Repeat("b", 16) + "-00"}}})
+	for i, r := range []Result{a, b} {
+		m := format.FindStringSubmatch(got[i+1])
+		if m == nil || m[1] != r.TraceID {
+			t.Fatalf("check %d: header %q, trace ID %q", i, got[i+1], r.TraceID)
+		}
+	}
+	if a.TraceID == b.TraceID {
+		t.Fatal("each check is a new trace")
 	}
 }

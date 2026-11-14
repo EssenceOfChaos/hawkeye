@@ -795,3 +795,6 @@ button.value-chip { font: .85rem/1.4 var(--font-mono); padding: .1rem .55rem; bo
 
 /* Text that must not break inside, such as a time with its AM or PM. */
 .nowrap { white-space: nowrap; }
+
+/* A trace ID in the check history: long and unbroken, so it may wrap anywhere rather than widen the table. */
+.trace-id { font-family: var(--font-mono); font-size: .8em; overflow-wrap: anywhere; user-select: all; }
