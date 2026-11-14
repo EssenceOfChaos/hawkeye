@@ -19,6 +19,15 @@ with ChatGPT and then cut out, cropped and resized outside the repository. **The
   pixels (alpha 12 or less) were removed: they show as colored specks against pure black and as nothing on the page.
 - **`dashboard-laptop.webp`:** the hero laptop on the landing page, 1100px wide lossy WebP with alpha (145 KB). It is an illustration (alt text says so): its sidebar
   labels (Reports, Settings) and "Online" wording are not the app's exact ones.
+- **Scout, the mascot** (`scout-wave`, `-check`, `-stand`, `-alert` `.webp`): a navy and gold hawk with a harness, a heartbeat shield badge and a cloud/code
+  device on his back. The originals are 1254x1254 transparent PNGs (about 1.7 MB each), kept outside the repository by the product owner. Each was trimmed to its
+  outline, centered on a square with his feet on the bottom edge, resized to 640x640 and saved as lossy WebP with alpha (70 to 95 KB). Render him with
+  `components/Scout.tsx`, which adds a soft gold glow behind him (his navy feathers otherwise sink into the navy page) and hides him from screen readers
+  unless given alt text. Poses: **wave** (greeting: the Monitors empty state), **check** (thumbs-up with a green check: the landing hero, in front of the laptop),
+  **stand** (neutral, gesturing with one wing: beside the 404 radar), **alert** (holding a red warning beacon: not used yet). Where he goes: personality
+  moments (empty states, first-run screens, errors, marketing). Where he doesn't: dense working screens, customers' public status pages (their brand, not ours),
+  and real outage alerts (a cartoon is the wrong tone when someone's site is down). Keep the red **alert** pose off the 404 page and anything that could be
+  read as a claim about system health. He is too detailed to read below about 64 px, so favicons and small icons stay with the logo badge.
 - **`monitoring-hawk-eye.webp`, `monitoring-earth-network.webp`:** the /monitoring page's background art (a gold hawk's eye on navy; the night Earth with connection arcs),
   lossy WebP at full width. No text in either. They are photographic gradients, so WebP is a fraction of a PNG's size with no visible banding.
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { brand } from '../brand'
+import { Scout } from '../components/Scout'
 
 const year = new Date().getFullYear()
 
@@ -65,6 +66,7 @@ export function NotFoundPage() {
           <div className="nf-sweep" />
           <span className="nf-number">404</span>
           <div className="nf-reticle" />
+          <Scout pose="stand" size={170} className="nf-scout" eager />
         </div>
         <h1 ref={heading} tabIndex={-1}>
           <span className="nf-sr">Error 404: page not found. </span>Beyond our field of view.
