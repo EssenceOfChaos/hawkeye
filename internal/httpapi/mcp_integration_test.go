@@ -439,6 +439,11 @@ func TestMCPWritesShareTheKeysWriteBudgetWithTheAPI(t *testing.T) {
 	mon := owner.call("POST", "/api/v1/monitors", monitorBody("Site")).Body["monitor"].(map[string]any)["id"].(string)
 	_, token := newKey(t, owner, map[string]any{"name": "Claude", "scope": "write"})
 	s := e.mcpSession(t, token)
+	// The budget is counted in fixed windows aligned to the clock minute, so a loop that crosses into the next minute starts
+	// from zero and the extra write is allowed. Start early enough in a minute for every write to land in the same window.
+	if left := time.Until(time.Now().Truncate(time.Minute).Add(time.Minute)); left < 15*time.Second {
+		time.Sleep(left + 100*time.Millisecond)
+	}
 	for i := 0; i < mcpserver.WritesPerMinute; i++ {
 		mustOK(t, callTool(t, s, "pause_monitors", map[string]any{"monitor_ids": []string{mon}}), "pause")
 	}
