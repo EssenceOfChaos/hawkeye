@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider } from '../auth'
+import { AuthProvider } from '../AuthProvider'
 import { MonitoringLandingPage } from './MonitoringLandingPage'
 
 afterEach(() => vi.unstubAllGlobals())

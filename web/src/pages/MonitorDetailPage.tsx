@@ -5,15 +5,15 @@ import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { BadgeCard } from '../components/BadgeCard'
 import { CertificateCard } from '../components/Certificate'
-import { formatPeriod, PingLog, PingSetup } from '../components/Heartbeat'
+import { PingLog, PingSetup } from '../components/Heartbeat'
 import { RangePicker } from '../components/RangePicker'
 import { ResponseChart } from '../components/ResponseChart'
 import { StatusBadge } from '../components/StatusBadge'
 import { AvgResponseTile, StatTile, UptimeHero } from '../components/Uptime'
 import { WorkflowRun } from '../components/WorkflowRun'
-import { availableRanges, formatDateTime, formatMs, RANGE_LABELS, reportMonths, reportPdfPath } from '../format'
+import { availableRanges, formatDateTime, formatDuration, formatMs, formatPeriod, RANGE_LABELS, reportMonths, reportPdfPath } from '../format'
 import { useApi } from '../hooks'
-import { formatDuration, IncidentStatus } from './IncidentsPage'
+import { IncidentStatus } from './IncidentsPage'
 
 const PAGE = 25
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, MAX_TAG_NAME, type BulkAction, type Monitor, type MonitorStatus, type TagSummary, type Usage } from '../api'
+import { useLatestRequest } from '../hooks'
 import { formatDateTime, formatMoney, timeAgo } from '../format'
 import { Alert } from '../components/Alert'
 import { brand } from '../brand'
@@ -9,7 +10,7 @@ import { CertBadge } from '../components/Certificate'
 import { StatusBadge } from '../components/StatusBadge'
 import { TagList } from '../components/Tags'
 import { BulkAlertTiming, type AlertTimingChange } from '../components/AlertTiming'
-import { formatPeriod } from '../components/Heartbeat'
+import { formatPeriod } from '../format'
 
 const PAGE_SIZE = 25
 
@@ -208,7 +209,9 @@ export function MonitorsPage() {
     return () => clearTimeout(t)
   }, [query, search])
 
+  const startRequest = useLatestRequest()
   const load = useCallback(async () => {
+    const current = startRequest()
     const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
     if (search) params.set('q', search)
     if (status) params.set('status', status)
@@ -220,6 +223,7 @@ export function MonitorsPage() {
         // Tags only add filters and bulk actions; the list still works without them.
         api<{ tags?: TagSummary[] }>('GET', '/tags').catch(() => ({ tags: [] })),
       ])
+      if (!current()) return // a newer search, filter or page has been asked for
       setMonitors(list.monitors)
       setTotal(list.total)
       setUsage(u.usage)
@@ -228,11 +232,12 @@ export function MonitorsPage() {
       setSelected((s) => s.filter((id) => list.monitors.some((m) => m.id === id)))
       setError(null)
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not load monitors.')
+      if (current()) setError(e instanceof ApiError ? e.message : 'Could not load monitors.')
     }
-  }, [offset, search, status, tag])
+  }, [offset, search, status, tag, startRequest])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- load() sets state only after its request returns, never synchronously
     void load()
   }, [load])
 

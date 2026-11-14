@@ -22,3 +22,6 @@ export function afterLoginPath(state: unknown): string {
   if (typeof from !== 'string' || !from.startsWith('/') || from.startsWith('//') || from.startsWith('/\\') || from === '/login') return '/dashboard'
   return from
 }
+
+/** Sends the browser to the app that asked (its registered redirect address, checked by the server). Kept apart so tests can watch it. */
+export const leave = { to: (url: string) => window.location.assign(url) }

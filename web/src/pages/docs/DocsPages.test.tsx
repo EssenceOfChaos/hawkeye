@@ -2,9 +2,10 @@ import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { DNS_RECORD_TYPES } from '../../api'
-import { AuthProvider } from '../../auth'
+import { AuthProvider } from '../../AuthProvider'
 import { PAGES } from '../../seo'
-import { DocPage, DOCS, DocsIndexPage } from './DocsPages'
+import { DocPage, DocsIndexPage } from './DocsPages'
+import { DOCS } from './docs'
 
 vi.mock('../../analytics', () => ({ trackEvent: vi.fn(), trackPageView: vi.fn(), openCookieSettings: vi.fn(), initAnalytics: vi.fn(), analyticsEnabled: () => false, useConsent: () => ({}) }))
 vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{}', { status: 401, headers: { 'Content-Type': 'application/json' } }))))

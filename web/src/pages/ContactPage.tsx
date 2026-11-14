@@ -46,6 +46,7 @@ export function ContactPage() {
 
   // Signed-in visitors start with their own address; they can still change it.
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- deliberate: fills in the signed-in address once it is known, without overwriting what the visitor typed
     if (user?.email) setEmail((current) => current || user.email)
   }, [user?.email])
 

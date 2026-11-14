@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider } from '../auth'
+import { AuthProvider } from '../AuthProvider'
 import { BillingPage } from './BillingPage'
 import { LandingPage } from './LandingPage'
 import { MonitoringLandingPage } from './MonitoringLandingPage'
@@ -79,7 +79,7 @@ describe('pricing cards stay in sync', () => {
   })
 
   it('include every plan feature switched on in the plans table, on all three pages', async () => {
-    for (const [ui, signedIn] of [[<LandingPage />, false], [<MonitoringLandingPage />, false], [<BillingPage />, true]] as const) {
+    for (const [ui, signedIn] of [[<LandingPage key="landing" />, false], [<MonitoringLandingPage key="monitoring" />, false], [<BillingPage key="billing" />, true]] as const) {
       const cards = await cardsOn(ui, signedIn)
       expect(cards.Agency).toEqual(expect.arrayContaining([
         '200 monitors', 'Cron job and DNS monitoring', 'Checks from up to 3 locations', '5 team members', 'Require two-factor sign-in for your team', 'Domain expiry warnings for up to 100 domains',

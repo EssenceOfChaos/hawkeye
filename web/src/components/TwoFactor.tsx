@@ -63,6 +63,7 @@ export function TwoFactorCard() {
   }, [])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- load() sets state only after its request returns, never synchronously
     void load()
   }, [load])
 
@@ -243,6 +244,7 @@ export function RequireTwoFactorCard({ orgID }: { orgID: string }) {
   }, [orgID])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- load() sets state only after its request returns, never synchronously
     void load()
   }, [load])
 

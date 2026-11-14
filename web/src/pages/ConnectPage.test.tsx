@@ -2,8 +2,9 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider } from '../auth'
-import { ConnectPage, leave } from './ConnectPage'
+import { AuthProvider } from '../AuthProvider'
+import { leave } from '../navigation'
+import { ConnectPage } from './ConnectPage'
 
 afterEach(() => {
   vi.unstubAllGlobals()

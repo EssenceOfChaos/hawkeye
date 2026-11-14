@@ -9,9 +9,9 @@ import { DomainsPanel } from '../components/Domains'
 import { RangePicker } from '../components/RangePicker'
 import { ResponseChart } from '../components/ResponseChart'
 import { AvgResponseTile, StatTile, UptimeHero } from '../components/Uptime'
-import { availableRanges, RANGE_LABELS } from '../format'
+import { availableRanges, formatDuration, RANGE_LABELS } from '../format'
 import { useApi } from '../hooks'
-import { formatDuration, IncidentStatus } from './IncidentsPage'
+import { IncidentStatus } from './IncidentsPage'
 
 export function DashboardPage() {
   const [range, setRange] = useState('24h')

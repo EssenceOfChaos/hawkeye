@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router'
 import type { CertificateAlert, Monitor, SSLInfo } from '../api'
+import { certTone } from '../format'
 
 /** Warning milestones, in days before expiry. Mirrors checks.SSLBuckets on the server. */
 const MILESTONES = [30, 14, 7, 1] as const
@@ -19,10 +20,6 @@ function useNow(everyMs = 60_000) {
 function split(msLeft: number) {
   const mins = Math.max(0, Math.floor(msLeft / 60_000))
   return { days: Math.floor(mins / 1440), hours: Math.floor((mins % 1440) / 60), minutes: mins % 60 }
-}
-
-export function certTone(msLeft: number): 'ok' | 'soon' | 'expired' {
-  return msLeft <= 0 ? 'expired' : msLeft <= 30 * DAY ? 'soon' : 'ok'
 }
 
 const TONE_TEXT = { ok: 'Valid', soon: 'Expiring soon', expired: 'Expired' } as const

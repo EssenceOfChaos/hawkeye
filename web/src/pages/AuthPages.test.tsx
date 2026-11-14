@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider } from '../auth'
+import { AuthProvider } from '../AuthProvider'
 import { ConfirmAlertAddressPage, ResetPasswordPage, UnsubscribePage, VerifyEmailPage } from './AuthPages'
 
 afterEach(() => vi.unstubAllGlobals())

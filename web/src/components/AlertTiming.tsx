@@ -1,18 +1,10 @@
 import { useState } from 'react'
 import type { QuietHours } from '../api'
+import { localTimeZone } from '../format'
 import { Toggle } from './Toggle'
 
 /** The waits offered before announcing an outage, in minutes. */
 const DELAYS = [0, 5, 10, 15, 30, 60, 120]
-
-/** The visitor's own time zone, the default for new quiet hours. */
-export function localTimeZone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
-  } catch {
-    return 'UTC'
-  }
-}
 
 function timeZones(current: string): string[] {
   let all: string[] = []

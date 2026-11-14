@@ -2,7 +2,9 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import type { Monitor } from '../api'
-import { formatPeriod, pingExamples, PingSetup } from './Heartbeat'
+import { formatPeriod } from '../format'
+import { pingExamples } from '../pingExamples'
+import { PingSetup } from './Heartbeat'
 import { StatusBadge } from './StatusBadge'
 
 describe('formatPeriod', () => {

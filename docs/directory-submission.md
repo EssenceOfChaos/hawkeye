@@ -206,7 +206,7 @@ before changing the server URL, the OAuth endpoints, tool names or what a tool d
 
 Original checklist:
 
-- Update `/docs/claude` (`web/src/pages/docs/DocsPages.tsx`): replace "will be available once HawkEye is listed in Claude's connector directory"
+- Update `/docs/claude` (`web/src/pages/docs/docsArticles.tsx`): replace "will be available once HawkEye is listed in Claude's connector directory"
   with how to add HawkEye from Claude's connector directory, and add a "Works with Claude" line to the landing page and `llms.txt` (feature
   sync checklist). Don't advertise it before it is listed.
 - Mark Phase 3c done in `docs/plan-api-mcp.md`.
