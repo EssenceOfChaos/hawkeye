@@ -543,8 +543,9 @@ function ClaudeDocs() {
         end of each job. Ping addresses are read from environment variables or CI secrets, never written into your code, and Claude tells you which to set.
       </p>
       <p>
-        It needs a <strong>Read and write</strong> key, which can add monitors on every plan, including Free. With the key in <code>HAWKEYE_API_KEY</code>,
-        run these in Claude Code (the plugin connects to HawkEye for you, so you don’t need the command above as well):
+        It needs a <strong>Read and write</strong> key, which can add monitors on every plan, including Free. Run these in
+        Claude Code (the plugin connects to HawkEye for you, so you don’t need the command above as well); it asks for the key when the plugin is enabled
+        and keeps it in your system’s secure credential store. To change the key later, run <code>claude plugin configure hawkeye</code>.
       </p>
       <Code>{`/plugin marketplace add EssenceOfChaos/hawkeye
 /plugin install hawkeye@hawkeye`}</Code>

@@ -16,8 +16,9 @@ The person stays in charge: **nothing is created in HawkEye and no file is edite
 Call `get_account_overview`.
 
 - If the HawkEye tools are missing or the call is refused as unauthenticated, stop and tell the person how to connect: create a key with
-  **Read and write** access at https://hawkeye.observer/api-keys, set it as `HAWKEYE_API_KEY` in the environment Claude Code starts from, and
-  restart Claude Code. Read and write keys can add monitors on every plan, including Free.
+  **Read and write** access at https://hawkeye.observer/api-keys, then enter it when Claude Code asks for the plugin's API key (or run
+  `claude plugin configure hawkeye` in a terminal to set or change it) and restart Claude Code. Read and write keys can add monitors on every
+  plan, including Free. Never ask the person to paste the key into the conversation.
 - If `can_add_monitors` is false, the key is read only: you can still make the plan, but say that monitors can't be created until they use a read
   and write key.
 - Note `monitor_limit` minus `monitors_used`: the number of monitors there is room for.
