@@ -79,6 +79,17 @@ describe('MonitorFormPage', () => {
     })
   })
 
+  it('sends trace context only when it is turned on', async () => {
+    setup(() => json(201, { monitor: {} }))
+    const fetchMock = vi.mocked(globalThis.fetch)
+    await fill('API')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Send a trace context header with each check' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Monitor list' })).toBeInTheDocument())
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!
+    expect(JSON.parse(post[1]!.body as string)).toMatchObject({ trace_context: true })
+  })
+
   it('does not send a body for GET and hides assertions for HEAD', async () => {
     setup(() => json(201, { monitor: {} }))
     await fill('Site')

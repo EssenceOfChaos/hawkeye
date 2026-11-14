@@ -7,7 +7,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 ## What it does
 
 - Set up from your domain: enter a domain and HawkEye looks at the site from outside and suggests monitors (the home page, a health endpoint such as /healthz, an api subdomain, the domain's MX records); you pick which to add.
-- Website and API monitoring: custom request methods, headers, bodies, Basic/bearer/API-key authentication, and checks of the status code and response content.
+- Website and API monitoring: custom request methods, headers, bodies, Basic/bearer/API-key authentication, and checks of the status code and response content. Optionally, each check sends a W3C traceparent header so it appears in the site's own distributed tracing (OpenTelemetry, Datadog, Honeycomb, Grafana), with the trace ID shown in the check history.
 - Cron job (heartbeat) monitoring, on every plan: a job requests its private ping address each time it runs; a late ping, a failure ping or a non-zero exit status opens an incident and alerts you.
 - DNS monitoring, on every plan: HawkEye looks up an A, AAAA, MX, NS or TXT record on a schedule and alerts you when it disappears or stops matching the value you expect.
 - Response-time tracking, uptime reports and incident history.

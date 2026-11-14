@@ -639,3 +639,34 @@ func TestDNSMonitorOpensAndResolvesAnIncident(t *testing.T) {
 		t.Fatalf("open incidents = %d, %v", open, err)
 	}
 }
+
+func TestTraceContextIsSentAndItsTraceIDStored(t *testing.T) {
+	e := newEnv(t)
+	got := make(chan string, 2)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { got <- r.Header.Get("Traceparent") }))
+	defer srv.Close()
+	off, on := e.monitor(t, srv.URL), e.monitor(t, srv.URL)
+	e.pool.Exec(t.Context(), `UPDATE monitors SET trace_context = true WHERE id = $1`, on)
+	e.round(t, e.worker(loopbackCfg()))
+
+	headers := []string{<-got, <-got}
+	var stored, none *string
+	e.pool.QueryRow(t.Context(), `SELECT trace_id FROM check_results WHERE monitor_id = $1`, on).Scan(&stored)
+	e.pool.QueryRow(t.Context(), `SELECT trace_id FROM check_results WHERE monitor_id = $1`, off).Scan(&none)
+	if stored == nil || none != nil {
+		t.Fatalf("trace ID stored only for the monitor that sends one: on=%v off=%v", stored, none)
+	}
+	sent := 0
+	for _, h := range headers {
+		switch {
+		case h == "":
+		case strings.HasPrefix(h, "00-"+*stored+"-") && strings.HasSuffix(h, "-01"):
+			sent++
+		default:
+			t.Fatalf("unexpected traceparent %q (stored %s)", h, *stored)
+		}
+	}
+	if sent != 1 {
+		t.Fatalf("headers %q", headers)
+	}
+}

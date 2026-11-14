@@ -115,6 +115,7 @@ export function MonitorFormPage() {
   const [slowOn, setSlowOn] = useState(false)
   const [slowMs, setSlowMs] = useState(String(DEFAULT_SLOW_MS))
   const [slowChecks, setSlowChecks] = useState('3')
+  const [traceOn, setTraceOn] = useState(false)
   const [avgMs, setAvgMs] = useState<number | null>(null) // this monitor's average response over the last 24 hours, as a guide
   const [allTags, setAllTags] = useState<TagSummary[]>([])
   const [tagIDs, setTagIDs] = useState<string[]>([])
@@ -182,6 +183,7 @@ export function MonitorFormPage() {
         setSlowOn(m.slow_threshold_ms != null)
         if (m.slow_threshold_ms != null) setSlowMs(String(m.slow_threshold_ms))
         setSlowChecks(String(m.slow_checks ?? 3))
+        setTraceOn(Boolean(m.trace_context))
         setTagIDs((m.tags ?? []).map((t) => t.id))
         setAlertDelay(m.alert_delay_minutes ?? 0)
         setQuiet(m.quiet_hours ?? null)
@@ -284,6 +286,7 @@ export function MonitorFormPage() {
       assertions: assertionsAllowed ? checks.map((c) => c.assertion) : [],
       slow_threshold_ms: slowOn ? Number(slowMs) : null,
       slow_checks: Number(slowChecks),
+      trace_context: traceOn,
       tag_ids: tagIDs,
       alert_delay_minutes: alertDelay,
       quiet_hours: quiet,
@@ -610,6 +613,17 @@ export function MonitorFormPage() {
             ) : (
               f.slow_threshold_ms && <small className="error">{f.slow_threshold_ms}</small>
             )}
+          </fieldset>
+
+          <fieldset className="group">
+            <legend>Tracing</legend>
+            <Toggle checked={traceOn} onToggle={setTraceOn}>Send a trace context header with each check</Toggle>
+            <small className="hint">
+              For sites that use distributed tracing (OpenTelemetry, Datadog, Honeycomb, Grafana and others). Each check sends a W3C{' '}
+              <code>traceparent</code> header with a new trace ID, so the request appears in your tracing tool, and the check history shows the ID to look up
+              when a check fails. Leave it off if you don’t use tracing.
+            </small>
+            {f.trace_context && <small className="error">{f.trace_context}</small>}
           </fieldset>
 
           <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f} />
