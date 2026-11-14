@@ -5,10 +5,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"time"
 
@@ -384,14 +386,23 @@ func (s *Service) Test(ctx context.Context, orgID, id uuid.UUID, requestedBy str
 }
 
 func (s *Service) sendTest(ctx context.Context, channel, target, secret string) error {
-	a := Alert{Event: EventTest, AppBaseURL: s.appBaseURL}
+	a := Alert{Event: EventTest, AppBaseURL: s.appBaseURL, TestID: uuid.NewString()}
 	to, body, header, err := buildRequest(channel, target, a, secret, "", time.Now())
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, postTimeout)
 	defer cancel()
-	return post(ctx, s.http, to, body, header)
+	if err := post(ctx, s.http, to, body, header); err != nil {
+		return err
+	}
+	if channel == ChannelPagerDuty {
+		// The test proved the key works; resolve it at once so nobody has an open incident to close. A failure here is not a failed test.
+		if body, err := json.Marshal(map[string]any{"routing_key": routingKey(target), "event_action": "resolve", "dedup_key": "hawkeye:test:" + a.TestID}); err == nil {
+			_ = post(ctx, s.http, to, body, header)
+		}
+	}
+	return nil
 }
 
 // testReason is the part of a delivery error that is safe and useful to show the user. Telegram's statuses map to the usual
@@ -399,6 +410,9 @@ func (s *Service) sendTest(ctx context.Context, channel, target, secret string) 
 func testReason(channel string, err error) string {
 	reason := clean(err.Error())
 	var se statusError
+	if channel == ChannelPagerDuty && errors.As(err, &se) && se.code == http.StatusBadRequest {
+		return "PagerDuty did not accept the integration key: check that it is an Events API v2 key and that the region matches your PagerDuty account"
+	}
 	if channel != ChannelTelegram || !errors.As(err, &se) {
 		return reason
 	}
@@ -496,4 +510,13 @@ func newToken() (string, []byte) {
 func hashToken(raw string) []byte {
 	sum := sha256.Sum256([]byte(raw))
 	return sum[:]
+}
+
+// routingKey is the PagerDuty integration key in a stored enqueue URL.
+func routingKey(target string) string {
+	u, err := url.Parse(target)
+	if err != nil {
+		return ""
+	}
+	return u.Query().Get("routing_key")
 }

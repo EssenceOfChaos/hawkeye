@@ -185,6 +185,23 @@ describe('NotificationsPage', () => {
     expect(JSON.parse(String(post?.[1]?.body))).toEqual({ channel: 'telegram', destination: '-100123', bot_token: 'bad' })
   })
 
+  it('sends a PagerDuty integration key with its region, and explains how incidents open and close', async () => {
+    setup({
+      items: [mk('1', 'me@example.com', { user_id: 'u' })],
+      onPost: () => json(400, { error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: { fields: { destination: 'the test message was not delivered (PagerDuty did not accept the integration key)' } } } }),
+    })
+    const fetchMock = vi.mocked(fetch)
+    await screen.findByText('me@example.com')
+    await userEvent.selectOptions(screen.getByLabelText('Channel'), 'pagerduty')
+    expect(screen.getByText(/An outage opens a PagerDuty incident and its recovery resolves it/)).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Integration key'), 'R0123456789abcdefABCDEF012345678')
+    await userEvent.selectOptions(screen.getByLabelText('PagerDuty account region'), 'eu')
+    await userEvent.click(screen.getByRole('button', { name: 'Add destination' }))
+    expect(await screen.findByText(/PagerDuty did not accept the integration key/)).toBeInTheDocument()
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({ channel: 'pagerduty', destination: 'R0123456789abcdefABCDEF012345678', region: 'eu' })
+  })
+
   describe('sending a test alert', () => {
     it('emails a confirmed recipient and says where to look', async () => {
       const calls = setup({ items: [mk('1', 'me@example.com', { user_id: 'u' }), mk('2', 'ops@example.com')] })

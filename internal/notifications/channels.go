@@ -26,12 +26,13 @@ import (
 
 // Channels.
 const (
-	ChannelEmail    = "email"
-	ChannelWebhook  = "webhook"
-	ChannelSlack    = "slack"
-	ChannelDiscord  = "discord"
-	ChannelTeams    = "teams"
-	ChannelTelegram = "telegram"
+	ChannelEmail     = "email"
+	ChannelWebhook   = "webhook"
+	ChannelSlack     = "slack"
+	ChannelDiscord   = "discord"
+	ChannelTeams     = "teams"
+	ChannelTelegram  = "telegram"
+	ChannelPagerDuty = "pagerduty"
 )
 
 // EventTest is sent once when a webhook or chat destination is added, to prove it works.
@@ -64,7 +65,7 @@ func NewHTTPClient() *http.Client { return safehttp.New(safehttp.Config{}, postT
 // IsURLChannel reports whether a channel delivers by HTTPS request (everything but email).
 func IsURLChannel(channel string) bool {
 	switch channel {
-	case ChannelWebhook, ChannelSlack, ChannelDiscord, ChannelTeams, ChannelTelegram:
+	case ChannelWebhook, ChannelSlack, ChannelDiscord, ChannelTeams, ChannelTelegram, ChannelPagerDuty:
 		return true
 	}
 	return false
@@ -77,10 +78,14 @@ var (
 )
 
 // ParseDestination validates what the customer entered for a URL channel and returns the URL to store (sealed) with a label that
-// is safe to display. For Telegram, destination is the chat ID and botToken the bot's token; every other channel takes a URL.
-func ParseDestination(channel, destination, botToken string) (*url.URL, string, error) {
-	if channel == ChannelTelegram {
-		return TelegramURL(botToken, destination)
+// is safe to display. Most channels take a URL. extra is what a channel needs besides its destination: for Telegram, destination is the chat ID
+// and extra the bot's token; for PagerDuty, destination is the integration key and extra the service region (us or eu).
+func ParseDestination(channel, destination, extra string) (*url.URL, string, error) {
+	switch channel {
+	case ChannelTelegram:
+		return TelegramURL(extra, destination)
+	case ChannelPagerDuty:
+		return PagerDutyURL(destination, extra)
 	}
 	return ParseURL(channel, destination)
 }
@@ -468,6 +473,14 @@ func buildRequest(channel, target string, a Alert, secret, deliveryID string, no
 		chatID := u.Query().Get("chat_id")
 		u.RawQuery = ""
 		target, msg = u.String(), telegramMessage(chatID, chatContent(a, now))
+	case ChannelPagerDuty:
+		u, err := url.Parse(target)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		key := u.Query().Get("routing_key")
+		u.RawQuery = ""
+		target, msg = u.String(), pagerDutyEvent(key, a, chatContent(a, now))
 	default:
 		return "", nil, nil, fmt.Errorf("unknown channel %q", channel)
 	}

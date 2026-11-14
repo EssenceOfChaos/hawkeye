@@ -69,7 +69,7 @@ export function PlanDetails({ plan, interval = 'month' }: { plan: Plan; interval
         <li>Cron job and DNS monitoring</li>
         <li>SSL certificate expiry warnings</li>
         {plan.max_domains !== undefined && <li>Domain expiry warnings for up to {plan.max_domains} domains</li>}
-        <li>Email, Slack, Teams, Discord, Telegram and webhook alerts</li>
+        <li>Email, Slack, Teams, Discord, Telegram, PagerDuty and webhook alerts</li>
         <li>{plan.api_write_enabled ? 'API and Claude (MCP) access: read and make changes' : 'API and Claude (MCP) access: read and add monitors'}</li>
         <li>{(plan.max_status_pages ?? 1) > 1 ? `${plan.max_status_pages} public status pages` : 'Public status page'}</li>
         {plan.status_page_white_label

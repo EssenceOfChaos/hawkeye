@@ -441,8 +441,8 @@ export interface TelegramLink {
 export interface NotificationSetting {
   id: string
   user_id: string | null
-  channel: 'email' | 'webhook' | 'slack' | 'discord' | 'teams' | 'telegram'
-  destination: string // the address; for webhook and chat URLs a masked host such as hooks.slack.com/…; for Telegram "chat <id>"
+  channel: 'email' | 'webhook' | 'slack' | 'discord' | 'teams' | 'telegram' | 'pagerduty'
+  destination: string // the address; for webhook and chat URLs a masked host such as hooks.slack.com/…; for Telegram "chat <id>"; for PagerDuty "US service, key ending abcd"
   enabled: boolean
   verified: boolean
   /** Which monitors it gets alerts for: every monitor, or only those carrying one of tag_ids. */
