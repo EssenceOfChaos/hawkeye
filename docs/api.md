@@ -67,8 +67,11 @@ Scripts and tools authenticate with an API key instead: `Authorization: Bearer h
 - **What it acts as.** The person, in the key's organization (`X-Organization-ID` may be left out; one naming another organization is refused), with
   the person's role **now**: owner-only routes still need the owner, and the role is read on every request. The key is deleted with the membership (a
   foreign key), so leaving or being removed takes a person's keys with them.
-- **Writes.** A `read` key gets `403 TOKEN_SCOPE` on POST/PUT/PATCH/DELETE. A `write` key needs a plan with `api_write_enabled` (Pro, Agency),
-  checked on every write: after a downgrade it gets `403 PLAN_LIMIT_REACHED` (`limit_type: api_write`) and keeps reading.
+- **Writes.** A `read` key gets `403 TOKEN_SCOPE` on POST/PUT/PATCH/DELETE. `write` keys can be made on every plan. Creating monitors
+  (`POST /monitors`, and `POST /monitors/suggestions` before it; MCP `create_monitor` and `create_workflow`) works with a `write` key on every plan,
+  within the plan's monitor and workflow limits, so a coding agent can set up a Free account (`createRoutes` in `internal/httpapi/tokens.go`). Every
+  other write needs a plan with `api_write_enabled` (Pro, Agency), checked on each request: without it, `403 PLAN_LIMIT_REACHED`
+  (`limit_type: api_write`); the key keeps reading and creating monitors. OAuth consent may grant write access on every plan on the same terms.
 - **Where keys work.** Only on routes registered through `tokenGroup` in `registerAPI`: monitors and tags (including bulk actions), results, uptime,
   response times, incidents and incident updates, status pages, maintenance windows, domains, branding and reports, regions, the dashboard,
   `GET /usage`, `GET /billing/subscription` and `GET /notification-settings/coverage`. Everything else answers `403 SESSION_REQUIRED`: `/auth/*`,
@@ -110,8 +113,8 @@ HawkEye is an OAuth 2.1 authorization server for exactly one resource, the MCP s
 - **Access tokens** are `hk_` tokens of kind `oauth_access`, valid for an hour, accepted **only by `/mcp`** (the REST API answers
   `403 TOKEN_AUDIENCE`), never listed with API keys, and never sent expiry emails. **Refresh tokens** (`hkr_`) last 30 days and rotate;
   presenting a used one revokes the connection.
-- **Scope** is `read` or `write`, chosen by the person on the consent page; `write` needs the client to ask for it and the organization's plan to
-  include API writes. Connections follow the person's membership and two-factor requirement exactly like API keys.
+- **Scope** is `read` or `write`, chosen by the person on the consent page; `write` needs the client to ask for it; on a plan without API writes it only
+  creates monitors (see *Writes* under API keys). Connections follow the person's membership and two-factor requirement exactly like API keys.
 - **`/mcp` 401s** carry `WWW-Authenticate: Bearer …, resource_metadata="<app>/.well-known/oauth-protected-resource/mcp"`.
 
 ## MCP server
@@ -131,11 +134,11 @@ that are not browsers send none. It is stateless (no MCP sessions; `GET` and `DE
 | `list_status_pages`, `list_maintenance_windows` | read | – | `GET /status-pages`, `GET /maintenance-windows` |
 | `suggest_monitors` | read, open world | – | `POST /monitors/suggestions`; returns `create_monitor` arguments, creates nothing |
 | `pause_monitors`, `resume_monitors` | write | write key, paid plan | `POST /monitors/bulk` (by IDs or by tag name) |
-| `create_monitor` | write | write key, paid plan | `POST /monitors` (website with GET, heartbeat or DNS only) |
+| `create_monitor` | write | write key (any plan) | `POST /monitors` (website with GET, heartbeat or DNS only) |
 | `post_incident_update`, `delete_incident_update` | write, destructive | write key, paid plan, owner | `POST`/`DELETE /incidents/:id/updates` |
 | `schedule_maintenance` | write | write key, Pro or Agency, owner | `POST /maintenance-windows` (one-off) |
 | `delete_maintenance_window` | write, destructive | write key, paid plan, owner | `DELETE /maintenance-windows/:id` |
-| `create_workflow` | write, destructive, open world | write key, paid plan | `POST /monitors` with `type: "workflow"`, with secret *names* only (see below) |
+| `create_workflow` | write, destructive, open world | write key (any plan) | `POST /monitors` with `type: "workflow"`, with secret *names* only (see below) |
 | `test_workflow` | write, open world | write key, paid plan | `POST /monitors/test-workflow`, or a run of a saved workflow by `monitor_id` |
 
 **Multi-step API checks over MCP.** Secret values never pass through an assistant. `create_workflow` takes the names of the secrets its steps use;

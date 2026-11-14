@@ -348,9 +348,7 @@ func (s *Service) Approve(ctx context.Context, u auth.User, v Validated, a Appro
 		if !v.Request.RequestsWrite() {
 			return "", oerr(400, "invalid_scope", "This app asked only to read.")
 		}
-		if err := s.plans.CanWriteViaAPI(ctx, s.pool, a.OrganizationID); err != nil {
-			return "", err
-		}
+		// Granted on every plan: without API writes in the plan, the app can only create monitors (checked on each write).
 	default:
 		return "", oerr(400, "invalid_scope", "Choose read or write access.")
 	}

@@ -105,11 +105,11 @@ describe('ApiKeysPage', () => {
     expect(days).toBeLessThan(30.1)
   })
 
-  it('lets a paid plan choose write access, and explains why Free cannot', async () => {
+  it('offers write access on Free too, and says it only adds monitors there', async () => {
     setup({ write: false })
     await screen.findByText('No API keys yet.')
-    expect(screen.getByLabelText('Read and write')).toBeDisabled()
-    expect(screen.getByText(/plan can read through the API/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Read and write')).toBeEnabled()
+    expect(screen.getByText(/a read and write key can add monitors/)).toBeInTheDocument()
   })
 
   it('enables write access on Pro', async () => {

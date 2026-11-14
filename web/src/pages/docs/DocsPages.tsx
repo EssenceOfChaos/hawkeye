@@ -36,7 +36,9 @@ function GettingStarted() {
       <p>
         The quickest start is <strong>Set up from your domain</strong> (on the dashboard and the <strong>Monitors</strong> page). Enter your domain and
         HawkEye looks at your site from the outside and suggests monitors: your home page, a health endpoint such as <code>/healthz</code> if it has one, an
-        API on an <code>api.</code> subdomain, and your email’s MX records. Untick any you don’t want; nothing is added until you confirm.
+        API on an <code>api.</code> subdomain, and your email’s MX records. Untick any you don’t want; nothing is added until you confirm. If you use Claude
+        Code, <Link to="/docs/claude#setup">HawkEye’s plugin</Link> goes further: it reads your repository, finds your cron jobs and scheduled tasks, and adds
+        a heartbeat for each one.
       </p>
       <p>To add one yourself, choose <strong>Add monitor</strong> on the <strong>Monitors</strong> page, then pick what to watch:</p>
       <ul>
@@ -427,7 +429,7 @@ function ApiDocs() {
       </p>
       <ul>
         <li><strong>Read only</strong> keys can list and read everything below. They work on every plan, including Free.</li>
-        <li><strong>Read and write</strong> keys can also make changes. They need Pro or Agency; after a downgrade they keep reading but stop writing.</li>
+        <li><strong>Read and write</strong> keys can also make changes. On Free they can add monitors (within the plan’s limits) and nothing else; on Pro and Agency they can make every change the API offers. After a downgrade a key keeps reading and adding monitors, and stops making other changes.</li>
       </ul>
       <p>
         A key belongs to you and to the organization you made it in. It can do what you can do there and no more: if you are a member rather than the owner,
@@ -512,7 +514,7 @@ function ClaudeDocs() {
         <li>Choose <strong>Connect</strong>.</li>
         <li>
           Sign in to HawkEye (with your two-factor code if you use one), choose the organization Claude may use, and choose <strong>Read only</strong>, or{' '}
-          <strong>Read and write</strong> on Pro and Agency to let Claude make changes too.
+          <strong>Read and write</strong> to let Claude make changes too (on Free, only adding monitors).
         </li>
       </ol>
       <p>
@@ -523,7 +525,7 @@ function ClaudeDocs() {
       <h2 id="connect">Connect Claude Code</h2>
       <p>
         Create an <Link to="/docs/api">API key</Link> (account menu, then <strong>API keys</strong>). Choose <strong>Read only</strong> to let Claude look but not
-        touch, or <strong>Read and write</strong> (Pro and Agency) to let it make changes too. Then run:
+        touch, or <strong>Read and write</strong> to let it make changes too (on Free, only adding monitors). Then run:
       </p>
       <Code>{`claude mcp add --transport http hawkeye https://hawkeye.observer/mcp \\
   --header "Authorization: Bearer $HAWKEYE_API_KEY"`}</Code>
@@ -533,10 +535,30 @@ function ClaudeDocs() {
         choose the organization and the access the app gets (and confirm with your two-factor code if you use one).
       </p>
 
+      <h2 id="setup">Set up monitoring from your code</h2>
+      <p>
+        HawkEye’s plugin for Claude Code sets up monitoring from your repository. It finds your production domain, your cron jobs and scheduled tasks (crontab,
+        GitHub Actions schedules, Kubernetes CronJobs, platform crons and in-app schedulers) and your health endpoints, asks HawkEye to suggest monitors for
+        your live site, and shows you one plan. Once you approve it, Claude creates the monitors, including a heartbeat for each job, and adds the ping to the
+        end of each job. Ping addresses are read from environment variables or CI secrets, never written into your code, and Claude tells you which to set.
+      </p>
+      <p>
+        It needs a <strong>Read and write</strong> key, which can add monitors on every plan, including Free. With the key in <code>HAWKEYE_API_KEY</code>,
+        run these in Claude Code (the plugin connects to HawkEye for you, so you don’t need the command above as well):
+      </p>
+      <Code>{`/plugin marketplace add EssenceOfChaos/hawkeye
+/plugin install hawkeye@hawkeye`}</Code>
+      <p>
+        Then ask “set up monitoring for this project”. Your code stays on your machine; HawkEye receives only the monitors you approve. Other coding agents
+        that read skills can use the same <a href="https://github.com/EssenceOfChaos/hawkeye/tree/main/plugins/hawkeye">skill</a> with HawkEye’s MCP server
+        configured as above.
+      </p>
+
       <h2 id="tools">What Claude can do</h2>
       <ul>
         <li><strong>Read</strong> (any key): an account overview, your monitors and their state, uptime and response times, incidents and their updates, status pages and maintenance windows.</li>
-        <li><strong>Pause and resume monitors</strong>, one by one or every monitor with a tag, and <strong>add monitors</strong> (website, heartbeat or DNS).</li>
+        <li><strong>Add monitors</strong> (website, heartbeat or DNS) with a read and write key, on every plan.</li>
+        <li><strong>Pause and resume monitors</strong>, one by one or every monitor with a tag (Pro and Agency).</li>
         <li>
           <strong>Suggest monitors for a domain</strong> (any key): Claude asks HawkEye to look at your site, as <Link to="/docs/getting-started#monitor">Set up from
           your domain</Link> does, and offers the suggestions to you before adding any.
@@ -579,7 +601,7 @@ export const DOCS: readonly Doc[] = [
   { path: '/docs/dns-monitoring', title: 'DNS monitoring', summary: 'Get alerted when a DNS record disappears or stops matching the value you expect.', icon: GlobeAltIcon, body: DnsMonitoring },
   { path: '/docs/alerts', title: 'Alerts', summary: 'Alert channels, routing alerts by client, alert delays, quiet hours and maintenance windows.', icon: BellAlertIcon, body: Alerts },
   { path: '/docs/api', title: 'API and API keys', summary: 'Use HawkEye from your own scripts and tools: create a key, send requests, and keep keys safe.', icon: CodeBracketIcon, body: ApiDocs },
-  { path: '/docs/claude', title: 'Use HawkEye with Claude', summary: 'Connect Claude from its connector directory, or Claude Code with an API key, to check what is down, look at uptime and pause monitors by asking.', icon: ChatBubbleLeftRightIcon, body: ClaudeDocs },
+  { path: '/docs/claude', title: 'Use HawkEye with Claude', summary: 'Connect Claude from its connector directory, or Claude Code with an API key, to check what is down, look at uptime, pause monitors and set up monitoring from your code by asking.', icon: ChatBubbleLeftRightIcon, body: ClaudeDocs },
 ]
 
 function DocsShell({ children }: { children: ReactNode }) {

@@ -71,7 +71,7 @@ func (e *LimitError) Message() string {
 	case LimitWhiteLabel:
 		return fmt.Sprintf("Hiding \"Powered by HawkEye\" is not included in your %s plan. Upgrade to show status pages under your clients' brands alone.", e.Plan.Name)
 	case LimitAPIWrite:
-		return fmt.Sprintf("Your %s plan can read data through the API but not change it. Upgrade to make changes with API keys, or use a read-only key.", e.Plan.Name)
+		return fmt.Sprintf("Your %s plan can read data and add monitors through the API, but not make other changes. Upgrade to make every change with API keys.", e.Plan.Name)
 	case LimitWorkflows:
 		if e.Limit == 0 {
 			return fmt.Sprintf("Multi-step API checks are not included in your %s plan. Upgrade to check whole sequences of API requests.", e.Plan.Name)
@@ -243,8 +243,9 @@ func (s *Service) CanWhiteLabelStatusPages(ctx context.Context, db DB, orgID uui
 	return nil
 }
 
-// CanWriteViaAPI returns a *LimitError when the plan does not let API keys change data. It guards creating a write key and every write made with one,
-// so a key made on a paid plan stops writing after a downgrade (and works again after an upgrade); reading stays available on every plan.
+// CanWriteViaAPI returns a *LimitError when the plan does not let API keys change data. It guards every write made with a key, so a key stops making
+// changes after a downgrade (and works again after an upgrade). Reading, and creating monitors (within the plan's limits), are open to keys on every
+// plan, so the API and MCP routes that create monitors don't call it; read and write keys can therefore be made on every plan.
 func (s *Service) CanWriteViaAPI(ctx context.Context, db DB, orgID uuid.UUID) error {
 	p, err := EffectivePlan(ctx, db, orgID)
 	if err != nil {

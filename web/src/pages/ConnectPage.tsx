@@ -59,7 +59,8 @@ export function ConnectPage() {
   }, [search])
 
   const org = info?.organizations.find((o) => o.id === orgID)
-  const canWrite = Boolean(info?.requests_write && org?.can_write)
+  // Write access can be granted on every plan; without API changes in the plan it only adds monitors (the hint says so).
+  const canWrite = Boolean(info?.requests_write)
 
   async function allow(e: SubmitEvent) {
     e.preventDefault()
@@ -119,8 +120,8 @@ export function ConnectPage() {
                 Read and make changes (pause and add monitors, post incident updates, schedule maintenance)
               </label>
             )}
-            {info.requests_write && !org?.can_write && (
-              <small className="hint">{org?.name}’s plan can read through the API but not make changes. Upgrade to Pro or Agency to allow changes.</small>
+            {info.requests_write && org && !org.can_write && (
+              <small className="hint">On {org.name}’s plan, changes are limited to adding monitors. Upgrade to Pro or Agency to allow the rest.</small>
             )}
           </fieldset>
           {info.two_factor_code_needed && (

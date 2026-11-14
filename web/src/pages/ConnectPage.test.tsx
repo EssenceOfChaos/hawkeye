@@ -66,13 +66,14 @@ describe('ConnectPage', () => {
     expect(screen.getByText(/runs on your own computer/)).toBeInTheDocument()
   })
 
-  it('offers only read access when the plan can’t make changes', async () => {
+  it('allows write access on a plan without API changes, and says it only adds monitors there', async () => {
     const { calls } = setup(base)
     await userEvent.selectOptions(await screen.findByLabelText('Organization'), 'o2')
-    expect(screen.getByLabelText(/Read and make changes/)).toBeDisabled()
-    expect(screen.getByText(/can read through the API but not make changes/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Read and make changes/)).toBeEnabled()
+    expect(screen.getByText(/changes are limited to adding monitors/)).toBeInTheDocument()
+    await userEvent.click(screen.getByLabelText(/Read and make changes/))
     await userEvent.click(screen.getByRole('button', { name: 'Allow' }))
-    expect(calls.find((c) => c.method === 'POST')!.body).toMatchObject({ organization_id: 'o2', access: 'read' })
+    expect(calls.find((c) => c.method === 'POST')!.body).toMatchObject({ organization_id: 'o2', access: 'write' })
   })
 
   it('asks for a two-factor code when the person uses it, and shows a refusal', async () => {

@@ -189,7 +189,8 @@ export function SetupPage() {
 
       <p className="hint">
         Scheduled jobs such as backups and reports can’t be seen from outside. <Link to="/monitors/new?type=heartbeat">Add a heartbeat</Link> for each one, and
-        HawkEye alerts you when it stops running.
+        HawkEye alerts you when it stops running. Using Claude Code? <Link to="/docs/claude#setup">HawkEye’s plugin</Link> finds your jobs in your code and adds
+        the heartbeats for you.
       </p>
     </>
   )

@@ -268,7 +268,7 @@ func TestToolsRefuseWhatTheAPIRefuses(t *testing.T) {
 		{"owner with a write key on Pro", "write", "pro", false, 7},
 		{"member with a write key on Pro", "write", "pro", true, 3}, // pause, resume, create; updates and maintenance are the owner's
 		{"owner with a read key on Pro", "read", "pro", false, 0},
-		{"owner with a write key, downgraded to Free", "write", "free", false, 0},
+		{"owner with a write key, downgraded to Free", "write", "free", false, 1}, // creating monitors works on every plan
 	}
 	for _, sc := range scenarios {
 		t.Run(sc.name, func(t *testing.T) {
