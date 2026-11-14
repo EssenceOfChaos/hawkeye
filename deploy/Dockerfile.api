@@ -1,10 +1,14 @@
 # syntax=docker/dockerfile:1
 FROM golang:1.26.11-alpine3.24 AS build
 WORKDIR /src
+# The module and build caches persist on the build machine between releases (BuildKit cache mounts), so a release recompiles only the packages
+# that changed instead of every dependency. Without them every deploy compiled everything from scratch on the server, which outgrew the deploy
+# time limit once a large dependency arrived. The caches never end up in the image.
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api \
  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate \
  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/oauthclient ./cmd/oauthclient
 

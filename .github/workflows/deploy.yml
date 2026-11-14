@@ -29,7 +29,9 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     environment: production   # add "required reviewers" to this environment in GitHub if you want an approval click before each deploy
-    timeout-minutes: 25
+    # Images are built on the server. With the build cache (deploy/Dockerfile.*) a release takes a few minutes; the first build after the cache
+    # is empty (a new server, a pruned cache, a Go upgrade) compiles everything and can take much longer, so the limit leaves room for it.
+    timeout-minutes: 50
     steps:
       - name: Work out what to deploy
         id: sha
