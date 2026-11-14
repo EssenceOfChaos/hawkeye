@@ -161,18 +161,14 @@ func (in NewInput) validate(now time.Time) (name string, expires *time.Time, err
 	return name, expires, nil
 }
 
-// Create makes a key for the person in the organization and returns it with its token, which is never available again. A write key needs a plan
-// that includes API writes. The owner of the key is emailed, so a key they didn't make is noticed.
+// Create makes a key for the person in the organization and returns it with its token, which is never available again. Write keys can be made on
+// every plan: on a plan without API writes they can only create monitors (plans.CanWriteViaAPI is checked on each other write). The owner of the key
+// is emailed, so a key they didn't make is noticed.
 func (s *Service) Create(ctx context.Context, u auth.User, orgID uuid.UUID, in NewInput) (Key, string, error) {
 	now := s.now()
 	name, expires, err := in.validate(now)
 	if err != nil {
 		return Key{}, "", err
-	}
-	if in.Scope == ScopeWrite {
-		if err := s.plans.CanWriteViaAPI(ctx, s.pool, orgID); err != nil {
-			return Key{}, "", err
-		}
 	}
 	raw, err := newToken()
 	if err != nil {

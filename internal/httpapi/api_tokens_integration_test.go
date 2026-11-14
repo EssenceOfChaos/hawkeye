@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -165,9 +166,29 @@ func TestAPIKeyWritesNeedAPaidPlan(t *testing.T) {
 	owner, org := e.register(t, "owner@example.com")
 	e.markVerified(t, "owner@example.com")
 
-	r := owner.call("POST", "/api/v1/api-keys", map[string]any{"name": "Terraform", "scope": "write"})
+	// On Free a write key can be made, and it can create monitors (within the plan's limits), but make no other change.
+	_, freeToken := newKey(t, owner, map[string]any{"name": "Coding agent", "scope": "write"})
+	fk := e.keyClient(t, freeToken)
+	made := fk.call("POST", "/api/v1/monitors", map[string]any{"type": "heartbeat", "name": "Nightly backup"})
+	if made.Status != 201 {
+		t.Fatalf("Free creates monitors with a key: %d %v", made.Status, made.Body)
+	}
+	freeID := made.Body["monitor"].(map[string]any)["id"].(string)
+	r := fk.call("PATCH", "/api/v1/monitors/"+freeID, map[string]any{"name": "Renamed"})
 	if r.Status != 403 || errCode(r) != "PLAN_LIMIT_REACHED" || r.Body["error"].(map[string]any)["details"].(map[string]any)["limit_type"] != "api_write" {
-		t.Fatalf("Free can't make write keys: %d %v", r.Status, r.Body)
+		t.Fatalf("Free can't change monitors with a key: %d %v", r.Status, r.Body)
+	}
+	if !strings.Contains(r.Body["error"].(map[string]any)["message"].(string), "add monitors") {
+		t.Fatalf("the refusal should say what Free can do: %v", r.Body)
+	}
+	for i := range 4 { // the Free plan's limit of 5 monitors still applies
+		fk.call("POST", "/api/v1/monitors", monitorBody("m"+strconv.Itoa(i)))
+	}
+	if r := fk.call("POST", "/api/v1/monitors", monitorBody("one too many")); r.Status != 403 || r.Body["error"].(map[string]any)["details"].(map[string]any)["limit_type"] != "monitors" {
+		t.Fatalf("plan limit: %d %v", r.Status, r.Body)
+	}
+	if r := fk.call("DELETE", "/api/v1/monitors/"+freeID, nil); r.Status != 403 {
+		t.Fatalf("Free can't delete with a key: %d %v", r.Status, r.Body)
 	}
 	_, readToken := newKey(t, owner, map[string]any{"name": "Read", "scope": "read"})
 

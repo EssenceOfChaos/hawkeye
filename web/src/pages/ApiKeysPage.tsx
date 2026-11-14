@@ -77,7 +77,8 @@ export function ApiKeysPage() {
     void load()
   }, [load])
 
-  const canWrite = usage?.plan.api_write_enabled ?? false
+  // Read and write keys can be made on every plan; without API changes in the plan they can only add monitors.
+  const allChanges = usage?.plan.api_write_enabled ?? false
 
   async function create(e: SubmitEvent) {
     e.preventDefault()
@@ -183,11 +184,12 @@ export function ApiKeysPage() {
                   <input type="radio" name="scope" value="read" checked={scope === 'read'} onChange={() => setScope('read')} /> Read only
                 </label>
                 <label>
-                  <input type="radio" name="scope" value="write" checked={scope === 'write'} disabled={!canWrite} onChange={() => setScope('write')} /> Read and write
+                  <input type="radio" name="scope" value="write" checked={scope === 'write'} onChange={() => setScope('write')} /> Read and write
                 </label>
-                {!canWrite && usage && (
+                {!allChanges && usage && (
                   <small className="hint">
-                    Your {usage.plan.name} plan can read through the API. <Link to="/billing">Upgrade</Link> to make changes with a key.
+                    On your {usage.plan.name} plan a read and write key can add monitors, for example from a coding agent setting up your cron jobs.{' '}
+                    <Link to="/billing">Upgrade</Link> to make every other change with a key too.
                   </small>
                 )}
                 {fields.scope && <small className="error">{fields.scope}</small>}

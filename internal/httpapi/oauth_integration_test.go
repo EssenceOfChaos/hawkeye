@@ -271,8 +271,8 @@ func TestOAuthRefusesBadRequests(t *testing.T) {
 		}
 	}
 
-	// Write access needs a plan with API writes, and the client to have asked for it.
-	if r := consent(t, e, owner, f, map[string]any{"organization_id": org, "access": "write"}); r.Status != 403 || errCode(r) != "PLAN_LIMIT_REACHED" {
+	// Write access can be granted on Free (where it only adds monitors), but only when the client asked for it.
+	if r := consent(t, e, owner, f, map[string]any{"organization_id": org, "access": "write"}); r.Status != 200 {
 		t.Fatalf("Free: %d %v", r.Status, r.Body)
 	}
 	e.setOrgPlan(t, org, "pro")

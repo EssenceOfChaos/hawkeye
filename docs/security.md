@@ -195,7 +195,8 @@ requests.
 - **Same authentication as the API:** `/mcp` takes API keys only (a session cookie is not accepted), through the same code as the REST API
   (`keyPrincipal`): expired, revoked and unknown keys are refused, the per-key budgets apply, and `DISABLE_API_KEYS` turns it off.
 - **Same authority as the API:** every tool acts as the key's person in the key's organization, with their current role. Writes need a write key,
-  a plan with API writes, and the owner role where the REST route needs it; `TestToolsRefuseWhatTheAPIRefuses` compares every write tool with
+  a plan with API writes (except creating monitors, open to write keys on every plan within the plan's limits, as on REST), and the owner role where
+  the REST route needs it; `TestToolsRefuseWhatTheAPIRefuses` compares every write tool with
   its REST route for each kind of key. Tool writes share the key's write budget with REST writes. No tool reaches account, billing, team, alert
   destination or key settings.
 - **Origins:** a request with an `Origin` header is refused unless it comes from Claude's web apps (DNS-rebinding and cross-site guard); the key is

@@ -65,6 +65,13 @@ func currentPrincipal(c *echo.Context) (apitokens.Principal, bool) {
 
 func tokenRouteKey(method, path string) string { return method + " " + path }
 
+// createRoutes are the writes a key may make whatever the plan: creating monitors, and the suggestions that come before it. Everything else that
+// changes data needs a plan with API writes. MCP's create_monitor and create_workflow follow the same rule (mcpserver, access.create).
+var createRoutes = map[string]bool{
+	tokenRouteKey(http.MethodPost, "/api/v1/monitors"):             true,
+	tokenRouteKey(http.MethodPost, "/api/v1/monitors/suggestions"): true,
+}
+
 // opensToTokens reports whether the matched route accepts API keys.
 func (h *handlers) opensToTokens(c *echo.Context) bool {
 	return h.tokenRoutes[tokenRouteKey(c.Request().Method, c.Path())]
@@ -99,9 +106,12 @@ func (h *handlers) authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 			if !p.CanWrite() {
 				return errTokenScope
 			}
-			// Checked on every write, so a key stops changing data after a downgrade and works again after an upgrade.
-			if err := h.plans.CanWriteViaAPI(ctx, h.pool, p.OrganizationID); err != nil {
-				return mapError(err)
+			// Checked on every write, so a key stops changing data after a downgrade and works again after an upgrade. Creating monitors (and asking for
+			// suggestions first) is open on every plan, within the plan's own limits, so a coding agent can set up a Free account.
+			if !createRoutes[tokenRouteKey(c.Request().Method, c.Path())] {
+				if err := h.plans.CanWriteViaAPI(ctx, h.pool, p.OrganizationID); err != nil {
+					return mapError(err)
+				}
 			}
 		}
 		c.Set(userKey, p.User)

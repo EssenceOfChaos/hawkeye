@@ -144,7 +144,7 @@ type consentOrganization struct {
 	ID       uuid.UUID `json:"id"`
 	Name     string    `json:"name"`
 	Role     string    `json:"role"`
-	CanWrite bool      `json:"can_write"` // the plan includes changes through the API
+	CanWrite bool      `json:"can_write"` // the plan includes every change through the API (otherwise write access only adds monitors)
 	Blocked  bool      `json:"blocked"`   // shut out by the organization's two-factor requirement
 }
 

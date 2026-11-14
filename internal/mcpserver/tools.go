@@ -233,7 +233,8 @@ type Overview struct {
 	Plan              string                     `json:"plan"`
 	MonitorsUsed      int                        `json:"monitors_used"`
 	MonitorLimit      int                        `json:"monitor_limit"`
-	CanChangeData     bool                       `json:"can_change_data" jsonschema:"whether this key may make changes (its access and the plan)"`
+	CanChangeData     bool                       `json:"can_change_data" jsonschema:"whether this key may make every kind of change (its access and the plan)"`
+	CanAddMonitors    bool                       `json:"can_add_monitors" jsonschema:"whether this key may create monitors: any read and write key, on every plan"`
 	Monitors          reports.MonitorCounts      `json:"monitors"`
 	OpenIncidents     int                        `json:"open_incidents"`
 	Uptime24hPercent  *float64                   `json:"uptime_24h_percent,omitempty" jsonschema:"absent when there are too few checks"`
@@ -341,7 +342,7 @@ func updateOut(u incidents.Update) IncidentUpdate {
 // ---- Registration.
 
 func (s *tools) register(srv *mcp.Server) {
-	read, write, owner := access{}, access{write: true}, access{write: true, owner: true}
+	read, write, owner, create := access{}, access{write: true}, access{write: true, owner: true}, access{write: true, create: true}
 
 	add(s, srv, readTool("get_account_overview", "Account overview",
 		"Summarizes the organization: plan and monitor usage, how many monitors are up, down or paused, open incidents, uptime over the last 24 hours, "+
@@ -390,9 +391,8 @@ func (s *tools) register(srv *mcp.Server) {
 
 	add(s, srv, writeTool("create_monitor", "Create a monitor",
 		"Adds a monitor: a website (checks an address answers with a success status), a heartbeat (alerts when a scheduled job stops pinging; the "+
-			"result includes the address the job must request) or a DNS record. Counts toward the plan's monitor limit. Needs a read and write key on a "+
-			"paid plan.", false, false),
-		write, s.createMonitor)
+			"result includes the address the job must request) or a DNS record. Counts toward the plan's monitor limit. Needs a read and write key (on any plan).", false, false),
+		create, s.createMonitor)
 
 	s.registerSetup(srv)
 
@@ -401,8 +401,8 @@ func (s *tools) register(srv *mcp.Server) {
 			"steps. A step saves a value from its response (save) and later steps use it as {{name}}; secrets are used as {{secret.name}}. Secret "+
 			"values are never sent here: list their names in secrets, and the check is saved paused until a person enters them in HawkEye. The steps "+
 			"call the addresses given on every run, including POST, PUT, PATCH and DELETE requests, which change data there. Counts toward the plan's "+
-			"monitor and multi-step check limits. Needs a read and write key on a paid plan.", true),
-		write, s.createWorkflow)
+			"monitor and multi-step check limits. Needs a read and write key (on any plan).", true),
+		create, s.createWorkflow)
 
 	add(s, srv, workflowTool("test_workflow", "Test a multi-step API check",
 		"Runs a multi-step API check once and returns each step's status, time and failure reason, without recording a result. Give monitor_id to "+
@@ -452,7 +452,7 @@ func (s *tools) overview(ctx context.Context, c Caller, _ NoInput) (Overview, er
 		return Overview{}, err
 	}
 	return Overview{Organization: org, Role: c.Role, Plan: u.Plan.Name, MonitorsUsed: u.MonitorsUsed, MonitorLimit: u.MonitorLimit,
-		CanChangeData: c.CanWrite() && u.Plan.APIWriteEnabled, Monitors: sum.Monitors, OpenIncidents: sum.OpenIncidents,
+		CanChangeData: c.CanWrite() && u.Plan.APIWriteEnabled, CanAddMonitors: c.CanWrite(), Monitors: sum.Monitors, OpenIncidents: sum.OpenIncidents,
 		Uptime24hPercent: sum.Uptime.UptimePercent, ExpiringCerts: sum.Certificates, ExpiringDomains: sum.Domains,
 		HistoryRetainDays: u.Plan.HistoryRetentionDays}, nil
 }
