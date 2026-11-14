@@ -108,6 +108,7 @@ describe('LandingPage', () => {
     renderLanding(() => json(200, { plans: [] }))
     const expected = {
       X: 'https://x.com/HawkEyeOnX',
+      Bluesky: 'https://bsky.app/profile/hawkeye-observer.bsky.social',
       Facebook: 'https://www.facebook.com/people/HawkEye/61595561066921/',
       LinkedIn: 'https://www.linkedin.com/company/hawkeye-observer/',
       Reddit: 'https://www.reddit.com/r/HawkEye_Observer/',
