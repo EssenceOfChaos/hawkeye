@@ -26,6 +26,8 @@ type Alert struct {
 	// A test alert (EventTest, email only): who asked for it, and when it was sent (zero means now).
 	RequestedBy string
 	SentAt      time.Time
+	// TestID ties a PagerDuty test trigger to the resolve that follows it, so the test closes itself.
+	TestID string
 
 	// Certificate warnings (EventSSLExpiry): when the certificate expires and which warning bucket (30, 14, 7, 1 days, 0 = expired) this is.
 	SSLExpiresAt time.Time

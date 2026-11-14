@@ -1,6 +1,6 @@
 # HawkEye
 
-> HawkEye is a website, API, cron job and DNS monitoring service. It checks your websites and APIs on a schedule, opens an incident only after consecutive failures, notices when a scheduled job stops pinging or reports a failure, notices when a DNS record disappears or changes, and alerts you by email, Slack, Microsoft Teams, Discord, Telegram or webhook. It also warns you before SSL certificates and domain registrations expire.
+> HawkEye is a website, API, cron job and DNS monitoring service. It checks your websites and APIs on a schedule, opens an incident only after consecutive failures, notices when a scheduled job stops pinging or reports a failure, notices when a DNS record disappears or changes, and alerts you by email, Slack, Microsoft Teams, Discord, Telegram, PagerDuty or webhook. It also warns you before SSL certificates and domain registrations expire.
 
 HawkEye is for freelancers, web agencies, small businesses and small development teams. There is a free plan (not a trial) and paid plans; the home page shows current prices and limits.
 
@@ -15,7 +15,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 - Embeddable uptime badges for a website or a GitHub README, opt-in per monitor.
 - Multi-step API checks: several requests in a row, such as signing in and then fetching an account with the returned token, with values passed between steps, encrypted secrets, a test run before saving, and alerts that name the failing step. Free includes one of up to 3 steps; Pro 5 and Agency 50, of up to 10 steps.
 - Slow-response alerts: an alert when a site stays slower than a threshold you choose for several checks in a row, and another when it is back to normal.
-- Alerts by email, Slack, Microsoft Teams, Discord or Telegram, or signed JSON webhook, routed per client by tag, with optional alert delays and quiet hours per monitor.
+- Alerts by email, Slack, Microsoft Teams, Discord or Telegram, PagerDuty (incidents that open on an outage and resolve on recovery), or signed JSON webhook, routed per client by tag, with optional alert delays and quiet hours per monitor.
 - Public status pages for your customers: one on the Free plan, several on paid plans (one per client or product), with incident updates you post while you work on a problem.
 - Maintenance windows that pause alerts during planned work (paid plans).
 - AI-drafted incident updates (paid plans, off until the owner turns them on): a "Draft with AI" button writes a first draft of a status page update from the incident's details (never the monitor's address or response content) with Claude Haiku 5.5 by Anthropic; nothing is posted until the owner edits and posts it.

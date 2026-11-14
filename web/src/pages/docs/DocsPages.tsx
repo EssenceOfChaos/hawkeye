@@ -296,6 +296,12 @@ function Alerts() {
         </li>
         <li><strong>Slack, Microsoft Teams and Discord</strong> through an incoming webhook for the channel you choose.</li>
         <li><strong>Telegram</strong> through HawkEye’s bot or your own.</li>
+        <li>
+          <strong>PagerDuty</strong> through a service’s integration key: in PagerDuty, open the service, choose <strong>Integrations → Add an
+          integration → Events API V2</strong>, and copy its Integration Key. An outage opens a PagerDuty incident (so whoever is on call is paged),
+          and its recovery resolves that incident by itself. Slowdowns work the same way. Certificate and domain warnings open an incident that stays
+          open until you resolve it in PagerDuty. When you add the key, HawkEye opens a test incident and resolves it at once.
+        </li>
         <li><strong>Webhooks</strong>: a signed JSON request to your own endpoint, for anything else.</li>
       </ul>
       <p>Use <strong>Send test</strong> on the Alerts page to check that a destination works. A test alert says plainly that nothing is wrong.</p>

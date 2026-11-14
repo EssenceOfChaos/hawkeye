@@ -75,7 +75,7 @@ export function ProductShots() {
               </span>
             </div>
             <figcaption>
-              <strong>The alert you actually receive.</strong> One email when an outage is confirmed and one when it ends. Slack, Teams, Discord, Telegram and webhooks too.
+              <strong>The alert you actually receive.</strong> One email when an outage is confirmed and one when it ends. Slack, Teams, Discord, Telegram, PagerDuty and webhooks too.
             </figcaption>
           </figure>
         </div>

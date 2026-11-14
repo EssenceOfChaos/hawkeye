@@ -10,7 +10,7 @@ import { TagChip } from '../components/Tags'
 
 type Channel = NotificationSetting['channel']
 
-const channelNames: Record<Channel, string> = { email: 'Email', slack: 'Slack', discord: 'Discord', teams: 'Microsoft Teams', telegram: 'Telegram', webhook: 'Webhook' }
+const channelNames: Record<Channel, string> = { email: 'Email', slack: 'Slack', discord: 'Discord', teams: 'Microsoft Teams', telegram: 'Telegram', pagerduty: 'PagerDuty', webhook: 'Webhook' }
 
 /** How to ask for each channel that takes a URL. */
 const urlFields: Record<'slack' | 'discord' | 'teams' | 'webhook', { label: string; placeholder: string; hint: string }> = {
@@ -205,6 +205,7 @@ export function NotificationsPage() {
   const [channel, setChannel] = useState<Channel>('email')
   const [address, setAddress] = useState('')
   const [botToken, setBotToken] = useState('') // Telegram, own bot only
+  const [region, setRegion] = useState<'us' | 'eu'>('us') // PagerDuty: the account's service region
   const [telegramBot, setTelegramBot] = useState('') // HawkEye's bot, when chats can be connected through it
   const [ownBot, setOwnBot] = useState(false) // the advanced option: the customer's own bot
   const [secret, setSecret] = useState<string | null>(null)
@@ -272,7 +273,9 @@ export function NotificationsPage() {
     setNotice(null)
     setSecret(null)
     try {
-      const body = channel === 'telegram' ? { channel, destination: address, bot_token: botToken } : { channel, destination: address }
+      const body = channel === 'telegram' ? { channel, destination: address, bot_token: botToken }
+        : channel === 'pagerduty' ? { channel, destination: address, region }
+          : { channel, destination: address }
       const r = await api<{ notification_setting: NotificationSetting; signing_secret?: string }>('POST', '/notification-settings', body)
       setAddress('')
       setBotToken('')
@@ -286,7 +289,7 @@ export function NotificationsPage() {
       )
       await load()
     } catch (err) {
-      if (err instanceof ApiError && (err.fields.destination || err.fields.bot_token)) setFieldErrors(err.fields)
+      if (err instanceof ApiError && (err.fields.destination || err.fields.bot_token || err.fields.region)) setFieldErrors(err.fields)
       else setError(err instanceof ApiError ? err.message : 'That did not work. Try again.')
     } finally {
       setBusy(false)
@@ -316,7 +319,7 @@ export function NotificationsPage() {
         <PageIcon src={brand.icons.email} />
         <h1>Alert recipients</h1>
       </div>
-      <p>Everything listed here is told when a monitor is confirmed offline, when it recovers, and when a certificate or domain is about to expire: by email, in Slack, Discord, Microsoft Teams or Telegram, or by a signed webhook to your own systems.</p>
+      <p>Everything listed here is told when a monitor is confirmed offline, when it recovers, and when a certificate or domain is about to expire: by email, in Slack, Discord, Microsoft Teams or Telegram, in PagerDuty, or by a signed webhook to your own systems.</p>
       <p className="hint">
         Each destination gets alerts for all monitors, or only for monitors with chosen tags, so each client can get just their own sites’ alerts. To delay a
         monitor’s alerts or hold them overnight, edit the monitor.
@@ -446,6 +449,21 @@ export function NotificationsPage() {
                 <Field label="Chat ID" required value={address} onChange={(e) => setAddress(e.target.value)}
                   error={fieldErrors.destination} disabled={!verified || full} placeholder="-1001234567890 or @yourchannel"
                   hint="Add the bot to your group (or as an admin of your channel). Use the group’s numeric ID, or @name for a public channel. We send a test message first." />
+              </>
+            ) : channel === 'pagerduty' ? (
+              <>
+                <Field label="Integration key" required autoComplete="off" spellCheck={false} value={address} onChange={(e) => setAddress(e.target.value)}
+                  error={fieldErrors.destination} disabled={!verified || full} placeholder="32 characters, from your PagerDuty service"
+                  hint="In PagerDuty, open the service → Integrations → Add an integration → Events API V2, and copy its Integration Key. We trigger a test incident and resolve it straight away." />
+                <div className="field">
+                  <label htmlFor="pd-region">PagerDuty account region</label>
+                  <select id="pd-region" value={region} onChange={(e) => setRegion(e.target.value as 'us' | 'eu')} disabled={!verified || full}>
+                    <option value="us">US (pagerduty.com)</option>
+                    <option value="eu">EU (eu.pagerduty.com)</option>
+                  </select>
+                  {fieldErrors.region && <small className="error">{fieldErrors.region}</small>}
+                  <small className="hint">An outage opens a PagerDuty incident and its recovery resolves it. Slowdowns do the same; certificate and domain warnings stay open until you resolve them.</small>
+                </div>
               </>
             ) : (
               <Field label={urlFields[channel].label} type="url" required value={address} onChange={(e) => setAddress(e.target.value)}

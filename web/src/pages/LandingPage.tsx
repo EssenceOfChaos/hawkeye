@@ -64,7 +64,7 @@ const FEATURES = [
     icon: brand.icons.notifications,
     title: 'Alerts where you work',
     lead: 'The right signal. When it matters.',
-    text: 'One alert when an outage is confirmed, one when it ends. Email, Slack, Teams, Discord, Telegram or webhook.',
+    text: 'One alert when an outage is confirmed, one when it ends. Email, Slack, Teams, Discord, Telegram, PagerDuty or webhook.',
   },
   {
     icon: brand.icons.statusPage,
@@ -132,18 +132,18 @@ const AUDIENCES = [
 const STEPS = [
   { title: 'Add your website', text: 'Enter a name and URL. It joins your dashboard.' },
   { title: 'Let HawkEye keep watch', text: 'Checked at your plan’s interval, with every result recorded.' },
-  { title: 'Get notified when something changes', text: 'Confirmed failures open an incident and alert you by email, Slack, Teams, Discord, Telegram or webhook.' },
+  { title: 'Get notified when something changes', text: 'Confirmed failures open an incident and alert you by email, Slack, Teams, Discord, Telegram, PagerDuty or webhook.' },
   { title: 'Investigate and move forward', text: 'Review the incident. When checks recover, HawkEye resolves it and tells you.' },
 ]
 
 const FAQ = [
   { q: 'How does website monitoring work?', a: 'You add a website URL, or enter your domain and let HawkEye suggest monitors for your home page, health endpoint, API and email records, then pick the ones you want. HawkEye periodically sends an HTTP request, records the result, and evaluates whether repeated failures indicate a potential outage.' },
   { q: 'Do I need a credit card?', a: 'No. The free plan does not ask for one. A payment method is only needed if you choose a paid plan.' },
-  { q: 'What happens when my website goes offline?', a: 'When repeated failures meet the incident threshold, HawkEye creates an incident and sends an alert to your email, chat (Slack, Microsoft Teams, Discord or Telegram) or webhook destinations. It keeps checking, and tells you when the website recovers.' },
+  { q: 'What happens when my website goes offline?', a: 'When repeated failures meet the incident threshold, HawkEye creates an incident and sends an alert to your email, chat (Slack, Microsoft Teams, Discord or Telegram), PagerDuty or webhook destinations. It keeps checking, and tells you when the website recovers.' },
   { q: 'Will HawkEye guarantee that my website is always available?', a: 'No monitoring service can guarantee that a website will always be available or detect every possible problem. HawkEye provides periodic checks and recorded results to help you identify and investigate availability issues.' },
   { q: 'Does HawkEye warn me before my SSL certificate expires?', a: 'Yes, on every plan. For each HTTPS monitor, HawkEye reads the certificate your site presents during its checks, shows the expiry date and a countdown, and alerts your destinations 30, 14, 7 and 1 days before it expires and again if it does. Renew the certificate and HawkEye picks up the new date automatically. It reports the certificate it sees for the monitored address; it cannot tell you about other hostnames or certificates revoked early.' },
   { q: 'Does HawkEye warn me before my domain name expires?', a: 'Yes, on every plan, up to the number of domains your plan lists. HawkEye works out the registered domain of each website you monitor. It looks up the registration expiry date with the domain’s registry once a day and alerts your destinations 30, 14, 7 and 1 days before it expires. Not every registry shares this date, and some hide it for privacy. For those domains HawkEye shows “Expiry unavailable”. Warnings are a reminder; you remain responsible for renewing.' },
-  { q: 'Where can HawkEye send alerts?', a: 'To email addresses, to Slack, Microsoft Teams, Discord and Telegram channels, and to any HTTPS endpoint as a signed JSON webhook so your own systems can react. Every alert is queued and retried if delivery fails. Slack and webhook destinations are tested when you add them and available on every plan. SMS is not available yet.' },
+  { q: 'Where can HawkEye send alerts?', a: 'To email addresses, to Slack, Microsoft Teams, Discord and Telegram channels, to PagerDuty (an outage opens a PagerDuty incident and its recovery resolves it), and to any HTTPS endpoint as a signed JSON webhook so your own systems can react. Every alert is queued and retried if delivery fails. Slack and webhook destinations are tested when you add them and available on every plan. SMS is not available yet.' },
   { q: 'Can I show my customers a status page?', a: 'Yes, on every plan: one page on Free, and on paid plans several, so you can give each client or product its own. Choose an address, the monitors to show and the names to show them under, then publish. The page shows each service’s current state, daily uptime and recent incidents, and during an incident you can post updates such as “Investigating” or “Fixed” for your visitors to read. On Pro and Agency, HawkEye can write a first draft of each update for you to edit, if you turn that on. It never shows your monitored web addresses or error details, and it stays private until you publish it. On Pro and Agency you can add a logo, an accent color and a link back to your client’s website, and Agency can remove “Powered by HawkEye”. Daily history follows your plan: 7 days on Free, up to 90 on paid plans.' },
   { q: 'Can I show my uptime on my website or GitHub README?', a: 'Yes, on every plan. Open a monitor, turn on its public uptime badge and copy the code: HTML for a website (paste it into your site’s HTML, or into a “Custom HTML” or “Embed” block in WordPress, Squarespace, Wix, Webflow or Shopify) or Markdown for a README on GitHub, GitLab or anywhere else that shows Markdown. There are two sizes: a website badge and a smaller README badge. The badge shows the uptime percentage over the last 30 days (7 on Free) and whether the site is up right now, updates itself every few minutes, and never shows the monitor’s name or address. Turning it off removes it everywhere it is embedded.' },
   { q: 'How do I avoid false alerts during planned maintenance?', a: 'Schedule a maintenance window on a Pro or Agency plan. For all or some of your monitors, once or repeating daily or weekly, HawkEye keeps checking but does not open incidents or send alerts, and leaves those checks out of uptime. An incident that is already open stays open until the monitor recovers.' },
@@ -357,7 +357,7 @@ export function LandingPage() {
       <section aria-labelledby="pricing-h" className="section">
         <h2 id="pricing-h">Simple plans. Clear visibility.</h2>
         <p className="hint">
-          Start free. Upgrade when your monitoring needs grow. Every plan includes website and API monitoring (with a multi-step API check), SSL certificate expiry warnings, domain expiry warnings (up to a limit that grows with the plan), incident tracking, alerts by email, Slack, Microsoft Teams, Discord, Telegram and webhook, and public status pages (one on Free, more on paid plans). {paidAdvantages} The free plan is a real plan, not a trial, and monitors are never deleted if you move to a smaller plan.
+          Start free. Upgrade when your monitoring needs grow. Every plan includes website and API monitoring (with a multi-step API check), SSL certificate expiry warnings, domain expiry warnings (up to a limit that grows with the plan), incident tracking, alerts by email, Slack, Microsoft Teams, Discord, Telegram, PagerDuty and webhook, and public status pages (one on Free, more on paid plans). {paidAdvantages} The free plan is a real plan, not a trial, and monitors are never deleted if you move to a smaller plan.
         </p>
         {plans === null && (
           <div role="status" aria-label="Loading plans" className="plans-loading">

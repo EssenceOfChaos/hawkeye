@@ -408,3 +408,64 @@ func TestAFailedTestEmailIsReportedWithoutLeakingTheMailError(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestCreatePagerDutyTriggersAndResolvesATestAlert(t *testing.T) {
+	e := newEnv(t, 5)
+	rcv := newReceiver(t, 202)
+	svc := newService(t, e, rcv)
+	const key = "R0123456789abcdefABCDEF012345678"
+
+	st, secret, err := svc.CreateURL(t.Context(), e.org, "pagerduty", key, "eu")
+	if err != nil || !st.Verified || st.Channel != "pagerduty" || st.Destination != "EU service, key ending 5678" || secret != "" {
+		t.Fatalf("%+v %q %v", st, secret, err)
+	}
+	got := rcv.requests()
+	if len(got) != 2 || got[0].Path != "/v2/enqueue" || !strings.Contains(string(got[0].Body), `"event_action":"trigger"`) ||
+		!strings.Contains(string(got[1].Body), `"event_action":"resolve"`) || !strings.Contains(string(got[0].Body), `"routing_key":"`+key+`"`) {
+		t.Fatalf("the test alert is triggered, then resolved at once: %+v", got)
+	}
+	var dest string
+	e.pool.QueryRow(t.Context(), `SELECT destination FROM notification_settings WHERE id = $1`, st.ID).Scan(&dest)
+	if !strings.HasPrefix(dest, "enc:v1:") || strings.Contains(dest, key) {
+		t.Fatalf("the integration key must be stored sealed: %q", dest)
+	}
+}
+
+func TestAPagerDutyKeyThatIsRefusedSaysWhatToCheck(t *testing.T) {
+	e := newEnv(t, 5)
+	svc := newService(t, e, newReceiver(t, 400))
+	_, _, err := svc.CreateURL(t.Context(), e.org, "pagerduty", "R0123456789abcdefABCDEF012345678", "us")
+	if err == nil || !strings.Contains(err.Error(), "Events API v2") || strings.Contains(err.Error(), "R0123456789") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestPagerDutyDeliveriesTriggerThenResolveTheSameAlert(t *testing.T) {
+	e := newEnv(t, 5)
+	rcv := newReceiver(t, 202)
+	const key = "R0123456789abcdefABCDEF012345678"
+	setting, first, _ := e.urlDelivery(t, "pagerduty", "https://events.pagerduty.com/v2/enqueue?routing_key="+key, "outage")
+	d := dispatcher(e, &scriptedSender{}, notifications.DispatcherConfig{}).WithSecrets(testutil.SecretBox()).WithHTTPClient(rcv.client())
+	d.ProcessOne(t.Context())
+	var second uuid.UUID
+	if err := e.pool.QueryRow(t.Context(), `INSERT INTO notification_deliveries (incident_id, notification_setting_id, event_type)
+		VALUES ($1, $2, 'recovery') RETURNING id`, e.inc, setting).Scan(&second); err != nil {
+		t.Fatal(err)
+	}
+	d.ProcessOne(t.Context())
+
+	got := rcv.requests()
+	if e.row(t, first).Status != "sent" || e.row(t, second).Status != "sent" || len(got) != 2 {
+		t.Fatalf("%+v %+v %d", e.row(t, first), e.row(t, second), len(got))
+	}
+	var trig, res struct {
+		RoutingKey string `json:"routing_key"`
+		Action     string `json:"event_action"`
+		Dedup      string `json:"dedup_key"`
+	}
+	_ = json.Unmarshal(got[0].Body, &trig)
+	_ = json.Unmarshal(got[1].Body, &res)
+	if got[0].Path != "/v2/enqueue" || trig.RoutingKey != key || trig.Action != "trigger" || res.Action != "resolve" || res.Dedup != trig.Dedup || trig.Dedup == "" {
+		t.Fatalf("%s / %s", got[0].Body, got[1].Body)
+	}
+}

@@ -97,6 +97,7 @@ func (h *handlers) createSetting(c *echo.Context) error {
 		Channel     string `json:"channel"`
 		Destination string `json:"destination"`
 		BotToken    string `json:"bot_token"` // Telegram only
+		Region      string `json:"region"`    // PagerDuty only: us (default) or eu
 	}
 	if err := bind(c, &in); err != nil {
 		return err
@@ -105,7 +106,11 @@ func (h *handlers) createSetting(c *echo.Context) error {
 	case in.Channel == "" || in.Channel == notifications.ChannelEmail:
 	case notifications.IsURLChannel(in.Channel):
 		// The test message is delivered before anything is saved; the signing secret is shown only in this response.
-		s, secret, err := h.notifications.CreateURL(c.Request().Context(), currentOrg(c), in.Channel, in.Destination, in.BotToken)
+		extra := in.BotToken
+		if in.Channel == notifications.ChannelPagerDuty {
+			extra = in.Region
+		}
+		s, secret, err := h.notifications.CreateURL(c.Request().Context(), currentOrg(c), in.Channel, in.Destination, extra)
 		if err != nil {
 			return mapError(err)
 		}
@@ -116,7 +121,7 @@ func (h *handlers) createSetting(c *echo.Context) error {
 		}
 		return c.JSON(http.StatusCreated, out)
 	default:
-		return mapError(validation.New("channel", "must be email, webhook, slack, discord, teams or telegram"))
+		return mapError(validation.New("channel", "must be email, webhook, slack, discord, teams, telegram or pagerduty"))
 	}
 	// Adding a recipient emails a third party: cap how often any one address can be targeted.
 	if !h.emailBudget(c, "alert-confirm", in.Destination) {
