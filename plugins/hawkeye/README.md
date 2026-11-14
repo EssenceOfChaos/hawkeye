@@ -15,20 +15,18 @@ Nothing is created and no file is changed before you approve. Your code stays on
 ## Install
 
 Create an API key with **Read and write** access at https://hawkeye.observer/api-keys. Read and write keys can add monitors on every plan, including
-Free. Make it available to Claude Code:
-
-```sh
-export HAWKEYE_API_KEY=hk_...
-```
-
-Then, in Claude Code:
+Free. Then, in Claude Code:
 
 ```
 /plugin marketplace add EssenceOfChaos/hawkeye
 /plugin install hawkeye@hawkeye
 ```
 
-The plugin connects Claude Code to HawkEye's MCP server (`https://hawkeye.observer/mcp`) with that key, and adds the `set-up-monitoring` skill.
+Claude Code asks for the key when the plugin is enabled. It's masked as you type and kept in your system's secure credential store, never in a
+settings file. To change it later, run `claude plugin configure hawkeye` in a terminal.
+
+The plugin connects Claude Code to HawkEye's MCP server (`https://hawkeye.observer/mcp`) with that key, and adds the `set-up-monitoring` skill. The
+key is sent only to HawkEye.
 
 ## What's included
 

@@ -2,7 +2,7 @@
   "name": "hawkeye",
   "displayName": "HawkEye",
   "description": "Set up HawkEye monitoring from your codebase: heartbeats for your cron jobs and scheduled tasks, and monitors for your site, its health endpoint, API and email records.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": {
     "name": "HawkEye",
     "url": "https://hawkeye.observer"
@@ -15,5 +15,23 @@
   "repository": "https://github.com/EssenceOfChaos/hawkeye",
   "mcpServers": "./.mcp.json",
   "license": "MIT",
-  "keywords": ["monitoring", "uptime", "cron", "heartbeat", "dns", "ssl", "alerts", "status page"]
+  "keywords": [
+    "monitoring",
+    "uptime",
+    "cron",
+    "heartbeat",
+    "dns",
+    "ssl",
+    "alerts",
+    "status page"
+  ],
+  "userConfig": {
+    "api_key": {
+      "type": "string",
+      "title": "HawkEye API key",
+      "description": "A HawkEye API key with Read and write access (it starts with hk_). Create one at https://hawkeye.observer/api-keys; read and write keys can add monitors on every plan, including Free.",
+      "required": true,
+      "sensitive": true
+    }
+  }
 }

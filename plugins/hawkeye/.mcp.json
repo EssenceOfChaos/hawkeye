@@ -4,7 +4,7 @@
       "type": "http",
       "url": "https://hawkeye.observer/mcp",
       "headers": {
-        "Authorization": "Bearer ${HAWKEYE_API_KEY}"
+        "Authorization": "Bearer ${user_config.api_key}"
       }
     }
   }
