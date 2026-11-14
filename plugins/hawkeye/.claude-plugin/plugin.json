@@ -2,7 +2,7 @@
   "name": "hawkeye",
   "displayName": "HawkEye",
   "description": "Set up HawkEye monitoring from your codebase: heartbeats for your cron jobs and scheduled tasks, and monitors for your site, its health endpoint, API and email records.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": {
     "name": "HawkEye",
     "url": "https://hawkeye.observer"
@@ -10,6 +10,7 @@
   "icon": "./assets/icon.png",
   "homepage": "https://hawkeye.observer/docs/claude",
   "documentationUrl": "https://hawkeye.observer/docs/claude",
+  "supportUrl": "https://hawkeye.observer/contact",
   "privacyPolicyUrl": "https://hawkeye.observer/privacy",
   "termsOfServiceUrl": "https://hawkeye.observer/terms",
   "repository": "https://github.com/EssenceOfChaos/hawkeye",
