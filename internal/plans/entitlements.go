@@ -23,6 +23,7 @@ const (
 	LimitAPIWrite       = "api_write"
 	LimitWorkflows      = "workflows"
 	LimitWorkflowSteps  = "workflow_steps"
+	LimitAIDrafts       = "ai_drafts"
 )
 
 // LimitError is returned when an operation exceeds the organization's plan.
@@ -83,6 +84,8 @@ func (e *LimitError) Message() string {
 		return fmt.Sprintf("Your %s plan includes up to %d multi-step API check%s and all of them are in use.", e.Plan.Name, e.Limit, map[bool]string{true: "", false: "s"}[e.Limit == 1])
 	case LimitWorkflowSteps:
 		return fmt.Sprintf("Your %s plan allows up to %d steps in a multi-step API check.", e.Plan.Name, e.Limit)
+	case LimitAIDrafts:
+		return fmt.Sprintf("AI-drafted incident updates are not included in your %s plan. Upgrade to have a first draft written for you.", e.Plan.Name)
 	case LimitMaintenance:
 		return fmt.Sprintf("Maintenance windows are not included in your %s plan. Upgrade to silence alerts during planned work.", e.Plan.Name)
 	case LimitReports:
@@ -142,6 +145,19 @@ func (s *Service) CanUseMaintenance(ctx context.Context, db DB, orgID uuid.UUID)
 	}
 	if !p.MaintenanceEnabled {
 		return s.limitError(ctx, db, LimitMaintenance, 0, 0, p)
+	}
+	return nil
+}
+
+// CanUseAIDrafts returns a *LimitError when the plan does not include AI-drafted incident updates. It guards turning them on and every draft, so a
+// downgrade stops them at once.
+func (s *Service) CanUseAIDrafts(ctx context.Context, db DB, orgID uuid.UUID) error {
+	p, err := EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	if !p.AIDraftsEnabled {
+		return s.limitError(ctx, db, LimitAIDrafts, 0, 0, p)
 	}
 	return nil
 }

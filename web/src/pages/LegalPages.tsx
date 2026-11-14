@@ -28,7 +28,7 @@ const SUPPORT = 'customer_support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 12, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 13, 2026</p>
       <p>
         HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -214,6 +214,7 @@ export function PrivacyPage() {
         <li><strong>Google (Gmail)</strong>: the mailbox where we read and answer support messages.</li>
         <li><strong>Sentry</strong>: error tracking. When something unexpected goes wrong in our software, a technical error report is sent from our servers to Sentry so we can find and fix the problem. A report contains the error message, the software version and the part of the service that failed, and may include technical identifiers or a web address that appeared in the error. We remove email addresses, passwords, tokens and keys from it before it leaves our servers, and we do not send request contents, cookies, or the names of the people using the Service.</li>
         <li><strong>Google (Analytics and Ads)</strong>: website usage analytics and measurement of our own advertising, unless you opt out, as described in Section 2.C and E. Google receives page addresses without query strings or fragments, your IP address, browser and device information, and, when a payment is confirmed, a purchase event with the price paid.</li>
+        <li><strong>Anthropic</strong>: AI-drafted incident updates, only for organizations whose owner turns them on (Pro and Agency). When the owner asks for a draft, we send Anthropic’s Claude model the incident’s details: the monitor’s name and kind, when the incident started and ended, the kind of failure and its summary, HTTP status codes, the locations of failed checks, and the updates already posted. We never send the monitored address, request settings, credentials, or response content, and we do not store the drafts. Anthropic processes this to return the draft and does not use it to train its models under its commercial terms.</li>
         <li><strong>OpenAI (Ads measurement)</strong>: measurement of our own advertising in ChatGPT, unless you opt out, as described in Section 2.C and E. OpenAI receives page addresses that contain no personal information, page-view and sign-up events, your IP address, browser and device information, and, when a payment is confirmed, a subscription event with the plan and the price paid.</li>
       </ul>
       <p>

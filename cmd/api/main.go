@@ -31,6 +31,7 @@ import (
 	"hawkeye/internal/healthcheck"
 	"hawkeye/internal/heartbeats"
 	"hawkeye/internal/httpapi"
+	"hawkeye/internal/incidentdraft"
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/invitations"
 	"hawkeye/internal/lifecycle"
@@ -162,6 +163,7 @@ func run() error {
 		SiteCheck: freeTools.site,
 		// "Set up from your domain" is for signed-in customers, so it stays on when the public free tools are turned off.
 		Discovery: discovery.New(safehttp.Config{}),
+		Drafts:    newDrafts(cfg.AnthropicAPIKey, log),
 		APITokens: apiTokens,
 		TwoFactor: twoFactorSvc,
 		OAuth:     oauthSvc,
@@ -277,4 +279,13 @@ func newFreeTools(enabled bool, log *slog.Logger) freeToolSet {
 	}
 	// The zero safehttp.Config is the strict production destination policy: public addresses only, ports 80 and 443.
 	return freeToolSet{ssl: sslcheck.New(safehttp.Config{}), site: sitecheck.New(safehttp.Config{})}
+}
+
+// newDrafts returns the AI incident-update drafter, or nil (the feature off, and the app says so) when no Anthropic API key is set.
+func newDrafts(key string, log *slog.Logger) *incidentdraft.Service {
+	if key == "" {
+		log.Info("AI-drafted incident updates are off: ANTHROPIC_API_KEY is not set")
+		return nil
+	}
+	return incidentdraft.New(key)
 }

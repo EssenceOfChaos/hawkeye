@@ -77,6 +77,7 @@ export const sentences: Record<string, (e: LogEvent) => string> = {
   'organization.ownership_transferred': (e) => `Made ${plain(e)} the owner`,
   'organization.two_factor_requirement_changed': (e) =>
     e.details.required ? 'Required two-factor sign-in for everyone in the organization' : 'Stopped requiring two-factor sign-in',
+  'organization.ai_drafts_changed': (e) => (e.details.enabled ? 'Turned on AI-drafted incident updates' : 'Turned off AI-drafted incident updates'),
   'billing.subscription_canceled': () => 'Canceled the subscription',
   'member.invited': (e) => `Invited ${plain(e)} to the team`,
   'member.invitation_resent': (e) => `Sent the invitation to ${plain(e)} again`,

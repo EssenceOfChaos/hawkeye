@@ -24,6 +24,7 @@ import (
 	"hawkeye/internal/domains"
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/heartbeats"
+	"hawkeye/internal/incidentdraft"
 	"hawkeye/internal/invitations"
 	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/maintenance"
@@ -69,17 +70,18 @@ type Options struct {
 	Billing       *billing.Service
 	Account       *account.Service
 	Contact       *contact.Service
-	Invitations   *invitations.Service // team invitations; nil turns those endpoints off
-	Lifecycle     *lifecycle.Service   // unsubscribe from onboarding emails; nil turns the endpoint off
-	Branding      *branding.Service    // report branding and PDF reports; nil turns those endpoints off
-	SSLCheck      *sslcheck.Service    // free SSL checker; nil turns the endpoint off
-	SiteCheck     *sitecheck.Service   // free website status checker; nil turns the endpoint off
-	Discovery     *discovery.Service   // "set up from your domain" monitor suggestions; nil turns the endpoint off
-	APITokens     *apitokens.Service   // API keys; nil makes key requests answer 503 (DISABLE_API_KEYS) and sessions work as before
-	TwoFactor     *twofactor.Service   // two-factor sign-in settings and organization requirements
-	OAuth         *oauth.Service       // OAuth for the MCP server (connecting Claude); nil turns it off
-	Waitlist      *waitlist.Service    // "Get notified" waitlists for coming-soon features; nil turns them off
-	Audit         *audit.Recorder      // the security log; nil records nothing and turns its pages off
+	Invitations   *invitations.Service   // team invitations; nil turns those endpoints off
+	Lifecycle     *lifecycle.Service     // unsubscribe from onboarding emails; nil turns the endpoint off
+	Branding      *branding.Service      // report branding and PDF reports; nil turns those endpoints off
+	SSLCheck      *sslcheck.Service      // free SSL checker; nil turns the endpoint off
+	SiteCheck     *sitecheck.Service     // free website status checker; nil turns the endpoint off
+	Discovery     *discovery.Service     // "set up from your domain" monitor suggestions; nil turns the endpoint off
+	Drafts        *incidentdraft.Service // AI-drafted incident updates; nil (no ANTHROPIC_API_KEY) turns them off
+	APITokens     *apitokens.Service     // API keys; nil makes key requests answer 503 (DISABLE_API_KEYS) and sessions work as before
+	TwoFactor     *twofactor.Service     // two-factor sign-in settings and organization requirements
+	OAuth         *oauth.Service         // OAuth for the MCP server (connecting Claude); nil turns it off
+	Waitlist      *waitlist.Service      // "Get notified" waitlists for coming-soon features; nil turns them off
+	Audit         *audit.Recorder        // the security log; nil records nothing and turns its pages off
 	// WorkflowChecker runs test runs of multi-step API checks (POST /monitors/test-workflow); nil turns that endpoint off.
 	WorkflowChecker *checks.Checker
 	AppBaseURL      string   // public address of the app (status page and ping addresses in MCP tool results)
@@ -197,7 +199,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, discovery: o.Discovery, log: o.Logger, secureCookies: o.SecureCookies,
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, discovery: o.Discovery, drafts: o.Drafts, log: o.Logger, secureCookies: o.SecureCookies,
 		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, workflowChecker: o.WorkflowChecker, tokenRoutes: map[string]bool{}}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
@@ -420,6 +422,15 @@ func registerAPI(e *echo.Echo, o Options) {
 	api.GET("/incidents/:incidentID/updates", h.listIncidentUpdates)
 	api.POST("/incidents/:incidentID/updates", h.postIncidentUpdate, requireOwner, limit("incident-update"))
 	api.DELETE("/incidents/:incidentID/updates/:updateID", h.deleteIncidentUpdate, requireOwner)
+	// AI-drafted updates: session only (a draft is for a person to edit), the owner (as for posting), and a per-organization budget, since each draft
+	// is a paid model call.
+	scoped.GET("/ai-drafts", h.aiDrafts)
+	scoped.PUT("/ai-drafts", h.setAIDrafts, requireOwner)
+	draftLimits := []echo.MiddlewareFunc{requireOwner, limit("incident-draft")}
+	if h.limits.l != nil {
+		draftLimits = append(draftLimits, h.limits.by("incident-draft:org", 60, time.Hour, func(c *echo.Context) string { return currentOrg(c).String() }))
+	}
+	scoped.POST("/incidents/:incidentID/updates/draft", h.draftIncidentUpdate, draftLimits...)
 
 	// Billing: any member can see the plan; changes need the owner and a verified email.
 	api.GET("/billing/subscription", h.billingSubscription)

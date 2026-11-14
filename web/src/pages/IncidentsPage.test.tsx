@@ -17,7 +17,7 @@ const incident = (o: object) => ({
 
 type Call = { method: string; url: string; body?: unknown }
 
-function renderPage(list: unknown[], o: { role?: 'owner' | 'member'; pages?: unknown[]; updates?: unknown[] } = {}) {
+function renderPage(list: unknown[], o: { role?: 'owner' | 'member'; pages?: unknown[]; updates?: unknown[]; aiDrafts?: { available: boolean; included: boolean; enabled: boolean } } = {}) {
   const calls: Call[] = []
   let updates = o.updates ?? []
   document.cookie = 'csrf_token=t; path=/'
@@ -28,6 +28,11 @@ function renderPage(list: unknown[], o: { role?: 'owner' | 'member'; pages?: unk
     if (url.includes('/auth/me')) {
       return json(200, { user: { id: 'u', email: 'me@example.com', email_verified_at: '2026-01-01T00:00:00Z' }, organizations: [{ id: 'o', name: 'Org', role: o.role ?? 'owner' }] })
     }
+    if (url.endsWith('/ai-drafts')) {
+      const state = { model: 'Claude Haiku 5.5 by Anthropic', ...(o.aiDrafts ?? { available: false, included: false, enabled: false }) }
+      return json(200, method === 'PUT' ? { ...state, enabled: body.enabled } : state)
+    }
+    if (url.endsWith('/updates/draft')) return json(200, { message: `Draft for ${body.status}.` })
     if (url.includes('/updates')) {
       if (method === 'POST') {
         const u = { id: `u${updates.length + 1}`, incident_id: 'i1', status: body.status, message: body.message, author_email: 'me@example.com', created_at: '2026-10-12T15:00:00Z' }
@@ -75,6 +80,31 @@ describe('IncidentsPage', () => {
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ status: 'investigating', message: 'We are looking into it.' })
     expect(screen.getByLabelText('Status')).toHaveValue('identified')
     expect(screen.getByRole('button', { name: '1 update' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('fills in a draft for the chosen status, for the owner to edit and post', async () => {
+    const calls = renderPage([incident({ update_count: 0 })], { aiDrafts: { available: true, included: true, enabled: true } })
+    await userEvent.click(await screen.findByRole('button', { name: 'Add update' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Draft with AI' }))
+    expect(screen.getByLabelText('Update')).toHaveValue('Draft for investigating.')
+    expect(screen.getByText(/Written by AI from this incident’s details/)).toBeInTheDocument()
+    expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/updates'))).toBe(false) // nothing posted until the owner posts it
+  })
+
+  it('offers drafts only once the owner turns them on, and says what is sent', async () => {
+    const calls = renderPage([incident({ update_count: 0 })], { aiDrafts: { available: true, included: true, enabled: false } })
+    await userEvent.click(await screen.findByRole('button', { name: 'Add update' }))
+    expect(await screen.findByLabelText('Update')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Draft with AI' })).not.toBeInTheDocument()
+    expect(screen.getByText(/Never the monitor’s address/)).toBeInTheDocument()
+    await userEvent.click(screen.getByLabelText('Draft incident updates with AI'))
+    expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ enabled: true })
+    expect(await screen.findByRole('button', { name: 'Draft with AI' })).toBeInTheDocument()
+  })
+
+  it('points Free plans at the plans that include drafts', async () => {
+    renderPage([incident({})], { aiDrafts: { available: true, included: false, enabled: false } })
+    expect(await screen.findByText(/On Pro and Agency, HawkEye can write a first draft/)).toBeInTheDocument()
   })
 
   it('warns when no published status page shows the incident', async () => {

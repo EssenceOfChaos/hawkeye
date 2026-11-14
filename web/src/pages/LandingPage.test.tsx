@@ -161,7 +161,7 @@ describe('LandingPage', () => {
     expect(screen.getAllByText('SSL certificate expiry warnings')).toHaveLength(plans.length)
     expect(screen.getAllByText('Website and API monitoring').length).toBeGreaterThanOrEqual(plans.length)
     expect(screen.getByText(/Every plan includes website and API monitoring/)).toBeInTheDocument()
-    expect(screen.getByText(/Paid plans add more monitors, faster checks, longer history.*maintenance windows, more multi-step API checks, monthly PDF uptime reports and API keys that can make changes/)).toBeInTheDocument()
+    expect(screen.getByText(/Paid plans add more monitors, faster checks, longer history.*maintenance windows, more multi-step API checks, monthly PDF uptime reports, AI-drafted incident updates and API keys that can make every change/)).toBeInTheDocument()
     expect(screen.getByText('Where can HawkEye send alerts?')).toBeInTheDocument()
     expect(screen.getByText('Does HawkEye warn me before my SSL certificate expires?')).toBeInTheDocument()
     expect(screen.getByText(/Can I monitor an API\?/)).toBeInTheDocument()

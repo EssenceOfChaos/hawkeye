@@ -18,6 +18,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 - Alerts by email, Slack, Microsoft Teams, Discord or Telegram, or signed JSON webhook, routed per client by tag, with optional alert delays and quiet hours per monitor.
 - Public status pages for your customers: one on the Free plan, several on paid plans (one per client or product), with incident updates you post while you work on a problem.
 - Maintenance windows that pause alerts during planned work (paid plans).
+- AI-drafted incident updates (paid plans, off until the owner turns them on): a "Draft with AI" button writes a first draft of a status page update from the incident's details (never the monitor's address or response content) with Claude Haiku 5.5 by Anthropic; nothing is posted until the owner edits and posts it.
 - SSL certificate expiry warnings 30, 14, 7 and 1 days before expiry, on every plan.
 - Domain registration expiry warnings on the same schedule, for a number of domains that depends on the plan. Some domain registries do not publish expiry dates; HawkEye says so rather than guessing.
 - Checks from several locations on paid plans, where offered.
