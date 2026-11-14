@@ -38,7 +38,7 @@ type pdEvent struct {
 	DedupKey    string `json:"dedup_key"`
 	Payload     *struct {
 		Summary, Source, Severity, Class, Component, Timestamp string
-		CustomDetails map[string]string `json:"custom_details"`
+		CustomDetails                                          map[string]string `json:"custom_details"`
 	}
 	Links []struct{ Href, Text string }
 }
