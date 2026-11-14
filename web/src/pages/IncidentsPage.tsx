@@ -1,10 +1,13 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, type Incident } from '../api'
+import { useLatestRequest } from '../hooks'
+import { formatDuration } from '../format'
 import { Alert } from '../components/Alert'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
-import { AIDraftsSetting, useAIDrafts } from '../components/AIDrafts'
+import { AIDraftsSetting } from '../components/AIDrafts'
+import { useAIDrafts } from '../useAIDrafts'
 import { IncidentUpdates } from '../components/IncidentUpdates'
 import { useAuth } from '../auth'
 
@@ -19,15 +22,6 @@ function StartedAt({ iso }: { iso: string }) {
 }
 
 const PAGE_SIZE = 25
-
-export function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
-  const m = Math.floor(seconds / 60)
-  if (m < 60) return `${m}m`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ${m % 60}m`
-  return `${Math.floor(h / 24)}d ${h % 24}h`
-}
 
 const CAUSES: Record<string, string> = {
   dns: 'DNS lookup failed',
@@ -62,20 +56,24 @@ export function IncidentsPage() {
   const isOwner = organization?.role === 'owner'
   const [drafts, setDrafts] = useAIDrafts()
 
+  const startRequest = useLatestRequest()
   const load = useCallback(async () => {
+    const current = startRequest()
     try {
       const q = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
       if (filter) q.set('status', filter)
       const r = await api<{ incidents: Incident[]; total: number }>('GET', `/incidents?${q}`)
+      if (!current()) return // a newer filter or page has been asked for
       setItems(r.incidents)
       setTotal(r.total)
       setError(null)
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not load incidents.')
+      if (current()) setError(e instanceof ApiError ? e.message : 'Could not load incidents.')
     }
-  }, [offset, filter])
+  }, [offset, filter, startRequest])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- load() sets state only after its request returns, never synchronously
     void load()
   }, [load])
 

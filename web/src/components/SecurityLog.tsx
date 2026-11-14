@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError } from '../api'
+import { useLatestRequest } from '../hooks'
 import { Alert } from './Alert'
 import { categoryNames, describe, device, who, type LogEvent, type LogPage } from '../securityLog'
 
@@ -18,29 +19,33 @@ export function SecurityLog({ path, pageSize = 50, caption }: { path: string; pa
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  const startRequest = useLatestRequest()
   const load = useCallback(
     async (before: number | null) => {
+      const current = startRequest()
       setBusy(true)
       try {
         const q = new URLSearchParams({ limit: String(pageSize) })
         if (before) q.set('before', String(before))
         if (category) q.set('category', category)
         const r = await api<LogPage>('GET', `${path}?${q}`)
+        if (!current()) return // the category changed: this page belongs to the old list
         setEvents((prev) => (before && prev ? [...prev, ...r.events] : r.events))
         setNext(r.next_before)
         setCategories(r.categories)
         setDays(r.retention_days)
         setError(null)
       } catch (e) {
-        setError(e instanceof ApiError ? e.message : 'Could not load the security log.')
+        if (current()) setError(e instanceof ApiError ? e.message : 'Could not load the security log.')
       } finally {
-        setBusy(false)
+        if (current()) setBusy(false)
       }
     },
-    [path, pageSize, category],
+    [path, pageSize, category, startRequest],
   )
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- load() only sets busy synchronously (to show loading); its data arrives after the request returns
     void load(null)
   }, [load])
 

@@ -1,28 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, pingURL, type HeartbeatPing, type Monitor } from '../api'
-import { formatDateTime } from '../format'
+import { DURATION_UNITS, durationUnitFor, formatDateTime } from '../format'
+import { pingExamples } from '../pingExamples'
 import { Alert } from './Alert'
 import { CopyField } from './BadgeCard'
-
-const UNITS = [
-  { value: 86400, label: 'days' },
-  { value: 3600, label: 'hours' },
-  { value: 60, label: 'minutes' },
-] as const
-
-/** The largest unit that divides a duration evenly, so 86400 is shown as 1 day rather than 1440 minutes. */
-function unitFor(seconds: number): number {
-  return UNITS.find((u) => seconds % u.value === 0)?.value ?? 60
-}
-
-/** A duration in words: "5 minutes", "1 hour", "2 days". */
-export function formatPeriod(seconds: number): string {
-  const unit = unitFor(seconds)
-  const n = Math.round(seconds / unit)
-  const word = unit === 86400 ? 'day' : unit === 3600 ? 'hour' : 'minute'
-  return `${n} ${word}${n === 1 ? '' : 's'}`
-}
 
 /** A number and a unit (minutes, hours or days), reported to the parent in seconds. */
 export function DurationField({ id, label, seconds, onChange, error, hint }: {
@@ -33,8 +15,8 @@ export function DurationField({ id, label, seconds, onChange, error, hint }: {
   error?: string
   hint?: string
 }) {
-  const [unit, setUnit] = useState(() => unitFor(seconds))
-  const [text, setText] = useState(() => String(seconds / unitFor(seconds)))
+  const [unit, setUnit] = useState(() => durationUnitFor(seconds))
+  const [text, setText] = useState(() => String(seconds / durationUnitFor(seconds)))
   const report = (t: string, u: number) => {
     const n = Number(t)
     if (t !== '' && Number.isFinite(n) && n > 0) onChange(Math.round(n * u))
@@ -46,23 +28,13 @@ export function DurationField({ id, label, seconds, onChange, error, hint }: {
         <input id={id} type="number" min={1} step="any" required value={text} aria-invalid={error ? true : undefined}
           onChange={(e) => { setText(e.target.value); report(e.target.value, unit) }} />
         <select aria-label={`${label}: unit`} value={unit} onChange={(e) => { const u = Number(e.target.value); setUnit(u); report(text, u) }}>
-          {UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+          {DURATION_UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
         </select>
       </div>
       {error && <small className="error">{error}</small>}
       {hint && <small className="hint">{hint}</small>}
     </div>
   )
-}
-
-/** Ready-to-paste ways of pinging, for the common kinds of scheduled job. */
-export function pingExamples(url: string): { label: string; code: string }[] {
-  return [
-    { label: 'Crontab line', code: `0 2 * * * /usr/local/bin/backup.sh && curl -fsS -m 10 --retry 5 -o /dev/null ${url}` },
-    { label: 'Report failures too (exit status)', code: `0 2 * * * /usr/local/bin/backup.sh; curl -fsS -m 10 --retry 5 -o /dev/null ${url}/$?` },
-    { label: 'End of a shell script', code: `curl -fsS -m 10 --retry 5 -o /dev/null ${url}` },
-    { label: 'Windows PowerShell', code: `Invoke-RestMethod -Uri "${url}" -TimeoutSec 10` },
-  ]
 }
 
 /**

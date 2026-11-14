@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider, useAuth } from './auth'
+import { AuthProvider } from './AuthProvider'
+import { useAuth } from './auth'
 import { addressIsShareable, safeLocation, setChoice } from './analytics'
 import { attributionForSignup, campaignFrom, rememberArrival } from './attribution'
 

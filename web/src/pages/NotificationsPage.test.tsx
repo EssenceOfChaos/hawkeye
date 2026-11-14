@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider } from '../auth'
+import { AuthProvider } from '../AuthProvider'
 import { NotificationsPage } from './NotificationsPage'
 
 afterEach(() => vi.unstubAllGlobals())

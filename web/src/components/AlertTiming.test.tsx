@@ -2,7 +2,8 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
 import type { QuietHours } from '../api'
-import { AlertTiming, localTimeZone } from './AlertTiming'
+import { localTimeZone } from '../format'
+import { AlertTiming } from './AlertTiming'
 
 function Harness({ initialDelay = 0, initialQuiet = null as QuietHours | null, onChange = (_d: number, _q: QuietHours | null) => {} }) {
   const [delay, setDelay] = useState(initialDelay)

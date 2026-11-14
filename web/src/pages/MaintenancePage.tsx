@@ -66,6 +66,7 @@ export function MaintenancePage() {
   }, [])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- load() sets state only after its request returns, never synchronously
     void load()
   }, [load])
 

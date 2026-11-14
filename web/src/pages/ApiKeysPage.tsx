@@ -74,6 +74,7 @@ export function ApiKeysPage() {
   }, [])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- load() sets state only after its request returns, never synchronously
     void load()
   }, [load])
 
@@ -249,6 +250,7 @@ function ConnectedApps({ isOwner }: { isOwner: boolean }) {
   }, [])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- load() sets state only after its request returns, never synchronously
     void load()
   }, [load])
 

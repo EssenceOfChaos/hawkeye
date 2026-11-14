@@ -1,15 +1,6 @@
 import { Link } from 'react-router'
 import type { DomainAlert, TrackedDomain } from '../api'
-
-const DAY = 86_400_000
-
-/** "42 days", "Under a day", "Expired" for a domain's remaining time. */
-export function domainLeft(expiresAt: string, now = Date.now()): string {
-  const left = new Date(expiresAt).getTime() - now
-  if (left <= 0) return 'Expired'
-  const days = Math.floor(left / DAY)
-  return days >= 1 ? `${days} day${days === 1 ? '' : 's'}` : 'Under a day'
-}
+import { domainLeft } from '../format'
 
 /** A domain's state as a badge. Domains with no known expiry say so in words: "Expiry unavailable" is not a warning. */
 export function DomainBadge({ domain }: { domain: Pick<TrackedDomain, 'status' | 'tracked' | 'expires_at'> }) {

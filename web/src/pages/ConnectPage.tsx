@@ -4,6 +4,7 @@ import { api, ApiError } from '../api'
 import { Alert } from '../components/Alert'
 import { BrandMark } from '../components/Brand'
 import { Field } from '../components/Field'
+import { leave } from '../navigation'
 
 interface ConsentOrganization {
   id: string
@@ -25,9 +26,6 @@ interface ConsentInfo {
   /** That address is on this computer only: any program could be listening there. */
   redirect_loopback?: boolean
 }
-
-/** Sends the browser to the app that asked (its registered redirect address, checked by the server). Kept apart so tests can watch it. */
-export const leave = { to: (url: string) => window.location.assign(url) }
 
 /**
  * The consent page for connecting an app (such as Claude) through OAuth: /oauth/authorize sends people here with the request's parameters. They see

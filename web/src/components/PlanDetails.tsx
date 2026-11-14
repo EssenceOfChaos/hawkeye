@@ -1,12 +1,6 @@
 import { type BillingInterval, type Plan } from '../api'
 import { formatMoney } from '../format'
-import { planTagline } from '../planCopy'
-
-/** Whole months a year paid at once saves against twelve monthly payments (2 for "two months free"); 0 when it saves nothing or is not sold yearly. */
-export function monthsFree(plan: Plan): number {
-  if (!plan.annual_price_cents || plan.monthly_price_cents <= 0) return 0
-  return Math.max(0, Math.round((plan.monthly_price_cents * 12 - plan.annual_price_cents) / plan.monthly_price_cents))
-}
+import { monthsFree, planTagline } from '../planCopy'
 
 /**
  * Monthly or yearly prices on the pricing cards. Only shown when the server offers yearly billing. The saving named on the yearly option is the

@@ -2,8 +2,9 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider } from '../auth'
-import { formatDuration, IncidentsPage } from './IncidentsPage'
+import { AuthProvider } from '../AuthProvider'
+import { formatDuration } from '../format'
+import { IncidentsPage } from './IncidentsPage'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -134,5 +135,27 @@ describe('formatDuration', () => {
     expect(formatDuration(300)).toBe('5m')
     expect(formatDuration(7500)).toBe('2h 5m')
     expect(formatDuration(90000)).toBe('1d 1h')
+  })
+
+  it('never lets a slow, older response replace the list for a newer filter', async () => {
+    let releaseAll: () => void = () => {}
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('/auth/me')) {
+        return json(200, { user: { id: 'u', email: 'me@example.com', email_verified_at: '2026-01-01T00:00:00Z' }, organizations: [{ id: 'o', name: 'Org', role: 'owner' }] })
+      }
+      if (url.endsWith('/ai-drafts')) return json(200, { available: false, included: false, enabled: false, model: '' })
+      if (url.includes('status=resolved')) return json(200, { incidents: [incident({ id: 'r', status: 'resolved', resolved_at: '2026-10-12T15:00:00Z', summary: 'Resolved one' })], total: 1 })
+      // The unfiltered list is slow: it answers only after the filtered one has arrived.
+      return new Promise<Response>((resolve) => {
+        releaseAll = () => void json(200, { incidents: [incident({ summary: 'Stale unfiltered one' })], total: 1 }).then(resolve)
+      })
+    }))
+    render(<MemoryRouter><AuthProvider><IncidentsPage /></AuthProvider></MemoryRouter>)
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: /Show/ }), 'resolved')
+    expect(await screen.findByText('Resolved one')).toBeInTheDocument()
+    releaseAll()
+    await new Promise((r) => setTimeout(r, 20))
+    expect(screen.queryByText('Stale unfiltered one')).toBeNull()
+    expect(screen.getByText('Resolved one')).toBeInTheDocument()
   })
 })

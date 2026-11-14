@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { RangeInfo, SeriesPoint, Uptime } from '../api'
 import { RangePicker } from './RangePicker'
-import { ResponseChart, withGaps } from './ResponseChart'
+import { withGaps } from '../chartData'
+import { ResponseChart } from './ResponseChart'
 import { UptimeHero } from './Uptime'
 
 const uptime = (o: Partial<Uptime> = {}): Uptime => ({

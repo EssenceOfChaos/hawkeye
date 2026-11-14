@@ -1,5 +1,18 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { api, ApiError, type Plan } from './api'
+
+/**
+ * For a load that can start again before the last one finishes (a filter, search or page changes while a request is in flight). Call the returned
+ * function at the start of each load, and check what it gives back after every await: only the newest load may set state, so a slow, older response
+ * never replaces a newer one.
+ */
+export function useLatestRequest(): () => () => boolean {
+  const seq = useRef(0)
+  return useCallback(() => {
+    const id = ++seq.current
+    return () => id === seq.current
+  }, [])
+}
 
 /**
  * Closes a menu or popover: calls `onClose` when the person presses Escape (`viaKeyboard` is true, so the caller can return focus to the button that opened
@@ -42,6 +55,7 @@ export function useApi<T>(path: string | null): State<T> {
   useEffect(() => {
     if (path === null) return
     const id = ++seq.current
+    // oxlint-disable-next-line react/set-state-in-effect -- deliberate: marks the previous data as loading the moment the path changes, so charts dim instead of flashing
     setState((s) => ({ ...s, loading: true }))
     api<T>('GET', path)
       .then((data) => {

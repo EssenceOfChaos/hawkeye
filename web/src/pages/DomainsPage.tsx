@@ -5,7 +5,8 @@ import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
-import { DomainBadge, domainLeft } from '../components/Domains'
+import { DomainBadge } from '../components/Domains'
+import { domainLeft } from '../format'
 import { Field } from '../components/Field'
 
 const day = (iso: string) => new Date(iso).toLocaleDateString([], { dateStyle: 'medium' })
@@ -51,6 +52,7 @@ export function DomainsPage() {
   }, [])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- load() sets state only after its request returns, never synchronously
     void load()
   }, [load])
 

@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider } from '../auth'
+import { AuthProvider } from '../AuthProvider'
 import { Layout } from './Layout'
 vi.mock('../analytics', async (orig) => ({ ...(await orig<typeof import('../analytics')>()), trackPurchase: vi.fn() }))
 import { trackPurchase } from '../analytics'

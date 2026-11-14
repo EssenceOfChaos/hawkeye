@@ -13,6 +13,9 @@ import { PlanCard } from './LandingPage'
 // The campaign landing page (/monitoring) for paid ads: one message, one call to action, no site navigation. The copy follows the claims on the home page
 // and may only say what the product does today. It is kept out of search results (it repeats the home page); its title and noindex tag come from the page map in src/seo.ts.
 
+// The copyright year, worked out once when the page loads rather than on every render (render code must not read the clock).
+const year = new Date().getFullYear()
+
 const BENEFITS = [
   { icon: brand.icons.websites, title: 'Uptime monitoring', text: 'Know when a website or API stops responding.' },
   { icon: brand.icons.responseTime, title: 'Response-time tracking', text: 'Spot slowdowns early and review trends over time.' },
@@ -150,7 +153,7 @@ export function MonitoringLandingPage() {
       </section>
 
       <footer className="mon-footer">
-        <span>© {new Date().getFullYear()} HawkEye</span>
+        <span>© {year} HawkEye</span>
         <nav aria-label="Legal">
           <Link to="/privacy">Privacy policy</Link>
           <Link to="/terms">Terms of service</Link>

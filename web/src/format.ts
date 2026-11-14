@@ -81,3 +81,55 @@ export function formatMoney(cents: number): string {
   const whole = cents % 100 === 0
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 }).format(cents / 100)
 }
+
+/** The visitor's own time zone, the default for new quiet hours. */
+export function localTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch {
+    return 'UTC'
+  }
+}
+
+/** "42 days", "Under a day", "Expired" for a domain's remaining time. */
+export function domainLeft(expiresAt: string, now = Date.now()): string {
+  const left = new Date(expiresAt).getTime() - now
+  if (left <= 0) return 'Expired'
+  const days = Math.floor(left / DAY)
+  return days >= 1 ? `${days} day${days === 1 ? '' : 's'}` : 'Under a day'
+}
+
+const DAY = 86_400_000
+
+
+export function certTone(msLeft: number): 'ok' | 'soon' | 'expired' {
+  return msLeft <= 0 ? 'expired' : msLeft <= 30 * DAY ? 'soon' : 'ok'
+}
+
+export function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  const m = Math.floor(seconds / 60)
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ${m % 60}m`
+  return `${Math.floor(h / 24)}d ${h % 24}h`
+}
+
+export const DURATION_UNITS = [
+  { value: 86400, label: 'days' },
+  { value: 3600, label: 'hours' },
+  { value: 60, label: 'minutes' },
+] as const
+
+/** The largest unit that divides a duration evenly, so 86400 is shown as 1 day rather than 1440 minutes. */
+export function durationUnitFor(seconds: number): number {
+  return DURATION_UNITS.find((u) => seconds % u.value === 0)?.value ?? 60
+}
+
+/** A duration in words: "5 minutes", "1 hour", "2 days". */
+export function formatPeriod(seconds: number): string {
+  const unit = durationUnitFor(seconds)
+  const n = Math.round(seconds / unit)
+  const word = unit === 86400 ? 'day' : unit === 3600 ? 'hour' : 'minute'
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}

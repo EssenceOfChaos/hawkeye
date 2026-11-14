@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { RangeInfo, SeriesPoint } from '../api'
+import { withGaps, type Datum } from '../chartData'
 import { formatDateTime, formatMs } from '../format'
 
 interface Props {
@@ -10,27 +11,6 @@ interface Props {
   range: RangeInfo
   /** True while a refetch is in flight: the previous chart stays visible, dimmed. */
   loading?: boolean
-}
-
-interface Datum {
-  t: number
-  avg: number | null
-  max: number | null
-  checks: number
-  failed: number
-}
-
-/** Insert empty points where whole buckets are missing so the line breaks instead of bridging gaps. */
-export function withGaps(points: SeriesPoint[], bucketSeconds: number): Datum[] {
-  const out: Datum[] = []
-  const step = bucketSeconds * 1000
-  points.forEach((p, i) => {
-    const t = new Date(p.t).getTime()
-    const prev = i > 0 ? new Date(points[i - 1].t).getTime() : null
-    if (prev !== null && t - prev > step * 1.5) out.push({ t: prev + step, avg: null, max: null, checks: 0, failed: 0 })
-    out.push({ t, avg: p.avg_ms, max: p.max_ms, checks: p.checks, failed: p.failed })
-  })
-  return out
 }
 
 function tickFormat(spanMs: number) {
