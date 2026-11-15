@@ -107,6 +107,13 @@ main() {
     docker image prune -f >/dev/null
     echo "== deployed ${TARGET:0:12}: smoke test passed"
     update_regions
+    # Every release builds here, so old images and build cache fill the disk (25GB of cache after a few weeks). Only after a healthy release
+    # (never during a rollback) and after the workers took the running image: remove images no container uses that are over a week old (a
+    # rollback rebuilds from the commit, it does not need them), and trim the build cache to its most recently used 5GB. That keeps the Go
+    # module and compile caches (the --mount=type=cache lines in the Dockerfiles) that keep a release inside the workflow's time limit, so
+    # never `docker builder prune -a` here. A cleanup failure never fails a release that is already live.
+    docker image prune -a -f --filter "until=168h" >/dev/null || echo "!! could not remove old images; the release is fine" >&2
+    docker builder prune -f --keep-storage 5GB >/dev/null || echo "!! could not trim the build cache; the release is fine" >&2
     exit 0
   fi
 

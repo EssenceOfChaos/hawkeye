@@ -140,6 +140,12 @@ HTTP 200; real files (hashed assets, icons, email images) are served as files; e
 2. Build the new images (`docker compose ... build`), run `migrate`, then `up -d` (Compose replaces containers; the worker's leases make in-flight checks safe to interrupt, they are re-run).
 3. Re-run `scripts/smoke.sh`. Watch error rate and `hawkeye_http_panics_total` for 15 minutes.
 
+`scripts/deploy.sh` does all of this, and after a healthy release it also frees disk space: images that no container uses and that are over a week
+old are removed, and Docker's build cache is trimmed to its most recently used 5GB. Images are built on the server, so without this the build cache
+alone grew past 25GB. The 5GB that stays holds the Go module and compile caches, which keep a release inside the deploy workflow's time limit: to
+free space by hand, use `docker builder prune -f --keep-storage 5GB`, never `docker builder prune -a` (the next release would compile everything from
+scratch). `docker system df` shows what is using the disk.
+
 Migrations are **forward-only**. Make every schema change _expand/contract_: release N adds columns/tables that N-1 code ignores; release N+1 removes what nothing reads. This keeps rollback of the application safe.
 
 ## Rollback
