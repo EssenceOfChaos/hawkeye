@@ -49,6 +49,7 @@ import (
 	"hawkeye/internal/sitecheck"
 	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
+	"hawkeye/internal/statuspagedomains"
 	"hawkeye/internal/testutil"
 	"hawkeye/internal/twofactor"
 	"hawkeye/internal/waitlist"
@@ -78,9 +79,10 @@ type envOpts struct {
 	setup     *discovery.Service
 	drafts    *incidentdraft.Service
 	telegram  *notifications.TelegramBot
-	noAPIKeys bool             // DISABLE_API_KEYS
-	oauthPerM int              // OAUTH_TOKEN_RATE_LIMIT_PER_MIN (0: the default)
-	clock     func() time.Time // two-factor codes and grace periods (nil: the real clock)
+	noAPIKeys bool                       // DISABLE_API_KEYS
+	oauthPerM int                        // OAUTH_TOKEN_RATE_LIMIT_PER_MIN (0: the default)
+	clock     func() time.Time           // two-factor codes and grace periods (nil: the real clock)
+	dns       statuspagedomains.Resolver // custom domain lookups (nil: every name is unknown)
 }
 
 func newEnv(t *testing.T, rateLimit int) *env { return newEnvOpts(t, rateLimit, envOpts{}) }
@@ -114,6 +116,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 		Maintenance: maintenance.NewService(pool, planSvc),
 		Domains:     domains.NewService(pool, planSvc),
 		StatusPages: statuspage.NewService(pool, planSvc),
+		PageDomains: statuspagedomains.NewService(pool, planSvc, &statuspagedomains.Verifier{Resolver: dnsOrEmpty(o.dns), Target: "domains.app.test"}, "app.test"),
 		Badges:      badges.NewService(pool),
 		Heartbeats:  heartbeats.NewService(pool, checks.NewStore(pool, heartbeats.Thresholds, incidents.Engine{})),
 		Billing:     billing.NewService(pool, o.provider, o.billingCfg, metrics.New(), log),

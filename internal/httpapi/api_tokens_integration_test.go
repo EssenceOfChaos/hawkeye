@@ -495,7 +495,8 @@ func TestEveryRouteIsClassifiedForAPIKeys(t *testing.T) {
 		"GET /api/v1/regions", "GET /api/v1/monitors/:monitorID/regions",
 		"GET /api/v1/status-pages", "POST /api/v1/status-pages", "GET /api/v1/status-pages/:pageID", "PUT /api/v1/status-pages/:pageID",
 		"DELETE /api/v1/status-pages/:pageID", "GET /api/v1/status-pages/:pageID/logo", "PUT /api/v1/status-pages/:pageID/logo",
-		"DELETE /api/v1/status-pages/:pageID/logo",
+		"DELETE /api/v1/status-pages/:pageID/logo", "GET /api/v1/status-pages/:pageID/domain", "PUT /api/v1/status-pages/:pageID/domain",
+		"POST /api/v1/status-pages/:pageID/domain/check", "DELETE /api/v1/status-pages/:pageID/domain",
 		"GET /api/v1/maintenance-windows", "POST /api/v1/maintenance-windows", "DELETE /api/v1/maintenance-windows/:windowID",
 		"GET /api/v1/domains", "POST /api/v1/domains", "DELETE /api/v1/domains/:domainID",
 		"GET /api/v1/notification-settings/coverage",
@@ -504,7 +505,7 @@ func TestEveryRouteIsClassifiedForAPIKeys(t *testing.T) {
 	publicRoutes := setOf(
 		"POST /api/v1/auth/register", "POST /api/v1/auth/login", "POST /api/v1/auth/login/two-factor", "POST /api/v1/auth/forgot-password", "POST /api/v1/auth/reset-password",
 		"POST /api/v1/auth/verify-email", "POST /api/v1/auth/logout", "GET /api/v1/plans", "GET /api/v1/public/status/:slug",
-		"GET /api/v1/public/status/:slug/logo", "POST /api/v1/tools/ssl-check", "POST /api/v1/tools/site-check", "GET /api/v1/contact/categories",
+		"GET /api/v1/public/status/:slug/logo", "GET /api/v1/public/domain-status", "GET /api/v1/public/domain-status/logo", "POST /api/v1/tools/ssl-check", "POST /api/v1/tools/site-check", "GET /api/v1/contact/categories",
 		"POST /api/v1/contact", "POST /api/v1/waitlist", "POST /api/v1/waitlist/confirm", "POST /api/v1/waitlist/leave", "POST /api/v1/notification-settings/confirm", "POST /api/v1/lifecycle/unsubscribe", "POST /api/v1/invitations/preview",
 		"POST /api/v1/webhooks/stripe",
 	)

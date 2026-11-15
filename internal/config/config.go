@@ -122,6 +122,12 @@ type Config struct {
 	DomainRecheckInterval time.Duration
 	DomainLookupPace      time.Duration
 
+	// Status pages on customers' own domains (internal/statuspagedomains). StatusPageDomainTarget is the name their CNAME records point at; it must
+	// reach this server, unproxied (infra/ makes it a CNAME to the apex). Unset, it is "domains." plus APP_BASE_URL's host (domains.hawkeye.observer). The primary worker re-checks
+	// claimed domains' records (RunStatusPageDomains); a checks-only worker never does.
+	StatusPageDomainTarget string
+	RunStatusPageDomains   bool
+
 	// Onboarding emails to new accounts that have not added a monitor (internal/lifecycle). Off until LifecycleFromAddress is set, so deploying the
 	// code sends nothing before the sender is verified with the email provider and its replies reach a mailbox someone reads.
 	RunLifecycle           bool
@@ -173,6 +179,27 @@ func (c Config) IsProduction() bool { return c.AppEnv == EnvProduction }
 // SecretBox returns the cipher used to protect stored monitor credentials. Outside production a key is derived from SESSION_SECRET when none
 // is set, so a fresh checkout works; production refuses to start without a dedicated key (see validation).
 // Regions returns the configured regions (a single "primary" region when CHECK_REGIONS is empty).
+// DomainTarget is the name customers point their status page domains' CNAME records at: STATUS_PAGE_DOMAIN_TARGET, or "domains." plus
+// APP_BASE_URL's host.
+func (c Config) DomainTarget() string {
+	if t := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(c.StatusPageDomainTarget), ".")); t != "" {
+		return t
+	}
+	host := c.AppBaseURL
+	if u, err := url.Parse(c.AppBaseURL); err == nil && u.Hostname() != "" {
+		host = u.Hostname()
+	}
+	return "domains." + strings.ToLower(host)
+}
+
+// AppHost is APP_BASE_URL's host name: HawkEye's own, which nobody may claim for a status page.
+func (c Config) AppHost() string {
+	if u, err := url.Parse(c.AppBaseURL); err == nil {
+		return strings.ToLower(u.Hostname())
+	}
+	return ""
+}
+
 func (c Config) CanaryURLList() []string {
 	switch strings.ToLower(strings.TrimSpace(c.CanaryURLs)) {
 	case "":
@@ -350,6 +377,9 @@ func load(get func(string) string) (Config, error) {
 		DomainRecheckInterval: duration("DOMAIN_RECHECK_INTERVAL", 24*time.Hour),
 		DomainLookupPace:      duration("DOMAIN_LOOKUP_PACE", 500*time.Millisecond),
 
+		StatusPageDomainTarget: str("STATUS_PAGE_DOMAIN_TARGET", ""),
+		RunStatusPageDomains:   !boolean("DISABLE_STATUS_PAGE_DOMAIN_CHECKS"),
+
 		RunLifecycle:           !boolean("DISABLE_LIFECYCLE_EMAILS"),
 		LifecycleInterval:      duration("LIFECYCLE_INTERVAL", 10*time.Minute),
 		LifecycleFromAddress:   str("LIFECYCLE_FROM_ADDRESS", ""),
@@ -526,6 +556,7 @@ func load(get func(string) string) (Config, error) {
 
 	if c.WorkerChecksOnly {
 		c.RunScheduler, c.RunRetention, c.RunDomainChecks, c.RunLifecycle, c.RunWeeklySummary, c.RunMonthlyReports = false, false, false, false, false, false
+		c.RunStatusPageDomains = false
 	}
 
 	// Production must never fall back to a development secret.

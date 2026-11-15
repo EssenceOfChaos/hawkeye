@@ -24,6 +24,7 @@ const (
 	LimitWorkflows      = "workflows"
 	LimitWorkflowSteps  = "workflow_steps"
 	LimitAIDrafts       = "ai_drafts"
+	LimitPageDomains    = "status_page_domains"
 )
 
 // LimitError is returned when an operation exceeds the organization's plan.
@@ -67,6 +68,11 @@ func (e *LimitError) Message() string {
 			return fmt.Sprintf("Your %s plan includes one status page. Upgrade to give each client or product its own.", e.Plan.Name)
 		}
 		return fmt.Sprintf("Your %s plan includes up to %d status pages and all of them are in use.", e.Plan.Name, e.Limit)
+	case LimitPageDomains:
+		if e.Limit == 0 {
+			return fmt.Sprintf("Status pages on your own domain are not included in your %s plan. Upgrade to serve each client's page at an address on their own domain.", e.Plan.Name)
+		}
+		return fmt.Sprintf("Your %s plan includes up to %d status pages on your own domains and all of them are in use.", e.Plan.Name, e.Limit)
 	case LimitPageBranding:
 		return fmt.Sprintf("A logo, accent color and website link on status pages are not included in your %s plan. Upgrade to give each page its client's look.", e.Plan.Name)
 	case LimitWhiteLabel:
@@ -231,6 +237,24 @@ func (s *Service) CanCreateStatusPage(ctx context.Context, db DB, orgID uuid.UUI
 	}
 	if used >= p.MaxStatusPages {
 		return s.limitError(ctx, db, LimitStatusPages, p.MaxStatusPages, used, p)
+	}
+	return nil
+}
+
+// CanAddStatusPageDomain returns a *LimitError when the plan has no room for another custom domain. exceptPage is the page the domain is for: a
+// domain it already has is about to be replaced, so it does not count. Domains kept after a downgrade keep their state (the serving side decides
+// what is shown); this only guards claiming a new one.
+func (s *Service) CanAddStatusPageDomain(ctx context.Context, db DB, orgID, exceptPage uuid.UUID) error {
+	p, err := EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	var used int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM status_page_domains WHERE organization_id = $1 AND page_id <> $2`, orgID, exceptPage).Scan(&used); err != nil {
+		return err
+	}
+	if used >= p.MaxStatusPageDomains {
+		return s.limitError(ctx, db, LimitPageDomains, p.MaxStatusPageDomains, used, p)
 	}
 	return nil
 }

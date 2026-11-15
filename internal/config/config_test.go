@@ -419,7 +419,7 @@ func TestChecksOnlyWorkerNeedsOnlyTheDatabaseAndTheSecretsKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a checks-only worker should not need email, session or URL settings: %v", err)
 	}
-	if c.RunScheduler || c.RunRetention || c.RunDomainChecks || c.RunLifecycle || c.RunWeeklySummary || c.RunMonthlyReports {
+	if c.RunScheduler || c.RunRetention || c.RunDomainChecks || c.RunLifecycle || c.RunWeeklySummary || c.RunMonthlyReports || c.RunStatusPageDomains {
 		t.Fatalf("every background job must be off on a checks-only worker: %+v", c)
 	}
 	if c.Region() != "eu-central" {
@@ -446,5 +446,23 @@ func TestProductionRulesStillApplyWithoutChecksOnly(t *testing.T) {
 	env["SESSION_SECRET"] = ""
 	if _, err := load(func(k string) string { return env[k] }); err == nil || !strings.Contains(err.Error(), "SESSION_SECRET") {
 		t.Fatalf("expected the session secret to stay required: %v", err)
+	}
+}
+
+func TestStatusPageDomainSettings(t *testing.T) {
+	c, err := load(env(map[string]string{"DATABASE_URL": "postgres://x", "APP_BASE_URL": "https://HawkEye.observer"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.DomainTarget() != "domains.hawkeye.observer" || c.AppHost() != "hawkeye.observer" || !c.RunStatusPageDomains {
+		t.Fatalf("defaults: target %q, app host %q, run %v", c.DomainTarget(), c.AppHost(), c.RunStatusPageDomains)
+	}
+	c, err = load(env(map[string]string{"DATABASE_URL": "postgres://x", "STATUS_PAGE_DOMAIN_TARGET": " Edge.Example.com. ",
+		"DISABLE_STATUS_PAGE_DOMAIN_CHECKS": "true"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.DomainTarget() != "edge.example.com" || c.RunStatusPageDomains {
+		t.Fatalf("set: target %q, run %v", c.DomainTarget(), c.RunStatusPageDomains)
 	}
 }

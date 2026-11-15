@@ -29,6 +29,7 @@ type Plan struct {
 	MaxRegions                  int       `json:"max_regions"`
 	MaxDomains                  int       `json:"max_domains"`
 	MaxStatusPages              int       `json:"max_status_pages"`
+	MaxStatusPageDomains        int       `json:"max_status_page_domains"` // status pages served on the customer's own domain. 0: none
 	StatusPageBranding          bool      `json:"status_page_branding"`    // a logo, accent color and website link on status pages
 	StatusPageWhiteLabel        bool      `json:"status_page_white_label"` // hide "Powered by HawkEye" on status pages
 	APIWriteEnabled             bool      `json:"api_write_enabled"`       // API keys may change data (reading through the API is on every plan)
@@ -40,13 +41,13 @@ type Plan struct {
 
 const planCols = `p.id, p.code, p.name, p.monthly_price_cents, p.annual_price_cents, p.max_monitors, p.minimum_check_interval_seconds,
 	p.history_retention_days, p.max_team_members, p.reports_enabled, p.branded_reports_enabled, p.maintenance_enabled, p.max_regions, p.max_domains, p.max_status_pages,
-	p.status_page_branding, p.status_page_white_label, p.api_write_enabled, p.active, p.max_workflows, p.max_workflow_steps, p.ai_drafts_enabled`
+	p.status_page_branding, p.status_page_white_label, p.api_write_enabled, p.active, p.max_workflows, p.max_workflow_steps, p.ai_drafts_enabled, p.max_status_page_domains`
 
 func scanPlan(row pgx.Row, extra ...any) (Plan, error) {
 	var p Plan
 	dest := append([]any{&p.ID, &p.Code, &p.Name, &p.MonthlyPriceCents, &p.AnnualPriceCents, &p.MaxMonitors, &p.MinimumCheckIntervalSeconds,
 		&p.HistoryRetentionDays, &p.MaxTeamMembers, &p.ReportsEnabled, &p.BrandedReportsEnabled, &p.MaintenanceEnabled, &p.MaxRegions, &p.MaxDomains, &p.MaxStatusPages,
-		&p.StatusPageBranding, &p.StatusPageWhiteLabel, &p.APIWriteEnabled, &p.Active, &p.MaxWorkflows, &p.MaxWorkflowSteps, &p.AIDraftsEnabled}, extra...)
+		&p.StatusPageBranding, &p.StatusPageWhiteLabel, &p.APIWriteEnabled, &p.Active, &p.MaxWorkflows, &p.MaxWorkflowSteps, &p.AIDraftsEnabled, &p.MaxStatusPageDomains}, extra...)
 	err := row.Scan(dest...)
 	return p, err
 }

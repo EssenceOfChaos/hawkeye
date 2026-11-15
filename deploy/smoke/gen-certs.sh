@@ -4,7 +4,10 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p certs && cd certs
-if [ -f ca.pem ] && [ -f server.pem ]; then exit 0; fi
+# Kept between runs, but they last 30 days: make new ones when either expires within a day.
+if [ -f ca.pem ] && [ -f server.pem ] && openssl x509 -checkend 86400 -noout -in ca.pem >/dev/null && openssl x509 -checkend 86400 -noout -in server.pem >/dev/null; then
+  exit 0
+fi
 openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj "/CN=HawkEye local test CA" -keyout ca.key -out ca.pem 2>/dev/null
 openssl req -newkey rsa:2048 -nodes -subj "/CN=mailpit" -keyout server.key -out server.csr 2>/dev/null
 printf "subjectAltName=DNS:mailpit,DNS:localhost\nextendedKeyUsage=serverAuth\n" > ext.cnf

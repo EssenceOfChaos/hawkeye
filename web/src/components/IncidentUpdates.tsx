@@ -2,22 +2,13 @@ import { useEffect, useState, type SubmitEvent } from 'react'
 import { api, ApiError, type Incident, type IncidentUpdate, type IncidentUpdateStatus, type StatusPageRef } from '../api'
 import { Alert } from './Alert'
 import { Appear } from './Appear'
+import { UPDATE_STATUS } from '../updateStatus'
+import { UpdateStatusBadge } from './UpdateStatusBadge'
 
 const MAX_UPDATE_LENGTH = 1000
 
-// Full class names so the CSS generator can see them. Shared with the public status page.
-const UPDATE_STATUS: Record<IncidentUpdateStatus, { label: string; cls: string }> = {
-  investigating: { label: 'Investigating', cls: 'd-badge d-badge-soft d-badge-warning' },
-  identified: { label: 'Identified', cls: 'd-badge d-badge-soft d-badge-error' },
-  monitoring: { label: 'Monitoring', cls: 'd-badge d-badge-soft d-badge-info' },
-  resolved: { label: 'Resolved', cls: 'd-badge d-badge-soft d-badge-success' },
-}
-
-/** The status of an update, as a badge. An unknown status (from a newer server) shows as its own name. */
-export function UpdateStatusBadge({ status }: { status: string }) {
-  const s = UPDATE_STATUS[status as IncidentUpdateStatus]
-  return <span className={s?.cls ?? 'd-badge d-badge-soft'}>{s?.label ?? status}</span>
-}
+// The badge lives in its own module, so the status page served on customers' own domains (src/status-main.tsx) needs nothing else from here.
+export { UpdateStatusBadge }
 
 const when = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
 

@@ -320,6 +320,38 @@ What protects it:
 
 Tests: `internal/heartbeats/heartbeats_integration_test.go`, `internal/httpapi/heartbeats_integration_test.go`.
 
+## Status pages on customers' own domains (public, inbound)
+
+An Agency status page can be served at a subdomain the customer owns (`internal/statuspagedomains`, `internal/httpapi/handlers_domainserving.go`,
+the second site block in `deploy/Caddyfile`; design in `docs/plan-status-page-domains.md`). It is the only place HawkEye serves content, and gets
+certificates, for names it does not own. What protects it:
+
+- **Proof of control, per claim.** A name is served only after its zone holds a TXT record `_hawkeye.<name>` with that claim's random token
+  (160 bits) *and* the name routes to us (a CNAME to `domains.hawkeye.observer`, or addresses that are all ours). Every claim gets a new token, so a
+  record left behind from an earlier claim never verifies a new claimant. The token is not secret: it is published in the customer's DNS.
+- **No squatting, no takeover.** A name may be claimed by any number of organizations while pending; only one claim can be verified at a time (a
+  partial unique index on served states) and only a served name blocks others. So claiming a client's name first blocks nobody, and a customer who
+  deletes a page but leaves their CNAME pointing at us cannot have the name taken over: a new claimant can't write the TXT record. Verified domains
+  are re-checked daily; a record that stays wrong for 7 days stops the name being served.
+- **Certificates only for verified names.** Caddy's on-demand TLS asks `GET /internal/tls/allow?domain=` before every issuance. It answers 200 only
+  for a verified domain of a published page on a plan that includes custom domains; anything else gets no certificate, and the TLS handshake fails.
+  Answers (including "no") are cached in memory for 30 seconds, so floods of handshakes for random names can't load the database or use up our
+  Let's Encrypt limits. The path is not proxied by Caddy (not in `@backend`), lives outside `/api`, and refuses any request carrying
+  `X-Forwarded-For`, so it can't be reached from the internet even if the routing changed.
+- **Nothing but the status page on those names.** The customer-domain site serves `status.html` (a separate build entry with no router, sign-in,
+  analytics or cookies), the two host-based reads `/api/v1/public/domain-status[/logo]` and `/assets/*`; every other path is a plain 404. So a
+  customer's domain can never show HawkEye's sign-in form (no phishing look-alike), the app, the API, MCP, or another customer's page: the page is
+  found from the `Host` header, never from the address. CSP allows only our own origin; HSTS is sent without `includeSubDomains` so we never set
+  policy for the customer's other names; `X-Frame-Options: DENY`.
+- **Downgrades and removal.** Removing a domain stops it at once (the API clears its cache); after a downgrade the claim is kept but nothing is
+  served or certified until the plan includes custom domains again.
+- **Lookups.** Verification is two to four DNS lookups (TXT, CNAME, addresses) with a 5-second timeout each, on the same resolver as DNS
+  monitors; a lookup that gets no answer never changes an active domain. "Check now" is rate-limited per IP.
+
+Tests: `internal/statuspagedomains/*_test.go`, `internal/httpapi/statuspagedomain_integration_test.go` (the certificate check, serving by host,
+downgrades), and `scripts/smoke-domains.sh`, which CI runs on the smoke stack: a verified domain visited through Caddy gets its certificate
+on first visit and serves nothing but the status page, an unverified name gets no certificate, and http redirects.
+
 ## Settings and secrets handling
 
 Production settings are fetched from Infisical at deploy time by `scripts/fetch-secrets.py` (standard library only; HTTPS; no value is ever printed or logged: output goes to mode-600 files, or for the nightly copy straight into age, and only counts and manifest names are printed) and written by `scripts/sync-secrets.sh` to `.env.production` and `~/.hawkeye-host.env` (mode 600, atomic replace, validated against `deploy/env.manifest` first: required values present, no placeholders, nothing that a `.env` file cannot hold). Values are written unquoted or single-quoted so that docker compose and bash read them identically (tested against both). Host-only values (backup bucket keys, the heartbeat URL) go to the host file and never to the containers' environment. The credentials file refuses to be used unless it is mode 600 and its API address is https (plain http only for localhost, for the tests). See `docs/secrets.md`.

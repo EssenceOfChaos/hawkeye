@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"hawkeye/internal/apitokens"
+	"hawkeye/internal/audit"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/branding"
 	"hawkeye/internal/canary"
@@ -33,10 +35,12 @@ import (
 	"hawkeye/internal/monthlyreport"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/oauth"
+	"hawkeye/internal/plans"
 	"hawkeye/internal/retention"
 	"hawkeye/internal/safehttp"
 	"hawkeye/internal/scheduler"
 	"hawkeye/internal/statusbeat"
+	"hawkeye/internal/statuspagedomains"
 	"hawkeye/internal/weeklysummary"
 	"hawkeye/internal/worker"
 )
@@ -224,6 +228,15 @@ func run() error {
 		if cfg.RunMonthlyReports {
 			job := monthlyreport.NewJob(pool, mailer, branding.NewService(pool), monthlyreport.Config{Interval: cfg.MonthlyReportInterval,
 				AppBaseURL: cfg.AppBaseURL, Pace: time.Second}, m, log).WithReporter(reporter)
+			spawn(func() { job.Run(ctx) })
+		}
+		// Status pages on customers' own domains: re-checks each claimed domain's DNS records on its schedule and tells the owner when one goes
+		// live, needs attention or stops being served. Lookups use the system resolver, as DNS monitors do.
+		if cfg.RunStatusPageDomains {
+			v := &statuspagedomains.Verifier{Resolver: net.DefaultResolver, Target: cfg.DomainTarget()}
+			svc := statuspagedomains.NewService(pool, plans.NewService(cfg.AppBaseURL), v, cfg.AppHost())
+			job := statuspagedomains.NewJob(svc, mailer, audit.New(pool, log), statuspagedomains.JobConfig{AppBaseURL: cfg.AppBaseURL,
+				From: cfg.EmailFromAddress}, log).WithReporter(reporter).WithMetrics(m.StatusPageDomainChecks)
 			spawn(func() { job.Run(ctx) })
 		}
 	}

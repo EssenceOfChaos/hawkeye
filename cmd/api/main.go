@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -48,6 +49,7 @@ import (
 	"hawkeye/internal/sitecheck"
 	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
+	"hawkeye/internal/statuspagedomains"
 	"hawkeye/internal/twofactor"
 	"hawkeye/internal/waitlist"
 )
@@ -181,8 +183,10 @@ func run() error {
 		Domains:         domains.NewService(pool, planSvc),
 		Regions:         cfg.Regions(),
 		StatusPages:     statuspage.NewService(pool, planSvc),
-		Badges:          badges.NewService(pool),
-		Heartbeats:      heartbeats.NewService(pool, checks.NewStore(pool, heartbeats.Thresholds, incidents.Engine{}).WithRegions(cfg.Regions())),
+		PageDomains: statuspagedomains.NewService(pool, planSvc,
+			&statuspagedomains.Verifier{Resolver: net.DefaultResolver, Target: cfg.DomainTarget()}, cfg.AppHost()),
+		Badges:     badges.NewService(pool),
+		Heartbeats: heartbeats.NewService(pool, checks.NewStore(pool, heartbeats.Thresholds, incidents.Engine{}).WithRegions(cfg.Regions())),
 		Notifications: notifications.NewService(pool, mailer, log, cfg.AppBaseURL, cfg.EmailFromAddress, notifications.WithSecretBox(box), notifications.WithTelegramBot(telegramBot),
 			notifications.WithAudit(auditLog)),
 		TelegramBot:   telegramBot,

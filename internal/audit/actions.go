@@ -51,12 +51,19 @@ const (
 	StatusPageCreated       = "status_page.created"
 	StatusPageChanged       = "status_page.changed"
 	StatusPageDeleted       = "status_page.deleted"
-	MaintenanceScheduled    = "maintenance.scheduled" // details: starts_at, ends_at, monitors
-	MaintenanceDeleted      = "maintenance.deleted"
-	IncidentUpdatePosted    = "incident_update.posted" // details: status
-	IncidentUpdateDeleted   = "incident_update.deleted"
-	DomainAdded             = "domain.added"
-	DomainRemoved           = "domain.removed"
+	// A status page's custom domain (details: hostname). Set and removed are the owner's; verified, failing and disabled are HawkEye's own checks
+	// (actor: system), and failing carries the problem it found.
+	StatusPageDomainSet      = "status_page.domain_set"
+	StatusPageDomainRemoved  = "status_page.domain_removed"
+	StatusPageDomainVerified = "status_page.domain_verified"
+	StatusPageDomainFailing  = "status_page.domain_failing" // details: hostname, problem
+	StatusPageDomainDisabled = "status_page.domain_disabled"
+	MaintenanceScheduled     = "maintenance.scheduled" // details: starts_at, ends_at, monitors
+	MaintenanceDeleted       = "maintenance.deleted"
+	IncidentUpdatePosted     = "incident_update.posted" // details: status
+	IncidentUpdateDeleted    = "incident_update.deleted"
+	DomainAdded              = "domain.added"
+	DomainRemoved            = "domain.removed"
 )
 
 // AccountActions and OrganizationActions list every action of each log.
@@ -66,7 +73,8 @@ var (
 	OrganizationActions = []string{OrganizationRenamed, OwnershipTransferred, TwoFactorRequirement, AIDraftsSetting, SubscriptionCanceled, MemberInvited,
 		InvitationResent, InvitationRevoked, MemberJoined, MemberRemoved, MemberLeft, APIKeyCreated, APIKeyRevoked, AppConnected, AppDisconnected,
 		AlertDestinationAdded, AlertDestinationChanged, AlertDestinationRemoved, MonitorCreated, MonitorChanged, MonitorDeleted, MonitorPaused,
-		MonitorResumed, BadgeEnabled, BadgeDisabled, PingAddressRotated, StatusPageCreated, StatusPageChanged, StatusPageDeleted, MaintenanceScheduled,
+		MonitorResumed, BadgeEnabled, BadgeDisabled, PingAddressRotated, StatusPageCreated, StatusPageChanged, StatusPageDeleted, StatusPageDomainSet,
+		StatusPageDomainRemoved, StatusPageDomainVerified, StatusPageDomainFailing, StatusPageDomainDisabled, MaintenanceScheduled,
 		MaintenanceDeleted, IncidentUpdatePosted, IncidentUpdateDeleted, DomainAdded, DomainRemoved}
 )
 

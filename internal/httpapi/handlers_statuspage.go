@@ -67,6 +67,7 @@ func (h *handlers) createStatusPage(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	h.forgetDomains() // publishing or deleting a page changes what its domain serves
 	h.recordOrg(c, audit.StatusPageCreated, statusPageTarget(cfg), map[string]any{"slug": cfg.Slug, "published": cfg.Published})
 	return c.JSON(http.StatusCreated, map[string]any{"status_page": cfg})
 }
@@ -84,6 +85,7 @@ func (h *handlers) updateStatusPage(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
+	h.forgetDomains() // publishing or deleting a page changes what its domain serves
 	h.recordOrg(c, audit.StatusPageChanged, statusPageTarget(cfg), map[string]any{"slug": cfg.Slug, "published": cfg.Published,
 		"monitors": len(cfg.Monitors)})
 	return c.JSON(http.StatusOK, map[string]any{"status_page": cfg})
@@ -98,6 +100,7 @@ func (h *handlers) deleteStatusPage(c *echo.Context) error {
 	if err := h.statusPages.Delete(c.Request().Context(), currentOrg(c), id); err != nil {
 		return mapError(err)
 	}
+	h.forgetDomains() // publishing or deleting a page changes what its domain serves
 	h.recordOrg(c, audit.StatusPageDeleted, target{"status_page", id.String(), title}, nil)
 	return c.NoContent(http.StatusNoContent)
 }
@@ -159,6 +162,13 @@ func (h *handlers) sendLogo(c *echo.Context, data []byte, ctype string, err erro
 	c.Response().Header().Set("X-Content-Type-Options", "nosniff")
 	c.Response().Header().Set("Content-Security-Policy", "default-src 'none'")
 	return c.Blob(http.StatusOK, ctype, data)
+}
+
+// forgetDomains drops the cached answers about what customer domains serve, after a change to a page.
+func (h *handlers) forgetDomains() {
+	if h.pageDomains != nil {
+		h.pageDomains.Forget()
+	}
 }
 
 func statusPageTarget(cfg *statuspage.Config) target {

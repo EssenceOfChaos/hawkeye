@@ -102,6 +102,7 @@ export function AppRoutes() {
       <Route path="/docs/cron-job-monitoring" element={<DocPage path="/docs/cron-job-monitoring" />} />
       <Route path="/docs/api-workflows" element={<DocPage path="/docs/api-workflows" />} />
       <Route path="/docs/dns-monitoring" element={<DocPage path="/docs/dns-monitoring" />} />
+      <Route path="/docs/status-page-domains" element={<DocPage path="/docs/status-page-domains" />} />
       <Route path="/docs/alerts" element={<DocPage path="/docs/alerts" />} />
       <Route path="/docs/api" element={<DocPage path="/docs/api" />} />
       <Route path="/docs/claude" element={<DocPage path="/docs/claude" />} />

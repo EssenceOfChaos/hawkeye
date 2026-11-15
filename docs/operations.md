@@ -353,6 +353,23 @@ FROM users WHERE email_verified_at IS NOT NULL;
 
 Links in the email carry `utm_campaign=weekly_summary`.
 
+### Status pages on customers' own domains
+
+Agency status pages can be served on a customer's subdomain (`docs/plan-status-page-domains.md`; customer guide at `/docs/status-page-domains`).
+The primary worker re-checks claimed domains (`DISABLE_STATUS_PAGE_DOMAIN_CHECKS` turns that off) and emails the organization's owner when one goes
+live, needs attention, works again or stops after 7 days of wrong records. Metric: `hawkeye_status_page_domain_checks_total{result}`
+(`ok|problem|no_answer|error`); a run of `no_answer` across many domains points at our resolver, not at customers.
+
+```
+docker exec hawkeye-db-1 psql -U hawkeye -d monitoring -c "
+  SELECT d.hostname, d.state, d.last_error, d.last_checked_at, d.next_check_at, p.slug, p.published
+  FROM status_page_domains d JOIN status_pages p ON p.id = d.page_id ORDER BY d.updated_at DESC LIMIT 20"
+```
+
+`next_check_at` empty on a `pending` row means verification gave up after 3 days; the owner presses **Check now** (or you set `next_check_at = now()`).
+Certificates are obtained by Caddy on a name's first visit: `docker compose logs web | grep -i 'obtain'` shows issuance and its errors. Names that
+are not verified never get one (the TLS handshake fails), which is expected for scanners and typos.
+
 ### Feature waitlists
 
 "Get notified" sign-ups for coming-soon features (`internal/waitlist`, [API](api.md#feature-waitlists-get-notified)). Only confirmed sign-ups count; unconfirmed ones are dropped by the hourly clean-up once their 48-hour link expires.
@@ -393,6 +410,16 @@ Warnings use the same queue as outage alerts, so first follow *Alerts are not ar
 `ssl_expires_at` null means no check has read a certificate (an `http://` URL, a failing TLS handshake that is not an expiry, or no check has run yet). `ssl_notified_bucket` is the smallest warning bucket already queued for that certificate;
 the delivery rows are `SELECT * FROM notification_deliveries WHERE event_type = 'ssl_expiry' AND monitor_id = '…';`. A bucket is handled even if nobody could be notified at the time (no verified, enabled recipient), and is never re-sent: to repeat a warning,
 `UPDATE monitors SET ssl_notified_bucket = NULL, ssl_notified_for = NULL WHERE id = '…';` and the next check queues it again for the current bucket.
+
+### A customer's status page domain doesn't work
+
+1. Its state (query above). `pending` with "TXT record wasn't found": the record is missing, misnamed (a provider that adds the domain itself turns
+   `_hawkeye.status.client.com` into `_hawkeye.status.client.com.client.com`), or not yet visible; `dig TXT _hawkeye.<name>` shows what the world sees.
+2. "points somewhere other than HawkEye": `dig <name>` must end at `domains.hawkeye.observer` or at our address. A proxied record (Cloudflare's
+   orange cloud) resolves to the proxy instead: it must be DNS only.
+3. Active but the browser shows a certificate error: check Caddy's log for that name (Let's Encrypt limits are 50 certificates per registered
+   domain a week, and port 80 must be reachable for the HTTP challenge). `curl -sv https://<name>/ -o /dev/null` from outside shows the handshake.
+4. Active and published but 404: the plan may no longer include custom domains (the claim is kept, nothing is served).
 
 ### Domain expiry is missing or wrong
 

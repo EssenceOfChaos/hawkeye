@@ -125,6 +125,17 @@ or `scripts/deploy.sh` on the VM, which redeploys the tip of `origin/main`. `sec
 The scripts it calls after the checkout (`sync-secrets.sh`, `regions.py`, `smoke.sh`, `regional-sync.sh`) run from the new commit, so changes to them take effect in the
 same release. The exception is `backup-offsite.sh`, which runs before the checkout: like `deploy.sh`, it picks up a change one release later.
 
+## Status pages on customers' own domains
+
+Caddy also serves every name other than `SITE_ADDRESS` (`STATUS_DOMAINS_ADDRESS=https://` and `STATUS_DOMAINS_HTTP_ADDRESS=http://`, the defaults in
+`docker-compose.prod.yml`), for Agency status pages on customers' own domains. It gets a certificate for such a name on its first visit, but only after
+the API says the name is a verified domain (`on_demand_tls` → `http://api:8080/internal/tls/allow`), and serves nothing there but the status page.
+Customers point a CNAME at `domains.<your domain>` (`STATUS_PAGE_DOMAIN_TARGET` to change it), which must reach this server directly: a CNAME to the
+apex, DNS only, never proxied. To turn customer domains off, set both addresses to unused ports (`:8082` and `:8083`). Certificates for those names
+live in the `caddy_data` volume with the site's own; a rebuilt server gets them again on each name's next visit. Test stacks set
+`CADDY_EXTRA_GLOBAL=local_certs` so those certificates come from Caddy's own CA, and `scripts/smoke-domains.sh` (in `make smoke` and CI) checks
+this site end to end there. It writes to the stack's database, so never run it against production.
+
 ## Unknown pages (404)
 
 The web app is a single-page app, so Caddy has to know which addresses are real pages. `@app` in `deploy/Caddyfile` lists them: those get the app shell with
@@ -139,6 +150,12 @@ HTTP 200; real files (hashed assets, icons, email images) are served as files; e
 1. Take a backup (`scripts/backup.sh`), and note the current `APP_VERSION`.
 2. Build the new images (`docker compose ... build`), run `migrate`, then `up -d` (Compose replaces containers; the worker's leases make in-flight checks safe to interrupt, they are re-run).
 3. Re-run `scripts/smoke.sh`. Watch error rate and `hawkeye_http_panics_total` for 15 minutes.
+
+`scripts/deploy.sh` does all of this, and after a healthy release it also frees disk space: images that no container uses and that are over a week
+old are removed, and Docker's build cache is trimmed to its most recently used 5GB. Images are built on the server, so without this the build cache
+alone grew past 25GB. The 5GB that stays holds the Go module and compile caches, which keep a release inside the deploy workflow's time limit: to
+free space by hand, use `docker builder prune -f --keep-storage 5GB`, never `docker builder prune -a` (the next release would compile everything from
+scratch). `docker system df` shows what is using the disk.
 
 Migrations are **forward-only**. Make every schema change _expand/contract_: release N adds columns/tables that N-1 code ignores; release N+1 removes what nothing reads. This keeps rollback of the application safe.
 

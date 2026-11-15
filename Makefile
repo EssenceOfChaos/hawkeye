@@ -61,6 +61,7 @@ smoke-up:      ## Build and start the production images locally on https://local
 	$(SMOKE) up -d --build --wait
 smoke:         ## Run the post-deploy smoke test, including a full account lifecycle, against the local stack
 	SMOKE_HTTP_BASE=http://localhost:8088 scripts/smoke.sh https://localhost:8443 --insecure --full smoke@hawkeye.test --mail-api http://localhost:8026
+	scripts/smoke-domains.sh 8443 8088
 smoke-down:
 	$(SMOKE) down -v
 

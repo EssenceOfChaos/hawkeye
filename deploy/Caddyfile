@@ -4,13 +4,46 @@
 #   ACME_EMAIL    contact address for the certificate authority (expiry notices). Required.
 #   WWW_ADDRESS   optional, e.g. www.hawkeye.example.com: gets its own certificate and redirects to SITE_ADDRESS. Unset, it is an unused
 #                 listener on :8081 inside the container (nothing is published), so local and smoke stacks are unaffected.
+#   STATUS_DOMAINS_ADDRESS, STATUS_DOMAINS_HTTP_ADDRESS
+#                 status pages on customers' own domains (docs/plan-status-page-domains.md): "https://" and "http://" serve every other name
+#                 (docker-compose.prod.yml sets them). Unset, they are unused listeners on :8082 and :8083, as for WWW_ADDRESS.
+#   CADDY_EXTRA_GLOBAL
+#                 more global options, for test stacks only: the smoke stack sets "local_certs" so customer domains get certificates from Caddy's
+#                 own CA instead of Let's Encrypt. Empty in production.
 {
 	email {$ACME_EMAIL}
+	{$CADDY_EXTRA_GLOBAL}
+	# A certificate for a customer's domain is obtained on its first visit, and only for a name the API says serves a status page (a verified
+	# domain, on a plan that includes them). Without this check anyone could point names at us and use up our certificate rate limits. The API
+	# answers from a short cache, and the path is not proxied from outside (it is not in @backend below).
+	on_demand_tls {
+		ask http://api:8080/internal/tls/allow
+	}
 	servers {
 		timeouts {
 			read_header 10s
 			read_body 30s
 			idle 2m
+		}
+	}
+}
+
+# Access logs must not contain secrets: one-time tokens arrive in the query string of the emailed links, and sessions in cookies.
+(access_log) {
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					replace token REDACTED
+				}
+				request>headers>Referer delete
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				request>headers>X-Csrf-Token delete
+				resp_headers>Set-Cookie delete
+			}
 		}
 	}
 }
@@ -57,7 +90,7 @@
 
 	# The app is a single-page app, so the server must know which addresses are real pages; anything else gets the same shell with HTTP 404
 	# (handle_errors below), and the app renders its 404 page. KEEP IN STEP WITH THE ROUTES IN web/src/App.tsx (web/src/routes.test.ts checks this).
-	@app path_regexp app (?i)^/(?:(?:login|register|forgot-password|contact|docs(?:/(?:getting-started|cron-job-monitoring|api-workflows|dns-monitoring|alerts|api|claude))?|tools(?:/(?:is-website-down|ssl-certificate-checker|uptime-sla-calculator|downtime-cost-calculator))?|privacy|terms|reset-password|confirm-alert-address|unsubscribe|waitlist/(?:confirm|leave)|accept-invite|verify-email|dashboard|billing|account|incidents|notifications|team|api-keys|security-log|connect|domains|maintenance|reports|status-page|status-pages(?:/[^/]+)?|monitoring|monitors(?:/new|/[^/]+(?:/edit)?)?|status/[^/]+))?/?$
+	@app path_regexp app (?i)^/(?:(?:login|register|forgot-password|contact|docs(?:/(?:getting-started|cron-job-monitoring|api-workflows|dns-monitoring|status-page-domains|alerts|api|claude))?|tools(?:/(?:is-website-down|ssl-certificate-checker|uptime-sla-calculator|downtime-cost-calculator))?|privacy|terms|reset-password|confirm-alert-address|unsubscribe|waitlist/(?:confirm|leave)|accept-invite|verify-email|dashboard|billing|account|incidents|notifications|team|api-keys|security-log|connect|domains|maintenance|reports|status-page|status-pages(?:/[^/]+)?|monitoring|monitors(?:/new|/[^/]+(?:/edit)?)?|status/[^/]+))?/?$
 	# Pages with one fixed address have their own copy of the shell with that page's title, description and canonical tags in it
 	# (/pages/<name>.html, written by build/prerender-plugin.ts), so crawlers and link previews see them without running JavaScript. The home page is
 	# /pages/home.html. Everything else (monitor pages with an id, status pages) gets the neutral /index.html.
@@ -98,21 +131,55 @@
 		}
 	}
 
-	# Access logs must not contain secrets: one-time tokens arrive in the query string of the emailed links, and sessions in cookies.
-	log {
-		output stdout
-		format filter {
-			wrap json
-			fields {
-				request>uri query {
-					replace token REDACTED
-				}
-				request>headers>Referer delete
-				request>headers>Cookie delete
-				request>headers>Authorization delete
-				request>headers>X-Csrf-Token delete
-				resp_headers>Set-Cookie delete
-			}
-		}
+	import access_log
+}
+
+# Status pages on customers' own domains (status.clientbrand.com). Only the status page is served there: its own small page (status.html, with no
+# sign-in, no app and no analytics), the two public reads it makes, and the build's static files. Everything else is a 404, so a customer's
+# domain can never show HawkEye's sign-in form or anyone else's page. The API finds the page from the Host header, which Caddy passes on as is.
+{$STATUS_DOMAINS_ADDRESS::8082} {
+	tls {
+		on_demand
 	}
+	encode zstd gzip
+
+	header {
+		# No includeSubDomains: HawkEye must not set policy for the customer's other names.
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		# Our own files only: no analytics or any other third party on a customer's domain.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'none'; base-uri 'self'; object-src 'none'"
+		-Server
+	}
+
+	@reads path /api/v1/public/domain-status /api/v1/public/domain-status/logo
+	handle @reads {
+		reverse_proxy api:8080
+	}
+	@assets path /assets/*
+	handle @assets {
+		root * /srv
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+	handle / {
+		root * /srv
+		rewrite * /status.html
+		header Cache-Control "no-cache"
+		file_server
+	}
+	handle {
+		respond "Not found" 404
+	}
+
+	import access_log
+}
+
+# Plain http:// on those names goes to https:// (the certificate challenge on port 80 is answered before this).
+{$STATUS_DOMAINS_HTTP_ADDRESS::8083} {
+	redir https://{host}{uri} permanent
 }

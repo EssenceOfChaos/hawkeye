@@ -39,6 +39,7 @@ import (
 	"hawkeye/internal/sitecheck"
 	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
+	"hawkeye/internal/statuspagedomains"
 	"hawkeye/internal/twofactor"
 	"hawkeye/internal/validation"
 	"hawkeye/internal/waitlist"
@@ -56,6 +57,8 @@ type handlers struct {
 	maintenance     *maintenance.Service
 	domains         *domains.Service
 	statusPages     *statuspage.Service
+	pageDomains     *statuspagedomains.Service
+	appBaseURL      string
 	badges          *badges.Service
 	heartbeats      *heartbeats.Service
 	regions         regions.Set
@@ -158,6 +161,16 @@ func mapError(err error) error {
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Update not found."}
 	case errors.Is(err, statuspage.ErrNotFound):
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Status page not found."}
+	case errors.Is(err, statuspagedomains.ErrNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "This status page has no custom domain."}
+	case errors.Is(err, statuspagedomains.ErrNoPage):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Status page not found."}
+	case errors.Is(err, statuspagedomains.ErrHostnameInUse):
+		return &APIError{Status: http.StatusConflict, Code: "DOMAIN_IN_USE", Message: "That domain is already used by another HawkEye status page.",
+			Details: map[string]any{"fields": map[string]string{"hostname": "is already used by another HawkEye status page"}}}
+	case errors.Is(err, statuspagedomains.ErrHostnameOnOtherPage):
+		return &APIError{Status: http.StatusConflict, Code: "DOMAIN_ON_OTHER_PAGE", Message: "That domain is already set on another of your status pages.",
+			Details: map[string]any{"fields": map[string]string{"hostname": "is already set on another of your status pages"}}}
 	case errors.Is(err, statuspage.ErrSlugTaken):
 		return &APIError{Status: http.StatusConflict, Code: "SLUG_TAKEN", Message: "That status page address is already taken. Choose another.",
 			Details: map[string]any{"fields": map[string]string{"slug": "is already taken"}}}

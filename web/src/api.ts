@@ -45,6 +45,8 @@ export interface Plan {
   status_page_branding?: boolean
   /** Hiding "Powered by HawkEye" on status pages (Agency). */
   status_page_white_label?: boolean
+  /** Status pages served on the customer's own domain, one per page (Agency). 0 or absent: not included. */
+  max_status_page_domains?: number
   /** Monthly PDF uptime reports (Pro and Agency). */
   reports_enabled?: boolean
   /** The organization's own name and logo on those reports (Agency). */
@@ -408,6 +410,38 @@ export interface StatusPageConfig {
   /** Read-only: the logo is uploaded separately; the version changes whenever it does. */
   has_logo: boolean
   logo_version: number
+  /** Read-only: the page's custom domain (Agency) and its state; '' when none. Set through /status-pages/:id/domain. */
+  custom_domain?: string
+  custom_domain_state?: StatusPageDomainState | ''
+  /** While the domain is served, /status/<slug> sends visitors there. Left out of a save, the stored value is kept. */
+  redirect_to_domain?: boolean
+}
+
+/** pending: records not seen yet (not served); active: served; failing: a record went wrong (still served for 7 days); disabled: not served. */
+export type StatusPageDomainState = 'pending' | 'active' | 'failing' | 'disabled'
+
+/** A status page's custom domain (GET /status-pages/:id/domain). */
+export interface StatusPageDomain {
+  id: string
+  page_id: string
+  hostname: string
+  state: StatusPageDomainState
+  /** The DNS records the owner adds: a CNAME to HawkEye and a TXT record proving control of the name. */
+  records: { type: 'CNAME' | 'TXT'; name: string; value: string }[]
+  /** What is wrong, in plain words; '' when nothing is. */
+  last_error: string
+  last_checked_at: string | null
+  next_check_at: string | null
+  verified_at: string | null
+  failing_since: string | null
+  created_at: string
+}
+
+/** Every domain endpoint's answer: the domain (null when none), the name CNAME records point at, and the plan's limit (0: not included). */
+export interface StatusPageDomainView {
+  domain: StatusPageDomain | null
+  target: string
+  max: number
 }
 
 export interface PublicStatus {
@@ -426,6 +460,11 @@ export interface PublicStatus {
   incidents: { monitor: string; started_at: string; resolved_at: string | null; updates?: { status: string; message: string; posted_at: string }[] }[]
   history_days: number
   generated_at: string
+  /** The page's own domain while it is served there (https://status.example.com), and whether /status/<slug> should send visitors there. */
+  custom_domain_url?: string
+  redirect_to_domain?: boolean
+  /** On a customer's own domain only: HawkEye's address, for "Powered by HawkEye". */
+  home_url?: string
 }
 
 /** A one-time link that connects a Telegram chat through HawkEye's bot (POST /notification-settings/telegram-link). */

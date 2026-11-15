@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useState, type SubmitEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
-import { api, ApiError, apiUpload, type Monitor, type StatusPageConfig, type Usage } from '../api'
+import { api, ApiError, apiUpload, type Monitor, type StatusPageConfig, type StatusPageDomainState, type Usage } from '../api'
 import { readableTextOn } from '../color'
 import { Alert } from '../components/Alert'
+import { CustomDomainCard } from '../components/CustomDomain'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
 import { Toggle } from '../components/Toggle'
+
+/** A short note beside a custom domain that is not simply live, in the list of pages. */
+const DOMAIN_NOTE: Record<Exclude<StatusPageDomainState, 'active'>, string> = {
+  pending: 'waiting for DNS records',
+  failing: 'needs attention',
+  disabled: 'stopped',
+}
 
 /** A notice passed to the list after saving or deleting a page. */
 type ListState = { notice?: string } | null
@@ -69,6 +77,14 @@ export function StatusPagesPage() {
                     ) : (
                       <span className="hint">/status/{p.slug}</span>
                     )}
+                    {p.custom_domain && (
+                      <div>
+                        {p.published && (p.custom_domain_state === 'active' || p.custom_domain_state === 'failing')
+                          ? <a href={`https://${p.custom_domain}/`} target="_blank" rel="noreferrer">{p.custom_domain}</a>
+                          : <span className="hint">{p.custom_domain}</span>}
+                        {p.custom_domain_state && p.custom_domain_state !== 'active' && <span className="hint"> ({DOMAIN_NOTE[p.custom_domain_state]})</span>}
+                      </div>
+                    )}
                   </td>
                   <td>
                     {p.published
@@ -122,6 +138,10 @@ export function StatusPageEditor() {
   const [logoNotice, setLogoNotice] = useState<string | null>(null)
   const [canBrand, setCanBrand] = useState(false)
   const [canWhiteLabel, setCanWhiteLabel] = useState(false)
+  // Custom domain (Agency). The domain itself is saved by CustomDomainCard; the redirect switch is part of this form.
+  const [domain, setDomain] = useState('')
+  const [domainState, setDomainState] = useState<StatusPageDomainState | ''>('')
+  const [redirect, setRedirect] = useState(false)
 
   const apply = (p: StatusPageConfig) => {
     setSlug(p.slug)
@@ -134,6 +154,9 @@ export function StatusPageEditor() {
     setHidePoweredBy(p.hide_powered_by ?? false)
     setHasLogo(p.has_logo ?? false)
     setLogoVersion(p.logo_version ?? 0)
+    setDomain(p.custom_domain ?? '')
+    setDomainState(p.custom_domain_state ?? '')
+    setRedirect(p.redirect_to_domain ?? false)
   }
 
   const load = useCallback(async () => {
@@ -167,7 +190,7 @@ export function StatusPageEditor() {
       const ordered = monitors.filter((m) => m.id in shown)
       const body = {
         slug, title, description, published, monitors: ordered.map((m) => ({ monitor_id: m.id, display_name: shown[m.id] ?? '' })),
-        accent_color: accent, website_url: website.trim(), hide_powered_by: hidePoweredBy,
+        accent_color: accent, website_url: website.trim(), hide_powered_by: hidePoweredBy, redirect_to_domain: redirect,
       }
       if (pageID) await api('PUT', `/status-pages/${encodeURIComponent(pageID)}`, body)
       else await api('POST', '/status-pages', body)
@@ -223,6 +246,9 @@ export function StatusPageEditor() {
       {editing && loaded && published && linkable && (
         <p>
           Public at <a href={path} target="_blank" rel="noreferrer">{link}</a>
+          {domain && (domainState === 'active' || domainState === 'failing') && (
+            <> and <a href={`https://${domain}/`} target="_blank" rel="noreferrer">https://{domain}</a></>
+          )}
         </p>
       )}
       {!loaded && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>}
@@ -306,6 +332,12 @@ export function StatusPageEditor() {
               {!canWhiteLabel && <small className="hint">Included in the Agency plan.</small>}
             </fieldset>
             <Toggle checked={published} onToggle={setPublished}>Publish — anyone with the link can see this page</Toggle>
+            {domain && (
+              <>
+                <Toggle checked={redirect} onToggle={setRedirect}>Send visitors of /status/{slug || '…'} to {domain}</Toggle>
+                <small className="hint">Only while {domain} is live. Off, the page works at both addresses, and search engines are pointed to {domain}.</small>
+              </>
+            )}
           </fieldset>
           {isOwner ? (
             <p>
@@ -316,6 +348,9 @@ export function StatusPageEditor() {
             <p className="hint">Only the organization owner can change status pages.</p>
           )}
         </form>
+      )}
+      {loaded && pageID && (
+        <CustomDomainCard pageID={pageID} isOwner={isOwner} onChange={(h, st) => { setDomain(h); setDomainState(st) }} />
       )}
     </>
   )

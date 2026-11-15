@@ -104,6 +104,7 @@ button.danger[type='submit'] { background: transparent; color: var(--down); bord
 button.danger[type='submit']:hover:not(:disabled) { background: #ff8a8020; border-color: var(--down); }
 input[type='checkbox'], input[type='radio'], input[type='range'] { accent-color: var(--gold); }
 button.linklike { border: 0; padding: 0; background: none; color: var(--accent); text-decoration: underline; }
+button.linklike.danger { color: var(--down); }
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
 textarea { font: inherit; font-family: 'JetBrains Mono Variable', ui-monospace, monospace; font-size: .9rem; padding: .5rem .8rem; border-radius: .45rem; border: 1px solid #3d516a; background: #08172b; color: inherit; resize: vertical; }
@@ -604,11 +605,17 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 .status-bars > .d-tooltip { flex: 1; min-width: 2px; display: block; }
 .status-bars > .d-tooltip > span { display: block; height: 1.75rem; border-radius: 2px; background: var(--line); }
 .status-bars > .d-tooltip::before { white-space: nowrap; }
+/* Near either end of the row, line the tooltip up with that end instead of centering it, so it never sticks out past the page (StatusView's tipEdge). */
+.status-bars > .d-tooltip.tip-start::before { left: 0; right: auto; transform: translateY(var(--tt-pos, .25rem)); }
+.status-bars > .d-tooltip.tip-end::before { left: auto; right: 0; transform: translateY(var(--tt-pos, .25rem)); }
 .status-bars > .d-tooltip > .ok { background: var(--up); } .status-bars > .d-tooltip > .down { background: var(--down); } .status-bars > .d-tooltip > .degraded { background: #d9a400; }
 .status-row { padding: .8rem 0; border-top: 1px solid var(--line); }
 .status-row .head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; font-weight: 600; }
 .status-row .scale { display: flex; justify-content: space-between; font-size: .8rem; opacity: .75; }
 fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
+/* A fieldset is never narrower than its widest content unless told so: without this, the logo picker made the status page editor scroll sideways on a phone. */
+fieldset.field { min-width: 0; }
+.field input[type='file'] { max-width: 100%; }
 
 /* 404 page (src/pages/NotFoundPage.tsx). Always dark, whatever the system theme; every class is prefixed nf- so nothing else is affected. */
 .nf { --nf-navy: #091c33; --nf-gold: #e8b95e; --nf-text: #eaf1fa; --nf-muted: #a9b9cd; --nf-line: #ffffff1c;
@@ -832,3 +839,11 @@ button.value-chip { font: .85rem/1.4 var(--font-mono); padding: .1rem .55rem; bo
 
 /* A trace ID in the check history: long and unbroken, so it may wrap anywhere rather than widen the table. */
 .trace-id { font-family: var(--font-mono); font-size: .8em; overflow-wrap: anywhere; user-select: all; }
+
+/* A status page's custom domain (components/CustomDomain.tsx): its own card under the page's form, wide enough for the DNS records. */
+.custom-domain { max-width: 36rem; }
+.custom-domain .domain-head { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; font-size: 1.05rem; overflow-wrap: anywhere; }
+.custom-domain legend { font-weight: 600; margin-bottom: .25rem; }
+.custom-domain .dns-record { border-top: 1px solid var(--line); padding-top: .6rem; margin-top: .6rem; }
+.custom-domain .dns-record-type { margin: 0 0 .25rem; }
+.custom-domain .row-actions { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }

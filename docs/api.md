@@ -436,7 +436,7 @@ Public pages at `/status/<slug>`. An organization may have as many as its plan i
 | Method & path | Who | Notes |
 |---|---|---|
 | `GET /public/status/:slug` | **no login** | `{branding, title, description, overall, monitors: [{name, state, uptime_percent, days: [{date, uptime_percent, status}]}], incidents: [{monitor, started_at, resolved_at, updates: [{status, message, posted_at}]}], history_days, generated_at}`. `overall` is `operational`, `partial_outage`, `major_outage` or `maintenance`; `state` is `up`, `down`, `maintenance` or `unknown` (paused / no check yet); day `status` is `ok` (≥ 99.5 %), `degraded` (≥ 95 %), `down` or `none` (fewer than 5 checks). Uptime leaves out checks made during maintenance windows. `history_days` is 90, or the plan's retention if shorter (Free: 7). Incidents are those from the last 14 days. Cached for 30 s (`Cache-Control: public, max-age=30`); 120 requests/min/IP |
-| `GET /status-pages` | any member | `{status_pages: [{id, slug, title, description, published, monitors: [{monitor_id, display_name}], accent_color, website_url, hide_powered_by, has_logo, logo_version}], max}`, oldest first; `max` is the plan's limit |
+| `GET /status-pages` | any member | `{status_pages: [{id, slug, title, description, published, monitors: [{monitor_id, display_name}], accent_color, website_url, hide_powered_by, has_logo, logo_version, custom_domain, custom_domain_state, redirect_to_domain}], max}`, oldest first; `max` is the plan's limit |
 | `POST /status-pages` | owner | `{slug, title, description?, published, monitors, accent_color?, website_url?, hide_powered_by?}` → 201 `{status_page}`. `slug`: 3–40 lowercase letters, digits, hyphens. `display_name` empty = the monitor's own name. Publishing needs at least one monitor. 409 `SLUG_TAKEN`, 400 `VALIDATION_ERROR` (for example a monitor from another organization), 403 `PLAN_LIMIT_REACHED` with `limit_type: "status_pages"` |
 | `GET /status-pages/:id` | any member | `{status_page}`; another organization's page (or a malformed id) is a 404 |
 | `PUT /status-pages/:id` | owner | Replaces the page (same body as POST) → 200. Allowed above the plan's limit |
@@ -445,8 +445,30 @@ Public pages at `/status/<slug>`. An organization may have as many as its plan i
 | `GET /status-pages/:id/logo` | any member | The stored logo for the editor's preview, whatever the plan; 404 when there is none |
 | `DELETE /status-pages/:id/logo` | owner | → 200 `{status_page}`; allowed on every plan |
 | `GET /public/status/:slug/logo` | **no login** | A published page's logo, only while its plan includes branding (else 404, so drafts and logos kept after a downgrade reveal nothing). `Cache-Control: public, max-age=3600` (the public page links to it with `?v=<version>`), `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'` |
+| `GET /status-pages/:id/domain` | any member | `{domain, target, max}`: the page's custom domain or `null`, the name CNAME records point at (`domains.hawkeye.observer`), and the plan's limit (0: not included) |
+| `PUT /status-pages/:id/domain` | owner | `{hostname}` → 200 `{domain, target, max}`. Sets the page's custom domain, replacing any other (which stops being served at once). The same name again changes nothing. 400 `VALIDATION_ERROR` on `hostname`; 403 `PLAN_LIMIT_REACHED` (`status_page_domains`); 409 `DOMAIN_IN_USE` (another page serves it) or `DOMAIN_ON_OTHER_PAGE` (one of yours has it). Rate-limited |
+| `POST /status-pages/:id/domain/check` | owner | Looks the DNS records up now ("Check now") → 200 `{domain, target, max}`; a claim that stopped being checked automatically starts a new 3-day attempt. 404 when the page has no domain. Rate-limited |
+| `DELETE /status-pages/:id/domain` | owner | 204; it stops being served at once and the name is free for anyone to claim. 404 when there is none |
+| `GET /public/domain-status` | **no login** | The status page for the requested host name (the `Host` header; only on a customer's own domain, where Caddy serves this and nothing else of the API): the same body as `GET /public/status/:slug`, plus `home_url` (HawkEye's address) and with `logo_url` pointing at the next row. 404 for a name that is not verified, a draft, or a plan that no longer includes custom domains. `Vary: Host`; cached 30 s |
+| `GET /public/domain-status/logo` | **no login** | That page's logo, on the same terms as `GET /public/status/:slug/logo` |
 
 **Branding.** `accent_color` is `#rrggbb` (stored lower-case) or `""`; the public header uses it as its background with black or white text, whichever reads better (always at least 4.5:1). `website_url` is an `https://` address (no credentials) or `""`, shown as "← Back to example.com". `hide_powered_by` removes "Powered by HawkEye". A logo, color and link need `plans.status_page_branding` (Pro, Agency); hiding "Powered by" needs `plans.status_page_white_label` (Agency); otherwise 403 `PLAN_LIMIT_REACHED` with `limit_type` `status_page_branding` or `status_page_white_label`. Only a *change* is checked: clearing is always allowed, and values stored before a downgrade may be saved again unchanged (they are kept but not shown). The public view carries `branding: {logo_url?, accent_color?, website_url?, powered_by}` with only what the plan currently allows.
+
+**Custom domains** (Agency, one per page: `plans.max_status_page_domains`, Agency 50; `internal/statuspagedomains`, migration `000044`,
+`docs/plan-status-page-domains.md`). A page can be served at a subdomain the customer owns, such as `status.clientbrand.com`; a domain's own name
+(`clientbrand.com`) is refused, since it can't have a CNAME. `domain` is `{id, page_id, hostname, state, records: [{type, name, value}], last_error,
+last_checked_at, next_check_at, verified_at, failing_since, created_at}`. The two `records` are what the owner adds: `CNAME <hostname> →
+domains.hawkeye.observer` (routes visitors) and `TXT _hawkeye.<hostname> → hawkeye-verify=<token>` (proves control; each claim has its own token, so
+a record left from an earlier claim never verifies a new one). A provider that flattens the CNAME into addresses is accepted when every address is
+HawkEye's. `state`: `pending` (not served; checked every minute for an hour, then every 15 minutes for 3 days, then only on "Check now"), `active`
+(served; checked daily), `failing` (a record went wrong; still served, checked hourly, for 7 days from `failing_since`), `disabled` (not served
+until it verifies again). A lookup that gets no answer never changes an active domain. `last_error` says, in plain words, what is wrong. A name may
+be claimed by several organizations while pending, so claiming a client's name first blocks nobody; only the claim whose token is in the zone
+verifies, and a served name can't be claimed by anyone else. The organization's owner gets an email when a domain goes live, needs attention,
+works again or stops being served, and each change is in the security log (`status_page.domain_*`). The status page carries read-only
+`custom_domain` and `custom_domain_state`, and `redirect_to_domain` (default `false`): while the domain is served, `/status/<slug>` sends visitors
+there. A `PUT /status-pages/:id` that leaves `redirect_to_domain` out keeps its value. The MCP tool `list_status_pages` shows `custom_domain`,
+`custom_domain_state` and, while served, `custom_domain_url`.
 
 ## Maintenance windows
 
