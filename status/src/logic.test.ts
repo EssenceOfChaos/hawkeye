@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { days, downSeconds, engineOK, outageSeconds, parseWindow, percent, step, uptime, type State } from './logic'
+import { FAVICON_DATA_URL, faviconBytes } from './favicon'
 import { renderPage, type Snapshot } from './page'
 
 const fresh: State = { failures: 0, firstFailureAt: null, downSince: null }
@@ -155,5 +156,13 @@ describe('planned maintenance', () => {
     html = renderPage({ ...during, maintenance: [] })
     expect(html).toContain('Down since')
     expect(html).not.toContain('Under maintenance')
+  })
+})
+
+describe('the favicon', () => {
+  it('is embedded in the page and served at /favicon.ico as a real PNG', () => {
+    const html = renderPage({ now: 1_800_000_000, measuredSince: null, components: [], incidents: [], maintenance: [] })
+    expect(html).toContain(`<link rel="icon" type="image/png" sizes="32x32" href="${FAVICON_DATA_URL}">`)
+    expect([...faviconBytes().slice(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) // the PNG signature
   })
 })

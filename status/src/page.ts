@@ -1,6 +1,7 @@
 // The status page's HTML. Self-contained (inline styles, no fonts, images or scripts from anywhere), so it renders when HawkEye's own server is
 // down. Everything that comes from the database is escaped.
 
+import { FAVICON_DATA_URL } from './favicon'
 import { activeWindow, days, duration, percent, uptime, type IncidentStatus, type Outage } from './logic'
 
 export interface Snapshot {
@@ -103,6 +104,7 @@ export function renderPage(s: Snapshot): string {
 <title>HawkEye status</title>
 <meta name="description" content="Whether HawkEye is up, measured every minute from outside HawkEye's own servers, with its uptime over the last 90 days and any incidents.">
 <meta http-equiv="refresh" content="60">
+<link rel="icon" type="image/png" sizes="32x32" href="${FAVICON_DATA_URL}">
 <style>
 :root { --navy: #091c33; --panel: #0f2744; --text: #eaf1fa; --muted: #a9b9cd; --gold: #e8b95e; --up: #56d364; --minor: #f0b429; --major: #ff8a80; --maint: #79b8ff; --none: #2a4262; }
 * { box-sizing: border-box; }

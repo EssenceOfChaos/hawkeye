@@ -6,6 +6,7 @@ import {
   CHECK_TIMEOUT_MS, CHECKS_KEPT, COMPONENTS, engineOK, INCIDENT_STATUSES, parseWindow, step,
   type ComponentId, type IncidentStatus, type Outage, type State,
 } from './logic'
+import { faviconBytes } from './favicon'
 import { renderPage, type Snapshot } from './page'
 
 export interface Env {
@@ -152,6 +153,12 @@ export async function handle(req: Request, env: Env, now: number): Promise<Respo
         'X-Content-Type-Options': 'nosniff',
         'Referrer-Policy': 'no-referrer',
       },
+    })
+  }
+  // Browsers and tools that ask for /favicon.ico directly get the same icon the page embeds.
+  if (route === 'GET /favicon.ico' || route === 'HEAD /favicon.ico') {
+    return new Response(req.method === 'HEAD' ? null : faviconBytes(), {
+      headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' },
     })
   }
   if (route === 'GET /api/status.json') {
