@@ -172,8 +172,8 @@ func TestWritePreviewFiles(t *testing.T) {
 		base = "https://app.example.com"
 	}
 	verify := sample()
-	verify.AppBaseURL = base
-	outage := Content{Preheader: "Offline", Heading: "Marketing site may be offline", Tone: ToneAlert, AppBaseURL: base,
+	verify.AppBaseURL, verify.Picture = base, PictureWelcome
+	outage := Content{Preheader: "Offline", Heading: "Marketing site may be offline", Tone: ToneAlert, Picture: PictureMonitorDown, AppBaseURL: base,
 		Paragraphs:  []string{"HawkEye confirmed an outage after repeated failed checks."},
 		Facts:       []Fact{{"Website", "https://example.com/"}, {"Detected", "2026-10-18 21:04 UTC"}, {"Cause", "Connection timed out"}},
 		ButtonLabel: "See what's down", ButtonURL: base + "/incidents", Note: "You get one alert when an outage is confirmed and one when it ends."}
@@ -183,9 +183,35 @@ func TestWritePreviewFiles(t *testing.T) {
 	contact := Content{Preheader: "New message", Heading: "Charged twice", Tone: ToneAlert, AppBaseURL: base,
 		Paragraphs: []string{"New message from the HawkEye contact form."}, Facts: []Fact{{"Reference", "HK-7F3A2C"}, {"Priority", "High"}},
 		Quote: "I was charged twice this month.\nPlease check my invoice."}
-	for name, c := range map[string]Content{"verify": verify, "outage": outage, "recovered": recovered, "contact": contact} {
+	test := Content{Preheader: "Only a test", Heading: "Your alerts are working", Picture: PictureTestAlert, AppBaseURL: base,
+		Paragraphs: []string{"This is a test alert from HawkEye. If you can read this, real alerts will reach this address."},
+		Facts:      []Fact{{"Sent to", "ops@example.com"}}, ButtonLabel: "Manage alert recipients", ButtonURL: base + "/notifications"}
+	for name, c := range map[string]Content{"verify": verify, "outage": outage, "recovered": recovered, "contact": contact, "test": test} {
 		if err := os.WriteFile(filepath.Join(dir, name+".html"), []byte(c.RenderHTML()), 0o644); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestPictureSitsBesideTheHeadingAsDecoration(t *testing.T) {
+	c := sample()
+	c.Picture = PictureMonitorDown
+	h := c.RenderHTML()
+	img := `<img src="https://app.example.com/email/scout-monitor-down.png" width="112" height="112" alt=""`
+	if !strings.Contains(h, img) {
+		t.Fatalf("html misses %s:\n%s", img, h)
+	}
+	if i, j := strings.Index(h, "Verify your email</h1>"), strings.Index(h, img); i < 0 || j < i {
+		t.Fatal("the picture should follow the heading, in the cell beside it")
+	}
+	if strings.Contains(c.RenderText(), "scout") {
+		t.Fatal("the plain-text version has no picture")
+	}
+	if strings.Contains(sample().RenderHTML(), "/email/scout-") {
+		t.Fatal("no picture unless one is chosen")
+	}
+	c.AppBaseURL = ""
+	if strings.Contains(c.RenderHTML(), "<img") {
+		t.Fatal("without a base URL there is nowhere to load the picture from")
 	}
 }

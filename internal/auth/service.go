@@ -492,6 +492,7 @@ func (s *Service) sendVerification(ctx context.Context, to, raw string) {
 		Paragraphs:  []string{"Welcome to HawkEye. Please confirm your email address to enable billing and alert delivery."},
 		ButtonLabel: "Confirm email address", ButtonURL: link,
 		Note: "This link is valid for 48 hours. If you did not create a HawkEye account, you can ignore this email.", AppBaseURL: s.cfg.AppBaseURL,
+		Picture: email.PictureWelcome,
 	}
 	if err := s.mail.Send(ctx, c.Message("", to, "Verify your HawkEye email address")); err != nil {
 		s.log.ErrorContext(ctx, "send verification email failed", "error", err)

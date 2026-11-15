@@ -295,3 +295,42 @@ func TestRenderHeartbeatAlerts(t *testing.T) {
 		t.Fatalf("website webhook type: %+v", p.Monitor)
 	}
 }
+
+// Scout holds an envelope with a red warning on every kind of outage alert, and a thumbs-up on the test alert. Recoveries, slowdowns and
+// expiry warnings carry no picture.
+func TestAlertEmailPictures(t *testing.T) {
+	start := time.Date(2026, 11, 3, 2, 0, 0, 0, time.UTC)
+	end := start.Add(25 * time.Minute)
+	const base = "https://app"
+	down, test := base+"/email/scout-monitor-down.png", base+"/email/scout-test-alert.png"
+	cases := []struct {
+		name string
+		a    Alert
+		want string // "" means no picture
+	}{
+		{"website outage", Alert{Event: EventOutage, MonitorName: "Site", MonitorURL: "https://x.example.com"}, down},
+		{"DNS outage", Alert{Event: EventOutage, MonitorType: "dns", MonitorName: "Mail", MonitorURL: "example.com"}, down},
+		{"missed heartbeat", Alert{Event: EventOutage, MonitorType: "heartbeat", MonitorName: "Backup", Cause: "No ping since 2026-11-02 02:00 UTC"}, down},
+		{"failed heartbeat", Alert{Event: EventOutage, MonitorType: "heartbeat", MonitorName: "Backup", Cause: "The job exited with status 3"}, down},
+		{"test alert", Alert{Event: EventTest, To: "ops@example.com"}, test},
+		{"website recovery", Alert{Event: EventRecovery, MonitorName: "Site", MonitorURL: "https://x.example.com", ResolvedAt: &end}, ""},
+		{"DNS recovery", Alert{Event: EventRecovery, MonitorType: "dns", MonitorName: "Mail", ResolvedAt: &end}, ""},
+		{"heartbeat recovery", Alert{Event: EventRecovery, MonitorType: "heartbeat", MonitorName: "Backup", ResolvedAt: &end}, ""},
+		{"slow", Alert{Event: EventSlow, MonitorName: "Site", MonitorURL: "https://x.example.com"}, ""},
+		{"certificate expiry", Alert{Event: EventSSLExpiry, MonitorName: "Site", MonitorURL: "https://x.example.com", SSLExpiresAt: end.Add(72 * time.Hour), SSLBucket: 7}, ""},
+		{"domain expiry", Alert{Event: EventDomainExpiry, DomainName: "example.com", DomainExpiresAt: end.Add(72 * time.Hour), DomainBucket: 7}, ""},
+	}
+	for _, c := range cases {
+		c.a.StartedAt, c.a.AppBaseURL = start, base
+		html := Render(c.a).HTML
+		got := ""
+		for _, p := range []string{down, test, base + "/email/scout-welcome.png"} {
+			if strings.Contains(html, p) {
+				got = p
+			}
+		}
+		if got != c.want {
+			t.Errorf("%s: picture %q, want %q", c.name, got, c.want)
+		}
+	}
+}
