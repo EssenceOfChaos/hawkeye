@@ -97,6 +97,9 @@ After CI passes on a push to `main`, `.github/workflows/deploy.yml` SSHes to the
 test fails it rolls back to the previous commit and exits non-zero, so the Actions run turns red. A lock stops two deploys overlapping. You can also run it by
 hand on the VM (`scripts/deploy.sh`, defaults to the tip of `origin/main`) or from the Actions tab (Run workflow). Ticking **Only apply changed settings** there (or `scripts/deploy.sh secrets-only`) applies changes made in the secret manager without a new release.
 
+The status page (`status/`, a Cloudflare Worker) deploys separately: `.github/workflows/deploy-status.yml` runs when a push to `main` changes it.
+Its setup is in `docs/operations.md`, "HawkEye's status page".
+
 **One-time setup**
 
 1. On your computer, make a key used only for deploys: `ssh-keygen -t ed25519 -N "" -C github-actions-deploy -f ~/hawkeye-deploy-key`.

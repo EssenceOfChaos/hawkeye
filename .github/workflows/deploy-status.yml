@@ -1,0 +1,52 @@
+name: Deploy status page
+
+# Deploys status.hawkeye.observer (the Cloudflare Worker in status/) when a push to main changes it. Can also be run by hand from the Actions tab.
+# It type-checks and tests first, applies any new D1 migrations, then deploys. The Worker's own secrets (HEARTBEAT_TOKEN, ADMIN_TOKEN) stay in
+# Cloudflare between versions, so they are never needed here. One-time setup: docs/operations.md, "HawkEye's status page".
+on:
+  push:
+    branches: [main]
+    paths:
+      - status/**
+      - .github/workflows/deploy-status.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: status-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: status   # add "required reviewers" to this environment in GitHub if you want an approval click before each deploy
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: status
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: status/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Check the Cloudflare secrets are set
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in the repository's 'status' environment (docs/operations.md)."
+            exit 1
+          fi
+      # Migrations go first, so the new version never runs against tables it doesn't expect. Already-applied ones are skipped.
+      - name: Apply database migrations
+        run: npm run migrate
+      - name: Deploy
+        run: npm run deploy

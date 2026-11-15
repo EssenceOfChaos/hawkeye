@@ -138,9 +138,22 @@ The secrets go up with the first version, so the page never runs without them (h
 outage). Later deploys can leave out `--secrets-file`: secrets are kept between versions.
 
 Then add the two `STATUS_HEARTBEAT_*` settings to `prod` in Infisical and run `scripts/deploy.sh secrets-only` (or a normal release); the worker starts
-sending heartbeats and "Monitoring and alerts" turns green within a minute. Later changes to `status/`: `npm run deploy` again (and `npm run migrate`
-when a migration was added), or connect the repository in Cloudflare (Workers Builds, root directory `status`) to deploy on every push to `main`. CI
-type-checks and tests it either way.
+sending heartbeats and "Monitoring and alerts" turns green within a minute.
+
+**Later changes deploy themselves.** When a push to `main` changes anything in `status/`, `.github/workflows/deploy-status.yml` type-checks and
+tests it, applies any new D1 migrations (`npm run migrate`; already-applied ones are skipped), then deploys (`npm run deploy`). It never touches the
+Worker's secrets, which Cloudflare keeps between versions. Runs are in the Actions tab ("Deploy status page"), where it can also be run by hand. To
+deploy from a laptop instead: `set -a; . ~/.hawkeye-secrets/status-deploy.env; set +a; npm run migrate && npm run deploy` in `status/`.
+
+One-time setup for the workflow:
+
+1. In Cloudflare (My Profile → API Tokens → Create Token), start from the **Edit Cloudflare Workers** template, add **Account → D1 → Edit**, and limit
+   it to HawkEye's account and the `hawkeye.observer` zone. Use a new token for GitHub rather than the laptop's, so either can be revoked alone.
+2. In GitHub (Settings → Environments), create an environment named `status` and add two environment secrets: `CLOUDFLARE_API_TOKEN` (the new
+   token) and `CLOUDFLARE_ACCOUNT_ID` (on the Workers overview page in Cloudflare). Optionally add required reviewers for an approval click.
+3. Keep a copy of the token in Infisical's `staging` environment next to the laptop's, never in `prod` (anything in `prod` is copied to the server).
+
+Until the secrets are set, a run stops at "Check the Cloudflare secrets are set" with a message saying what is missing; nothing is deployed.
 
 **Posting an incident.** Write for customers: what they notice, not what broke inside. Status is `investigating`, `identified`, `monitoring` or
 `resolved` (which closes it). The page shows it within a minute.
