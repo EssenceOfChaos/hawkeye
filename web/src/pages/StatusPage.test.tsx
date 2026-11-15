@@ -130,7 +130,8 @@ describe('status page settings', () => {
   const pageA = { id: 'p1', slug: 'client-a', title: 'Client A', description: '', published: true, monitors: [{ monitor_id: 'm2', display_name: '' }], ...look }
   const pageB = { id: 'p2', slug: 'client-b', title: 'Client B', description: '', published: false, monitors: [], ...look }
 
-  function renderAt(path: string, list: { status_pages: unknown[]; max: number } = { status_pages: [], max: 1 }, plan: Record<string, unknown> = {}) {
+  function renderAt(path: string, list: { status_pages: unknown[]; max: number } = { status_pages: [], max: 1 }, plan: Record<string, unknown> = {},
+    domainView: unknown = { domain: null, target: 'domains.hawkeye.observer', max: 0 }) {
     document.cookie = 'csrf_token=t; path=/'
     const calls: { m: string; url: string; body?: string }[] = []
     vi.stubGlobal(
@@ -141,6 +142,7 @@ describe('status page settings', () => {
         if (url.includes('/auth/me')) return json(200, { user: { id: 'u', email: 'me@example.com', email_verified_at: '2026-01-01T00:00:00Z' }, organizations: [{ id: 'o', name: 'Org', role: 'owner' }] })
         if (url.endsWith('/status-pages') && m === 'POST') return json(201, { status_page: { ...pageB, id: 'new' } })
         if (url.endsWith('/status-pages')) return json(200, list)
+        if (url.endsWith('/status-pages/p1/domain')) return json(200, domainView)
         if (url.endsWith('/status-pages/p1') && m === 'PUT') return json(200, { status_page: pageA })
         if (url.endsWith('/status-pages/p1/logo') && m === 'PUT') return json(200, { status_page: { ...pageA, has_logo: true, logo_version: 7 } })
         if (url.endsWith('/status-pages/p1')) return json(200, { status_page: pageA })
@@ -222,6 +224,49 @@ describe('status page settings', () => {
     expect(await screen.findByText(/Client A is public/)).toBeInTheDocument()
     const put = calls.find((c) => c.m === 'PUT' && c.url.endsWith('/status-pages/p1'))
     expect(JSON.parse(put!.body!)).toMatchObject({ accent_color: '#1a73e8', website_url: 'https://www.acme.example.com', hide_powered_by: false })
+  })
+
+  it('lists a page’s custom domain beside its address, linked once it is live', async () => {
+    renderAt('/status-pages', { status_pages: [{ ...pageA, custom_domain: 'status.client-a.com', custom_domain_state: 'active' },
+      { ...pageB, custom_domain: 'status.client-b.com', custom_domain_state: 'pending' }], max: 50 })
+    expect(await screen.findByRole('link', { name: 'status.client-a.com' })).toHaveAttribute('href', 'https://status.client-a.com/')
+    expect(screen.queryByRole('link', { name: 'status.client-b.com' })).not.toBeInTheDocument()
+    expect(screen.getByText(/waiting for DNS records/)).toBeInTheDocument()
+  })
+
+  it('offers the redirect to the custom domain only when the page has one, and saves it with the page', async () => {
+    const withDomain = { ...pageA, custom_domain: 'status.client-a.com', custom_domain_state: 'active', redirect_to_domain: false }
+    const view = { domain: { id: 'd', page_id: 'p1', hostname: 'status.client-a.com', state: 'active', records: [], last_error: '', last_checked_at: null,
+      next_check_at: null, verified_at: '2026-11-01T00:00:00Z', failing_since: null, created_at: '2026-11-01T00:00:00Z' }, target: 'domains.hawkeye.observer', max: 50 }
+    const calls: { m: string; url: string; body?: string }[] = []
+    document.cookie = 'csrf_token=t; path=/'
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const m = init?.method ?? 'GET'
+      calls.push({ m, url, body: init?.body as string | undefined })
+      if (url.includes('/auth/me')) return json(200, { user: { id: 'u', email: 'me@example.com', email_verified_at: '2026-01-01T00:00:00Z' }, organizations: [{ id: 'o', name: 'Org', role: 'owner' }] })
+      if (url.endsWith('/status-pages/p1/domain')) return json(200, view)
+      if (url.endsWith('/status-pages/p1')) return json(200, { status_page: withDomain })
+      if (url.endsWith('/usage')) return json(200, { usage: { plan: { code: 'agency' } } })
+      if (url.includes('/monitors')) return json(200, { monitors: [{ id: 'm2', name: 'API' }], total: 1 })
+      return json(404, {})
+    }))
+    render(<MemoryRouter initialEntries={['/status-pages/p1']}><AuthProvider><Routes>
+      <Route path="/status-pages" element={<StatusPagesPage />} /><Route path="/status-pages/:pageID" element={<StatusPageEditor />} />
+    </Routes></AuthProvider></MemoryRouter>)
+    const toggle = await screen.findByLabelText('Send visitors of /status/client-a to status.client-a.com')
+    expect(screen.getByRole('link', { name: 'https://status.client-a.com' })).toHaveAttribute('href', 'https://status.client-a.com/')
+    await userEvent.click(toggle)
+    await userEvent.click(screen.getByRole('button', { name: 'Save status page' }))
+    await screen.findByText(/Client A is public/)
+    const put = calls.find((c) => c.m === 'PUT' && c.url.endsWith('/status-pages/p1'))
+    expect(JSON.parse(put!.body!)).toMatchObject({ redirect_to_domain: true })
+  })
+
+  it('has no redirect switch for a page without a custom domain', async () => {
+    renderAt('/status-pages/p1')
+    await screen.findByDisplayValue('client-a')
+    expect(screen.queryByLabelText(/Send visitors of/)).not.toBeInTheDocument()
+    expect(await screen.findByText(/on your client’s own domain/)).toBeInTheDocument()
   })
 
   it('on Free: offers branding as an upgrade and asks to create the page before adding a logo', async () => {

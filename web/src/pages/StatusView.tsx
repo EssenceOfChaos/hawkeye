@@ -36,6 +36,21 @@ function hostOf(url: string): string {
   }
 }
 
+/** The browser tab's title: the page's own, with "status" added unless it already says so ("Acme status", not "Acme status status"). */
+function tabTitle(title: string): string {
+  return /\bstatus\s*$/i.test(title) ? title.trim() : `${title} status`
+}
+
+/**
+ * Which edge a day's tooltip lines up with. Centered over a bar near either end of the row, the text would stick out past the page and make a phone
+ * scroll sideways, so the first third open toward the right and the last third toward the left.
+ */
+function tipEdge(i: number, n: number): string {
+  if (i < n / 3) return ' tip-start'
+  if (i >= (2 * n) / 3) return ' tip-end'
+  return ''
+}
+
 /** "Powered by HawkEye" links to HawkEye's own address on a customer's domain, and to this site's home page otherwise. */
 function homeLink(home: string | undefined): string {
   return home && /^https?:\/\//.test(home) ? home : '/'
@@ -73,7 +88,7 @@ export function StatusView({ load, onLoaded }: { load: () => Promise<PublicStatu
   }, [load, onLoaded])
 
   useEffect(() => {
-    if (data) document.title = `${data.title} status`
+    if (data) document.title = tabTitle(data.title)
   }, [data])
 
   // Search engines index the page once, at its own domain when it has one.
@@ -149,8 +164,8 @@ export function StatusView({ load, onLoaded }: { load: () => Promise<PublicStatu
             </div>
             <div className="status-bars" role="img"
               aria-label={`Daily uptime for the last ${data.history_days} days: ${known.length} days with data, ${known.filter((d) => d.status === 'down').length} days with an outage`}>
-              {m.days.map((d) => (
-                <span key={d.date} className="d-tooltip" data-tip={`${d.date}: ${d.uptime_percent === null ? 'no data' : `${d.uptime_percent.toFixed(2)}% uptime`}`}>
+              {m.days.map((d, i) => (
+                <span key={d.date} className={`d-tooltip${tipEdge(i, m.days.length)}`} data-tip={`${d.date}: ${d.uptime_percent === null ? 'no data' : `${d.uptime_percent.toFixed(2)}% uptime`}`}>
                   <span className={d.status} />
                 </span>
               ))}

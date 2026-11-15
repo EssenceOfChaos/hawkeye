@@ -168,9 +168,19 @@ func (s *Service) Claim(ctx context.Context, orgID, pageID uuid.UUID, raw string
 	return s.Get(ctx, orgID, pageID)
 }
 
-// Remove deletes a page's domain. It stops being served at once, and the name is free for anyone to claim.
+// Remove deletes a page's domain. It stops being served at once, and the name is free for anyone to claim. The page's redirect setting is turned
+// off with it, so a domain set up later is never redirected to before its owner chooses that again.
 func (s *Service) Remove(ctx context.Context, orgID, pageID uuid.UUID) (*Domain, error) {
-	d, err := s.scan(s.pool.QueryRow(ctx, `DELETE FROM status_page_domains WHERE organization_id = $1 AND page_id = $2 RETURNING `+domainCols, orgID, pageID))
+	var d *Domain
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		var err error
+		d, err = s.scan(tx.QueryRow(ctx, `DELETE FROM status_page_domains WHERE organization_id = $1 AND page_id = $2 RETURNING `+domainCols, orgID, pageID))
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `UPDATE status_pages SET redirect_to_domain = false WHERE id = $1`, pageID)
+		return err
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

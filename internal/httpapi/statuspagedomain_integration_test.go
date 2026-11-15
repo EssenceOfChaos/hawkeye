@@ -165,6 +165,9 @@ func TestStatusPageDomainEndpoints(t *testing.T) {
 	if r := owner.call("GET", base, nil); r.Body["domain"] != nil {
 		t.Fatalf("removed: %v", r.Body)
 	}
+	if page := owner.call("GET", "/api/v1/status-pages/"+pageID, nil).Body["status_page"].(map[string]any); page["redirect_to_domain"] != false || page["custom_domain"] != "" {
+		t.Fatalf("removing the domain turns the redirect off: %v", page)
+	}
 	if r := owner.call("DELETE", base, nil); r.Status != 404 {
 		t.Fatalf("remove twice: %d", r.Status)
 	}

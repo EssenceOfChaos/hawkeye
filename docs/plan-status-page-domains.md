@@ -124,6 +124,12 @@ step 4.
   redirects there when `redirect_to_domain` is on. After a downgrade the claim is kept but nothing is served or certified. Checked on the smoke
   stack (`CADDY_EXTRA_GLOBAL=local_certs`): certificate on first visit, nothing but the page on the domain, no certificate for an unverified
   name, the main site unchanged, and the page rendering in Chromium with no console errors, no cookies and no other host contacted.
+- Step 5: the **Custom domain** card on a status page's settings (`web/src/components/CustomDomain.tsx`): the two DNS records with Copy buttons,
+  the state and the problem in plain words, **Check now**, **Use another domain** and **Remove**; Free and Pro see it as an Agency upgrade.
+  The redirect switch is in the page's own form, shown only when the page has a domain, and removing a domain turns it off. The list of pages
+  shows each page's domain. Also fixed on the way: public status pages scrolled sideways on phones (the day tooltips at either end of the row
+  now line up with that end), the tab read "Acme status status" for a page titled "Acme status", and the editor's branding section scrolled
+  sideways on phones.
 
 ## Operations
 
