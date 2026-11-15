@@ -426,6 +426,11 @@ export interface PublicStatus {
   incidents: { monitor: string; started_at: string; resolved_at: string | null; updates?: { status: string; message: string; posted_at: string }[] }[]
   history_days: number
   generated_at: string
+  /** The page's own domain while it is served there (https://status.example.com), and whether /status/<slug> should send visitors there. */
+  custom_domain_url?: string
+  redirect_to_domain?: boolean
+  /** On a customer's own domain only: HawkEye's address, for "Powered by HawkEye". */
+  home_url?: string
 }
 
 /** A one-time link that connects a Telegram chat through HawkEye's bot (POST /notification-settings/telegram-link). */

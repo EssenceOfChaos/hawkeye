@@ -6,6 +6,7 @@ import (
 	"encoding/base32"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,10 +69,14 @@ type Service struct {
 	verifier *Verifier
 	reserved []string
 	now      func() time.Time
+
+	mu      sync.Mutex
+	serving map[string]servingEntry
 }
 
 func NewService(pool *pgxpool.Pool, p *plans.Service, v *Verifier, reserved ...string) *Service {
-	return &Service{pool: pool, plans: p, verifier: v, reserved: append([]string{v.Target}, reserved...), now: time.Now}
+	return &Service{pool: pool, plans: p, verifier: v, reserved: append([]string{v.Target}, reserved...), now: time.Now,
+		serving: map[string]servingEntry{}}
 }
 
 // Target is the name customers point their CNAME at.
@@ -218,6 +223,69 @@ func (s *Service) check(ctx context.Context, d *Domain, restart bool) (*Domain, 
 		ch = &Change{Domain: *updated, From: d.State}
 	}
 	return updated, ch, r, nil
+}
+
+// servingTTL is how long Serving remembers an answer. Caddy asks on every TLS handshake for a name it has no certificate for, and anyone can
+// make it ask about any name, so answers (including "no") are cached to keep that off the database. A domain removed or disabled can be served
+// for up to this long after.
+const servingTTL = 30 * time.Second
+
+const maxServingCache = 10000
+
+type servingEntry struct {
+	slug    string
+	ok      bool
+	expires time.Time
+}
+
+// Serving answers what a host name serves to the public: the slug of a published status page whose domain is verified (active or failing) and
+// whose organization's plan still includes custom domains. ok is false for anything else, so after a downgrade the domain stops being served
+// (and no new certificate is issued) while its claim is kept. Answers are cached for servingTTL.
+func (s *Service) Serving(ctx context.Context, host string) (slug string, ok bool, err error) {
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	if host == "" || len(host) > 253 {
+		return "", false, nil
+	}
+	now := s.now()
+	s.mu.Lock()
+	if e, hit := s.serving[host]; hit && now.Before(e.expires) {
+		s.mu.Unlock()
+		return e.slug, e.ok, nil
+	}
+	s.mu.Unlock()
+
+	var org uuid.UUID
+	err = s.pool.QueryRow(ctx, `SELECT p.slug, p.organization_id FROM status_page_domains d JOIN status_pages p ON p.id = d.page_id
+		WHERE d.hostname = $1 AND d.state IN ('active', 'failing') AND p.published`, host).Scan(&slug, &org)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		slug, err = "", nil
+	case err != nil:
+		return "", false, err
+	default:
+		p, perr := plans.EffectivePlan(ctx, s.pool, org)
+		if perr != nil {
+			return "", false, perr
+		}
+		ok = p.MaxStatusPageDomains > 0
+		if !ok {
+			slug = ""
+		}
+	}
+	s.mu.Lock()
+	if len(s.serving) >= maxServingCache {
+		clear(s.serving)
+	}
+	s.serving[host] = servingEntry{slug: slug, ok: ok, expires: now.Add(servingTTL)}
+	s.mu.Unlock()
+	return slug, ok, nil
+}
+
+// Forget drops Serving's cached answers, so a change made in this process is served at once.
+func (s *Service) Forget() {
+	s.mu.Lock()
+	clear(s.serving)
+	s.mu.Unlock()
 }
 
 // ServedPage returns the status page a host name serves, for the certificate check (Caddy's on-demand "ask") and the public page on that name.

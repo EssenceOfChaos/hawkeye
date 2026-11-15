@@ -51,6 +51,7 @@ check "public plan list has three plans"    '[ "$("${CURL[@]}" "$BASE/api/v1/pla
 check "unauthenticated /auth/me is 401 with the error envelope" '[ "$(status "$BASE/api/v1/auth/me")" = 401 ] && "${CURL[@]}" "$BASE/api/v1/auth/me" | grep -q UNAUTHENTICATED'
 check "CSRF protection is active (login without token is 403)" '[ "$(status -X POST -H "Content-Type: application/json" -d "{}" "$BASE/api/v1/auth/login")" = 403 ]'
 check "unknown API route is a JSON 404"     '[ "$(status "$BASE/api/v1/nope")" = 404 ]'
+check "the certificate check for customer domains is not reachable from outside" '[ "$(status "$BASE/internal/tls/allow?domain=example.com")" = 404 ] && ! "${CURL[@]}" -I "$BASE/internal/tls/allow?domain=example.com" | grep -qi "^content-type: application/json"'
 check "heartbeat pings reach the API: an unknown ping address is a plain-text 404, not the app's page" '[ "$(status "$BASE/ping/AAAAAAAAAAAAAAAAAAAAAA")" = 404 ] && "${CURL[@]}" "$BASE/ping/AAAAAAAAAAAAAAAAAAAAAA" | grep -q "check the ping address"'
 check "Stripe webhook rejects an unsigned request (400, or 503 if billing is off)" 'c=$(status -X POST -d "{}" "$BASE/api/v1/webhooks/stripe"); [ "$c" = 400 ] || [ "$c" = 503 ]'
 

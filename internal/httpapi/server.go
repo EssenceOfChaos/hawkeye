@@ -202,7 +202,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
 	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, pageDomains: o.PageDomains, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, discovery: o.Discovery, drafts: o.Drafts, log: o.Logger, secureCookies: o.SecureCookies,
-		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, workflowChecker: o.WorkflowChecker, tokenRoutes: map[string]bool{}}
+		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, workflowChecker: o.WorkflowChecker, tokenRoutes: map[string]bool{}, appBaseURL: o.AppBaseURL}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
@@ -296,6 +296,15 @@ func registerAPI(e *echo.Echo, o Options) {
 	}
 	v1.GET("/public/status/:slug", h.publicStatus, publicLimit)
 	v1.GET("/public/status/:slug/logo", h.publicStatusLogo, publicLimit)
+	if h.pageDomains != nil {
+		// A status page on its own domain: the page is found from the Host header (Caddy passes it on unchanged), never from the address, so a
+		// customer's domain can only ever show that customer's page.
+		v1.GET("/public/domain-status", h.publicDomainStatus, publicLimit)
+		v1.GET("/public/domain-status/logo", h.publicDomainStatusLogo, publicLimit)
+		// Caddy's on-demand TLS asks here before getting a certificate for a name. Not under /api, and not in the Caddyfile's @backend list, so it
+		// can't be reached from the internet: only Caddy, on the private network, calls it.
+		e.GET(TLSAllowPath, h.tlsAllow)
+	}
 	if h.badges != nil {
 		// Uptime badges are embedded on other sites and in READMEs, so they live at a short address outside /api and outside its CSRF and global
 		// limits. Requests come largely from a few image proxies (GitHub's camo, for one), so the per-IP budget is generous and kept in memory: a

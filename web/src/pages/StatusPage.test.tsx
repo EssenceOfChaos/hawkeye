@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
+import { goTo } from '../statusLoad'
 import { StatusPage } from './StatusPage'
 import { StatusPageEditor, StatusPagesPage } from './StatusPageSettings'
 
@@ -95,6 +96,33 @@ describe('public StatusPage', () => {
     renderPublic(() => json(404, { error: { code: 'NOT_FOUND', message: 'Status page not found.' } }))
     expect(await screen.findByRole('heading', { name: 'Status page not found' })).toBeInTheDocument()
   })
+
+  it('sends visitors to the page’s own domain when its owner chose that', async () => {
+    const go = vi.spyOn(goTo, 'url').mockImplementation(() => {})
+    renderPublic(() => json(200, page({ custom_domain_url: 'https://status.acme.com', redirect_to_domain: true })))
+    expect(await screen.findByText(/Opening the status page/)).toBeInTheDocument()
+    expect(go).toHaveBeenCalledWith('https://status.acme.com/')
+    expect(screen.queryByText(/All systems operational/)).not.toBeInTheDocument()
+    go.mockRestore()
+  })
+
+  it('stays on this address when there is no redirect, and names the domain as the canonical address', async () => {
+    const go = vi.spyOn(goTo, 'url').mockImplementation(() => {})
+    renderPublic(() => json(200, page({ custom_domain_url: 'https://status.acme.com' })))
+    expect(await screen.findByText(/All systems operational/)).toBeInTheDocument()
+    expect(go).not.toHaveBeenCalled()
+    expect(document.head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://status.acme.com/')
+    go.mockRestore()
+  })
+
+  it('never follows an address that is not https', async () => {
+    const go = vi.spyOn(goTo, 'url').mockImplementation(() => {})
+    renderPublic(() => json(200, page({ custom_domain_url: 'javascript:alert(1)', redirect_to_domain: true })))
+    expect(await screen.findByText(/All systems operational/)).toBeInTheDocument()
+    expect(go).not.toHaveBeenCalled()
+    go.mockRestore()
+  })
+
 })
 
 describe('status page settings', () => {

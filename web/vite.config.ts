@@ -9,6 +9,8 @@ const apiTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8080'
 export default defineConfig({
   plugins: [react(), tailwindcss(), prerender()],
   build: {
+    // Two pages: the app (index.html), and the status page alone as served on customers' own domains (status.html, src/status-main.tsx).
+    rollupOptions: { input: { main: 'index.html', status: 'status.html' } },
     // Never inline fonts as data: URLs (small subsets otherwise are): the production CSP only allows fonts from our own origin.
     assetsInlineLimit: (file) => (/\.woff2?$/.test(file) ? false : undefined),
   },

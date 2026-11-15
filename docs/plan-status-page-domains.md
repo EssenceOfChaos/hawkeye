@@ -116,6 +116,14 @@ step 4.
 - Step 3: `GET/PUT/DELETE /status-pages/:id/domain` and `POST …/domain/check` (`docs/api.md`, *Custom domains*), the status page's read-only
   `custom_domain` and `custom_domain_state` and its `redirect_to_domain` setting (a save that leaves it out keeps it), and the MCP fields. The
   redirect itself is done in step 4, with the serving side.
+- Step 4: Caddy's `on_demand_tls` asks `GET /internal/tls/allow` (200 only for a verified domain of a published page on a plan that includes
+  them; answers cached 30 s; refused when the request came through a proxy). A catch-all site (`STATUS_DOMAINS_ADDRESS`, `https://` in
+  `docker-compose.prod.yml`) serves only `status.html` (`web/src/status-main.tsx`: the status view with no router, sign-in or analytics), the two
+  `/api/v1/public/domain-status` reads (found from the `Host` header) and `/assets/*`; everything else is a 404, with a CSP of our own origin only
+  and HSTS without `includeSubDomains`. `http://` on those names redirects to https. `/status/<slug>` names the domain as canonical, and
+  redirects there when `redirect_to_domain` is on. After a downgrade the claim is kept but nothing is served or certified. Checked on the smoke
+  stack (`CADDY_EXTRA_GLOBAL=local_certs`): certificate on first visit, nothing but the page on the domain, no certificate for an unverified
+  name, the main site unchanged, and the page rendering in Chromium with no console errors, no cookies and no other host contacted.
 
 ## Operations
 

@@ -77,6 +77,7 @@ func (h *handlers) putStatusPageDomain(c *echo.Context) error {
 		}
 		h.recordOrg(c, audit.StatusPageDomainSet, target{"status_page", id.String(), title}, map[string]any{"hostname": d.Hostname})
 		h.statusPages.Forget()
+		h.pageDomains.Forget()
 	}
 	return h.domainView(c, d)
 }
@@ -105,8 +106,10 @@ func (h *handlers) checkStatusPageDomain(c *echo.Context) error {
 			}
 			h.recordOrg(c, action, target{"status_page", id.String(), title}, details)
 		}
-		h.statusPages.Forget()
 	}
+	// "Check now" also makes any other recent change (publishing the page, a plan change) count at once, rather than within 30 seconds.
+	h.statusPages.Forget()
+	h.pageDomains.Forget()
 	return h.domainView(c, d)
 }
 
@@ -125,5 +128,6 @@ func (h *handlers) deleteStatusPageDomain(c *echo.Context) error {
 	}
 	h.recordOrg(c, audit.StatusPageDomainRemoved, target{"status_page", id.String(), title}, map[string]any{"hostname": d.Hostname})
 	h.statusPages.Forget()
+	h.pageDomains.Forget()
 	return c.NoContent(http.StatusNoContent)
 }

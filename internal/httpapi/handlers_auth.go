@@ -58,6 +58,7 @@ type handlers struct {
 	domains         *domains.Service
 	statusPages     *statuspage.Service
 	pageDomains     *statuspagedomains.Service
+	appBaseURL      string
 	badges          *badges.Service
 	heartbeats      *heartbeats.Service
 	regions         regions.Set

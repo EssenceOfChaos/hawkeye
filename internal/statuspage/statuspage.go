@@ -130,6 +130,10 @@ type Public struct {
 	Incidents   []IncidentView `json:"incidents"`
 	HistoryDays int            `json:"history_days"`
 	GeneratedAt time.Time      `json:"generated_at"`
+	// The page's own domain, while it is served there (verified, and the plan includes custom domains): its address, and whether visitors of
+	// /status/<slug> are sent there.
+	CustomDomainURL  string `json:"custom_domain_url,omitempty"`
+	RedirectToDomain bool   `json:"redirect_to_domain,omitempty"`
 }
 
 type Service struct {
@@ -553,6 +557,18 @@ func (s *Service) build(ctx context.Context, slug string, now time.Time) (Public
 	}
 	p.HistoryDays = min(MaxHistory, plan.HistoryRetentionDays)
 	p.GeneratedAt = now.UTC().Truncate(time.Second)
+	if plan.MaxStatusPageDomains > 0 {
+		var host string
+		var redirect bool
+		err := s.pool.QueryRow(ctx, `SELECT d.hostname, sp.redirect_to_domain FROM status_page_domains d JOIN status_pages sp ON sp.id = d.page_id
+			WHERE d.page_id = $1 AND d.state IN ('active', 'failing')`, pageID).Scan(&host, &redirect)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return Public{}, err
+		}
+		if host != "" {
+			p.CustomDomainURL, p.RedirectToDomain = "https://"+host, redirect
+		}
+	}
 
 	rows, err := s.pool.Query(ctx, `SELECT m.id, COALESCE(pm.display_name, m.name), m.enabled, m.current_status, in_maintenance(m.organization_id, m.id, $2)
 		FROM status_page_monitors pm JOIN monitors m ON m.id = pm.monitor_id

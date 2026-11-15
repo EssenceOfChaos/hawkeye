@@ -2,7 +2,9 @@ package httpapi_test
 
 import (
 	"context"
+	"encoding/json"
 	"net"
+	"net/http"
 	"net/netip"
 	"strings"
 	"sync"
@@ -184,4 +186,107 @@ func fieldValues(r resp) []string {
 		}
 	}
 	return out
+}
+
+// hostGet requests path from the test API as a visitor of host would reach it through Caddy.
+func hostGet(t *testing.T, e *env, host, path string, headers map[string]string) (int, map[string]any) {
+	t.Helper()
+	req, _ := http.NewRequest("GET", e.srv.URL+path, nil)
+	req.Host = host
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var m map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&m)
+	return res.StatusCode, m
+}
+
+func TestServingOnCustomDomains(t *testing.T) {
+	zone := newZone()
+	e := newEnvOpts(t, 100000, envOpts{dns: zone})
+	owner, org := e.register(t, "owner@example.com")
+	e.markVerified(t, "owner@example.com")
+	e.setOrgPlan(t, org, "agency")
+	r := owner.call("POST", "/api/v1/status-pages", map[string]any{"slug": "acme", "title": "Acme status"})
+	pageID := r.Body["status_page"].(map[string]any)["id"].(string)
+	base := "/api/v1/status-pages/" + pageID + "/domain"
+	r = owner.call("PUT", base, map[string]any{"hostname": "status.acme.com"})
+	zone.publish(r.Body["domain"].(map[string]any)["records"].([]any))
+
+	allow := func(name string) int {
+		code, _ := hostGet(t, e, "api:8080", "/internal/tls/allow?domain="+name, nil)
+		return code
+	}
+	if allow("status.acme.com") != 404 {
+		t.Fatal("no certificate before the domain is verified")
+	}
+	if r := owner.call("POST", base+"/check", nil); r.Body["domain"].(map[string]any)["state"] != "active" {
+		t.Fatalf("verify: %v", r.Body)
+	}
+	if allow("status.acme.com") != 404 {
+		t.Fatal("no certificate while the page is a draft")
+	}
+	if _, err := e.pool.Exec(t.Context(), `UPDATE status_pages SET published = true WHERE id = $1`, pageID); err != nil {
+		t.Fatal(err)
+	}
+	owner.call("POST", base+"/check", nil) // any domain change clears the cached answers
+	if code := allow("status.acme.com"); code != 200 {
+		t.Fatalf("a verified, published page gets a certificate: %d", code)
+	}
+	for _, name := range []string{"other.acme.com", "app.test", "", "STATUS.ACME.COM."} {
+		if code := allow(name); (code == 200) != (name == "STATUS.ACME.COM.") {
+			t.Errorf("certificate for %q: %d", name, code)
+		}
+	}
+	if code, _ := hostGet(t, e, "api:8080", "/internal/tls/allow?domain=status.acme.com", map[string]string{"X-Forwarded-For": "198.51.100.7"}); code != 403 {
+		t.Fatalf("a request that came through a proxy is refused: %d", code)
+	}
+
+	// The page on its own domain, found from the Host header.
+	code, body := hostGet(t, e, "status.acme.com", "/api/v1/public/domain-status", nil)
+	if code != 200 || body["title"] != "Acme status" || body["home_url"] != "http://app.test" || body["redirect_to_domain"] != nil {
+		t.Fatalf("domain status: %d %v", code, body)
+	}
+	if code, _ := hostGet(t, e, "status.other.com", "/api/v1/public/domain-status", nil); code != 404 {
+		t.Fatalf("an unknown name: %d", code)
+	}
+	if code, _ := hostGet(t, e, "status.acme.com", "/api/v1/public/domain-status/logo", nil); code != 404 {
+		t.Fatalf("no logo uploaded: %d", code)
+	}
+
+	// The HawkEye address names the domain, and redirects when asked.
+	_, pub := hostGet(t, e, "app.test", "/api/v1/public/status/acme", nil)
+	if pub["custom_domain_url"] != "https://status.acme.com" || pub["redirect_to_domain"] != nil {
+		t.Fatalf("public page: %v", pub)
+	}
+	owner.call("PUT", "/api/v1/status-pages/"+pageID, map[string]any{"slug": "acme", "title": "Acme status", "redirect_to_domain": true,
+		"published": false})
+	if _, err := e.pool.Exec(t.Context(), `UPDATE status_pages SET published = true WHERE id = $1`, pageID); err != nil {
+		t.Fatal(err)
+	}
+	owner.call("POST", base+"/check", nil)
+	if _, pub := hostGet(t, e, "app.test", "/api/v1/public/status/acme", nil); pub["redirect_to_domain"] != true {
+		t.Fatalf("redirect: %v", pub)
+	}
+
+	// After a downgrade the claim is kept, but nothing is served or certified.
+	e.setOrgPlan(t, org, "pro")
+	owner.call("POST", base+"/check", nil)
+	if allow("status.acme.com") != 404 {
+		t.Fatal("no certificate once the plan no longer includes custom domains")
+	}
+	if code, _ := hostGet(t, e, "status.acme.com", "/api/v1/public/domain-status", nil); code != 404 {
+		t.Fatalf("not served after a downgrade: %d", code)
+	}
+	if _, pub := hostGet(t, e, "app.test", "/api/v1/public/status/acme", nil); pub["custom_domain_url"] != nil || pub["redirect_to_domain"] != nil {
+		t.Fatalf("the HawkEye address stops naming the domain: %v", pub)
+	}
+	if r := owner.call("GET", base, nil); r.Body["domain"].(map[string]any)["state"] != "active" {
+		t.Fatalf("the claim itself is kept: %v", r.Body)
+	}
 }
