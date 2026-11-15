@@ -25,16 +25,25 @@ with ChatGPT and then cut out, cropped and resized outside the repository. **The
   `components/Scout.tsx`, which adds a soft gold glow behind him (his navy feathers otherwise sink into the navy page) and hides him from screen readers
   unless given alt text. Poses: **wave** (greeting: the Monitors empty state), **check** (thumbs-up with a green check: not used since the hero animates),
   **stand** (neutral, gesturing with one wing: beside the 404 radar), **alert** (holding a red warning beacon: not used yet). Where he goes: personality
-  moments (empty states, first-run screens, errors, marketing). Where he doesn't: dense working screens, customers' public status pages (their brand, not ours),
-  and real outage alerts (a cartoon is the wrong tone when someone's site is down). Keep the red **alert** pose off the 404 page and anything that could be
-  read as a claim about system health. He is too detailed to read below about 64 px, so favicons and small icons stay with the logo badge.
+  moments (empty states, first-run screens, errors, marketing) and the emails below. Where he doesn't: dense working screens, customers' public status pages
+  (their brand, not ours), and chat and webhook alerts. Keep the red **alert** pose off the 404 page and anything that could be read as a claim about system
+  health. He is too detailed to read below about 64 px, so favicons and small icons stay with the logo badge.
 - **Scout in motion** (`scout-rest.webp`, `scout-frames.webp`): the landing hero's Scout, in front of the laptop, rendered with
   `components/AnimatedScout.tsx`. He waves hello once the page has loaded and gives a thumbs-up with a green check, then blinks every few seconds (every
   fourth time, a thumbs-up instead), and flaps his wings with a small hop when pointed at or tapped. The frames come from eight 1254x1254 originals of one
   pose (rest, blink, wings up, wings down, three wave steps, thumbs-up), also kept by the product owner. The three wave originals and the thumbs-up had him
   drawn 18 to 44 px left of the others, so each was shifted until he lined up with the rest frame (feet within about 1 px at display size), placed on a
-  1270x1270 square wide enough for spread wings, resized to 400x400 and joined left to right into one strip: lossy WebP with alpha, 237 KB. `scout-rest.webp` is the first frame alone (29 KB): it shows first, the strip loads only after the page has,
-  and people who prefer reduced motion keep the still and never download the strip. New frames must line up the same way, or he jitters as they change.
+  1270x1270 square wide enough for spread wings, resized to 400x400 and joined left to right into one strip: lossy WebP with alpha, 237 KB.
+  `scout-rest.webp` is the first frame alone (29 KB): it shows first, the strip loads only after the page has, and people who prefer reduced motion
+  keep the still and never download the strip. New frames must line up the same way, or he jitters as they change.
+- **Scout in emails** (`web/public/email/scout-welcome.png`, `-monitor-down.png`, `-test-alert.png`, served at `/email/` like the logo): set with
+  `email.Content.Picture`, which shows him at 112 px beside the heading, HTML only and with empty alt text (the text says everything). **Welcome** (waving)
+  is on the "Confirm your email address" email, the first one a new account gets. **Monitor down** (worried, holding an envelope with a red warning) is on
+  every outage alert: websites, DNS checks and cron jobs; not on recoveries, slowdowns or certificate and domain warnings. He sits beside the heading so
+  the facts stay as high as before. **Test alert** (thumbs-up, holding an envelope with a green check) is on the "Your alerts are working" test email. The
+  originals are 1254x1254 transparent PNGs kept by the product owner; each was trimmed to his outline, placed on a 240x240 square with his feet at the
+  bottom, given a soft gold glow behind him (email clients can't draw the web's CSS glow, and his navy feathers sink into the navy card without it) and
+  saved as full-color PNG with alpha (90 to 96 KB). PNG, not WebP, because Outlook can't show WebP; full color because 256 colors lost the glow.
 - **`monitoring-hawk-eye.webp`, `monitoring-earth-network.webp`:** the /monitoring page's background art (a gold hawk's eye on navy; the night Earth with connection arcs),
   lossy WebP at full width. No text in either. They are photographic gradients, so WebP is a fraction of a PNG's size with no visible banding.
 

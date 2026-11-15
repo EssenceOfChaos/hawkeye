@@ -16,6 +16,20 @@ const (
 	ToneSuccess Tone = "success" // green: a recovery
 )
 
+// Picture is an illustration of Scout, the mascot, shown beside an email's heading. Each is a PNG served from <AppBaseURL>/email/<name>.png
+// (web/public/email), 240x240 with a soft gold glow drawn in so his navy feathers stand out from the navy card (docs/branding.md).
+type Picture string
+
+const (
+	PictureNone        Picture = ""
+	PictureWelcome     Picture = "scout-welcome"      // waving hello: the first email after signing up
+	PictureMonitorDown Picture = "scout-monitor-down" // holding an envelope with a red warning: a monitor's outage alert
+	PictureTestAlert   Picture = "scout-test-alert"   // thumbs-up, holding an envelope with a green check: the test alert
+)
+
+// pictureSize is the width and height a Picture is shown at, in CSS pixels (its file is twice that, for sharp high-density screens).
+const pictureSize = 112
+
 // Fact is one labeled line, such as "Website: https://example.com".
 type Fact struct{ Label, Value string }
 
@@ -30,7 +44,8 @@ type Content struct {
 	ButtonURL   string
 	Note        string // small print under the button
 	Tone        Tone
-	AppBaseURL  string // used for the logo and footer links
+	Picture     Picture // optional illustration beside the heading, HTML only (decoration: the text says everything)
+	AppBaseURL  string  // used for the logo, the picture and footer links
 
 	// UnsubscribeURL marks the email as one the recipient can opt out of (leave both empty for alerts and account mail). It is the page linked in the
 	// footer; UnsubscribePostURL is the endpoint mail clients POST to for their own "Unsubscribe" button (RFC 8058), sent in the headers.
@@ -88,6 +103,7 @@ func (c Content) clean() Content {
 	c.Preheader, c.Heading, c.ButtonLabel, c.Note = oneLine(c.Preheader), oneLine(c.Heading), oneLine(c.ButtonLabel), oneLine(c.Note)
 	c.ButtonURL, c.AppBaseURL, c.Address = noSpace(c.ButtonURL), noSpace(c.AppBaseURL), oneLine(c.Address)
 	c.UnsubscribeURL, c.UnsubscribePostURL = noSpace(c.UnsubscribeURL), noSpace(c.UnsubscribePostURL)
+	c.Picture = Picture(noSpace(string(c.Picture)))
 	c.Quote = multiLine(c.Quote)
 	ps := make([]string, len(c.Paragraphs))
 	for i, p := range c.Paragraphs {
@@ -174,6 +190,8 @@ type htmlData struct {
 	Accent, Ink, Gold                                  string
 	Page, Panel, Panel2, Border, Text, BodyText, Muted string
 	LogoURL                                            string
+	PictureURL                                         string
+	PictureSize                                        int
 }
 
 // The layout is a single-column, table-based, inline-styled design: the only approach that renders consistently in Gmail, Outlook and Apple Mail.
@@ -197,7 +215,10 @@ var layout = template.Must(template.New("email").Parse(`<!doctype html>
       {{if .LogoURL}}<img src="{{.LogoURL}}" width="200" alt="HawkEye" style="display:block;border:0;height:auto;width:200px;">{{else}}<span style="font:700 24px Arial,Helvetica,sans-serif;color:{{.Text}};">Hawk<span style="color:{{.Gold}};">Eye</span></span>{{end}}
     </td></tr>
     <tr><td bgcolor="{{.Panel}}" style="background:{{.Panel}};border:1px solid {{.Border}};border-top:3px solid {{.Accent}};border-radius:10px;padding:30px 30px 26px 30px;font:16px/1.6 Arial,Helvetica,sans-serif;color:{{.BodyText}};">
-      {{if .Heading}}<h1 style="margin:0 0 18px 0;font:700 24px/1.3 Arial,Helvetica,sans-serif;color:{{.Text}};">{{.Heading}}</h1>{{end}}
+      {{if .PictureURL}}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px 0;"><tr>
+        <td style="vertical-align:middle;">{{if .Heading}}<h1 style="margin:0;font:700 24px/1.3 Arial,Helvetica,sans-serif;color:{{.Text}};">{{.Heading}}</h1>{{end}}</td>
+        <td width="{{.PictureSize}}" style="width:{{.PictureSize}}px;padding:0 0 0 14px;vertical-align:bottom;"><img src="{{.PictureURL}}" width="{{.PictureSize}}" height="{{.PictureSize}}" alt="" style="display:block;border:0;width:{{.PictureSize}}px;height:{{.PictureSize}}px;"></td>
+      </tr></table>{{else if .Heading}}<h1 style="margin:0 0 18px 0;font:700 24px/1.3 Arial,Helvetica,sans-serif;color:{{.Text}};">{{.Heading}}</h1>{{end}}
       {{range .Paragraphs}}<p style="margin:0 0 16px 0;color:{{$.BodyText}};">{{.}}</p>{{end}}
       {{if .Facts}}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 22px 0;border-top:1px solid {{$.Border}};">
         {{range .Facts}}<tr>
@@ -231,6 +252,9 @@ func (c Content) RenderHTML() string {
 	d := htmlData{Content: c, Accent: c.accent(), Ink: colInk, Gold: colGold, Page: colPage, Panel: colPanel, Panel2: colPanel2, Border: colBorder, Text: colText, BodyText: colBody, Muted: colMuted}
 	if c.AppBaseURL != "" {
 		d.LogoURL = c.AppBaseURL + "/email/hawkeye-logo.png"
+		if c.Picture != PictureNone {
+			d.PictureURL, d.PictureSize = c.AppBaseURL+"/email/"+string(c.Picture)+".png", pictureSize
+		}
 	}
 	var b bytes.Buffer
 	if err := layout.Execute(&b, d); err != nil {

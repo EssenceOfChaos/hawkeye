@@ -139,7 +139,7 @@ func Render(a Alert) email.Message {
 		c.Paragraphs = append(c.Paragraphs, "Review the incident timeline to see the recorded failures and recovery checks.")
 	default:
 		subject = "HawkEye alert: " + name + " may be offline"
-		c.Tone = email.ToneAlert
+		c.Tone, c.Picture = email.ToneAlert, email.PictureMonitorDown
 		c.Preheader = "HawkEye detected repeated failures while checking " + name + "."
 		c.Heading = name + " may be offline"
 		c.Paragraphs = []string{
@@ -175,7 +175,7 @@ func renderDNS(a Alert, name, host string) email.Message {
 		}
 		return c.Message(a.From, a.To, "HawkEye recovery: DNS for "+name+" is resolving correctly again")
 	}
-	c.Tone = email.ToneAlert
+	c.Tone, c.Picture = email.ToneAlert, email.PictureMonitorDown
 	c.Heading = "DNS check failing for " + name
 	c.Preheader = "HawkEye detected repeated failures while looking up " + name + "."
 	c.Paragraphs = []string{
@@ -214,7 +214,7 @@ func renderHeartbeat(a Alert, name string) email.Message {
 	}
 	problem := heartbeatProblem(a.Cause)
 	subject = "HawkEye alert: " + name + " " + problem
-	c.Tone = email.ToneAlert
+	c.Tone, c.Picture = email.ToneAlert, email.PictureMonitorDown
 	c.Heading = name + " " + problem
 	c.Preheader = c.Heading + "."
 	if problem == "reported a failure" {
@@ -241,6 +241,7 @@ func renderTest(a Alert) email.Message {
 	c := email.Content{
 		Preheader: "This is only a test. Nothing is wrong with your websites.",
 		Heading:   "Your alerts are working",
+		Picture:   email.PictureTestAlert,
 		Paragraphs: []string{
 			"This is a test alert from HawkEye. If you can read this, real alerts will reach this address.",
 			"Nothing is wrong: no website is offline and nothing needs your attention.",
