@@ -3,6 +3,7 @@ package statuspagedomains_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"net/netip"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/audit"
+	"hawkeye/internal/email"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/statuspagedomains"
 	"hawkeye/internal/testutil"
@@ -259,5 +262,109 @@ func TestDeletingThePageDeletesItsDomain(t *testing.T) {
 	var n int
 	if err := e.pool.QueryRow(t.Context(), `SELECT count(*) FROM status_page_domains`).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("domains left: %d %v", n, err)
+	}
+}
+
+func TestJobChecksOnScheduleAndTellsTheOwner(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+	org, pages := e.org(t, "agency", "acme")
+	for _, u := range []struct{ addr, role string }{{"owner@example.com", "owner"}, {"member@example.com", "member"}} {
+		if _, err := e.pool.Exec(ctx, `WITH u AS (INSERT INTO users (email, password_hash, email_verified_at) VALUES ($1, 'x', now()) RETURNING id)
+			INSERT INTO organization_members (organization_id, user_id, role) SELECT $2, id, $3 FROM u`, u.addr, org, u.role); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mail := &email.Memory{}
+	job := statuspagedomains.NewJob(e.svc, mail, audit.New(e.pool, slog.New(slog.DiscardHandler)),
+		statuspagedomains.JobConfig{AppBaseURL: "https://app.test", From: "HawkEye <alerts@app.test>"}, slog.New(slog.DiscardHandler))
+	due := func() {
+		t.Helper()
+		if _, err := e.pool.Exec(ctx, `UPDATE status_page_domains SET next_check_at = now() - interval '1 second'`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run := func(wantState string) statuspagedomains.Stats {
+		t.Helper()
+		st, err := job.RunOnce(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d, _ := e.svc.Get(ctx, org, pages[0]); d.State != wantState {
+			t.Fatalf("state %q, want %q (%s)", d.State, wantState, d.LastError)
+		}
+		return st
+	}
+	logged := func(action string) map[string]any {
+		t.Helper()
+		var actor string
+		var details map[string]any
+		if err := e.pool.QueryRow(ctx, `SELECT actor_type, details FROM audit_events WHERE organization_id = $1 AND action = $2`, org, action).Scan(&actor, &details); err != nil {
+			t.Fatalf("%s not in the security log: %v", action, err)
+		}
+		if actor != "system" || details["hostname"] != "status.acme.com" {
+			t.Fatalf("%s: actor %q, details %v", action, actor, details)
+		}
+		return details
+	}
+	lastMail := func(subject string) email.Message {
+		t.Helper()
+		msgs := mail.Messages()
+		if len(msgs) == 0 || !strings.Contains(msgs[len(msgs)-1].Subject, subject) {
+			t.Fatalf("want an email %q; got %d emails", subject, len(msgs))
+		}
+		m := msgs[len(msgs)-1]
+		if m.To != "owner@example.com" {
+			t.Fatalf("domain emails go to the owner only, not %q", m.To)
+		}
+		return m
+	}
+
+	d, err := e.svc.Claim(ctx, org, pages[0], "status.acme.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := run(statuspagedomains.StatePending); st.Checked != 1 || len(mail.Messages()) != 0 {
+		t.Fatalf("a new claim is checked at once, quietly: %+v", st)
+	}
+	if st := run(statuspagedomains.StatePending); st.Checked != 0 {
+		t.Fatalf("not due again within the minute: %+v", st)
+	}
+
+	e.dns.publish(d)
+	due()
+	run(statuspagedomains.StateActive)
+	if m := lastMail("Your status page is live on status.acme.com"); !strings.Contains(m.Text, "https://status.acme.com") {
+		t.Fatalf("live email: %s", m.Text)
+	}
+	logged(audit.StatusPageDomainVerified)
+
+	delete(e.dns.txt, "_hawkeye.status.acme.com")
+	due()
+	run(statuspagedomains.StateFailing)
+	if m := lastMail("Action needed"); !strings.Contains(m.Text, "TXT record") || !strings.Contains(m.Text, "still served") {
+		t.Fatalf("failing email: %s", m.Text)
+	}
+	if det := logged(audit.StatusPageDomainFailing); !strings.Contains(det["problem"].(string), "TXT record") {
+		t.Fatalf("the problem is logged: %v", det)
+	}
+	if _, ok, _ := e.svc.ServedPage(ctx, "status.acme.com"); !ok {
+		t.Fatal("a failing domain is still served")
+	}
+
+	if _, err := e.pool.Exec(ctx, `UPDATE status_page_domains SET failing_since = now() - interval '8 days'`); err != nil {
+		t.Fatal(err)
+	}
+	due()
+	run(statuspagedomains.StateDisabled)
+	if m := lastMail("no longer served"); !strings.Contains(m.Text, "https://app.test/status/acme") {
+		t.Fatalf("disabled email names the page's HawkEye address: %s", m.Text)
+	}
+	logged(audit.StatusPageDomainDisabled)
+	if _, ok, _ := e.svc.ServedPage(ctx, "status.acme.com"); ok {
+		t.Fatal("a disabled domain is not served")
+	}
+	if n := len(mail.Messages()); n != 3 {
+		t.Fatalf("one email per change: %d", n)
 	}
 }

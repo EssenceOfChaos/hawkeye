@@ -106,7 +106,13 @@ States: `pending` (records not seen yet), `active`, `failing` (was active, now a
 About 3 weeks. Steps 1 and 2 can ship on their own: without the API endpoints (step 3) nobody can claim a domain, and nothing is served until
 step 4.
 
-**Done:** step 1 (`migrations/000044_status_page_domains`, `internal/statuspagedomains`, `plans.CanAddStatusPageDomain`).
+**Done:**
+
+- Step 1: `migrations/000044_status_page_domains`, `internal/statuspagedomains`, `plans.CanAddStatusPageDomain`.
+- Step 2: `statuspagedomains.Job` on the primary worker (`STATUS_PAGE_DOMAIN_TARGET`, `DISABLE_STATUS_PAGE_DOMAIN_CHECKS`), metric
+  `hawkeye_status_page_domain_checks_total{result}`, and security log events `status_page.domain_{set,removed,verified,failing,disabled}`. The
+  emails (live, needs attention, working again, no longer served) go to the organization's owner directly, not through alert destinations: they
+  are about the account's setup, not a monitored site. They are sent at most once; the editor shows the same state if one is lost.
 
 ## Operations
 

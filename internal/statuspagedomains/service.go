@@ -178,14 +178,15 @@ func (s *Service) CheckNow(ctx context.Context, orgID, pageID uuid.UUID) (*Domai
 	if err != nil {
 		return nil, nil, err
 	}
-	return s.check(ctx, d, true)
+	d, ch, _, err := s.check(ctx, d, true)
+	return d, ch, err
 }
 
 // check verifies d and stores the outcome. The lookups run outside any transaction; the update applies only if the row is still the same claim.
-func (s *Service) check(ctx context.Context, d *Domain, restart bool) (*Domain, *Change, error) {
+func (s *Service) check(ctx context.Context, d *Domain, restart bool) (*Domain, *Change, Result, error) {
 	r, err := s.verifier.Verify(ctx, d.Hostname, d.token)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, r, err
 	}
 	now := s.now()
 	cur := d.status()
@@ -198,7 +199,7 @@ func (s *Service) check(ctx context.Context, d *Domain, restart bool) (*Domain, 
 		WHERE id = $1 RETURNING `+domainCols,
 		d.ID, next.State, next.LastError, next.LastCheckedAt, next.NextCheckAt, next.VerifyStartedAt, next.VerifiedAt, next.FailingSince))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil, ErrNotFound // removed or replaced while the lookups ran
+		return nil, nil, r, ErrNotFound // removed or replaced while the lookups ran
 	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -206,17 +207,17 @@ func (s *Service) check(ctx context.Context, d *Domain, restart bool) (*Domain, 
 		updated, err = s.scan(s.pool.QueryRow(ctx, `UPDATE status_page_domains SET last_error = $2, last_checked_at = $3, next_check_at = $4
 			WHERE id = $1 RETURNING `+domainCols, d.ID, ErrHostnameInUse.Error()+".", now, pendingNext(cur.VerifyStartedAt, now)))
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil, ErrNotFound
+			return nil, nil, r, ErrNotFound
 		}
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, r, err
 	}
 	var ch *Change
 	if updated.State != d.State {
 		ch = &Change{Domain: *updated, From: d.State}
 	}
-	return updated, ch, nil
+	return updated, ch, r, nil
 }
 
 // ServedPage returns the status page a host name serves, for the certificate check (Caddy's on-demand "ask") and the public page on that name.

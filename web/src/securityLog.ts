@@ -41,6 +41,7 @@ export const categoryNames: Record<string, string> = {
 const quoted = (s: string | null | undefined) => (s ? `“${s}”` : '')
 const name = (e: LogEvent) => quoted(e.target?.name) || '(name not recorded)'
 const plain = (e: LogEvent) => e.target?.name ?? 'someone'
+const host = (e: LogEvent) => (typeof e.details.hostname === 'string' ? e.details.hostname : 'its domain')
 const access = (scope: unknown) => (scope === 'write' ? 'read and write' : 'read only')
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
@@ -115,6 +116,11 @@ export const sentences: Record<string, (e: LogEvent) => string> = {
       : e.details.logo === 'removed' ? `Removed the logo from the status page ${name(e)}`
         : `Changed the status page ${name(e)}${e.details.published === true ? ' (published)' : e.details.published === false ? ' (not published)' : ''}`,
   'status_page.deleted': (e) => `Deleted the status page ${name(e)}`,
+  'status_page.domain_set': (e) => `Set the custom domain ${host(e)} for the status page ${name(e)}`,
+  'status_page.domain_removed': (e) => `Removed the custom domain ${host(e)} from the status page ${name(e)}`,
+  'status_page.domain_verified': (e) => `Verified the custom domain ${host(e)}: the status page ${name(e)} is served there`,
+  'status_page.domain_failing': (e) => `Found a problem with the DNS records of ${host(e)}${e.details.problem ? `: ${String(e.details.problem)}` : ''}`,
+  'status_page.domain_disabled': (e) => `Stopped serving the status page ${name(e)} on ${host(e)}, whose DNS records stayed wrong for 7 days`,
   'maintenance.scheduled': (e) => `Scheduled the maintenance window ${name(e)}`,
   'maintenance.deleted': (e) => `Deleted the maintenance window ${name(e)}`,
   'incident_update.posted': (e) => `Posted a public incident update (${String(e.details.status ?? 'update')})${e.details.message ? `: ${quoted(String(e.details.message))}` : ''}`,
