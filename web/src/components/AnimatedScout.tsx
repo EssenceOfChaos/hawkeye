@@ -1,28 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { brand } from '../brand'
 import { prefersReducedMotion } from '../motion'
-
-/** Frames in brand.scoutMotion.frames, left to right. */
-const REST = 0
-const BLINK = 1
-const WINGS_UP = 2
-const WINGS_DOWN = 3
-const WAVE = [4, 5, 6]
-const THUMBS_UP = 7
-
-/** A sequence of [frame, milliseconds]; he returns to rest after the last one. */
-type Steps = [number, number][]
-
-const HELLO: Steps = [[WAVE[0], 140], [WAVE[1], 140], [WAVE[2], 170], [WAVE[1], 140], [WAVE[2], 170], [WAVE[1], 140], [WAVE[0], 140]]
-const FLAP: Steps = [[WINGS_DOWN, 90], [WINGS_UP, 110], [WINGS_DOWN, 90], [WINGS_UP, 110], [WINGS_DOWN, 100]]
-const BLINK_ONCE: Steps = [[BLINK, 130]]
-const BLINK_TWICE: Steps = [[BLINK, 110], [REST, 120], [BLINK, 110]]
-const ALL_GOOD: Steps = [[THUMBS_UP, 1800]]
-/** Every this many idle moments, he gives a thumbs-up instead of blinking. */
-const THUMBS_UP_EVERY = 4
-
-/** Wait before the hello wave: long enough for the hero's rise-in to finish (index.css, .hero-scout). */
-export const HELLO_DELAY_MS = 1100
+import { ALL_GOOD, BLINK_ONCE, BLINK_TWICE, FLAP, HELLO, HELLO_DELAY_MS, REST, THUMBS_UP_EVERY, type Steps } from './scoutSteps'
 
 /**
  * Scout, animated: he waves hello, gives a thumbs-up, blinks now and then, and flaps his wings when pointed at or tapped. The still rest frame shows first;
@@ -84,7 +63,9 @@ export function AnimatedScout({ size = 160, className = '' }: { size?: number; c
         idle()
       }, 2500 + Math.random() * 3500)
     }
-    later(() => play(HELLO, () => play(ALL_GOOD, idle)), HELLO_DELAY_MS)
+    // If he is mid-flap when the hello is due, it waits for the flap to end rather than being skipped (the blinking starts after it).
+    const hello = () => { if (!play(HELLO, () => play(ALL_GOOD, idle))) later(hello, 150) }
+    later(hello, HELLO_DELAY_MS)
     return () => { timers.current.forEach(clearTimeout); timers.current = []; busy.current = false }
   }, [ready, play, later])
 

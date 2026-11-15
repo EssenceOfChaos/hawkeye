@@ -59,10 +59,10 @@ export const brand = {
   scout: { wave: scoutWave, check: scoutCheck, stand: scoutStand, alert: scoutAlert },
   /**
    * Scout in motion, for the AnimatedScout component. rest: him standing, wings folded (400x400, shown first and to people who prefer
-   * reduced motion). frames: eight 400x400 frames side by side, his body lined up across all of them: rest, blink, wings up, wings down,
-   * three steps of a wave, and a thumbs-up with a green check.
+   * reduced motion). frames: eleven 400x400 frames side by side, his body lined up across all of them: rest, blink, three steps of a wave,
+   * a thumbs-up with a green check, and five steps of raising his wings.
    */
-  scoutMotion: { rest: scoutRest, frames: scoutFrames, count: 8 },
+  scoutMotion: { rest: scoutRest, frames: scoutFrames, count: 11 },
   /** Background art for the /monitoring page: a gold hawk's eye on navy, and the night Earth with connection arcs. No text in either. */
   art: { hawkEye: monitoringHawkEye, earth: monitoringEarth },
   /** Real screens of the app with sample data (scripts/screenshots): the dashboard, the incidents list and the alert email. */
