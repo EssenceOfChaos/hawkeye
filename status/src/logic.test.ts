@@ -67,4 +67,16 @@ describe('the page', () => {
     expect(html).toContain('a &amp; b')
     expect(html).toContain('Major outage')
   })
+
+  it("labels each day's bar with a tooltip of its own, not the browser's slow one", () => {
+    const s: Snapshot = {
+      now: 1_800_000_000, measuredSince: 1_799_000_000,
+      components: [{ id: 'api', name: 'API', description: 'd', downSince: null, outages: [{ started_at: 1_799_990_000, ended_at: 1_799_990_600 }] }],
+      incidents: [],
+    }
+    const html = renderPage(s)
+    expect(html).not.toMatch(/<li[^>]*title=/)
+    expect(html.match(/<li class="[a-z]+"><span class="tip">[^<]+<\/span><\/li>/g)).toHaveLength(90)
+    expect(html).toMatch(/<span class="tip">[A-Z][a-z]{2} \d+, \d{4}: down 10 min<\/span>/)
+  })
 })

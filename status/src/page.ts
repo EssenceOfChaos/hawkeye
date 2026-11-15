@@ -42,7 +42,8 @@ function component(s: Snapshot, c: Snapshot['components'][number]): string {
     .map((d) => {
       const label = d.status === 'none' ? `${day(d.start)}: not measured yet`
         : d.status === 'up' ? `${day(d.start)}: no downtime` : `${day(d.start)}: down ${duration(d.downSeconds)}`
-      return `<li class="${d.status}" title="${esc(label)}"><span class="sr">${esc(label)}</span></li>`
+      // The label is screen reader text, and the tooltip on hover (no title attribute: the browser's own tooltip waits about a second).
+      return `<li class="${d.status}"><span class="tip">${esc(label)}</span></li>`
     })
     .join('')
   const state = c.downSince !== null
@@ -95,9 +96,16 @@ h2 { font-size: 1.05rem; margin: 0; }
 .hint { color: var(--muted); font-size: .875rem; margin: .25rem 0; }
 .state { font-size: .9rem; font-weight: 600; } .state.up { color: var(--up); } .state.major { color: var(--major); }
 .bars { display: flex; gap: 2px; list-style: none; padding: 0; margin: .75rem 0 .25rem; height: 2.25rem; }
-.bars li { flex: 1; border-radius: 2px; background: var(--none); }
+.bars li { flex: 1; border-radius: 2px; background: var(--none); position: relative; }
 .bars .up { background: var(--up); } .bars .minor { background: var(--minor); } .bars .major { background: var(--major); }
-.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* Each day's label: hidden but read by screen readers, and shown at once as a tooltip above the bar on hover. Near either end it lines up with
+   the bar's outer edge, so it never runs off the page. */
+.tip { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.bars li:hover { filter: brightness(1.25); }
+.bars li:hover .tip { width: auto; height: auto; overflow: visible; clip: auto; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 1;
+  padding: .3rem .55rem; border-radius: .35rem; background: #050f1d; border: 1px solid var(--none); color: var(--text); font-size: .8rem; pointer-events: none; }
+.bars li:nth-child(-n+15):hover .tip { left: 0; transform: none; }
+.bars li:nth-last-child(-n+15):hover .tip { left: auto; right: 0; transform: none; }
 section.incidents h2 { margin-top: 2rem; }
 .incident h3 { margin: 0 0 .5rem; font-size: 1rem; } .incident.open { border-left: 4px solid var(--minor); }
 .updates { list-style: none; padding: 0; margin: 0; } .updates li + li { margin-top: .75rem; }
