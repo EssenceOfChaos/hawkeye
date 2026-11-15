@@ -30,12 +30,14 @@ with ChatGPT and then cut out, cropped and resized outside the repository. **The
   health. He is too detailed to read below about 64 px, so favicons and small icons stay with the logo badge.
 - **Scout in motion** (`scout-rest.webp`, `scout-frames.webp`): the landing hero's Scout, in front of the laptop, rendered with
   `components/AnimatedScout.tsx`. He waves hello once the page has loaded and gives a thumbs-up with a green check, then blinks every few seconds (every
-  fourth time, a thumbs-up instead), and flaps his wings with a small hop when pointed at or tapped. The frames come from eight 1254x1254 originals of one
-  pose (rest, blink, wings up, wings down, three wave steps, thumbs-up), also kept by the product owner. The three wave originals and the thumbs-up had him
-  drawn 18 to 44 px left of the others, so each was shifted until he lined up with the rest frame (feet within about 1 px at display size), placed on a
-  1270x1270 square wide enough for spread wings, resized to 400x400 and joined left to right into one strip: lossy WebP with alpha, 237 KB.
-  `scout-rest.webp` is the first frame alone (29 KB): it shows first, the strip loads only after the page has, and people who prefer reduced motion
-  keep the still and never download the strip. New frames must line up the same way, or he jitters as they change.
+  fourth time, a thumbs-up instead), and flaps his wings with a small hop when pointed at or tapped. The frames come from eleven 1254x1254 originals of
+  one pose (rest, blink, three wave steps, thumbs-up, and five steps of raising his wings, from just lifting off his body to raised high), also kept by
+  the product owner. A flap plays the five wing steps up, down and up again, one step at a time, so the wings never jump. Most originals had him drawn
+  up to 64 px left of the rest frame, and some of the wing steps a few percent larger, so each was shifted (and, for the wing steps, scaled) until his
+  face, badge and feet lined up with the rest frame, then placed on a 1290x1290 square wide enough for spread wings, resized to 400x400 and joined left
+  to right into one strip: lossy WebP with alpha, 324 KB. `scout-rest.webp` is the first frame alone (29 KB): it shows first, the strip loads only after
+  the page has, and people who prefer reduced motion keep the still and never download the strip. New frames must line up the same way, or he jitters
+  as they change.
 - **Scout in emails** (`web/public/email/scout-welcome.png`, `-monitor-down.png`, `-test-alert.png`, served at `/email/` like the logo): set with
   `email.Content.Picture`, which shows him at 112 px beside the heading, HTML only and with empty alt text (the text says everything). **Welcome** (waving)
   is on the "Confirm your email address" email, the first one a new account gets. **Monitor down** (worried, holding an envelope with a red warning) is on
