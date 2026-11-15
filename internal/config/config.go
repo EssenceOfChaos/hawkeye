@@ -122,8 +122,8 @@ type Config struct {
 	DomainRecheckInterval time.Duration
 	DomainLookupPace      time.Duration
 
-	// Status pages on customers' own domains (internal/statuspagedomains). StatusPageDomainTarget is the name their CNAME records point at; it needs A
-	// and AAAA records for this server. Unset, it is "domains." plus APP_BASE_URL's host (domains.hawkeye.observer). The primary worker re-checks
+	// Status pages on customers' own domains (internal/statuspagedomains). StatusPageDomainTarget is the name their CNAME records point at; it must
+	// reach this server, unproxied (infra/ makes it a CNAME to the apex). Unset, it is "domains." plus APP_BASE_URL's host (domains.hawkeye.observer). The primary worker re-checks
 	// claimed domains' records (RunStatusPageDomains); a checks-only worker never does.
 	StatusPageDomainTarget string
 	RunStatusPageDomains   bool

@@ -158,6 +158,20 @@ resource "cloudflare_dns_record" "www" {
   comment = "HawkEye www redirect (managed by infra/)"
 }
 
+# The name customers point their status page domains at (STATUS_PAGE_DOMAIN_TARGET's default; docs/plan-status-page-domains.md). A CNAME to the
+# apex, so it follows the reserved IP when the server is replaced. Never proxied: customers' CNAMEs must reach Caddy directly (it gets their
+# certificates), and Cloudflare refuses a CNAME from another account to a proxied record.
+resource "cloudflare_dns_record" "status_domains" {
+  count   = local.is_prod ? 1 : 0
+  zone_id = var.cloudflare_zone_id
+  name    = "domains.${var.domain}"
+  type    = "CNAME"
+  content = var.domain
+  ttl     = var.dns_ttl
+  proxied = false
+  comment = "HawkEye status pages on customers' own domains (managed by infra/)"
+}
+
 resource "cloudflare_dns_record" "stage" {
   zone_id = var.cloudflare_zone_id
   name    = "${local.stage}.${var.domain}"

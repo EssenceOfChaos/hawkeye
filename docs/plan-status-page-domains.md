@@ -13,7 +13,7 @@ page is served there over HTTPS with a certificate HawkEye obtains and renews. T
 | Which plans | **Agency only**, one domain per status page (so up to 50). The roadmap's reason for the feature is "a premium reason for agencies to choose Agency". Pro sees it on the pricing card as an Agency feature |
 | Apex domains (`clientbrand.com` itself) | **Not at launch.** An apex can't have a CNAME, so it would need an A record holding our server's IP, which breaks silently whenever the server is rebuilt (`docs/rebuild.md`). Subdomains only; the form explains why |
 | The `/status/<slug>` address once a domain is live | **Keeps working, and a per-page setting can redirect it to the domain** (off by default). The page's canonical tag points to the domain whatever the setting |
-| The DNS target customers point at | A dedicated name, **`domains.hawkeye.observer`** (an A and AAAA record for the production server), so a new server IP is one change in our DNS, not one per customer |
+| The DNS target customers point at | A dedicated name, **`domains.hawkeye.observer`** (a CNAME to the apex, not proxied; `infra/main.tf`), so a new server IP changes nothing for customers |
 
 ## How it works for the customer
 
@@ -133,7 +133,8 @@ step 4.
 
 ## Operations
 
-- DNS: add `domains.hawkeye.observer` (A and AAAA) before step 6.
+- DNS: `domains.hawkeye.observer` is a CNAME to the apex, DNS only (`cloudflare_dns_record.status_domains` in `infra/main.tf`). Apply it
+  before launch. Customers' CNAMEs then resolve through it to the server's reserved IP, which verification accepts (the address check).
 - Metrics: `hawkeye_status_page_domains{state}` and `hawkeye_status_page_domain_checks_total{result}`; an alert when on-demand issuance fails
   repeatedly (Caddy logs `obtaining certificate` errors).
 - Let's Encrypt limits are per registered domain (50 certificates a week), so one client can't affect another.
