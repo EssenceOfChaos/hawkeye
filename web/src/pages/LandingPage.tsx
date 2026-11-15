@@ -10,7 +10,7 @@ import { ComingSoon } from '../components/ComingSoon'
 import { MonitoringFlow } from '../components/MonitoringFlow'
 import { ProductShots } from '../components/ProductShots'
 import { Reveal } from '../components/Reveal'
-import { Scout } from '../components/Scout'
+import { AnimatedScout } from '../components/AnimatedScout'
 import { inScope, parallax, prefersReducedMotion, rotateScramble } from '../motion'
 
 // The copyright year, worked out once when the page loads rather than on every render (render code must not read the clock).
@@ -265,7 +265,7 @@ export function LandingPage() {
             width={566}
             height={463}
           />
-          <Scout pose="check" size={200} className="hero-scout" eager />
+          <AnimatedScout size={200} className="hero-scout" />
         </div>
         </div>
       </section>

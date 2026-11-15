@@ -671,6 +671,19 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; }
 .hero-art-wrap { grid-area: art; position: relative; }
 .hero-scout { position: absolute; left: -6%; bottom: -8%; width: 36%; height: auto; aspect-ratio: 1; }
 @media (max-width: 480px) { .hero-scout { left: -2%; } }
+/* AnimatedScout (src/components/AnimatedScout.tsx): the still and the frames stack in .scout-figure. The frames are one strip; --frame picks
+   which shows. */
+.scout-figure { position: relative; display: block; width: 100%; height: 100%; }
+.scout-frames { position: absolute; inset: 0; background-repeat: no-repeat; background-size: calc(var(--frames) * 100%) 100%;
+  background-position: calc(var(--frame) * 100% / (var(--frames) - 1)) 0; }
+/* In the hero he rises in once it has loaded, then bobs gently while his glow stays put, so he seems to hover. When he flaps (pointed at
+   or tapped) he hops. The rise and the bob move the figure; the hop moves the wrapper, so they never fight. Transform and opacity only. */
+.hero-scout .scout-figure { animation: scout-rise .7s cubic-bezier(.2, .8, .3, 1.2) .35s both, scout-bob 5s ease-in-out 1.05s infinite; }
+@keyframes scout-rise { from { opacity: 0; transform: translateY(18%) scale(.92); } to { opacity: 1; transform: none; } }
+@keyframes scout-bob { 0%, 100% { transform: none; } 50% { transform: translateY(-4%); } }
+.hero-scout { transition: transform .25s cubic-bezier(.2, .8, .3, 1.3); }
+.hero-scout.is-flapping { transform: translateY(-6%); }
+@media (prefers-reduced-motion: reduce) { .hero-scout .scout-figure { animation: none; } .hero-scout { transition: none; } }
 /* Empty states: Scout above the heading. */
 .empty-scout { margin: 0 auto .25rem; }
 @media (max-width: 480px) { .empty-scout { width: 112px; height: 112px; } }

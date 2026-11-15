@@ -36,6 +36,8 @@ import scoutWave from './assets/brand/scout-wave.webp'
 import scoutCheck from './assets/brand/scout-check.webp'
 import scoutAlert from './assets/brand/scout-alert.webp'
 import scoutStand from './assets/brand/scout-stand.webp'
+import scoutRest from './assets/brand/scout-rest.webp'
+import scoutFrames from './assets/brand/scout-frames.webp'
 import logo from './assets/brand/logo.png'
 import logoWhite from './assets/brand/logo-white.png'
 
@@ -55,6 +57,12 @@ export const brand = {
    * gesturing with one wing; alert: holding a red warning beacon (use sparingly, never in a real outage alert).
    */
   scout: { wave: scoutWave, check: scoutCheck, stand: scoutStand, alert: scoutAlert },
+  /**
+   * Scout in motion, for the AnimatedScout component. rest: him standing, wings folded (400x400, shown first and to people who prefer
+   * reduced motion). frames: eight 400x400 frames side by side, his body lined up across all of them: rest, blink, wings up, wings down,
+   * three steps of a wave, and a thumbs-up with a green check.
+   */
+  scoutMotion: { rest: scoutRest, frames: scoutFrames, count: 8 },
   /** Background art for the /monitoring page: a gold hawk's eye on navy, and the night Earth with connection arcs. No text in either. */
   art: { hawkEye: monitoringHawkEye, earth: monitoringEarth },
   /** Real screens of the app with sample data (scripts/screenshots): the dashboard, the incidents list and the alert email. */

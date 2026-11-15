@@ -23,11 +23,18 @@ with ChatGPT and then cut out, cropped and resized outside the repository. **The
   device on his back. The originals are 1254x1254 transparent PNGs (about 1.7 MB each), kept outside the repository by the product owner. Each was trimmed to its
   outline, centered on a square with his feet on the bottom edge, resized to 640x640 and saved as lossy WebP with alpha (70 to 95 KB). Render him with
   `components/Scout.tsx`, which adds a soft gold glow behind him (his navy feathers otherwise sink into the navy page) and hides him from screen readers
-  unless given alt text. Poses: **wave** (greeting: the Monitors empty state), **check** (thumbs-up with a green check: the landing hero, in front of the laptop),
+  unless given alt text. Poses: **wave** (greeting: the Monitors empty state), **check** (thumbs-up with a green check: not used since the hero animates),
   **stand** (neutral, gesturing with one wing: beside the 404 radar), **alert** (holding a red warning beacon: not used yet). Where he goes: personality
   moments (empty states, first-run screens, errors, marketing). Where he doesn't: dense working screens, customers' public status pages (their brand, not ours),
   and real outage alerts (a cartoon is the wrong tone when someone's site is down). Keep the red **alert** pose off the 404 page and anything that could be
   read as a claim about system health. He is too detailed to read below about 64 px, so favicons and small icons stay with the logo badge.
+- **Scout in motion** (`scout-rest.webp`, `scout-frames.webp`): the landing hero's Scout, in front of the laptop, rendered with
+  `components/AnimatedScout.tsx`. He waves hello once the page has loaded and gives a thumbs-up with a green check, then blinks every few seconds (every
+  fourth time, a thumbs-up instead), and flaps his wings with a small hop when pointed at or tapped. The frames come from eight 1254x1254 originals of one
+  pose (rest, blink, wings up, wings down, three wave steps, thumbs-up), also kept by the product owner. The three wave originals and the thumbs-up had him
+  drawn 18 to 44 px left of the others, so each was shifted until he lined up with the rest frame (feet within about 1 px at display size), placed on a
+  1270x1270 square wide enough for spread wings, resized to 400x400 and joined left to right into one strip: lossy WebP with alpha, 237 KB. `scout-rest.webp` is the first frame alone (29 KB): it shows first, the strip loads only after the page has,
+  and people who prefer reduced motion keep the still and never download the strip. New frames must line up the same way, or he jitters as they change.
 - **`monitoring-hawk-eye.webp`, `monitoring-earth-network.webp`:** the /monitoring page's background art (a gold hawk's eye on navy; the night Earth with connection arcs),
   lossy WebP at full width. No text in either. They are photographic gradients, so WebP is a fraction of a PNG's size with no visible banding.
 
