@@ -14,6 +14,7 @@ import (
 	"hawkeye/internal/maintenance"
 	"hawkeye/internal/monitors"
 	"hawkeye/internal/reports"
+	"hawkeye/internal/statuspagedomains"
 )
 
 // ---- Shapes returned to the client. Small on purpose: what a person would ask about, with IDs to pass to the next tool.
@@ -286,6 +287,11 @@ type StatusPage struct {
 	Published bool   `json:"published"`
 	PublicURL string `json:"public_url"`
 	Monitors  int    `json:"monitor_count"`
+	// The page's own domain (Agency), if one is set: its name and state (pending, active, failing, disabled). It is served there while active or
+	// failing; DomainURL is set only then.
+	CustomDomain      string `json:"custom_domain,omitempty" jsonschema:"the page's custom domain, such as status.example.com, if one is set"`
+	CustomDomainState string `json:"custom_domain_state,omitempty" jsonschema:"pending (DNS records not seen yet), active, failing (a record changed; still served for 7 days) or disabled"`
+	DomainURL         string `json:"custom_domain_url,omitempty" jsonschema:"the page's address on its custom domain, while it is served there"`
 }
 
 type StatusPageList struct {
@@ -604,7 +610,11 @@ func (s *tools) listStatusPages(ctx context.Context, c Caller, _ NoInput) (Statu
 	}
 	out := StatusPageList{StatusPages: make([]StatusPage, len(list))}
 	for i, p := range list {
-		out.StatusPages[i] = StatusPage{ID: p.ID.String(), Title: p.Title, Published: p.Published, PublicURL: s.appURL("/status/" + p.Slug), Monitors: len(p.Monitors)}
+		out.StatusPages[i] = StatusPage{ID: p.ID.String(), Title: p.Title, Published: p.Published, PublicURL: s.appURL("/status/" + p.Slug), Monitors: len(p.Monitors),
+			CustomDomain: p.CustomDomain, CustomDomainState: p.CustomDomainState}
+		if statuspagedomains.Served(p.CustomDomainState) {
+			out.StatusPages[i].DomainURL = "https://" + p.CustomDomain
+		}
 	}
 	return out, nil
 }

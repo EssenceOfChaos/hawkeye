@@ -39,6 +39,7 @@ import (
 	"hawkeye/internal/sitecheck"
 	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
+	"hawkeye/internal/statuspagedomains"
 	"hawkeye/internal/twofactor"
 	"hawkeye/internal/waitlist"
 )
@@ -65,8 +66,9 @@ type Options struct {
 	Domains       *domains.Service
 	Regions       regions.Set
 	StatusPages   *statuspage.Service
-	Badges        *badges.Service     // public uptime badges; nil turns them off
-	Heartbeats    *heartbeats.Service // heartbeat pings (/ping/<token>) and ping logs; nil turns them off
+	PageDomains   *statuspagedomains.Service // status pages on customers' own domains
+	Badges        *badges.Service            // public uptime badges; nil turns them off
+	Heartbeats    *heartbeats.Service        // heartbeat pings (/ping/<token>) and ping logs; nil turns them off
 	Billing       *billing.Service
 	Account       *account.Service
 	Contact       *contact.Service
@@ -199,7 +201,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, discovery: o.Discovery, drafts: o.Drafts, log: o.Logger, secureCookies: o.SecureCookies,
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, pageDomains: o.PageDomains, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, discovery: o.Discovery, drafts: o.Drafts, log: o.Logger, secureCookies: o.SecureCookies,
 		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, workflowChecker: o.WorkflowChecker, tokenRoutes: map[string]bool{}}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
@@ -466,6 +468,10 @@ func registerAPI(e *echo.Echo, o Options) {
 	api.GET("/status-pages/:pageID/logo", h.getStatusPageLogo)
 	api.PUT("/status-pages/:pageID/logo", h.putStatusPageLogo, requireOwner, limit("branding"))
 	api.DELETE("/status-pages/:pageID/logo", h.deleteStatusPageLogo, requireOwner)
+	api.GET("/status-pages/:pageID/domain", h.getStatusPageDomain)
+	api.PUT("/status-pages/:pageID/domain", h.putStatusPageDomain, requireOwner, limit("page-domain"))
+	api.POST("/status-pages/:pageID/domain/check", h.checkStatusPageDomain, requireOwner, limit("page-domain-check"))
+	api.DELETE("/status-pages/:pageID/domain", h.deleteStatusPageDomain, requireOwner)
 	api.GET("/maintenance-windows", h.listMaintenance)
 	api.POST("/maintenance-windows", h.createMaintenance, requireOwner)
 	api.DELETE("/maintenance-windows/:windowID", h.deleteMaintenance, requireOwner)

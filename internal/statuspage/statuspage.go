@@ -73,6 +73,12 @@ type Config struct {
 	HidePoweredBy bool   `json:"hide_powered_by"` // hide "Powered by HawkEye"
 	HasLogo       bool   `json:"has_logo"`        // read-only: the logo is uploaded separately
 	LogoVersion   int64  `json:"logo_version"`    // read-only: changes whenever the logo does, for cache-busting
+	// Custom domain (Agency; internal/statuspagedomains). The domain is set through its own endpoints; here it is read-only. RedirectToDomain sends
+	// visitors of /status/<slug> to the domain while it is served (off by default); a save that leaves it out keeps the stored value, so clients that
+	// predate it never turn it off.
+	CustomDomain      string `json:"custom_domain"`       // read-only: "" when none
+	CustomDomainState string `json:"custom_domain_state"` // read-only: pending, active, failing, disabled, or ""
+	RedirectToDomain  *bool  `json:"redirect_to_domain"`
 }
 
 type MonitorConfig struct {
@@ -169,9 +175,12 @@ func (s *Service) List(ctx context.Context, orgID uuid.UUID) ([]Config, error) {
 func (s *Service) Get(ctx context.Context, orgID, id uuid.UUID) (*Config, error) {
 	var c Config
 	var logoAt *time.Time
-	err := s.pool.QueryRow(ctx, `SELECT id, slug, title, description, published, COALESCE(accent_color, ''), COALESCE(website_url, ''), hide_powered_by, logo_updated_at
-		FROM status_pages WHERE id = $1 AND organization_id = $2`, id, orgID).
-		Scan(&c.ID, &c.Slug, &c.Title, &c.Description, &c.Published, &c.AccentColor, &c.WebsiteURL, &c.HidePoweredBy, &logoAt)
+	c.RedirectToDomain = new(bool)
+	err := s.pool.QueryRow(ctx, `SELECT p.id, p.slug, p.title, p.description, p.published, COALESCE(p.accent_color, ''), COALESCE(p.website_url, ''),
+			p.hide_powered_by, p.logo_updated_at, COALESCE(d.hostname, ''), COALESCE(d.state, ''), p.redirect_to_domain
+		FROM status_pages p LEFT JOIN status_page_domains d ON d.page_id = p.id WHERE p.id = $1 AND p.organization_id = $2`, id, orgID).
+		Scan(&c.ID, &c.Slug, &c.Title, &c.Description, &c.Published, &c.AccentColor, &c.WebsiteURL, &c.HidePoweredBy, &logoAt,
+			&c.CustomDomain, &c.CustomDomainState, &c.RedirectToDomain)
 	if logoAt != nil {
 		c.HasLogo, c.LogoVersion = true, logoAt.UnixMilli()
 	}
@@ -248,16 +257,17 @@ func (s *Service) save(ctx context.Context, orgID uuid.UUID, id *uuid.UUID, in C
 			if err := s.plans.CanCreateStatusPage(ctx, tx, orgID); err != nil {
 				return err
 			}
-			if err := tx.QueryRow(ctx, `INSERT INTO status_pages (organization_id, slug, title, description, published, accent_color, website_url, hide_powered_by)
-				VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), NULLIF($7, ''), $8) RETURNING id`,
-				orgID, in.Slug, in.Title, in.Description, in.Published, in.AccentColor, in.WebsiteURL, in.HidePoweredBy).Scan(&pageID); err != nil {
+			if err := tx.QueryRow(ctx, `INSERT INTO status_pages (organization_id, slug, title, description, published, accent_color, website_url, hide_powered_by,
+					redirect_to_domain)
+				VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), NULLIF($7, ''), $8, COALESCE($9, false)) RETURNING id`,
+				orgID, in.Slug, in.Title, in.Description, in.Published, in.AccentColor, in.WebsiteURL, in.HidePoweredBy, in.RedirectToDomain).Scan(&pageID); err != nil {
 				return err
 			}
 		} else {
 			if err := tx.QueryRow(ctx, `UPDATE status_pages SET slug = $3, title = $4, description = $5, published = $6,
-					accent_color = NULLIF($7, ''), website_url = NULLIF($8, ''), hide_powered_by = $9
+					accent_color = NULLIF($7, ''), website_url = NULLIF($8, ''), hide_powered_by = $9, redirect_to_domain = COALESCE($10, redirect_to_domain)
 				WHERE id = $1 AND organization_id = $2 RETURNING id`,
-				*id, orgID, in.Slug, in.Title, in.Description, in.Published, in.AccentColor, in.WebsiteURL, in.HidePoweredBy).Scan(&pageID); err != nil {
+				*id, orgID, in.Slug, in.Title, in.Description, in.Published, in.AccentColor, in.WebsiteURL, in.HidePoweredBy, in.RedirectToDomain).Scan(&pageID); err != nil {
 				return err
 			}
 			if _, err := tx.Exec(ctx, `DELETE FROM status_page_monitors WHERE page_id = $1`, pageID); err != nil {

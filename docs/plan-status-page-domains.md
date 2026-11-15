@@ -113,6 +113,9 @@ step 4.
   `hawkeye_status_page_domain_checks_total{result}`, and security log events `status_page.domain_{set,removed,verified,failing,disabled}`. The
   emails (live, needs attention, working again, no longer served) go to the organization's owner directly, not through alert destinations: they
   are about the account's setup, not a monitored site. They are sent at most once; the editor shows the same state if one is lost.
+- Step 3: `GET/PUT/DELETE /status-pages/:id/domain` and `POST …/domain/check` (`docs/api.md`, *Custom domains*), the status page's read-only
+  `custom_domain` and `custom_domain_state` and its `redirect_to_domain` setting (a save that leaves it out keeps it), and the MCP fields. The
+  redirect itself is done in step 4, with the serving side.
 
 ## Operations
 
