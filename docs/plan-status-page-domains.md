@@ -1,6 +1,11 @@
 # Plan: status pages on your own domain
 
-Status: **in progress** (2026-11-15). The four decisions below were made as recommended. Waitlist key `status_page_domains` (`web/src/comingSoon.ts`); retire it at launch, as migration 000039 did for
+Status: **built** (2026-11-15). The four decisions below were made as recommended. Customer guide: `/docs/status-page-domains`; operations:
+`docs/operations.md` (*Status pages on customers' own domains*); security: `docs/security.md`.
+
+**Launch checklist.** (1) `domains.hawkeye.observer` exists: a CNAME to the apex, DNS only (added in the Cloudflare dashboard on 2026-11-15, as
+production DNS is not under Terraform state yet). (2) Before deploying, email the confirmed `status_page_domains` waitlist sign-ups (query in
+`docs/operations.md`, *Feature waitlists*): migration `000045` deletes them. (3) After deploying, `scripts/smoke.sh` and one real domain end to end. Waitlist key `status_page_domains` (`web/src/comingSoon.ts`); retire it at launch, as migration 000039 did for
 API workflows.
 
 A customer points a host name they own, such as `status.clientbrand.com`, at HawkEye. Once HawkEye has confirmed they control it, that status
@@ -130,6 +135,10 @@ step 4.
   shows each page's domain. Also fixed on the way: public status pages scrolled sideways on phones (the day tooltips at either end of the row
   now line up with that end), the tab read "Acme status status" for a page titled "Acme status", and the editor's branding section scrolled
   sideways on phones.
+- Step 6: the waitlist retired (migration `000045`, `waitlist.Features`, the landing page's coming-soon card), the pricing card line (Agency),
+  the landing page's status page card, FAQ and paid-plans summary, the customer guide `/docs/status-page-domains` (route, SEO entry, Caddy `@app`),
+  `llms.txt`, README, the Privacy Policy and `docs/legal-placeholders.md`, and `docs/architecture.md`, `operations.md`, `deployment.md`,
+  `security.md`, `security-review.md`. The DNS target is a CNAME to the apex (`infra/main.tf`), not A and AAAA records as first planned.
 
 ## Operations
 

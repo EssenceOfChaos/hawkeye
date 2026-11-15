@@ -269,6 +269,79 @@ export function DnsMonitoring() {
   )
 }
 
+export function StatusPageDomains() {
+  return (
+    <>
+      <p>
+        On the Agency plan, each status page can be served at an address on your client’s own domain, such as <code>status.yourclient.com</code>,
+        instead of only at its HawkEye address. Visitors see your client’s name in the address bar, and HawkEye gets and renews the certificate for it.
+        Each page can have one domain, and the page keeps working at its HawkEye address too.
+      </p>
+
+      <h2 id="set-up">Set it up</h2>
+      <ol>
+        <li>Open the status page on the <strong>Status pages</strong> page. Under <strong>Custom domain</strong>, enter the address, such as <code>status.yourclient.com</code>, and choose <strong>Set up domain</strong>.</li>
+        <li>
+          HawkEye shows two DNS records. Add both at the company that runs DNS for the domain (often the registrar, or a service such as Cloudflare):
+          <ul>
+            <li>a <strong>CNAME</strong> record from your address to <code>domains.hawkeye.observer</code>, which sends visitors to HawkEye;</li>
+            <li>a <strong>TXT</strong> record at <code>_hawkeye.</code> followed by your address, holding a value that starts <code>hawkeye-verify=</code>, which proves the domain is yours.</li>
+          </ul>
+        </li>
+        <li>
+          Wait for HawkEye to see them. It checks every minute for the first hour, then every 15 minutes for three days, or choose <strong>Check now</strong>.
+          When both records are right the domain shows as <strong>Live</strong> and the organization’s owner gets an email. The first visit takes a few
+          seconds while the certificate is issued.
+        </li>
+      </ol>
+      <p>Keep both records in place: HawkEye checks them every day, and the TXT record is what stops anyone else from using the address.</p>
+
+      <h2 id="dns-tips">DNS tips</h2>
+      <ul>
+        <li><strong>Use a subdomain.</strong> A domain on its own, such as <code>yourclient.com</code>, can’t have a CNAME record, so it can’t be used.</li>
+        <li>
+          <strong>Names in your DNS provider.</strong> Many providers add the domain to a record’s name by themselves: if yours does, enter
+          <code>status</code> and <code>_hawkeye.status</code> rather than the full names.
+        </li>
+        <li>
+          <strong>Turn off proxying.</strong> If your provider offers a proxy, such as Cloudflare’s orange cloud, set the CNAME record to DNS only. HawkEye
+          has to receive visitors directly to look after the certificate.
+        </li>
+        <li><strong>Changes take time.</strong> A new record can take up to an hour to be seen everywhere, longer if an old record with a long TTL is cached.</li>
+      </ul>
+
+      <h2 id="redirect">Send visitors to the domain</h2>
+      <p>
+        Once a domain is live, search engines are pointed to it, and the page still works at its HawkEye address. To send everyone to the domain, turn on
+        <strong> Send visitors of /status/… to</strong> your domain in the page’s settings and save the page.
+      </p>
+
+      <h2 id="problems">If something changes</h2>
+      <ul>
+        <li>
+          <strong>Needs attention</strong>: a record was changed or removed. The page is still served on the domain for 7 days while you fix it, and the
+          owner is emailed with what is wrong.
+        </li>
+        <li>
+          <strong>Stopped</strong>: the records stayed wrong for 7 days, so the page is no longer served on the domain. Put the records back and choose
+          <strong> Check now</strong>.
+        </li>
+        <li>
+          <strong>Removing a domain</strong> stops it at once, and you can delete its DNS records. If you move to a plan without custom domains, the domain
+          is kept but not served until you move back.
+        </li>
+      </ul>
+
+      <h2 id="what-is-served">What visitors see</h2>
+      <p>
+        Only the status page is served on your domain: no HawkEye sign-in, no other pages and no tracking. Monitored web addresses and error details are
+        never shown, exactly as on the HawkEye address. With Agency you can also add your client’s logo, an accent color and a link back to their website,
+        and hide “Powered by HawkEye”.
+      </p>
+    </>
+  )
+}
+
 export function Alerts() {
   return (
     <>

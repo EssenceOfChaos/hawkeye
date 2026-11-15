@@ -40,6 +40,11 @@ SQL: all queries are parameterized; the few places that assemble SQL (dynamic `U
 
 ## Residual risks and launch blockers
 
+Status pages on customers' own domains (added 2026-11-15) are reviewed in `docs/security.md#status-pages-on-customers-own-domains-public-inbound`.
+Residual: a verified domain stays served for up to 30 seconds after it is removed or the plan changes (the cache), and for up to 7 days after its
+records go wrong (by design, so a DNS mistake doesn't take a client's page down at once). The customer controls their zone; if they let someone else
+control it, that person could verify the name for their own HawkEye page, as with any domain verification.
+
 Multi-step API checks (added 2026-11-11) are reviewed in `docs/security.md#multi-step-api-checks-workflows`. Residual: a customer can point a workflow
 at a third-party API with credentials they hold, as they could with a single API check, and the requests come from our servers; the verified-address and
 5-minute rules for writes, the rate limits and the Terms' "authorized to monitor" clause are the controls. Redaction hides values of 4 characters or

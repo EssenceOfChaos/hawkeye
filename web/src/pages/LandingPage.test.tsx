@@ -33,7 +33,7 @@ describe('LandingPage', () => {
     const cards = document.querySelector('ul.plans') as HTMLElement
     expect(within(cards).getAllByText(/team members/)).toHaveLength(1)
     expect(within(cards).getByText('5 team members')).toBeInTheDocument()
-    expect(screen.getByText(/Agency also adds team members and reports with your own name and logo/)).toBeInTheDocument()
+    expect(screen.getByText(/Agency also adds team members, reports with your own name and logo, and status pages on your clients’ own domains/)).toBeInTheDocument()
   })
 
   it('lists reports on a plan only when that plan includes them', async () => {

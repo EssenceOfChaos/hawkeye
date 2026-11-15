@@ -166,6 +166,20 @@ The worker runs `Job` (advisory-locked, so one pass at a time across workers): e
 
 Warnings reuse `notification_deliveries` (`event_type = 'domain_expiry'`, `domain_id`, `domain_expires_at`, `domain_bucket`; the `notification_deliveries_shape` constraint says exactly which columns each event type carries) and the dispatcher, with email, webhook and chat renderers in `internal/notifications` (`chatContent` builds one channel-neutral message that Slack, Discord, Teams and Telegram each render and escape for their own markup; migration `000020` widens the channel list). Slow-response alerts (migration `000021`) run in the same result transaction: `checks.ApplySpeed` keeps slow/normal streaks (on the monitor, or per location in `monitor_region_state` with the same majority rule as outages), and `Incidents.SlowStarted`/`SlowEnded` open and resolve a row in `slowdowns` and queue `slow`/`slow_recovery` deliveries keyed by `slowdown_id`. Slowdowns are deliberately separate from incidents, so slowness never counts as downtime. UI: `web/src/pages/DomainsPage.tsx`, `web/src/components/Domains.tsx`.
 
+## Status pages on customers' own domains
+
+`internal/statuspagedomains` (migrations `000044`, `000045`; design and decisions in `docs/plan-status-page-domains.md`). A status page (Agency,
+`plans.max_status_page_domains`) may claim one subdomain: `status_page_domains` holds the host name, the claim's TXT token, its state (`pending`,
+`active`, `failing`, `disabled`) and the schedule. `Verifier` looks up `_hawkeye.<name>` TXT and where the name routes; `Next` (state.go, pure) turns
+a result into the next state and check time. The primary worker runs `Job` (advisory-locked) every minute for due claims and emails the owner on a
+change; the API runs the same check for "Check now".
+
+Serving: Caddy's catch-all site (`STATUS_DOMAINS_ADDRESS`, `https://` in production) asks `GET /internal/tls/allow` before getting a certificate
+(on-demand TLS), then serves `web/status.html` (entry `web/src/status-main.tsx`, which renders `StatusView` without the app) and proxies only
+`/api/v1/public/domain-status[/logo]`, where `Service.Serving` maps the `Host` header to a page's slug (cached 30 s, and only while the plan includes
+custom domains). `statuspage.Public` carries `custom_domain_url` and `redirect_to_domain`, so `/status/<slug>` can name the domain as canonical and
+send visitors there.
+
 ## Phase 8 additions
 
 Production Dockerfiles and Compose (`deploy/`, `docs/deployment.md`); SMTP sender; shared PostgreSQL rate limiter; API metrics on a private port (`:9091`) and alert rules; optional Sentry error tracking; account export/deletion/change-password; legal placeholder pages; backup/restore scripts (`docs/backup-restore.md`); egress firewall; smoke test (`scripts/smoke.sh`); security review (`docs/security-review.md`).

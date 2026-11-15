@@ -55,19 +55,19 @@ describe('Coming soon', () => {
   it('asks a signed-out visitor for an address, then to confirm it from their inbox', async () => {
     const posts = stub()
     mountSection()
-    await userEvent.click(await screen.findByRole('button', { name: 'Get notified about Status pages on your own domain' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Get notified about Email updates for status page visitors' }))
     await userEvent.type(screen.getByLabelText('Your email address'), 'visitor@example.com')
     await userEvent.click(screen.getByRole('button', { name: 'Notify me' }))
     expect(await screen.findByText(/Check your inbox/)).toBeInTheDocument()
-    expect(posts).toEqual([{ url: expect.stringContaining('/waitlist'), body: { feature: 'status_page_domains', email: 'visitor@example.com', company: '' } }])
+    expect(posts).toEqual([{ url: expect.stringContaining('/waitlist'), body: { feature: 'status_page_subscribers', email: 'visitor@example.com', company: '' } }])
   })
 
   it('adds a verified, signed-in person in one click', async () => {
     const posts = stub({ user: 'verified', reply: () => json(200, { status: 'added' }) })
     mountSection()
-    await userEvent.click(await screen.findByRole('button', { name: 'Get notified about Status pages on your own domain' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Get notified about Email updates for status page visitors' }))
     expect(await screen.findByText(/You’re on the list\. We’ll email me@example\.org/)).toBeInTheDocument()
-    expect(posts[0].body).toEqual({ feature: 'status_page_domains', company: '' })
+    expect(posts[0].body).toEqual({ feature: 'status_page_subscribers', company: '' })
     expect(screen.queryByLabelText('Your email address')).not.toBeInTheDocument()
   })
 

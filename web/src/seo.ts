@@ -87,6 +87,7 @@ export const PAGES: readonly PageMeta[] = [
     description: 'Get alerted when a DNS record disappears or stops matching the value you expect. Watch A, AAAA, MX, NS and TXT records, including SPF and DMARC.',
     index: true,
   },
+  { path: '/docs/status-page-domains', title: 'Status Pages on Your Own Domain | HawkEye Docs', description: 'Serve a HawkEye status page at an address on your client’s own domain, such as status.yourclient.com, with a certificate HawkEye looks after.', index: true },
   { path: '/docs/alerts', title: 'Alerts, Routing & Quiet Hours | HawkEye Docs', description: 'Send HawkEye alerts by email, Slack, Teams, Discord, Telegram, PagerDuty or webhook, route them by client, and set alert delays and quiet hours.', index: true },
   { path: '/docs/claude', title: 'Use HawkEye with Claude (MCP) | HawkEye Docs', description: 'Add HawkEye from Claude’s connector directory, or connect Claude Code with an API key: ask what is down, check uptime, pause monitors and post incident updates.', index: true },
   { path: '/docs/api', title: 'API & API Keys | HawkEye Docs', description: 'Use the HawkEye API from scripts and tools: create a read-only or read and write API key, send requests, handle errors and keep keys safe.', index: true },

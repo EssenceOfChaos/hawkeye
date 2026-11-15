@@ -45,6 +45,8 @@ export interface Plan {
   status_page_branding?: boolean
   /** Hiding "Powered by HawkEye" on status pages (Agency). */
   status_page_white_label?: boolean
+  /** Status pages served on the customer's own domain, one per page (Agency). 0 or absent: not included. */
+  max_status_page_domains?: number
   /** Monthly PDF uptime reports (Pro and Agency). */
   reports_enabled?: boolean
   /** The organization's own name and logo on those reports (Agency). */

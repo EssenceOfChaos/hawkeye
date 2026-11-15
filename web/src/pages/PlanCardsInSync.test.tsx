@@ -22,7 +22,7 @@ const pro = {
 const agency = {
   code: 'agency', name: 'Agency', monthly_price_cents: 5900, annual_price_cents: 59000, max_monitors: 200, minimum_check_interval_seconds: 60, history_retention_days: 365,
   max_domains: 100, max_team_members: 5, max_regions: 3, maintenance_enabled: true, reports_enabled: true, branded_reports_enabled: true, api_write_enabled: true, ai_drafts_enabled: true,
-  max_workflows: 50, max_workflow_steps: 10,
+  max_workflows: 50, max_workflow_steps: 10, max_status_page_domains: 50,
 }
 const plans = [free, pro, agency]
 

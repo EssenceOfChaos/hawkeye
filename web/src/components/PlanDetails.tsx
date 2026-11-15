@@ -69,6 +69,7 @@ export function PlanDetails({ plan, interval = 'month' }: { plan: Plan; interval
         {plan.status_page_white_label
           ? <li>White-label status pages: your clients’ logos and colors, no HawkEye branding</li>
           : plan.status_page_branding && <li>Status pages with your clients’ logos and colors</li>}
+        {(plan.max_status_page_domains ?? 0) > 0 && <li>Status pages on your clients’ own domains</li>}
         {plan.maintenance_enabled && <li>Maintenance windows</li>}
         {plan.ai_drafts_enabled && <li>AI-drafted incident updates</li>}
         {plan.reports_enabled && <li>Monthly PDF uptime reports</li>}

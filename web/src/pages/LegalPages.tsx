@@ -28,7 +28,7 @@ const SUPPORT = 'customer_support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 13, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 15, 2026</p>
       <p>
         HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -57,6 +57,7 @@ export function PrivacyPage() {
         <li>If you use PDF reports on the Agency plan: the name and logo image you add to put on them. We check the image and store a cleaned copy, and print it on your reports.</li>
         <li>If you join a team and choose to receive its alerts: your email address is added to that team’s alert recipients, and its owner can see it. It is removed when you leave the team or are removed from it, and you can turn it off or remove it yourself at any time.</li>
         <li>If you brand a status page: the logo image, accent color and website address you add to it. We check the image and store a cleaned copy, and show these on that page while it is published.</li>
+        <li>If you serve a status page on your own domain: the domain name you enter, the verification value we give you for it, and the results and times of our checks of its DNS records. We look those records up through public DNS, which shares only the domain name, and we obtain a security certificate for that name from a certificate authority (Let’s Encrypt), which publishes the name in public certificate logs.</li>
         <li>Feature sign-ups. If you ask to be told when an upcoming feature launches (“Get notified”), we receive your email address, which feature you chose, and, if you are signed in, your account identifier. An address entered while signed out is only kept if you confirm it from the email we send.</li>
         <li>Communications you send to us. If you use our contact form we receive the name, email address, subject, message, and optional website address you enter and, if you are signed in, your account identifier and plan.</li>
       </ul>
@@ -93,7 +94,7 @@ export function PrivacyPage() {
       <p>
         If you create a public status page, anyone who has its address can see the page title and description you enter, any logo, accent color and website link you add to it, the names you give the monitors you add to it, each one’s current state (up, down, or under maintenance),
         daily and overall uptime percentages, the start and end times of recent incidents, and any updates you post on those incidents (their text, status and time, but not who posted them). We do not show monitored web addresses, error messages, or the causes of incidents on the page. The page is not visible until you
-        publish it, and you can unpublish or delete it at any time. Likewise, if you turn on a public uptime badge for a monitor, anyone with the badge’s address can see that monitor’s uptime percentage, the period it covers and whether it is currently up, but never its name or web address; turning the badge off makes its address stop working. Do not put personal or confidential information in the title, description, or monitor names. Public status pages may be cached by us for a short time (under a minute)
+        publish it, and you can unpublish or delete it at any time. If you set up your own domain for a status page, the page is also shown at that address while its DNS records point to us. Likewise, if you turn on a public uptime badge for a monitor, anyone with the badge’s address can see that monitor’s uptime percentage, the period it covers and whether it is currently up, but never its name or web address; turning the badge off makes its address stop working. Do not put personal or confidential information in the title, description, or monitor names. Public status pages may be cached by us for a short time (under a minute)
         and, once published, may be copied or indexed by others, which we cannot control.
       </p>
 
