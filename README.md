@@ -57,7 +57,7 @@ API reference: `docs/api.md`. Security notes: `docs/security.md`. Running the en
 | `make test`, `make test-race`            | Go tests                                                                                    |
 | `make lint`                              | gofmt, vet, web lint                                                                        |
 | `make build`                             | Build binaries into `bin/` and the web bundle                                               |
-| `make smoke-up` / `smoke` / `smoke-down` | Build and run the production images locally (HTTPS, mail catcher), run 42 checks, tear down |
+| `make smoke-up` / `smoke` / `smoke-down` | Build and run the production images locally (HTTPS, mail catcher), run the smoke tests (`scripts/smoke.sh`, and `scripts/smoke-domains.sh` for a status page on a customer's domain), tear down |
 | `make vuln`                              | `govulncheck` (through `scripts/vulncheck.py`) and `npm audit`                              |
 
 ## Configuration

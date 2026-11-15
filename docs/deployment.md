@@ -133,7 +133,8 @@ the API says the name is a verified domain (`on_demand_tls` → `http://api:8080
 Customers point a CNAME at `domains.<your domain>` (`STATUS_PAGE_DOMAIN_TARGET` to change it), which must reach this server directly: a CNAME to the
 apex, DNS only, never proxied. To turn customer domains off, set both addresses to unused ports (`:8082` and `:8083`). Certificates for those names
 live in the `caddy_data` volume with the site's own; a rebuilt server gets them again on each name's next visit. Test stacks set
-`CADDY_EXTRA_GLOBAL=local_certs` so those certificates come from Caddy's own CA.
+`CADDY_EXTRA_GLOBAL=local_certs` so those certificates come from Caddy's own CA, and `scripts/smoke-domains.sh` (in `make smoke` and CI) checks
+this site end to end there. It writes to the stack's database, so never run it against production.
 
 ## Unknown pages (404)
 

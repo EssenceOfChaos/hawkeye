@@ -349,7 +349,8 @@ certificates, for names it does not own. What protects it:
   monitors; a lookup that gets no answer never changes an active domain. "Check now" is rate-limited per IP.
 
 Tests: `internal/statuspagedomains/*_test.go`, `internal/httpapi/statuspagedomain_integration_test.go` (the certificate check, serving by host,
-downgrades), and the smoke-stack walkthrough recorded in the plan.
+downgrades), and `scripts/smoke-domains.sh`, which CI runs on the smoke stack: a verified domain visited through Caddy gets its certificate
+on first visit and serves nothing but the status page, an unverified name gets no certificate, and http redirects.
 
 ## Settings and secrets handling
 
