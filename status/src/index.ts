@@ -1,9 +1,9 @@
 // status.hawkeye.observer. Every minute (the cron trigger) it checks HawkEye's website and API from Cloudflare and reads the newest heartbeat from
-// HawkEye's monitoring engine, and records confirmed outages. It serves the page, a JSON copy of it, and two authenticated endpoints: heartbeats
-// from HawkEye's worker, and incident notes from us. Nothing here depends on HawkEye's server or database.
+// HawkEye's monitoring engine, and records confirmed outages. It serves the page, a JSON copy of it, and authenticated endpoints: heartbeats
+// from HawkEye's worker, and incident notes and planned maintenance from us. Nothing here depends on HawkEye's server or database.
 
 import {
-  CHECK_TIMEOUT_MS, CHECKS_KEPT, COMPONENTS, engineOK, INCIDENT_STATUSES, step,
+  CHECK_TIMEOUT_MS, CHECKS_KEPT, COMPONENTS, engineOK, INCIDENT_STATUSES, parseWindow, step,
   type ComponentId, type IncidentStatus, type Outage, type State,
 } from './logic'
 import { renderPage, type Snapshot } from './page'
@@ -80,13 +80,16 @@ export async function runChecks(env: Env, now: number): Promise<void> {
 export async function snapshot(env: Env, now: number): Promise<Snapshot> {
   const since = now - 90 * 86_400
   const recent = now - 30 * 86_400 // incidents resolved within this are still listed
-  const [meta, states, outages, incidents, updates] = await env.DB.batch([
+  const [meta, states, outages, incidents, updates, windows] = await env.DB.batch([
     env.DB.prepare("SELECT value FROM meta WHERE key = 'measured_since'"),
     env.DB.prepare('SELECT component, down_since FROM component_state'),
     env.DB.prepare('SELECT component, started_at, ended_at FROM outages WHERE ended_at IS NULL OR ended_at >= ? ORDER BY started_at').bind(since),
     env.DB.prepare('SELECT id, title, created_at, resolved_at FROM incidents WHERE resolved_at IS NULL OR resolved_at >= ? ORDER BY created_at DESC').bind(recent),
     env.DB.prepare(`SELECT u.incident_id, u.status, u.message, u.created_at FROM incident_updates u JOIN incidents i ON i.id = u.incident_id
       WHERE i.resolved_at IS NULL OR i.resolved_at >= ? ORDER BY u.created_at DESC`).bind(recent),
+    // Upcoming and in progress, and those that ended within the 90 days the uptime covers.
+    env.DB.prepare(`SELECT id, title, message, starts_at, ends_at, created_at FROM maintenance
+      WHERE canceled_at IS NULL AND ends_at >= ? ORDER BY starts_at`).bind(since),
   ])
   const measured = (meta.results[0] as { value: number } | undefined)?.value ?? null
   const down = new Map((states.results as { component: string; down_since: number | null }[]).map((r) => [r.component, r.down_since]))
@@ -102,6 +105,7 @@ export async function snapshot(env: Env, now: number): Promise<Snapshot> {
     incidents: (incidents.results as { id: number; title: string; created_at: number; resolved_at: number | null }[]).map((i) => ({
       ...i, updates: notes.filter((u) => u.incident_id === i.id),
     })),
+    maintenance: windows.results as Snapshot['maintenance'],
   }
 }
 
@@ -194,6 +198,31 @@ export async function handle(req: Request, env: Env, now: number): Promise<Respo
       env.DB.prepare('UPDATE incidents SET resolved_at = ? WHERE id = ?').bind(st === 'resolved' ? now : null, id),
     ])
     return new Response(null, { status: 204 })
+  }
+  // Planned maintenance, from us: { title, message?, starts_at, ends_at | duration_minutes }. It must start now or later (never backdated), last at
+  // most 4 hours, and is shown on the page from the moment it is created.
+  if (route === 'POST /api/maintenance') {
+    if (!authorized(req, env.ADMIN_TOKEN)) return bad('unauthorized', 401)
+    const w = parseWindow(await body(req), now)
+    if (typeof w === 'string') return bad(w)
+    const created = await env.DB.prepare('INSERT INTO maintenance (title, message, starts_at, ends_at, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id')
+      .bind(w.title, w.message, w.starts_at, w.ends_at, now).first<{ id: number }>()
+    return json({ id: created!.id, starts_at: w.starts_at, ends_at: w.ends_at }, 201)
+  }
+  // Ends a window early (it is done), or cancels one that has not started. A window that is over can't be changed.
+  const mw = route.match(/^POST \/api\/maintenance\/(\d+)\/end$/)
+  if (mw) {
+    if (!authorized(req, env.ADMIN_TOKEN)) return bad('unauthorized', 401)
+    const w = await env.DB.prepare('SELECT starts_at, ends_at FROM maintenance WHERE id = ? AND canceled_at IS NULL').bind(Number(mw[1]))
+      .first<{ starts_at: number; ends_at: number }>()
+    if (!w) return bad('no such maintenance window', 404)
+    if (w.ends_at <= now) return bad('this maintenance window is already over', 409)
+    if (w.starts_at > now) {
+      await env.DB.prepare('UPDATE maintenance SET canceled_at = ? WHERE id = ?').bind(now, Number(mw[1])).run()
+      return json({ canceled: true })
+    }
+    await env.DB.prepare('UPDATE maintenance SET ends_at = ? WHERE id = ?').bind(Math.max(now, w.starts_at + 1), Number(mw[1])).run()
+    return json({ ended_at: Math.max(now, w.starts_at + 1) })
   }
   return bad('not found', 404)
 }
