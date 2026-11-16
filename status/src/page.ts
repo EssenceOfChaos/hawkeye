@@ -2,7 +2,7 @@
 // down. Everything that comes from the database is escaped.
 
 import { FAVICON_DATA_URL } from './favicon'
-import { activeWindow, days, duration, percent, uptime, type IncidentStatus, type Outage } from './logic'
+import { activeWindow, days, downtimeIn, duration, percent, uptime, type IncidentStatus, type Outage } from './logic'
 
 export interface Snapshot {
   now: number
@@ -74,12 +74,24 @@ function incident(i: Snapshot['incidents'][number]): string {
 </article>`
 }
 
-/** A maintenance window: when it runs, what it is for, and when it was announced (always before it started). */
-function maintenance(w: Snapshot['maintenance'][number], now: number): string {
+/**
+ * A maintenance window: when it runs, what it is for, and when it was announced (always before it started). Once it is over, it also says how much
+ * downtime was recorded inside it, so the window's length is never read as the length of an outage.
+ */
+function maintenance(s: Snapshot, w: Snapshot['maintenance'][number]): string {
+  const now = s.now
   const phase = w.ends_at <= now ? 'Completed' : w.starts_at <= now ? 'In progress' : 'Scheduled'
+  let outcome = ''
+  if (w.ends_at <= now) {
+    const d = downtimeIn(s.components, w, now)
+    outcome = d.seconds === 0
+      ? 'No downtime was recorded during this window.'
+      : `${d.names.join(' and ')} ${d.names.length > 1 ? 'were' : 'was'} unavailable for about ${duration(d.seconds)} of it.`
+  }
   return `<article class="incident maint${w.ends_at > now ? ' open' : ''}">
   <h3>Planned maintenance: ${esc(w.title)}</h3>
-  <p><strong>${phase}</strong> · ${esc(stamp(w.starts_at))} to ${esc(stamp(w.ends_at))} (${esc(duration(w.ends_at - w.starts_at))})</p>
+  <p><strong>${phase}</strong> · ${esc(stamp(w.starts_at))} to ${esc(stamp(w.ends_at))} (${esc(duration(w.ends_at - w.starts_at))} window)</p>
+  ${outcome ? `<p>${esc(outcome)}</p>` : ''}
   ${w.message ? `<p class="message">${esc(w.message)}</p>` : ''}
   <p class="hint">Announced ${esc(stamp(w.created_at))}.</p>
 </article>`
@@ -94,7 +106,7 @@ export function renderPage(s: Snapshot): string {
   // Past incidents and completed maintenance, newest first.
   const history = [
     ...past.map((i) => ({ at: i.created_at, html: incident(i) })),
-    ...done.map((w) => ({ at: w.starts_at, html: maintenance(w, s.now) })),
+    ...done.map((w) => ({ at: w.starts_at, html: maintenance(s, w) })),
   ].sort((x, y) => y.at - x.at)
   return `<!doctype html>
 <html lang="en">
@@ -148,7 +160,7 @@ footer { margin-top: 2rem; color: var(--muted); font-size: .85rem; }
   <a href="https://hawkeye.observer/contact">Contact support</a>
 </header>
 <h1 class="${b.cls}">${esc(b.text)}</h1>
-${coming.map((w) => maintenance(w, s.now)).join('\n')}
+${coming.map((w) => maintenance(s, w)).join('\n')}
 ${open.map(incident).join('\n')}
 ${s.components.map((c) => component(s, c)).join('\n')}
 <section class="incidents" aria-labelledby="past-h">

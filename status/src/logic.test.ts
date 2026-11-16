@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { days, downSeconds, engineOK, outageSeconds, parseWindow, percent, step, uptime, type State } from './logic'
+import { days, downSeconds, downtimeIn, engineOK, outageSeconds, parseWindow, percent, step, uptime, type State } from './logic'
 import { FAVICON_DATA_URL, faviconBytes } from './favicon'
 import { renderPage, type Snapshot } from './page'
 
@@ -171,5 +171,38 @@ describe('the favicon', () => {
     const html = renderPage({ now: 1_800_000_000, measuredSince: null, components: [], incidents: [], maintenance: [] })
     expect(html).toContain(`<link rel="icon" type="image/png" sizes="32x32" href="${FAVICON_DATA_URL}">`)
     expect([...faviconBytes().slice(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) // the PNG signature
+  })
+})
+
+describe('a completed window says how much downtime it held', () => {
+  const w = { starts_at: 1000, ends_at: 1600 }
+  it('counts overlapping outages of several components once, and only the part inside the window', () => {
+    const d = downtimeIn([
+      { name: 'Website and app', outages: [{ started_at: 1100, ended_at: 1300 }] },
+      { name: 'API', outages: [{ started_at: 1200, ended_at: 1400 }, { started_at: 1500, ended_at: 2000 }] },
+      { name: 'Monitoring and alerts', outages: [{ started_at: 100, ended_at: 200 }] },
+    ], w, 5000)
+    expect(d).toEqual({ seconds: 400, names: ['Website and app', 'API'] }) // 1100-1400 and 1500-1600
+  })
+
+  // The first real window on status.hawkeye.observer (2026-11-16): the reboot recovered within a minute, so no outage was recorded during it.
+  const firstWindow = { id: 1, title: 'Server reboot for a kernel update', message: '', starts_at: Date.UTC(2026, 10, 16, 0, 48) / 1000,
+    ends_at: Date.UTC(2026, 10, 16, 0, 56, 55) / 1000, created_at: Date.UTC(2026, 10, 16, 0, 46, 30) / 1000 }
+  const nov14 = { started_at: Date.UTC(2026, 10, 14, 5, 4) / 1000, ended_at: Date.UTC(2026, 10, 14, 5, 6) / 1000 }
+  const snap = (outages: { started_at: number; ended_at: number | null }[]): Snapshot => ({
+    now: Date.UTC(2026, 10, 16, 2, 0) / 1000, measuredSince: Date.UTC(2026, 10, 1) / 1000, incidents: [], maintenance: [firstWindow],
+    components: [{ id: 'website', name: 'Website and app', description: 'd', downSince: null, outages }],
+  })
+
+  it('says no downtime was recorded when none was, and calls the length a window', () => {
+    const html = renderPage(snap([nov14]))
+    expect(html).toContain('(9 min window)')
+    expect(html).toContain('No downtime was recorded during this window.')
+  })
+
+  it('says how long, and what, when there was downtime inside it', () => {
+    const html = renderPage(snap([{ started_at: firstWindow.starts_at + 60, ended_at: firstWindow.starts_at + 180 }]))
+    expect(html).toContain('Website and app was unavailable for about 2 min of it.')
+    expect(html).not.toContain('No downtime was recorded')
   })
 })
