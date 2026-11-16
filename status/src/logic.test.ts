@@ -126,6 +126,13 @@ describe('planned maintenance', () => {
     expect(parseWindow({ title: 'Far', starts_at: now + 91 * day, duration_minutes: 10 }, now)).toMatch(/90 days/)
     expect(parseWindow({ title: 'Backwards', starts_at: now + 600, ends_at: now + 60 }, now)).toMatch(/after starts_at/)
     expect(parseWindow({ title: 'No zone', starts_at: '2026-11-16T03:00:00', duration_minutes: 10 }, now)).toMatch(/time zone/)
+    expect(parseWindow({ title: 'Offset', starts_at: '2027-01-15T08:00:00.5+01:00', duration_minutes: 10 }, 1_800_000_000 - 10 * day)).toMatchObject({ starts_at: Date.parse('2027-01-15T07:00:00.5Z') / 1000 | 0 })
+    expect(parseWindow({ title: 'Junk', starts_at: 'xT2026-11-16T03:00Z', duration_minutes: 10 }, now)).toMatch(/time zone/)
+    // Crafted input is refused quickly (CodeQL: polynomial regular expression), however long it is.
+    const t0 = performance.now()
+    expect(parseWindow({ title: 'Slow', starts_at: 'T'.repeat(100_000) + '!', duration_minutes: 10 }, now)).toMatch(/time zone/)
+    expect(parseWindow({ title: 'Slow', starts_at: '2026-11-16T' + '0'.repeat(30) + 'Z', duration_minutes: 10 }, now)).toMatch(/time zone/)
+    expect(performance.now() - t0).toBeLessThan(50)
     expect(parseWindow({ starts_at: now + 60, duration_minutes: 10 }, now)).toMatch(/title/)
   })
 

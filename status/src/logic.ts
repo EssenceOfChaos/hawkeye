@@ -187,10 +187,16 @@ export type IncidentStatus = (typeof INCIDENT_STATUSES)[number]
 export const MAINTENANCE_MAX_SECONDS = 4 * 3600
 export const MAINTENANCE_MAX_AHEAD = 90 * 86_400
 
+/**
+ * An ISO 8601 date and time with a time zone: 2026-11-16T03:00Z, 2026-11-16T03:00:00.000+01:00. Every part has a fixed length, so matching takes
+ * time in proportion to the input (no open-ended repetition for crafted input to make backtrack), and the input is length-checked first anyway.
+ */
+const ISO_WITH_ZONE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})$/
+
 /** Reads a time given as Unix seconds or an ISO 8601 string with a time zone. */
 function when(v: unknown): number | null {
   if (typeof v === 'number' && Number.isInteger(v) && v > 0) return v
-  if (typeof v === 'string' && /T.*(Z|[+-]\d\d:?\d\d)$/.test(v)) {
+  if (typeof v === 'string' && v.length <= 40 && ISO_WITH_ZONE.test(v)) {
     const ms = Date.parse(v)
     return Number.isFinite(ms) ? Math.floor(ms / 1000) : null
   }
