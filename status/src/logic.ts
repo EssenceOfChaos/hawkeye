@@ -131,6 +131,24 @@ export function uptime(outages: Outage[], from: number, to: number, measuredSinc
   return 1 - downSeconds(outages, start, to, windows) / measured
 }
 
+/**
+ * Recorded downtime inside one window: how long any component was down during it (overlapping outages of several components count once), and
+ * which components. Shown on a completed window, so its length is never mistaken for the length of an outage.
+ */
+export function downtimeIn(components: { name: string; outages: Outage[] }[], w: Window, now: number): { seconds: number; names: string[] } {
+  const to = Math.min(w.ends_at, now)
+  const names: string[] = []
+  const spans: Window[] = []
+  for (const c of components) {
+    const mine = c.outages
+      .map((o) => ({ starts_at: Math.max(o.started_at, w.starts_at), ends_at: Math.min(o.ended_at ?? to, to) }))
+      .filter((s) => s.ends_at > s.starts_at)
+    if (mine.length) names.push(c.name)
+    spans.push(...mine)
+  }
+  return { seconds: length(covered(spans, w.starts_at, to)), names }
+}
+
 /** The window in progress at `now`, if any. */
 export function activeWindow<W extends Window>(windows: W[], now: number): W | undefined {
   return windows.find((w) => w.starts_at <= now && now < w.ends_at)
