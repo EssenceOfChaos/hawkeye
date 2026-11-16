@@ -116,7 +116,7 @@ Customers check `https://status.hawkeye.observer` when they think HawkEye is dow
 `/api/v1/plans` from Cloudflare, and reads the newest heartbeat from the primary worker (`internal/statusbeat`), which reports how overdue the oldest
 queued check is. A component is down after two failures in a row, counted from the first; "Monitoring and alerts" is down when heartbeats stop for 3
 minutes or report checks more than 5 minutes overdue. Uptime is computed from those outages, from the day measuring began; nothing before it is
-counted or claimed. Raw check results are kept 14 days, outages and incidents for good.
+counted or claimed. Downtime inside an announced maintenance window is shown as maintenance and not counted (*Planned maintenance* below). Raw check results are kept 14 days, outages and incidents for good.
 
 **Settings.** Cloudflare: the `DB` binding and the route are in `status/wrangler.toml`; the secrets `HEARTBEAT_TOKEN` and `ADMIN_TOKEN` are set with
 `wrangler secret put`. Infisical: `STATUS_HEARTBEAT_URL` (`https://status.hawkeye.observer/heartbeat`) and `STATUS_HEARTBEAT_TOKEN` (the same value as
@@ -170,6 +170,25 @@ curl -s -X POST $S/api/incidents/4/updates -H "$T" -H 'Content-Type: application
 Outages themselves are recorded automatically; an incident note is for explaining one. If a check was wrong (Cloudflare could not reach us but
 customers could), say so in a note rather than deleting the outage: the numbers stay honest. To look at raw results:
 `npx wrangler d1 execute hawkeye-status --remote --command "SELECT * FROM checks ORDER BY at DESC LIMIT 20"`.
+
+**Planned maintenance.** Announce work that takes HawkEye down (a server reboot) before it starts. The page shows the window, with when it was
+announced, from the moment it is created; downtime inside it is shown as maintenance and left out of the uptime (from the downtime and from the
+time measured), and anything outside it, including an outage that runs past its end, counts as usual. Outages are still recorded as they happened.
+A window must start now or later (it can never be backdated over downtime that already happened) and last at most 4 hours. Deploys don't need
+one: `deploy.sh` swaps containers in seconds, and an outage needs two failed checks a minute apart.
+
+```sh
+S=https://status.hawkeye.observer; T="Authorization: Bearer $ADMIN_TOKEN"
+curl -s -X POST $S/api/maintenance -H "$T" -H 'Content-Type: application/json' \
+  -d '{"title":"Server reboot for a kernel update","message":"HawkEye may be unavailable for about 2 minutes.","starts_at":"2026-11-16T03:00:00Z","duration_minutes":15}'
+# → {"id":1,"starts_at":...,"ends_at":...}     (starts_at: ISO 8601 with a time zone, or Unix seconds; or ends_at instead of duration_minutes)
+curl -s -X POST $S/api/maintenance/1/end -H "$T"   # done early: ends it now. Before it starts: cancels it ({"canceled":true}).
+```
+
+**Rebooting the server.** (1) `cat /var/run/reboot-required.pkgs` and `sudo needrestart -r l`: if only services need restarting, restart those
+instead. (2) Announce a window of about 15 minutes, ideally a day ahead and at a quiet time. (3) In the window: `sudo reboot`, then
+`docker ps` once it is back (every container restarts by itself) and `scripts/smoke.sh https://hawkeye.observer`. (4) End the window early with
+`/end` once all is well.
 
 ## Runbooks
 

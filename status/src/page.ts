@@ -1,7 +1,8 @@
 // The status page's HTML. Self-contained (inline styles, no fonts, images or scripts from anywhere), so it renders when HawkEye's own server is
 // down. Everything that comes from the database is escaped.
 
-import { days, duration, percent, uptime, type IncidentStatus, type Outage } from './logic'
+import { FAVICON_DATA_URL } from './favicon'
+import { activeWindow, days, duration, percent, uptime, type IncidentStatus, type Outage } from './logic'
 
 export interface Snapshot {
   now: number
@@ -14,6 +15,8 @@ export interface Snapshot {
     resolved_at: number | null
     updates: { status: IncidentStatus; message: string; created_at: number }[]
   }[]
+  /** Maintenance windows: upcoming and in progress, and those that ended in the last 90 days (for the uptime). */
+  maintenance: { id: number; title: string; message: string; starts_at: number; ends_at: number; created_at: number }[]
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
@@ -31,24 +34,28 @@ const BAR_DAYS = 90
 function banner(s: Snapshot): { cls: string; text: string } {
   const down = s.components.filter((c) => c.downSince !== null)
   if (s.measuredSince === null) return { cls: 'none', text: 'Measuring has just started' }
+  if (down.length > 0 && activeWindow(s.maintenance, s.now)) return { cls: 'maint', text: 'Scheduled maintenance in progress' }
   if (down.length === 0) return { cls: 'up', text: 'All systems operational' }
   if (down.length === s.components.length) return { cls: 'major', text: 'Major outage' }
   return { cls: 'minor', text: `${down.map((c) => c.name).join(' and ')}: outage` }
 }
 
 function component(s: Snapshot, c: Snapshot['components'][number]): string {
-  const up90 = uptime(c.outages, s.now - BAR_DAYS * 86_400, s.now, s.measuredSince ?? s.now)
-  const bars = days(c.outages, BAR_DAYS, s.now, s.measuredSince)
+  const up90 = uptime(c.outages, s.now - BAR_DAYS * 86_400, s.now, s.measuredSince ?? s.now, s.maintenance)
+  const bars = days(c.outages, BAR_DAYS, s.now, s.measuredSince, s.maintenance)
     .map((d) => {
+      const planned = d.maintenanceSeconds > 0 ? `${duration(d.maintenanceSeconds)} of planned maintenance` : ''
       const label = d.status === 'none' ? `${day(d.start)}: not measured yet`
-        : d.status === 'up' ? `${day(d.start)}: no downtime` : `${day(d.start)}: down ${duration(d.downSeconds)}`
+        : d.status === 'up' ? `${day(d.start)}: no downtime`
+          : d.status === 'maintenance' ? `${day(d.start)}: ${planned}, no other downtime`
+            : `${day(d.start)}: down ${duration(d.downSeconds)}${planned ? `, and ${planned}` : ''}`
       // The label is screen reader text, and the tooltip on hover (no title attribute: the browser's own tooltip waits about a second).
       return `<li class="${d.status}"><span class="tip">${esc(label)}</span></li>`
     })
     .join('')
-  const state = c.downSince !== null
-    ? `<span class="state major">Down since ${esc(stamp(c.downSince))}</span>`
-    : `<span class="state up">Operational</span>`
+  const state = c.downSince === null ? `<span class="state up">Operational</span>`
+    : activeWindow(s.maintenance, s.now) ? `<span class="state maint">Under maintenance</span>`
+      : `<span class="state major">Down since ${esc(stamp(c.downSince))}</span>`
   return `<section class="component" aria-labelledby="c-${c.id}">
   <div class="row"><h2 id="c-${c.id}">${esc(c.name)}</h2>${state}</div>
   <p class="hint">${esc(c.description)}</p>
@@ -67,10 +74,28 @@ function incident(i: Snapshot['incidents'][number]): string {
 </article>`
 }
 
+/** A maintenance window: when it runs, what it is for, and when it was announced (always before it started). */
+function maintenance(w: Snapshot['maintenance'][number], now: number): string {
+  const phase = w.ends_at <= now ? 'Completed' : w.starts_at <= now ? 'In progress' : 'Scheduled'
+  return `<article class="incident maint${w.ends_at > now ? ' open' : ''}">
+  <h3>Planned maintenance: ${esc(w.title)}</h3>
+  <p><strong>${phase}</strong> · ${esc(stamp(w.starts_at))} to ${esc(stamp(w.ends_at))} (${esc(duration(w.ends_at - w.starts_at))})</p>
+  ${w.message ? `<p class="message">${esc(w.message)}</p>` : ''}
+  <p class="hint">Announced ${esc(stamp(w.created_at))}.</p>
+</article>`
+}
+
 export function renderPage(s: Snapshot): string {
   const b = banner(s)
   const open = s.incidents.filter((i) => i.resolved_at === null)
   const past = s.incidents.filter((i) => i.resolved_at !== null)
+  const coming = s.maintenance.filter((w) => w.ends_at > s.now).sort((x, y) => x.starts_at - y.starts_at)
+  const done = s.maintenance.filter((w) => w.ends_at <= s.now && w.ends_at >= s.now - 30 * 86_400)
+  // Past incidents and completed maintenance, newest first.
+  const history = [
+    ...past.map((i) => ({ at: i.created_at, html: incident(i) })),
+    ...done.map((w) => ({ at: w.starts_at, html: maintenance(w, s.now) })),
+  ].sort((x, y) => y.at - x.at)
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -79,8 +104,9 @@ export function renderPage(s: Snapshot): string {
 <title>HawkEye status</title>
 <meta name="description" content="Whether HawkEye is up, measured every minute from outside HawkEye's own servers, with its uptime over the last 90 days and any incidents.">
 <meta http-equiv="refresh" content="60">
+<link rel="icon" type="image/png" sizes="32x32" href="${FAVICON_DATA_URL}">
 <style>
-:root { --navy: #091c33; --panel: #0f2744; --text: #eaf1fa; --muted: #a9b9cd; --gold: #e8b95e; --up: #56d364; --minor: #f0b429; --major: #ff8a80; --none: #2a4262; }
+:root { --navy: #091c33; --panel: #0f2744; --text: #eaf1fa; --muted: #a9b9cd; --gold: #e8b95e; --up: #56d364; --minor: #f0b429; --major: #ff8a80; --maint: #79b8ff; --none: #2a4262; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--navy); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
 main { max-width: 52rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
@@ -89,15 +115,15 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 .brand b { color: var(--gold); }
 a { color: var(--gold); }
 h1 { font-size: 1.1rem; margin: 0; padding: 1rem 1.25rem; border-radius: .6rem; }
-h1.up { background: #123d2a; } h1.minor { background: #4a3a12; } h1.major { background: #4d1f22; } h1.none { background: var(--panel); }
+h1.up { background: #123d2a; } h1.minor { background: #4a3a12; } h1.major { background: #4d1f22; } h1.maint { background: #143457; } h1.none { background: var(--panel); }
 h2 { font-size: 1.05rem; margin: 0; }
 .component, .incident, .about { background: var(--panel); border-radius: .6rem; padding: 1rem 1.25rem; margin-top: 1rem; }
 .row { display: flex; justify-content: space-between; align-items: baseline; gap: .75rem; flex-wrap: wrap; }
 .hint { color: var(--muted); font-size: .875rem; margin: .25rem 0; }
-.state { font-size: .9rem; font-weight: 600; } .state.up { color: var(--up); } .state.major { color: var(--major); }
+.state { font-size: .9rem; font-weight: 600; } .state.up { color: var(--up); } .state.major { color: var(--major); } .state.maint { color: var(--maint); }
 .bars { display: flex; gap: 2px; list-style: none; padding: 0; margin: .75rem 0 .25rem; height: 2.25rem; }
 .bars li { flex: 1; border-radius: 2px; background: var(--none); position: relative; }
-.bars .up { background: var(--up); } .bars .minor { background: var(--minor); } .bars .major { background: var(--major); }
+.bars .up { background: var(--up); } .bars .minor { background: var(--minor); } .bars .major { background: var(--major); } .bars .maintenance { background: var(--maint); }
 /* Each day's label: hidden but read by screen readers, and shown at once as a tooltip above the bar on hover. Near either end it lines up with
    the bar's outer edge, so it never runs off the page. */
 .tip { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -107,7 +133,8 @@ h2 { font-size: 1.05rem; margin: 0; }
 .bars li:nth-child(-n+15):hover .tip { left: 0; transform: none; }
 .bars li:nth-last-child(-n+15):hover .tip { left: auto; right: 0; transform: none; }
 section.incidents h2 { margin-top: 2rem; }
-.incident h3 { margin: 0 0 .5rem; font-size: 1rem; } .incident.open { border-left: 4px solid var(--minor); }
+.incident h3 { margin: 0 0 .5rem; font-size: 1rem; } .incident.open { border-left: 4px solid var(--minor); } .incident.maint.open { border-left-color: var(--maint); }
+.incident p { margin: .25rem 0; } .incident .message { white-space: pre-line; }
 .updates { list-style: none; padding: 0; margin: 0; } .updates li + li { margin-top: .75rem; }
 .updates time { color: var(--muted); font-size: .85rem; margin-left: .35rem; } .updates p { margin: .2rem 0 0; white-space: pre-line; }
 footer { margin-top: 2rem; color: var(--muted); font-size: .85rem; }
@@ -121,17 +148,20 @@ footer { margin-top: 2rem; color: var(--muted); font-size: .85rem; }
   <a href="https://hawkeye.observer/contact">Contact support</a>
 </header>
 <h1 class="${b.cls}">${esc(b.text)}</h1>
+${coming.map((w) => maintenance(w, s.now)).join('\n')}
 ${open.map(incident).join('\n')}
 ${s.components.map((c) => component(s, c)).join('\n')}
 <section class="incidents" aria-labelledby="past-h">
-  <h2 id="past-h">Past incidents</h2>
-  ${past.length ? past.map(incident).join('\n') : '<p class="hint">No incidents in the last 30 days.</p>'}
+  <h2 id="past-h">Past incidents and maintenance</h2>
+  ${history.length ? history.map((h) => h.html).join('\n') : '<p class="hint">No incidents or maintenance in the last 30 days.</p>'}
 </section>
 <section class="about">
   <h2>How this is measured</h2>
   <p class="hint">
     This page runs separately from HawkEye, so it stays up when HawkEye doesn't. Every minute it loads HawkEye’s website and API, and HawkEye’s
     monitoring engine reports that checks are running on time. A component counts as down after two failures in a row, from the first of them.
+    Planned maintenance is announced here before it starts; downtime inside its window is shown as maintenance and left out of the uptime, and
+    anything outside it counts as usual.
     ${s.measuredSince ? `Measured since ${esc(day(s.measuredSince))}.` : ''}
   </p>
 </section>

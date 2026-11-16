@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { PublicStatus } from '../api'
 import { StatusNotFound } from '../statusLoad'
@@ -12,13 +12,12 @@ const page: PublicStatus = {
 // The view as the custom-domain entry (src/status-main.tsx) uses it: no router around it.
 describe('StatusView on a customer’s own domain', () => {
   it('names the browser tab after the page, without saying "status" twice', async () => {
+    // The title is set in an effect after the page renders, so wait for it rather than reading it as soon as the heading appears.
     const { unmount } = render(<StatusView load={() => Promise.resolve({ ...page, title: 'Acme Status' })} />)
-    await screen.findByRole('heading', { name: 'Acme Status' })
-    expect(document.title).toBe('Acme Status')
+    await waitFor(() => expect(document.title).toBe('Acme Status'))
     unmount()
     render(<StatusView load={() => Promise.resolve({ ...page, title: 'Acme' })} />)
-    await screen.findByRole('heading', { name: 'Acme' })
-    expect(document.title).toBe('Acme status')
+    await waitFor(() => expect(document.title).toBe('Acme status'))
   })
 
   it('lines the tooltips at either end of the bars up with that end, so none sticks out past a phone screen', async () => {
