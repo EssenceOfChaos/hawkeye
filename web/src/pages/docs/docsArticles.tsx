@@ -31,7 +31,14 @@ export function GettingStarted() {
         <li>
           <strong>A website or API.</strong> Enter its address. HawkEye requests it on a schedule (every 5 minutes on Free, every minute on paid plans)
           and opens an incident when the failure is confirmed by consecutive failed checks, so a single blip never alerts anyone. You can also
-          check for words on the page, check JSON values, send headers or authentication, get warned about slow responses, and send a trace context header so each check shows up in your tracing tool.
+          check for words on the page, check JSON values, send headers or authentication, get warned about slow responses, and send a trace context header so each check shows up in your tracing tool. For an API, choose <strong>Paste a cURL command</strong>: paste one
+          from your API docs, a terminal or your browser’s developer tools (Copy as cURL), and HawkEye fills in the address, method, headers, body and
+          authentication. It is read in your browser, and a token it finds goes into the encrypted authentication field rather than a plain header. Have an
+          OpenAPI (3.x) or Swagger (2.0) file, or a Postman collection (v2.1)? Choose <strong>Import from OpenAPI or Postman</strong> on the{' '}
+          <strong>Monitors</strong> page: HawkEye lists a check for each endpoint, with health endpoints and endpoints that read data ticked. Each checks the
+          status code, and from an OpenAPI spec also the fields it marks as required. From a collection, its variables, auth and saved example responses
+          are used, and you type the value of any variable the collection leaves empty, such as <code>{'{{baseUrl}}'}</code>. Endpoints that change data are listed but not ticked. Enter credentials once, fill in any values a path needs (such as a real ID), and
+          add them; they’re tagged with the API’s name so you can filter, pause or remove them together.
         </li>
         <li>
           <strong>A cron job or scheduled task.</strong> Your job pings HawkEye each time it runs, and HawkEye tells you when a ping is late or the job
@@ -418,7 +425,7 @@ export function ApiWorkflows() {
       <h2 id="create">Create one</h2>
       <ol>
         <li>Choose <strong>Add monitor</strong>, then <strong>A multi-step API check</strong>.</li>
-        <li>For each step, give it a name, a method and an address. <strong>More options</strong> has headers, a body, authentication and checks on the response.</li>
+        <li>For each step, give it a name, a method and an address. <strong>More options</strong> has headers, a body, authentication and checks on the response. Or choose <strong>Paste a cURL command</strong> on the step to fill it in from a command; a token or key in it is saved as a secret.</li>
         <li>Add the passwords and keys the steps need under <strong>Secrets</strong>.</li>
         <li>Choose <strong>Run test</strong> to try it before saving, then <strong>Add monitor</strong>.</li>
       </ol>

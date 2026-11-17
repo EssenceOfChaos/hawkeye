@@ -31,7 +31,9 @@ import { TagPicker } from '../components/Tags'
 import { AlertTiming } from '../components/AlertTiming'
 import { DurationField } from '../components/Heartbeat'
 import { Toggle } from '../components/Toggle'
+import { CurlImport } from '../components/CurlImport'
 import { WorkflowEditor } from '../components/WorkflowEditor'
+import { suggestName, type CurlRequest } from '../curl'
 import { draftsFrom, newStep, secretsInput, stepsInput, usesWriteMethod, type SecretDraft, type StepDraft } from '../workflowDrafts'
 
 /** The server allows this many checks in total: text checks and JSON checks together. */
@@ -307,6 +309,19 @@ export function MonitorFormPage() {
     }
   }
 
+  // A pasted cURL command replaces the request (address, method, headers, body and credentials); the name is filled in only when empty.
+  function importCurl(r: CurlRequest) {
+    setUrl(r.url)
+    setMethod(r.method)
+    setHeaders(r.headers)
+    setBody(r.body)
+    setAuthType(r.auth.type)
+    setAuthUsername(r.auth.username ?? '')
+    setAuthHeaderName(r.auth.headerName ?? '')
+    setAuthSecret(r.auth.secret ?? '')
+    if (name.trim() === '') setName(suggestName(r))
+  }
+
   const setHeader = (i: number, patch: Partial<RequestHeader>) =>
     setHeaders((hs) => hs.map((h, j) => (j === i ? { ...h, ...patch } : h)))
   const setAssertion = (i: number, patch: Partial<Assertion>) =>
@@ -372,7 +387,12 @@ export function MonitorFormPage() {
           </label>
         </fieldset>
       )}
-      {!editing && kind === 'http' && <p>Give your monitor a recognizable name and enter the website or API URL you want HawkEye to check.</p>}
+      {!editing && kind === 'http' && (
+        <p>
+          Give your monitor a recognizable name and enter the website or API URL you want HawkEye to check. Have an OpenAPI or Swagger file, or a Postman collection?{' '}
+          <Link to="/monitors/import">Import it</Link> to add a check for each endpoint at once.
+        </p>
+      )}
       {!loaded && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>}
       {generic && (
         <Alert>{error.code === 'PLAN_LIMIT_REACHED' ? limitMessage(error) : error.message}</Alert>
@@ -451,6 +471,7 @@ export function MonitorFormPage() {
       )}
       {loaded && kind === 'http' && (
         <form onSubmit={onSubmit}>
+          <CurlImport onImport={importCurl} onRestore={(h) => setHeaders((hs) => [...hs, h])} />
           <Field label="Name" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} error={f.name} />
           <Field label="URL" type="url" required value={url} onChange={(e) => setUrl(e.target.value)} error={f.url}
             hint="A public http(s) address. Private and internal addresses are not allowed." />

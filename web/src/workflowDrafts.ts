@@ -89,3 +89,17 @@ export function secretsInput(secrets: SecretDraft[]): Record<string, string | nu
 }
 
 export const usesWriteMethod = (steps: StepDraft[]) => steps.some((s) => WRITE_METHODS.includes(s.method))
+
+/**
+ * A name for a new secret holding a credential pasted into a step (from a cURL command): token, password, or the header's name (X-API-Key becomes
+ * x_api_key), made unique among the workflow's secrets and valid for {{secret.name}} (a letter or _, then up to 39 letters, digits or _).
+ */
+export function secretNameFor(auth: { type: AuthType; headerName?: string }, secrets: SecretDraft[]): string {
+  let base = auth.type === 'bearer' ? 'token' : auth.type === 'basic' ? 'password'
+    : (auth.headerName ?? 'api_key').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'api_key'
+  if (/^[0-9]/.test(base)) base = '_' + base
+  base = base.slice(0, 36)
+  const taken = new Set(secrets.filter((s) => !s.removed).map((s) => s.name.trim()))
+  if (!taken.has(base)) return base
+  for (let n = 2; ; n++) if (!taken.has(`${base}_${n}`)) return `${base}_${n}`
+}

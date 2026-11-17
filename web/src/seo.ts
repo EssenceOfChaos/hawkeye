@@ -113,6 +113,7 @@ export const PAGES: readonly PageMeta[] = [
   { path: '/monitors', title: 'Monitors | HawkEye', description: 'Your HawkEye monitors.', index: false },
   { path: '/monitors/new', title: 'Add a monitor | HawkEye', description: 'Add a website or API monitor.', index: false },
   { path: '/monitors/setup', title: 'Set up from your domain | HawkEye', description: 'Get suggested monitors for your website.', index: false },
+  { path: '/monitors/import', title: 'Import from OpenAPI or Postman | HawkEye', description: 'Create API checks from an OpenAPI spec or a Postman collection.', index: false },
   { path: '/monitors/:monitorID', title: 'Monitor | HawkEye', description: 'Monitor details.', index: false },
   { path: '/monitors/:monitorID/edit', title: 'Edit monitor | HawkEye', description: 'Edit a monitor.', index: false },
   { path: '/incidents', title: 'Incidents | HawkEye', description: 'Your HawkEye incidents.', index: false },
