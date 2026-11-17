@@ -66,6 +66,11 @@ web/           React + TypeScript (Vite, Vitest): the public site (landing, /mon
 
 ## Monitoring engine (Phase 4)
 
+Readers of history (uptime, status pages, charts, monthly and weekly reports) don't add up `check_results` directly: `internal/rollups` keeps hourly
+totals per monitor, and `rollups.Source` combines them with raw results for the partial hours at either end of a range and anything newer than
+`rollup_state.through`, so answers are the same as adding up raw results (an equivalence test checks every reader). Only the check history list and
+incidents read raw results. Why: `docs/plan-sub-minute-checks.md`.
+
 ```
 monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► worker.ProcessOne ──► check_results
    (due, enabled,           (SKIP LOCKED,      (UNIQUE per     (Claim w/ lease,     + monitors.current_status,
