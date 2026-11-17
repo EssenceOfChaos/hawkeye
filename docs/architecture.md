@@ -101,9 +101,10 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
   index: one open per monitor) and enqueues one `notification_deliveries` row per enabled, verified recipient; any move into `up` closes an
   open incident and enqueues recovery deliveries. Status, incident and deliveries therefore commit atomically
   (`TestIncidentAndNotificationsCommitAtomicallyWithTheResult`). The dispatcher (in `cmd/worker`) sends them; see `docs/api.md` for retry rules.
-- **Reporting (Phase 6):** reports read `check_results` directly (index `(monitor_id, checked_at)`); series are aggregated in SQL into at most 150
-  buckets so dashboards never load raw history. At current scale (a 1-minute plan with 200 monitors writes ≈ 288k rows/day) this is fast enough; if
-  org-wide 90–365-day charts become slow, add a pre-aggregated hourly rollup table fed by the retention job.
+- **Reporting (Phase 6):** reports add up hourly totals (`check_rollups`, `internal/rollups`) for whole hours and `check_results` (index
+  `(monitor_id, checked_at)`) for the rest; series are aggregated in SQL into at most 150 buckets so dashboards never load raw history. Adding up
+  raw results alone took seconds for 90 days of 50 monitors (a 1-minute plan with 200 monitors writes ≈ 288k rows/day), which the totals brought
+  to milliseconds (`docs/plan-sub-minute-checks.md`).
 - **Retention policy** (`internal/retention`, hourly, `DISABLE_RETENTION` to turn off per instance; one pass at a time via a PostgreSQL advisory lock):
   check results and *resolved* incidents older than the plan's history window are deleted in batches of `RETENTION_BATCH` with a short pause between
   statements; live monitors and open incidents are never deleted (a downgrade only shrinks the history window); monitors the user deleted are purged
