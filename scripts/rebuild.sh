@@ -173,6 +173,11 @@ cmd_preflight() {
   say "Preflight (read-only)"
   local t; for t in tofu rclone age gh jq ssh scp curl shasum; do command -v "$t" >/dev/null && ok "$t installed" || die "$t is not installed"; done
   local v; for v in VULTR_API_KEY CLOUDFLARE_API_TOKEN TF_VAR_cloudflare_zone_id; do [ -n "${!v:-}" ] && ok "$v is set" || die "$v is not set (Cloudflare: CF_DNS_API_TOKEN and CF_ZONE_ID are mapped automatically)"; done
+  # The state is remote and encrypted (infra/backend.tf): the object storage key that reads it, and the passphrase that decrypts it.
+  for v in AWS_ENDPOINT_URL_S3 AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY TF_VAR_state_passphrase; do [ -n "${!v:-}" ] && ok "$v is set" || die "$v is not set (the OpenTofu state's R2 endpoint, token and passphrase: docs/deployment.md, \"Infrastructure changes\")"; done
+  if [ "$WS" = default ] && grep -q '^adopted_server_id *= *"[^"]' "$INFRA/production.auto.tfvars" 2>/dev/null; then
+    die "production is an adopted server (infra/adopt.tf): change it through a pull request, which CI applies. To rebuild it after losing it, first set adopted_server_id = \"\" in infra/production.auto.tfvars (docs/rebuild.md)"
+  fi
   if [ "$USE_SM" = 1 ]; then
     sm check > "$WORK/sm-check" 2>&1 && ok "secret manager reachable; $(head -1 "$WORK/sm-check")" || { cat "$WORK/sm-check" >&2; die "the secret manager's settings are not usable (above)"; }
   else
@@ -191,7 +196,7 @@ cmd_preflight() {
   git ls-tree -r origin/main --name-only | grep -q '^scripts/deploy.sh$' && ok "origin/main has the deploy scripts" || die "origin/main does not contain scripts/deploy.sh"
   [ "$USE_SM" = 0 ] || { git ls-tree -r origin/main --name-only | grep -q '^scripts/sync-secrets.sh$' && ok "origin/main has scripts/sync-secrets.sh" || die "origin/main does not contain scripts/sync-secrets.sh: push it first, the new server clones main"; }
   [ -z "$(git status --porcelain -- scripts deploy docker-compose* 2>/dev/null)" ] && ok "scripts/ and deploy/ are committed" || warn "uncommitted changes in scripts/ or deploy/: the new server clones main from GitHub, so it will not have them until they are committed and pushed"
-  tf init -input=false >/dev/null && tf validate >/dev/null && ok "infra/ validates"
+  tf init -input=false -backend-config=state.s3.tfbackend >/dev/null && tf validate >/dev/null && ok "infra/ validates"
   local tmp="$WORK/preflight"; mkdir -p "$tmp"
   ( load_backup_settings
     n="$(rclone lsf "offsite:$BACKUP_BUCKET/db/" --include 'hawkeye-*.dump.age' | wc -l | tr -d ' ')"; echo "$n" > "$tmp/n" ) 2>/dev/null || die "cannot read the backup bucket (check the BACKUP_* settings in the secret manager, or ~/.hawkeye-secrets/.hawkeye-backup.env)"
@@ -215,7 +220,7 @@ prepare_live() { # remember where the site points today, and the deploy key, in 
 import_dns() { # adopt the existing apex A and www records instead of creating duplicates
   [ "$WS" = default ] || return 0
   local addr name type id
-  for pair in 'cloudflare_dns_record.apex[0]|A|'"$SITE" 'cloudflare_dns_record.www[0]|CNAME|www.'"$SITE"; do
+  for pair in 'cloudflare_dns_record.prod["apex"]|A|'"$SITE" 'cloudflare_dns_record.prod["www"]|CNAME|www.'"$SITE" 'cloudflare_dns_record.prod["domains"]|CNAME|domains.'"$SITE"; do
     addr="${pair%%|*}"; rest="${pair#*|}"; type="${rest%%|*}"; name="${rest#*|}"
     if [ "$DRY" = 1 ]; then echo "  [dry-run] would import the existing $type record $name as $addr if it is not in state"; continue; fi
     if tf state list 2>/dev/null | grep -qF "$addr"; then ok "$addr already managed"; continue; fi

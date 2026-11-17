@@ -1,0 +1,16 @@
+# Remote state in Cloudflare R2 (S3-compatible), in a bucket of its own: the token that reaches it is limited to this bucket, so CI can never
+# touch the database backups (they are in Vultr Object Storage). Nothing here is secret. The endpoint,
+# https://<Cloudflare account id>.r2.cloudflarestorage.com, comes from AWS_ENDPOINT_URL_S3, and the credentials from AWS_ACCESS_KEY_ID /
+# AWS_SECRET_ACCESS_KEY (the R2 API token's access key id and secret). Workspaces (rehearsals such as "drill") are stored under env:/<workspace>/.
+bucket                      = "hawkeye-tofu-state"
+key                         = "hawkeye/terraform.tfstate"
+region                      = "auto" # R2's only region; the S3 client still needs one
+use_path_style              = true
+skip_credentials_validation = true
+skip_region_validation      = true
+skip_requesting_account_id  = true
+skip_metadata_api_check     = true
+skip_s3_checksum            = true
+# A lock file next to the state stops two runs writing at once (R2 supports the conditional writes it relies on). CI also runs one
+# infrastructure job at a time (concurrency group).
+use_lockfile = true

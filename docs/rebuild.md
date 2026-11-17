@@ -1,6 +1,6 @@
 # Rebuilding the server (infrastructure as code)
 
-`infra/` describes the production server in OpenTofu/Terraform: a Vultr instance (Ubuntu 24.04 LTS, 2 vCPU / 4 GB, region `ewr`), a network firewall (22, 80, 443), your SSH key, a
+`infra/` describes the production server in OpenTofu/Terraform: a Vultr instance (Ubuntu 24.04 LTS, 2 vCPU / 4 GB, region `ewr`, for a server it creates; today's production server is adopted as it is, see `infra/adopt.tf`), a network firewall (22, 80, 443), your SSH key, a
 **reserved IP** that stays yours when the server is replaced, and the **Cloudflare DNS** records for the site (apex A, `www`, and a test name). First-boot setup
 (`infra/cloud-init.yaml.tftpl`) creates the `deploy` user, key-only SSH, `ufw`, `fail2ban`, Docker, a swap file, clones this repo to `/home/deploy/hawkeye`, installs the worker
 egress firewall as a systemd unit, and installs the nightly backup and the heartbeat crons.
@@ -65,11 +65,15 @@ To switch it on for a server made before the cron entry existed: add `* * * * * 
 
 ## Day to day
 
-- The server is **replaceable, not editable**. `ignore_changes = [user_data]` means editing the cloud-init file does not touch a running server; to apply it, replace the server on
-  purpose (`tofu apply -replace=vultr_instance.server`) and repeat `stage`/`cutover`-style steps. The reserved IP carries over.
+- The server is **replaceable, not editable**. `ignore_changes` (cloud-init, SSH keys, OS) means editing them does not touch a running server; to apply them, replace the
+  server on purpose (in CI: the Infrastructure workflow run by hand with `vultr_instance.server` in *allow_replace*) and repeat `stage`/`cutover`-style steps. The reserved IP carries over.
 - Changing `hostname`, the OS or the region also replaces the server. Always read `tofu plan` first and look for `must be replaced` and `destroy`.
-- DNS: only the apex A, `www` and the stage name are managed. Mail, Resend and Email Routing records are never touched. `live.auto.tfvars` (git-ignored) records `cutover` and the old IP; do not
-  edit it by hand.
+- DNS: only the apex A, `www`, `domains` and the stage name are managed (`cloudflare_dns_record.prod` and `.stage`). Mail, Resend and Email Routing records are never touched.
+  `live.auto.tfvars` (git-ignored) records `cutover` and the old IP for a rebuild in progress; do not edit it by hand. `production.auto.tfvars` (committed) is read after it and wins.
+- **Production changes go through CI** (`docs/deployment.md`, "Infrastructure changes"): this script refuses the production workspace while the server is adopted
+  (`adopted_server_id` in `infra/production.auto.tfvars`). To rebuild production after losing the server, a pull request first sets `adopted_server_id = ""` (the
+  server then gets a reserved IP and firewall group like any new one), and the rebuild runs as described here. Rehearsals (`--workspace drill`) work as before.
+- The state is remote and encrypted: set `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (the R2 state bucket's endpoint and token) and `TF_VAR_state_passphrase` before running this script (preflight checks).
 - Cost: the instance bills hourly until destroyed; a reserved IP and Vultr's automatic backups add to it (`enable_backups = false` turns the backups off). A rehearsal costs cents if you destroy it.
 - First boot is proven only by running it. The egress rules still need `scripts/verify-egress.sh` on the new server.
 - Regional workers (`infra/workers.tf`, off until `infra/regions.json` lists one) are created by `scripts/rebuild.sh regions`, and `cutover` reconnects them to a new server by itself. See "Regional worker hosts" in `docs/deployment.md`. `tofu test` from `infra/` checks this configuration against mock providers, with no tokens.

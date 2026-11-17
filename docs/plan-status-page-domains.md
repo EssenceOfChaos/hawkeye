@@ -143,7 +143,7 @@ step 4.
 
 ## Operations
 
-- DNS: `domains.hawkeye.observer` is a CNAME to the apex, DNS only (`cloudflare_dns_record.status_domains` in `infra/main.tf`). Apply it
+- DNS: `domains.hawkeye.observer` is a CNAME to the apex, DNS only (`cloudflare_dns_record.prod["domains"]` in `infra/main.tf`). Apply it
   before launch. Customers' CNAMEs then resolve through it to the server's reserved IP, which verification accepts (the address check).
 - Metrics: `hawkeye_status_page_domain_checks_total{result}`. The planned `hawkeye_status_page_domains{state}` gauge and an alert on repeated
   certificate failures weren't built: failed issuance shows in Caddy's logs (`obtaining certificate`), and domains by state are a query in

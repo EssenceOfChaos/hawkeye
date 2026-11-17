@@ -13,7 +13,8 @@
 # already on the server and says so. Without credentials, the existing .env.production is used as it is.
 set -euo pipefail
 # Everything lives in one function that is parsed before it runs: the checkout below replaces this very file, and bash must not read a
-# half-changed script. So a change to this file takes effect one release later: after merging one, deploy again (docs/deployment.md).
+# half-changed script. So the release that changes this file is deployed by the previous copy; when that release is healthy, the new copy is run
+# once for the same commit, so whatever it adds takes effect without a second deploy by hand (docs/deployment.md).
 main() {
   cd "$(dirname "$0")/.."
   ROOT="$PWD"
@@ -23,6 +24,8 @@ main() {
 
   exec 9>"$ROOT/.deploy.lock"
   flock -n 9 || { echo "another deploy is running" >&2; exit 1; }
+  # This copy, as parsed: compared with the checked-out one after a healthy release.
+  SELF_SUM="$(sha256sum scripts/deploy.sh | cut -d' ' -f1)"
 
   # Our own alerting (Prometheus and Alertmanager) comes with the release that has it: a rollback to an older release, without the file, runs
   # without it (and --remove-orphans stops it) rather than failing.
@@ -114,6 +117,12 @@ main() {
     # never `docker builder prune -a` here. A cleanup failure never fails a release that is already live.
     docker image prune -a -f --filter "until=168h" >/dev/null || echo "!! could not remove old images; the release is fine" >&2
     docker builder prune -f --keep-storage 5GB >/dev/null || echo "!! could not trim the build cache; the release is fine" >&2
+    # This release changed the deploy script: run the new copy once for the same commit (it finds itself unchanged, so it never repeats).
+    if [ "$(sha256sum scripts/deploy.sh | cut -d' ' -f1)" != "$SELF_SUM" ]; then
+      echo "== this release changed scripts/deploy.sh: deploying ${TARGET:0:12} again with the new copy"
+      exec 9>&-   # release the lock; the new copy takes it again
+      exec scripts/deploy.sh "$TARGET"
+    fi
     exit 0
   fi
 

@@ -1,0 +1,90 @@
+name: Infrastructure
+
+# Every change to the servers, firewall and DNS goes through here (docs/deployment.md, "Infrastructure changes"): nobody runs `tofu apply` by hand.
+#   pull request touching infra/   check (format, validate, tests) and plan against production; the plan is on the run's summary page
+#   merge to main                  plan again and apply exactly that plan, unless it deletes or replaces something
+#   run by hand (Actions tab)      the same apply, optionally allowing named resources to be deleted or replaced (a server rebuild)
+# One-time setup (Vultr API user, R2 state bucket, secrets): docs/deployment.md, "Infrastructure changes".
+
+on:
+  pull_request:
+    paths: [infra/**, scripts/infra-plan-guard.py, .github/workflows/infra.yml]
+  push:
+    branches: [main]
+    paths: [infra/**, scripts/infra-plan-guard.py, .github/workflows/infra.yml]
+  workflow_dispatch:
+    inputs:
+      allow_replace:
+        description: "Resource addresses this run may delete or replace, separated by spaces (for example vultr_instance.server). Leave empty for none."
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+# One infrastructure run at a time, plans included: they read the state the applies write. Never cancel a run that may be applying.
+concurrency:
+  group: infrastructure
+  cancel-in-progress: false
+
+env:
+  TOFU_VERSION: 1.13.1
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+      - run: tofu fmt -check -recursive
+      - run: tofu init -backend=false -input=false
+      - run: tofu validate
+      - name: Tests (mock providers, no credentials)
+        run: tofu test
+
+  plan-or-apply:
+    needs: check
+    # Pull requests from forks get no secrets, so they stop at the check.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    # Applies run in the "infrastructure" environment: add required reviewers there for an approval click before each apply.
+    environment: ${{ github.event_name == 'pull_request' && 'infrastructure-plan' || 'infrastructure' }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: infra
+    env:
+      VULTR_API_KEY: ${{ secrets.VULTR_API_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+      TF_VAR_state_passphrase: ${{ secrets.TOFU_STATE_PASSPHRASE }}
+      AWS_ENDPOINT_URL_S3: ${{ secrets.TOFU_STATE_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.TOFU_STATE_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TOFU_STATE_SECRET_KEY }}
+      TF_IN_AUTOMATION: "1"
+      TF_INPUT: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+      - run: tofu init -backend-config=state.s3.tfbackend
+      - name: Plan (production)
+        run: tofu plan -out=plan.bin
+      - name: Check the plan deletes or replaces nothing unexpected
+        env:
+          ALLOW: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_replace || '' }}
+        run: |
+          args=()
+          for a in $ALLOW; do args+=(--allow "$a"); done
+          tofu show -json plan.bin | python3 ../scripts/infra-plan-guard.py "${args[@]}"
+      - name: Apply exactly the plan above
+        if: github.event_name != 'pull_request'
+        run: tofu apply plan.bin
