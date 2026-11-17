@@ -715,7 +715,7 @@ The pages at `/waitlist/confirm` and `/waitlist/leave` ask before calling these,
               "next_plan": {"code": "pro", "name": "Pro", "max_monitors": 50, "monthly_price_cents": 1900}}}}
 ```
 
-`limit_type` is `monitors`, `check_interval` (limit = minimum seconds), `team_members`, `regions`, `domains`, `status_pages`, `status_page_branding`, `status_page_white_label`, `maintenance_windows`, `reports` or `branded_reports`. If an organization is *above* its limit
+`limit_type` is `monitors`, `check_interval` (limit = minimum seconds), `team_members`, `regions`, `domains`, `status_pages`, `status_page_branding`, `status_page_white_label`, `status_page_domains`, `maintenance_windows`, `reports`, `branded_reports`, `workflows`, `workflow_steps`, `api_write` or `ai_drafts`. If an organization is *above* its limit
 after a downgrade, existing monitors (and status pages) are untouched, creation is refused, the message says how many to delete, and `usage.over_limit` is true.
 
 ## Known trade-offs

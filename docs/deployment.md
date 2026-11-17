@@ -182,7 +182,7 @@ This section explains how locations behave. On the hosted service they are confi
 
 **Reaching the database.** Workers talk to PostgreSQL directly: they claim jobs, read monitor settings *including the decrypted credentials of the monitors they check* (they hold `SECRETS_ENCRYPTION_KEY`), and write results. A worker in another data center therefore needs a private, encrypted path to the database. On a managed database, use its private endpoint with `sslmode=verify-full`; with the database on the production server, the tunnel below is that path and does the encrypting. **Do not expose PostgreSQL to the public internet**, and treat every location's host as trusted infrastructure: anyone who controls one can read the whole database, not just its own region's monitors. Moving remote hosts off direct database access needs a probe API (not built yet).
 
-**A location with no workers.** Its jobs queue up and never run; that location's streak stops changing, and the rest of the quorum decides as long as a majority of locations are healthy. Backpressure is per location, so it does not slow the others. Watch `hawkeye_queue_oldest_age_seconds` (not yet per location) and remove the location from `CHECK_REGIONS` if you retire it: monitors that listed it fall back to the locations that remain.
+**A location with no workers.** Its jobs queue up and never run; that location's streak stops changing, and the rest of the quorum decides as long as a majority of locations are healthy. Backpressure is per location, so it does not slow the others. Watch `hawkeye_queue_oldest_job_age_seconds` (not yet per location) and remove the location from `CHECK_REGIONS` if you retire it: monitors that listed it fall back to the locations that remain.
 
 ## Regional worker hosts
 

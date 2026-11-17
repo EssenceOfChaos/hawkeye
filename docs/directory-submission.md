@@ -96,7 +96,7 @@ Metadata Documents later would let Claude Code and custom connectors connect by 
 
 ### 2. Tools
 
-Synced from the server. Expect 17 tools, 8 read-only and 9 writes (`create_workflow` and `test_workflow` were added 2026-11-11 and declare `openWorldHint: true`, because their steps call other services), with no warnings about missing titles or annotations.
+Synced from the server. Expect 18 tools, 9 read-only and 9 writes (`create_workflow` and `test_workflow` were added 2026-11-11 and declare `openWorldHint: true`, because their steps call other services; `suggest_monitors` is read-only and open world, because it looks at the site), with no warnings about missing titles or annotations.
 
 ### 3. Listing
 
