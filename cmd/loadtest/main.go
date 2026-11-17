@@ -26,6 +26,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	mrand "math/rand/v2"
 	"net/http"
@@ -52,6 +53,7 @@ import (
 	"hawkeye/internal/plans"
 	"hawkeye/internal/queue"
 	"hawkeye/internal/reports"
+	"hawkeye/internal/rollups"
 	"hawkeye/internal/safehttp"
 	"hawkeye/internal/scheduler"
 	"hawkeye/internal/statuspage"
@@ -446,6 +448,7 @@ func pct(v []float64, p float64) float64 {
 type readOpts struct {
 	interval, monitors, days, repeat int
 	failRate                         float64
+	rollups                          bool
 }
 
 func parseRead(args []string) *readOpts {
@@ -456,6 +459,7 @@ func parseRead(args []string) *readOpts {
 	fs.IntVar(&o.days, "days", 90, "days of history per monitor (status pages show up to 90)")
 	fs.IntVar(&o.repeat, "repeat", 5, "times each query runs")
 	fs.Float64Var(&o.failRate, "fail", 0.002, "share of failed checks in the history")
+	fs.BoolVar(&o.rollups, "rollups", true, "build the hourly totals (internal/rollups) before timing the queries, as the worker does; false times raw results only")
 	_ = fs.Parse(args)
 	return o
 }
@@ -522,6 +526,30 @@ func (o *readOpts) run(ctx context.Context, dsn string) error {
 	fmt.Printf("| rows | %d |\n| table + indexes | %s (table %s) |\n| bytes per result, with indexes | %.0f |\n", n, size(total), size(heap), perRow)
 	fmt.Printf("| one monitor, 365 days at %ds | %d rows, %s |\n", o.interval, yearRows, size(int64(perRow*float64(yearRows))))
 	fmt.Printf("| a full Agency account (200 monitors, 365 days) | %d rows, %s |\n", 200*yearRows, size(int64(perRow*float64(200*yearRows))))
+
+	if o.rollups {
+		began := time.Now()
+		job := rollups.NewJob(pool, rollups.JobConfig{}, metrics.New(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+		for {
+			more, err := job.Step(ctx)
+			if err != nil {
+				return fmt.Errorf("rollups: %w", err)
+			}
+			if !more {
+				break
+			}
+		}
+		if _, err := pool.Exec(ctx, `VACUUM ANALYZE check_rollups`); err != nil {
+			return err
+		}
+		var rows, bytes int64
+		if err := pool.QueryRow(ctx, `SELECT count(*), pg_total_relation_size('check_rollups') FROM check_rollups`).Scan(&rows, &bytes); err != nil {
+			return err
+		}
+		perMonitorYear := float64(bytes) / float64(o.monitors) * 365 / float64(o.days)
+		fmt.Printf("| hourly totals (internal/rollups) | %d rows, %s, built in %v |\n", rows, size(bytes), time.Since(began).Round(time.Second))
+		fmt.Printf("| totals for a full Agency account (200 monitors, 365 days) | %s, whatever the interval |\n", size(int64(perMonitorYear*200)))
+	}
 
 	now := time.Now()
 	mon := ids[0]
