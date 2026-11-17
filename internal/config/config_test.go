@@ -116,7 +116,7 @@ func TestEngineDefaultsAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.WorkerConcurrency != 10 || c.FailureThreshold != 2 || c.RecoveryThreshold != 2 || !c.RunScheduler || !c.FreeToolsEnabled || c.JobLease.Minutes() != 2 {
+	if c.WorkerConcurrency != 30 || c.FailureThreshold != 2 || c.RecoveryThreshold != 2 || !c.RunScheduler || !c.FreeToolsEnabled || c.JobLease.Minutes() != 2 {
 		t.Fatalf("%+v", c)
 	}
 	_, err = load(env(map[string]string{"DATABASE_URL": "postgres://x", "WORKER_CONCURRENCY": "0", "JOB_LEASE": "10s", "FAILURE_THRESHOLD": "0"}))

@@ -16,7 +16,7 @@ Starts with Phase 4; extended in Phase 8.
 | `hawkeye_canary_up` | 1 while this worker reaches independent public sites, 0 while it does not (the canary). Alert if 0 for 3 min |
 | `hawkeye_checks_total{result="inconclusive",category}` | failures dropped (never recorded) because the canary said our own network was down |
 | `hawkeye_scheduler_lag_seconds` | age of the most overdue monitor. Alert if > 2 × the shortest interval (60 s plans: > 120 s) |
-| `hawkeye_queue_depth{state}`, `hawkeye_queue_oldest_job_age_seconds` | work waiting / running. Oldest age growing = workers too few or stuck |
+| `hawkeye_queue_depth{state}`, `hawkeye_queue_oldest_job_age_seconds` | work waiting / running. Healthy: about 1 s. Over 30 s for 5 minutes (`HawkEyeChecksDelayed`) means the workers are saturated and every monitor runs late, even though `missed_checks` and the lag alert stay quiet |
 | `hawkeye_scheduler_backpressure_total` | queue hit `QUEUE_MAX_DEPTH`; add workers or raise concurrency |
 | `hawkeye_scheduler_missed_checks_total` | checks scheduled a full interval late (the engine was behind or down) |
 | `hawkeye_scheduler_skipped_total` | due but the previous check was still outstanding |
@@ -532,7 +532,8 @@ reclaimed automatically; no manual action is needed. To force a retry: `UPDATE c
 
 ### Queue full (backpressure)
 
-Raise `WORKER_CONCURRENCY` (and DB pool), add worker instances, or raise `QUEUE_MAX_DEPTH`. Each check holds one
+Raise `WORKER_CONCURRENCY` (default 30; the worker's pool follows it), add worker instances, or raise `QUEUE_MAX_DEPTH`. To see what a change costs before
+making it, run `cmd/loadtest` against a throwaway database sized like production (`docs/plan-sub-minute-checks.md` has the method and results). Each check holds one
 goroutine and one database connection only while claiming/recording, not while waiting on the website.
 
 ### A DNS monitor fails but the record looks right

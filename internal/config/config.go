@@ -355,7 +355,9 @@ func load(get func(string) string) (Config, error) {
 		StatusHeartbeatURL:   str("STATUS_HEARTBEAT_URL", ""),
 		StatusHeartbeatToken: str("STATUS_HEARTBEAT_TOKEN", ""),
 		WorkerRegion:         str("WORKER_REGION", ""),
-		WorkerConcurrency:    integer("WORKER_CONCURRENCY", 10),
+		// Checks mostly wait on the network, so 30 at a time keep 1,400 monitors on time on a 2-CPU server with the database at a quarter of its
+		// CPU; 10 fell behind at about 1,100 monitors checked every minute (docs/plan-sub-minute-checks.md, cmd/loadtest).
+		WorkerConcurrency:    integer("WORKER_CONCURRENCY", 30),
 		WorkerChecksOnly:     boolean("WORKER_CHECKS_ONLY"),
 		RunScheduler:         !boolean("DISABLE_SCHEDULER"),
 		SchedulerInterval:    duration("SCHEDULER_INTERVAL", time.Second),
