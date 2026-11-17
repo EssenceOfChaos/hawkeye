@@ -3,8 +3,8 @@
 # Only the production workspace imports; rehearsal workspaces create their own servers as before. Once the first apply has recorded them, the two
 # import blocks do nothing and can be deleted.
 #
-# An adopted server is described as it is: no reserved IP and no Vultr firewall group (ufw on the server is its only firewall). Moving to those is
-# a later, reviewed change (docs/plan-high-availability.md, step 1). Once adopted_server_id is cleared, a rebuild (scripts/rebuild.sh) creates
+# An adopted server is described as it is, except for what has since been added to it in reviewed changes: the Vultr firewall group
+# (2026-11-17). It has no reserved IP yet (docs/plan-high-availability.md, step 1). Once adopted_server_id is cleared, a rebuild (scripts/rebuild.sh) creates
 # them as for any new server.
 
 variable "adopted_server_id" {

@@ -15,11 +15,15 @@ variables {
   import_adopted     = false # tofu test cannot import; this checks the configuration the import is matched against
 }
 
-run "production_adopts_the_existing_server_and_creates_no_reserved_ip_or_firewall" {
+run "production_adopts_the_existing_server_with_a_firewall_but_no_reserved_ip" {
   command = plan
   assert {
-    condition     = length(vultr_reserved_ip.main) == 0 && length(vultr_firewall_group.web) == 0 && length(cloudflare_dns_record.stage) == 0
-    error_message = "An adopted server must not get a reserved IP, a firewall group or a staging name in the same change."
+    condition     = length(vultr_reserved_ip.main) == 0 && length(cloudflare_dns_record.stage) == 0
+    error_message = "An adopted server keeps its own address: no reserved IP and no staging name."
+  }
+  assert {
+    condition     = length(vultr_firewall_rule.ssh) == 1 && vultr_firewall_rule.http.port == "80" && vultr_firewall_rule.https.port == "443"
+    error_message = "The adopted server's firewall group admits SSH, HTTP and HTTPS, the ports it serves today."
   }
   assert {
     condition     = vultr_instance.server.hostname == "hawkeye.observer" && vultr_instance.server.plan == "vc2-1c-2gb"
@@ -37,15 +41,18 @@ run "a_rebuilt_production_server_gets_a_reserved_ip_and_firewall" {
     adopted_server_id = ""
   }
   assert {
-    condition     = length(vultr_reserved_ip.main) == 1 && length(vultr_firewall_group.web) == 1
-    error_message = "A server OpenTofu creates gets its reserved IP and firewall group."
+    condition     = length(vultr_reserved_ip.main) == 1
+    error_message = "A server OpenTofu creates gets its reserved IP."
   }
 }
 
-run "workers_wait_until_the_server_has_a_firewall_group" {
+run "workers_can_join_the_adopted_server_now_it_has_a_firewall_group" {
   command = plan
   variables {
     regions_file = "tests/two-regions.json"
   }
-  expect_failures = [vultr_instance.worker]
+  assert {
+    condition     = length(vultr_instance.worker) == 2 && length(vultr_firewall_rule.wireguard) == 2
+    error_message = "Each worker gets a host and a tunnel rule in the production server's firewall group."
+  }
 }

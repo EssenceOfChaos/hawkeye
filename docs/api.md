@@ -687,7 +687,7 @@ left alone until then (see *Alert routing, alert delay and quiet hours*).
 
 ## Feature waitlists ("Get notified")
 
-Sign-ups for coming-soon features from the landing page's "Coming soon" section (`internal/waitlist`). Features: `status_page_domains` (status pages on your own domain), `status_page_subscribers` (email updates for status page visitors).
+Sign-ups for coming-soon features from the landing page's "Coming soon" section (`internal/waitlist`). Features: `status_page_subscribers` (email updates for status page visitors) and `browser_checks` (a real browser going through a site like a customer; `docs/plan-browser-checks.md`). Launched features leave the list (`status_page_domains`, `api_workflows`).
 
 | Method & path | Auth | Notes |
 |---|---|---|
