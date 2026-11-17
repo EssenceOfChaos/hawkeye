@@ -73,7 +73,7 @@ To switch it on for a server made before the cron entry existed: add `* * * * * 
 - **Production changes go through CI** (`docs/deployment.md`, "Infrastructure changes"): this script refuses the production workspace while the server is adopted
   (`adopted_server_id` in `infra/production.auto.tfvars`). To rebuild production after losing the server, a pull request first sets `adopted_server_id = ""` (the
   server then gets a reserved IP and firewall group like any new one), and the rebuild runs as described here. Rehearsals (`--workspace drill`) work as before.
-- The state is remote and encrypted: set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `TF_VAR_state_passphrase` before running this script (preflight checks).
+- The state is remote and encrypted: set `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (the R2 state bucket's endpoint and token) and `TF_VAR_state_passphrase` before running this script (preflight checks).
 - Cost: the instance bills hourly until destroyed; a reserved IP and Vultr's automatic backups add to it (`enable_backups = false` turns the backups off). A rehearsal costs cents if you destroy it.
 - First boot is proven only by running it. The egress rules still need `scripts/verify-egress.sh` on the new server.
 - Regional workers (`infra/workers.tf`, off until `infra/regions.json` lists one) are created by `scripts/rebuild.sh regions`, and `cutover` reconnects them to a new server by itself. See "Regional worker hosts" in `docs/deployment.md`. `tofu test` from `infra/` checks this configuration against mock providers, with no tokens.

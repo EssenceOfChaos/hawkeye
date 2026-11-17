@@ -174,7 +174,7 @@ cmd_preflight() {
   local t; for t in tofu rclone age gh jq ssh scp curl shasum; do command -v "$t" >/dev/null && ok "$t installed" || die "$t is not installed"; done
   local v; for v in VULTR_API_KEY CLOUDFLARE_API_TOKEN TF_VAR_cloudflare_zone_id; do [ -n "${!v:-}" ] && ok "$v is set" || die "$v is not set (Cloudflare: CF_DNS_API_TOKEN and CF_ZONE_ID are mapped automatically)"; done
   # The state is remote and encrypted (infra/backend.tf): the object storage key that reads it, and the passphrase that decrypts it.
-  for v in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY TF_VAR_state_passphrase; do [ -n "${!v:-}" ] && ok "$v is set" || die "$v is not set (the OpenTofu state's bucket key and passphrase: docs/deployment.md, \"Infrastructure changes\")"; done
+  for v in AWS_ENDPOINT_URL_S3 AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY TF_VAR_state_passphrase; do [ -n "${!v:-}" ] && ok "$v is set" || die "$v is not set (the OpenTofu state's R2 endpoint, token and passphrase: docs/deployment.md, \"Infrastructure changes\")"; done
   if [ "$WS" = default ] && grep -q '^adopted_server_id *= *"[^"]' "$INFRA/production.auto.tfvars" 2>/dev/null; then
     die "production is an adopted server (infra/adopt.tf): change it through a pull request, which CI applies. To rebuild it after losing it, first set adopted_server_id = \"\" in infra/production.auto.tfvars (docs/rebuild.md)"
   fi

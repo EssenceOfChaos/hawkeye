@@ -131,17 +131,20 @@ production; the plan is on the run's summary page. Merging applies exactly the p
 **deleting or replacing anything is refused** (`scripts/infra-plan-guard.py`) unless the workflow is run by hand from the Actions tab with those
 addresses in *allow_replace*, which is how a deliberate server rebuild goes. One infrastructure run happens at a time.
 
-The state is in Vultr Object Storage (`infra/backend.tf`, `infra/state.s3.tfbackend`), encrypted with OpenTofu state encryption before upload, so CI
-and people share one copy and no laptop holds it. `infra/production.auto.tfvars` (committed) describes production. The production server and its
+The state is in Cloudflare R2 (`infra/backend.tf`, `infra/state.s3.tfbackend`), encrypted with OpenTofu state encryption before upload, so CI and
+people share one copy and no laptop holds it. It has a bucket and a token of its own: Vultr Object Storage gives one key per subscription for all of
+its buckets, so a state bucket next to the backups would let CI's key delete the backups, and the server's backup key reach the state. A few
+kilobytes is well inside R2's free tier. `infra/production.auto.tfvars` (committed) describes production. The production server and its
 DNS records were created by hand on 2026-10-17 and are **adopted**, not rebuilt (`infra/adopt.tf`): the first apply imports them, and the code
 describes them as they are (1 vCPU / 2 GB, Ubuntu 26.10, no reserved IP or Vultr firewall group). Bringing them in line with the rest of `infra/`
 is a series of reviewed pull requests, listed in `docs/plan-high-availability.md`.
 
 **One-time setup**
 
-1. **State bucket.** In Vultr Object Storage (the subscription that holds the backups, `ewr1`), create the bucket `hawkeye-tofu-state` (private). Its
-   access key and secret are the subscription's S3 keys. Generate a state passphrase (`openssl rand -base64 32`) and keep it in the password
-   manager and the secret manager: **without it the state cannot be read**.
+1. **State bucket.** In Cloudflare → R2, create the bucket `hawkeye-tofu-state` (no public access, no custom domain). Then R2 → Manage API tokens →
+   create a token with **Object Read & Write** on that bucket only. Note its access key id and secret access key, and the S3 endpoint shown with it,
+   `https://<account id>.r2.cloudflarestorage.com`. Generate a state passphrase (`openssl rand -base64 32`) and keep it in the password manager and
+   the secret manager: **without it the state cannot be read**.
 2. **A Vultr API key for CI.** The account's API key only accepts listed IP addresses, and GitHub's runners have no fixed address. In Vultr, under
    Account → Users, add a user for OpenTofu with API access and only the permissions it needs (servers, firewall, reserved IPs, SSH keys), and allow
    its key from any address (`0.0.0.0/0` and `::/0`). The key lives only in GitHub's secrets; rotate it if it is ever exposed. (Alternatively, a
@@ -149,13 +152,13 @@ is a series of reviewed pull requests, listed in `docs/plan-high-availability.md
 3. **A Cloudflare token for CI** with *DNS Edit* on the `hawkeye.observer` zone only.
 4. **GitHub.** Settings → Environments: create `infrastructure-plan` (pull request plans) and `infrastructure` (applies; add required reviewers here
    if you want an approval click before each apply). Add these secrets to both: `VULTR_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`,
-   `TOFU_STATE_ACCESS_KEY`, `TOFU_STATE_SECRET_KEY`, `TOFU_STATE_PASSPHRASE`.
+   `TOFU_STATE_ENDPOINT` (the R2 endpoint above), `TOFU_STATE_ACCESS_KEY`, `TOFU_STATE_SECRET_KEY`, `TOFU_STATE_PASSPHRASE`.
 5. **Adopt production.** Merge the pull request that adds this. Its run imports the server and the three records; read the plan on the run's page:
    it must import 4 resources and change nothing else except metadata (tags, DNS TTL and comments, the backup schedule). Nothing is replaced: the
    guard refuses the run if anything would be.
 
 Running OpenTofu on your own machine is for reading (`tofu plan`) and for rehearsals in their own workspace (`scripts/rebuild.sh --workspace drill`).
-It needs `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (the state bucket's keys) and `TF_VAR_state_passphrase`, and
+It needs `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (the R2 endpoint and token) and `TF_VAR_state_passphrase`, and
 `tofu init -backend-config=state.s3.tfbackend` from `infra/`.
 
 ## Status pages on customers' own domains
