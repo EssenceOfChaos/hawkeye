@@ -16,14 +16,15 @@ resource "vultr_ssh_key" "admin" {
   ssh_key = local.ssh_key
 }
 
-# Vultr's network firewall drops everything that is not listed. ufw on the server is a second layer.
+# Vultr's network firewall drops everything that is not listed. ufw on the server is a second layer. An adopted server (adopt.tf) has none yet.
 resource "vultr_firewall_group" "web" {
+  count       = local.adopted ? 0 : 1
   description = "${local.server_name}: SSH, HTTP, HTTPS"
 }
 
 resource "vultr_firewall_rule" "ssh" {
-  for_each          = toset(var.ssh_allowed_cidrs)
-  firewall_group_id = vultr_firewall_group.web.id
+  for_each          = local.adopted ? toset([]) : toset(var.ssh_allowed_cidrs)
+  firewall_group_id = vultr_firewall_group.web[0].id
   protocol          = "tcp"
   ip_type           = "v4"
   subnet            = split("/", each.value)[0]
@@ -33,7 +34,8 @@ resource "vultr_firewall_rule" "ssh" {
 }
 
 resource "vultr_firewall_rule" "http" {
-  firewall_group_id = vultr_firewall_group.web.id
+  count             = local.adopted ? 0 : 1
+  firewall_group_id = vultr_firewall_group.web[0].id
   protocol          = "tcp"
   ip_type           = "v4"
   subnet            = "0.0.0.0"
@@ -43,7 +45,8 @@ resource "vultr_firewall_rule" "http" {
 }
 
 resource "vultr_firewall_rule" "https" {
-  firewall_group_id = vultr_firewall_group.web.id
+  count             = local.adopted ? 0 : 1
+  firewall_group_id = vultr_firewall_group.web[0].id
   protocol          = "tcp"
   ip_type           = "v4"
   subnet            = "0.0.0.0"
@@ -53,8 +56,8 @@ resource "vultr_firewall_rule" "https" {
 }
 
 resource "vultr_firewall_rule" "http_v6" {
-  count             = var.enable_ipv6 ? 1 : 0
-  firewall_group_id = vultr_firewall_group.web.id
+  count             = var.enable_ipv6 && !local.adopted ? 1 : 0
+  firewall_group_id = vultr_firewall_group.web[0].id
   protocol          = "tcp"
   ip_type           = "v6"
   subnet            = "::"
@@ -63,8 +66,8 @@ resource "vultr_firewall_rule" "http_v6" {
 }
 
 resource "vultr_firewall_rule" "https_v6" {
-  count             = var.enable_ipv6 ? 1 : 0
-  firewall_group_id = vultr_firewall_group.web.id
+  count             = var.enable_ipv6 && !local.adopted ? 1 : 0
+  firewall_group_id = vultr_firewall_group.web[0].id
   protocol          = "tcp"
   ip_type           = "v6"
   subnet            = "::"
@@ -74,6 +77,7 @@ resource "vultr_firewall_rule" "https_v6" {
 
 # A reserved IP stays yours when the server is replaced: the DNS record and the GitHub secret DEPLOY_HOST never change.
 resource "vultr_reserved_ip" "main" {
+  count   = local.adopted ? 0 : 1
   region  = var.region
   ip_type = "v4"
   label   = "${local.server_name}-ip"
@@ -87,8 +91,8 @@ resource "vultr_instance" "server" {
   label             = local.server_name
   tags              = ["hawkeye", terraform.workspace == "default" ? "production" : terraform.workspace]
   ssh_key_ids       = [vultr_ssh_key.admin.id]
-  firewall_group_id = vultr_firewall_group.web.id
-  reserved_ip_id    = vultr_reserved_ip.main.id
+  firewall_group_id = local.adopted ? null : vultr_firewall_group.web[0].id
+  reserved_ip_id    = local.adopted ? null : vultr_reserved_ip.main[0].id
   enable_ipv6       = var.enable_ipv6
   backups           = var.enable_backups ? "enabled" : "disabled"
   activation_email  = false
@@ -114,8 +118,10 @@ resource "vultr_instance" "server" {
   })
 
   lifecycle {
-    # The server is replaceable, not editable: to apply a changed cloud-init, replace it on purpose with `tofu apply -replace=vultr_instance.server`.
-    ignore_changes = [user_data]
+    # The server is replaceable, not editable. These are only read when it is created, and changing them in place would reinstall it, so a
+    # change to them never reaches a running server: replace it on purpose instead (`-replace=vultr_instance.server`, which CI allows only when
+    # that run is told to). The adopted production server was created without them.
+    ignore_changes = [user_data, ssh_key_ids, activation_email, os_id]
   }
 }
 
@@ -126,57 +132,43 @@ resource "vultr_instance" "server" {
 locals {
   is_prod = terraform.workspace == "default"
   stage   = local.is_prod ? "staging" : terraform.workspace
-  apex_ip = var.cutover ? vultr_reserved_ip.main.subnet : var.old_ip
+  apex_ip = var.cutover ? local.server_ip : var.old_ip
+  # The production records, created here or adopted (adopt.tf). www and domains are CNAMEs to the apex, so they follow it.
+  prod_records = local.is_prod ? {
+    apex    = { name = var.domain, type = "A", content = local.apex_ip, comment = "HawkEye production (managed by infra/)" }
+    www     = { name = "www.${var.domain}", type = "CNAME", content = var.domain, comment = "HawkEye www redirect (managed by infra/)" }
+    domains = { name = "domains.${var.domain}", type = "CNAME", content = var.domain, comment = "HawkEye status pages on customers' own domains (managed by infra/)" }
+  } : {}
 }
 
-resource "cloudflare_dns_record" "apex" {
-  count   = local.is_prod ? 1 : 0
-  zone_id = var.cloudflare_zone_id
-  name    = var.domain
-  type    = "A"
-  content = local.apex_ip
-  ttl     = var.dns_ttl
-  proxied = false
-  comment = "HawkEye production (managed by infra/)"
+# domains.<domain> is the name customers point their status page domains at (STATUS_PAGE_DOMAIN_TARGET's default;
+# docs/plan-status-page-domains.md). Never proxied: customers' CNAMEs must reach Caddy directly (it gets their certificates), and Cloudflare
+# refuses a CNAME from another account to a proxied record.
+resource "cloudflare_dns_record" "prod" {
+  for_each = local.prod_records
+  zone_id  = var.cloudflare_zone_id
+  name     = each.value.name
+  type     = each.value.type
+  content  = each.value.content
+  ttl      = var.dns_ttl
+  proxied  = false
+  comment  = each.value.comment
 
   lifecycle {
     precondition {
-      condition     = var.cutover || var.old_ip != ""
+      condition     = each.key != "apex" || var.cutover || var.old_ip != ""
       error_message = "old_ip must be set until the cutover (scripts/rebuild.sh writes it to live.auto.tfvars)."
     }
   }
 }
 
-resource "cloudflare_dns_record" "www" {
-  count   = local.is_prod ? 1 : 0
-  zone_id = var.cloudflare_zone_id
-  name    = "www.${var.domain}"
-  type    = "CNAME"
-  content = var.domain
-  ttl     = var.dns_ttl
-  proxied = false
-  comment = "HawkEye www redirect (managed by infra/)"
-}
-
-# The name customers point their status page domains at (STATUS_PAGE_DOMAIN_TARGET's default; docs/plan-status-page-domains.md). A CNAME to the
-# apex, so it follows the reserved IP when the server is replaced. Never proxied: customers' CNAMEs must reach Caddy directly (it gets their
-# certificates), and Cloudflare refuses a CNAME from another account to a proxied record.
-resource "cloudflare_dns_record" "status_domains" {
-  count   = local.is_prod ? 1 : 0
-  zone_id = var.cloudflare_zone_id
-  name    = "domains.${var.domain}"
-  type    = "CNAME"
-  content = var.domain
-  ttl     = var.dns_ttl
-  proxied = false
-  comment = "HawkEye status pages on customers' own domains (managed by infra/)"
-}
-
+# A name for testing a new server before the cutover. The adopted production server is already live, so it has none.
 resource "cloudflare_dns_record" "stage" {
+  count   = local.adopted ? 0 : 1
   zone_id = var.cloudflare_zone_id
   name    = "${local.stage}.${var.domain}"
   type    = "A"
-  content = vultr_reserved_ip.main.subnet
+  content = local.server_ip
   ttl     = var.dns_ttl
   proxied = false
   comment = "HawkEye ${local.stage} (managed by infra/)"

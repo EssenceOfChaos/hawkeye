@@ -1,0 +1,16 @@
+# Remote state in Vultr Object Storage (S3-compatible). Nothing here is secret: credentials come from AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
+# Workspaces (rehearsals such as "drill") are stored next to it under env:/<workspace>/.
+bucket = "hawkeye-tofu-state"
+key    = "hawkeye/terraform.tfstate"
+region = "us-east-1" # required by the S3 client; Vultr ignores it
+endpoints = {
+  s3 = "https://ewr1.vultrobjects.com"
+}
+use_path_style              = true
+skip_credentials_validation = true
+skip_region_validation      = true
+skip_requesting_account_id  = true
+skip_metadata_api_check     = true
+skip_s3_checksum            = true
+# A lock file next to the state stops two runs writing at once. CI also runs one infrastructure job at a time (concurrency group).
+use_lockfile = true

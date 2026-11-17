@@ -3,6 +3,7 @@
 *.tfstate.*
 terraform.tfvars
 *.auto.tfvars
+!production.auto.tfvars
 crash.log
 live.auto.tfvars
 .known_hosts_*

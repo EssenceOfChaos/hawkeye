@@ -117,6 +117,34 @@ class DeployScriptTests(Base):
         self.git(self.repo, "reset", "-q", "--hard", here)
         return sha
 
+    def change_the_deploy_script(self):
+        """A new commit on origin whose scripts/deploy.sh records each run of itself. Returns its sha."""
+        here = self.head()
+        self.git(self.repo, "checkout", "-q", "main")
+        self.git(self.repo, "reset", "-q", "--hard", self.sha2)
+        script = self.repo / "scripts/deploy.sh"
+        script.write_text(script.read_text().replace("main() {\n", 'main() {\n  echo new-deploy-script >> "$HOME/events"\n', 1))
+        self.commit("deploy script")
+        self.git(self.repo, "push", "-q", "origin", "main")
+        sha = self.head()
+        self.git(self.repo, "reset", "-q", "--hard", here)
+        return sha
+
+    # ---- a release that changes this script ----
+
+    def test_a_release_that_changes_the_deploy_script_runs_the_new_copy_once(self):
+        sha = self.change_the_deploy_script()
+        r = self.deploy(sha, no_creds=True)
+        self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+        self.assertIn("deploying " + sha[:12] + " again with the new copy", r.stdout)
+        self.assertEqual(self.events().count("new-deploy-script"), 1, self.events())
+        self.assertEqual(self.head(), sha)
+
+    def test_a_release_that_leaves_the_deploy_script_alone_runs_once(self):
+        r = self.deploy(self.sha2, no_creds=True)
+        self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+        self.assertNotIn("again with the new copy", r.stdout)
+
     # ---- our own alerting ----
 
     def test_a_release_with_the_monitoring_file_starts_prometheus_and_alertmanager_too(self):

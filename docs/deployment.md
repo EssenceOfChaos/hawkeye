@@ -115,15 +115,48 @@ Its setup is in `docs/operations.md`, "HawkEye's status page".
 Rollback only restores the **code**; migrations are forward-only (see Upgrades and Rollback below), which is why every schema change must be expand/contract.
 The script sets `APP_VERSION` in `.env.production` to the commit sha so logs and Sentry releases name the exact version. A release first refreshes the settings from the secret manager (carrying on with the ones already on the server if it cannot be reached, and putting the previous settings back together with the previous code if the release fails); without credentials for the secret manager it uses the existing `.env.production`.
 
-**A change to `scripts/deploy.sh` takes effect one release later.** The script loads itself completely before it checks out the new commit, so that replacing its own file
-mid-run cannot break it. The release that changes the script is therefore deployed by the *previous* copy, and the new copy first runs on the next deploy. Anything the new copy
-adds, such as a new Compose file, is missing after that first release even though the deploy reports success. Example: the release that added
-`docker-compose.monitoring.yml` started without Prometheus and Alertmanager.
+**A release that changes `scripts/deploy.sh` runs the new copy too, by itself.** The script loads itself completely before it checks out the new commit,
+so that replacing its own file mid-run cannot break it; the release that changes it is therefore deployed by the *previous* copy. When that release is
+healthy and the checked-out `deploy.sh` differs from the one running, the script runs the new copy once for the same commit, so anything the new copy
+adds (such as a new Compose file) takes effect in the same Actions run. The new copy finds itself unchanged and stops there. The scripts it calls after
+the checkout (`sync-secrets.sh`, `regions.py`, `smoke.sh`, `regional-sync.sh`) run from the new commit anyway; `backup-offsite.sh` runs before the
+checkout, and its new copy is first used by that second run. (The release that added this rerun was itself deployed by an older copy, which doesn't
+rerun: it needed one more deploy, the last one by hand.)
 
-When you merge a change to `scripts/deploy.sh`, run one more deploy straight after it: Actions → Deploy → **Run workflow** (leave **Only apply changed settings** unticked),
-or `scripts/deploy.sh` on the VM, which redeploys the tip of `origin/main`. `secrets-only` is not enough: when no setting has changed it stops before restarting anything.
-The scripts it calls after the checkout (`sync-secrets.sh`, `regions.py`, `smoke.sh`, `regional-sync.sh`) run from the new commit, so changes to them take effect in the
-same release. The exception is `backup-offsite.sh`, which runs before the checkout: like `deploy.sh`, it picks up a change one release later.
+## Infrastructure changes (OpenTofu in CI)
+
+The servers, the firewall and the DNS records the site needs are described in `infra/` and changed only by `.github/workflows/infra.yml`; nobody runs
+`tofu apply` by hand. A pull request that touches `infra/` is checked (format, validate, `tofu test` against mock providers) and planned against
+production; the plan is on the run's summary page. Merging applies exactly the plan made in that run. Creating and updating in place go ahead;
+**deleting or replacing anything is refused** (`scripts/infra-plan-guard.py`) unless the workflow is run by hand from the Actions tab with those
+addresses in *allow_replace*, which is how a deliberate server rebuild goes. One infrastructure run happens at a time.
+
+The state is in Vultr Object Storage (`infra/backend.tf`, `infra/state.s3.tfbackend`), encrypted with OpenTofu state encryption before upload, so CI
+and people share one copy and no laptop holds it. `infra/production.auto.tfvars` (committed) describes production. The production server and its
+DNS records were created by hand on 2026-10-17 and are **adopted**, not rebuilt (`infra/adopt.tf`): the first apply imports them, and the code
+describes them as they are (1 vCPU / 2 GB, Ubuntu 26.10, no reserved IP or Vultr firewall group). Bringing them in line with the rest of `infra/`
+is a series of reviewed pull requests, listed in `docs/plan-high-availability.md`.
+
+**One-time setup**
+
+1. **State bucket.** In Vultr Object Storage (the subscription that holds the backups, `ewr1`), create the bucket `hawkeye-tofu-state` (private). Its
+   access key and secret are the subscription's S3 keys. Generate a state passphrase (`openssl rand -base64 32`) and keep it in the password
+   manager and the secret manager: **without it the state cannot be read**.
+2. **A Vultr API key for CI.** The account's API key only accepts listed IP addresses, and GitHub's runners have no fixed address. In Vultr, under
+   Account → Users, add a user for OpenTofu with API access and only the permissions it needs (servers, firewall, reserved IPs, SSH keys), and allow
+   its key from any address (`0.0.0.0/0` and `::/0`). The key lives only in GitHub's secrets; rotate it if it is ever exposed. (Alternatively, a
+   self-hosted runner with a fixed address keeps the allow-list; not on the production server itself.)
+3. **A Cloudflare token for CI** with *DNS Edit* on the `hawkeye.observer` zone only.
+4. **GitHub.** Settings → Environments: create `infrastructure-plan` (pull request plans) and `infrastructure` (applies; add required reviewers here
+   if you want an approval click before each apply). Add these secrets to both: `VULTR_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`,
+   `TOFU_STATE_ACCESS_KEY`, `TOFU_STATE_SECRET_KEY`, `TOFU_STATE_PASSPHRASE`.
+5. **Adopt production.** Merge the pull request that adds this. Its run imports the server and the three records; read the plan on the run's page:
+   it must import 4 resources and change nothing else except metadata (tags, DNS TTL and comments, the backup schedule). Nothing is replaced: the
+   guard refuses the run if anything would be.
+
+Running OpenTofu on your own machine is for reading (`tofu plan`) and for rehearsals in their own workspace (`scripts/rebuild.sh --workspace drill`).
+It needs `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (the state bucket's keys) and `TF_VAR_state_passphrase`, and
+`tofu init -backend-config=state.s3.tfbackend` from `infra/`.
 
 ## Status pages on customers' own domains
 
@@ -166,7 +199,8 @@ Migrations are **forward-only**. Make every schema change _expand/contract_: rel
 
 ## Scaling and availability
 
-`api` is stateless (sessions, rate limits and the job queue live in PostgreSQL), so run several replicas behind Caddy. Workers scale horizontally (jobs are claimed with `FOR UPDATE SKIP LOCKED`; `DISABLE_SCHEDULER=true` on all but one or two is fine, duplicates are harmless). A single host is a single point of failure: for HA, put the database on a managed HA service and run the stack on two hosts behind a load balancer.
+The plan for surviving a server failure (a managed database with a standby, two app servers behind a load balancer) is
+`docs/plan-high-availability.md`. Today: `api` is stateless (sessions, rate limits and the job queue live in PostgreSQL), so run several replicas behind Caddy. Workers scale horizontally (jobs are claimed with `FOR UPDATE SKIP LOCKED`; `DISABLE_SCHEDULER=true` on all but one or two is fine, duplicates are harmless). A single host is a single point of failure: for HA, put the database on a managed HA service and run the stack on two hosts behind a load balancer.
 
 ## Checking from several locations
 

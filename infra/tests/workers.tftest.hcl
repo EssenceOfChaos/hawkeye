@@ -13,6 +13,9 @@ variables {
   cloudflare_zone_id  = "zone"
   ssh_public_key_path = "./tests/fake.pub"
   cutover             = true
+  state_passphrase    = "test-passphrase-not-secret"
+  # These tests are about a server OpenTofu creates; production.auto.tfvars adopts one (tests/adopt.tftest.hcl covers that).
+  adopted_server_id = ""
 }
 
 run "the_committed_file_creates_nothing_until_a_worker_is_listed" {
