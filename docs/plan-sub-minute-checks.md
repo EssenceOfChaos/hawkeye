@@ -77,5 +77,8 @@ account's year whatever the interval, and were built from 13 million results in 
    cover, and the rollup job never replaces totals whose results are gone. The rule follows a monitor's current interval. A range reaching back
    past 30 days for such a monitor loses only the partial hour at its start (which comes from raw results); step 4 tells the person, on the check
    history list, that individual checks go back 30 days.
-4. **The interval change:** migration (monitors may run every 30 s; Agency's minimum 30 s), new monitors default to 60 s whatever the plan's
+4. **Done: the interval change** (migration `000048`). Websites, APIs and DNS records may run every 30 s on Agency; heartbeats and multi-step API
+   checks keep 60 s (a multi-step run may take 60 s). New monitors default to 60 s whatever the plan allows (`monitors.DefaultIntervalSeconds`),
+   and a timeout is at most half the interval, so a 30-second check gives up after 15 s; bulk `set_interval` follows the same rules. The form
+   has a "Check every 30 seconds" switch, shown only when the plan allows it and the request does not change data. Was: migration (monitors may run every 30 s; Agency's minimum 30 s), new monitors default to 60 s whatever the plan's
    minimum, timeout below the interval, then the form, API, MCP, pricing card, docs and the Terms' plan list.

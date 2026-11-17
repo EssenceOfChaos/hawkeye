@@ -296,21 +296,30 @@ func (s *Service) Bulk(ctx context.Context, orgID uuid.UUID, in BulkInput) (int,
 
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		// Monitor rows first, then (for deletes) the organization row: the same order as single edits and deletes, so they cannot deadlock.
-		rows, err := tx.Query(ctx, `SELECT method FROM monitors WHERE organization_id = $1 AND id = ANY($2) AND deleted_at IS NULL FOR UPDATE`, orgID, ids)
+		rows, err := tx.Query(ctx, `SELECT method, kind, timeout_seconds FROM monitors WHERE organization_id = $1 AND id = ANY($2) AND deleted_at IS NULL
+			FOR UPDATE`, orgID, ids)
 		if err != nil {
 			return err
 		}
-		writes := 0
+		writes, workflows, maxTimeout := 0, 0, 0
 		found := 0
 		for rows.Next() {
-			var method string
-			if err := rows.Scan(&method); err != nil {
+			var method, kind string
+			var timeout int
+			if err := rows.Scan(&method, &kind, &timeout); err != nil {
 				rows.Close()
 				return err
 			}
 			found++
 			if IsWriteMethod(method) {
 				writes++
+			}
+			switch kind {
+			case TypeWorkflow:
+				workflows++
+			case TypeHeartbeat: // left as they are by set_interval
+			default:
+				maxTimeout = max(maxTimeout, timeout)
 			}
 		}
 		rows.Close()
@@ -350,6 +359,15 @@ func (s *Service) Bulk(ctx context.Context, orgID uuid.UUID, in BulkInput) (int,
 				return validation.New("check_interval_seconds", fmt.Sprintf(
 					"must be at least %d minutes: %d of the selected monitors use POST, PUT, PATCH or DELETE, which repeat the request on every check",
 					MinWriteIntervalSeconds/60, writes))
+			}
+			if workflows > 0 && v < MinPeriodSeconds {
+				return validation.New("check_interval_seconds", fmt.Sprintf(
+					"must be at least %d seconds: %d of the selected monitors are multi-step API checks", MinPeriodSeconds, workflows))
+			}
+			if maxTimeout > v/2 {
+				return validation.New("check_interval_seconds", fmt.Sprintf(
+					"must be at least %d seconds: a selected monitor's timeout is %d seconds, and a timeout may be at most half the interval",
+					maxTimeout*2, maxTimeout))
 			}
 			if err := s.plans.CheckInterval(ctx, tx, orgID, v); err != nil {
 				return err

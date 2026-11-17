@@ -97,6 +97,9 @@ export function MonitorFormPage() {
   const [expected, setExpected] = useState('')
   const [intervalMin, setIntervalMin] = useState('')
   const [minAllowed, setMinAllowed] = useState(1)
+  // The Agency plan may check websites and DNS records every 30 seconds: a switch beside the minutes, since the minutes can't say it.
+  const [minSeconds, setMinSeconds] = useState(60)
+  const [fast, setFast] = useState(false)
   const [headers, setHeaders] = useState<RequestHeader[]>([])
   const [body, setBody] = useState('')
   const [authType, setAuthType] = useState<AuthType>('none')
@@ -133,6 +136,7 @@ export function MonitorFormPage() {
     api<{ usage: { plan: { minimum_check_interval_seconds: number; max_workflow_steps?: number } } }>('GET', '/usage')
       .then((r) => {
         setMinAllowed(Math.ceil(r.usage.plan.minimum_check_interval_seconds / 60))
+        setMinSeconds(r.usage.plan.minimum_check_interval_seconds)
         if (r.usage.plan.max_workflow_steps) setMaxSteps(r.usage.plan.max_workflow_steps)
       })
       .catch(() => undefined)
@@ -168,7 +172,8 @@ export function MonitorFormPage() {
         setUrl(m.url)
         setMethod(m.method)
         setExpected(m.expected_status_code?.toString() ?? '')
-        setIntervalMin(String(Math.round(m.effective_check_interval_seconds / 60)))
+        setFast(m.effective_check_interval_seconds < 60)
+        setIntervalMin(String(Math.max(1, Math.round(m.effective_check_interval_seconds / 60))))
         setHeaders(m.headers ?? [])
         setBody(m.body ?? '')
         if (m.auth) {
@@ -201,6 +206,9 @@ export function MonitorFormPage() {
   // POST, PUT, PATCH and DELETE change things on the target, and the request is repeated on every check.
   const writeMethod = kind === 'workflow' ? usesWriteMethod(steps) : WRITE_METHODS.includes(method)
   const minIntervalMin = writeMethod ? Math.max(minAllowed, WRITE_MIN_MINUTES) : minAllowed
+  // Multi-step checks may take up to a minute, and checks that change data run at most every few minutes.
+  const canFast = minSeconds < 60 && kind !== 'workflow' && !writeMethod
+  const intervalSeconds = () => (fast && canFast ? FAST_SECONDS : intervalMin === '' ? undefined : Number(intervalMin) * 60)
   const assertionsAllowed = method !== 'HEAD'
   const keepsSecret = storedAuthType === authType
 
@@ -228,7 +236,7 @@ export function MonitorFormPage() {
       tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet,
     }
     if (allRegions.length > 1) payload.regions = chosen
-    if (intervalMin !== '') payload.check_interval_seconds = Number(intervalMin) * 60
+    if (intervalSeconds() !== undefined) payload.check_interval_seconds = intervalSeconds()
     try {
       if (editing) await api('PATCH', `/monitors/${monitorID}`, payload)
       else await api('POST', '/monitors', { ...payload, type: 'dns' })
@@ -245,7 +253,7 @@ export function MonitorFormPage() {
       name, steps: stepsInput(steps), secrets: secretsInput(secrets), cookies, tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet,
     }
     if (allRegions.length > 1) payload.regions = chosen
-    if (intervalMin !== '') payload.check_interval_seconds = Number(intervalMin) * 60
+    if (intervalSeconds() !== undefined) payload.check_interval_seconds = intervalSeconds()
     try {
       if (editing) {
         await api('PATCH', `/monitors/${monitorID}`, payload)
@@ -297,7 +305,7 @@ export function MonitorFormPage() {
     if (authType === 'basic') payload.auth!.username = authUsername
     if (authType === 'header') payload.auth!.header_name = authHeaderName
     if (authType !== 'none' && authSecret !== '') payload.auth!.secret = authSecret
-    if (intervalMin !== '') payload.check_interval_seconds = Number(intervalMin) * 60
+    if (intervalSeconds() !== undefined) payload.check_interval_seconds = intervalSeconds()
     try {
       if (editing) await api('PATCH', `/monitors/${monitorID}`, payload)
       else await api('POST', '/monitors', payload)
@@ -435,9 +443,9 @@ export function MonitorFormPage() {
             onChange={(e) => setDnsExpected(e.target.value)} error={f.dns_expected} hint={DNS_EXPECTED[recordType].hint} />
           <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f} />
           {regionPicker}
-          <Field label="Check every (minutes)" type="number" min={minAllowed} max={1440} value={intervalMin}
-            onChange={(e) => setIntervalMin(e.target.value)} error={f.check_interval_seconds}
-            hint={`Your plan allows checks every ${minAllowed} minute(s) or slower. Leave empty for the default. A changed record shows up here once the old one expires from DNS caches.`} />
+          <IntervalField min={minAllowed} value={intervalMin} onChange={setIntervalMin} fast={fast && canFast} onFast={canFast ? setFast : undefined}
+            error={f.check_interval_seconds ?? f.timeout_seconds}
+            hint={`${planHint(minAllowed, canFast)} A changed record shows up here once the old one expires from DNS caches.`} />
           <div className="row">
             <button type="submit" disabled={busy}>{editing ? 'Save changes' : 'Add monitor'}</button>
             <Link to="/monitors">Cancel</Link>
@@ -459,10 +467,9 @@ export function MonitorFormPage() {
           )}
           <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f} />
           {regionPicker}
-          <Field label="Check every (minutes)" type="number" min={minIntervalMin} max={1440} value={intervalMin}
-            onChange={(e) => setIntervalMin(e.target.value)} error={f.check_interval_seconds}
-            hint={writeMethod ? `Checks that change data run at most every ${WRITE_MIN_MINUTES} minutes. Leave empty for the default.`
-              : `Your plan allows checks every ${minAllowed} minute(s) or slower. Leave empty for the default.`} />
+          <IntervalField min={minIntervalMin} value={intervalMin} onChange={setIntervalMin} error={f.check_interval_seconds}
+            hint={writeMethod ? `Checks that change data run at most every ${WRITE_MIN_MINUTES} minutes. Leave empty for the default (1 minute, or your plan's fastest).`
+              : planHint(minAllowed, false)} />
           <div className="row">
             <button type="submit" disabled={busy}>{editing ? 'Save changes' : 'Add monitor'}</button>
             <Link to={editing ? `/monitors/${monitorID}` : '/monitors'}>Cancel</Link>
@@ -651,11 +658,11 @@ export function MonitorFormPage() {
 
           {regionPicker}
 
-          <Field label="Check every (minutes)" type="number" min={minIntervalMin} max={1440} value={intervalMin}
-            onChange={(e) => setIntervalMin(e.target.value)} error={f.check_interval_seconds}
+          <IntervalField min={minIntervalMin} value={intervalMin} onChange={setIntervalMin} fast={fast && canFast} onFast={canFast ? setFast : undefined}
+            error={f.check_interval_seconds ?? f.timeout_seconds}
             hint={writeMethod
               ? `${method} monitors run at most every ${WRITE_MIN_MINUTES} minutes. Leave empty for the default.`
-              : `Your plan allows checks every ${minAllowed} minute(s) or slower. Leave empty for the default.`} />
+              : planHint(minAllowed, canFast)} />
           <div className="row">
             <button type="submit" disabled={busy}>{editing ? 'Save changes' : 'Add monitor'}</button>
             <Link to="/monitors">Cancel</Link>
@@ -663,5 +670,43 @@ export function MonitorFormPage() {
         </form>
       )}
     </section>
+  )
+}
+
+const FAST_SECONDS = 30
+
+function planHint(minMinutes: number, canFast: boolean): string {
+  if (canFast) return 'Leave empty for the default, every minute.'
+  return `Your plan allows checks every ${minMinutes} minute${minMinutes === 1 ? '' : 's'} or slower. Leave empty for the default.`
+}
+
+/**
+ * How often HawkEye checks, in minutes, and on plans that allow it a switch for every 30 seconds. Thirty-second checks keep each check's
+ * details for 30 days (their uptime and charts keep the plan's full history), which the switch says, so nobody finds out from the history list.
+ */
+function IntervalField({ min, value, onChange, fast = false, onFast, error, hint }: {
+  min: number
+  value: string
+  onChange: (v: string) => void
+  fast?: boolean
+  onFast?: (on: boolean) => void
+  error?: string
+  hint: string
+}) {
+  return (
+    <>
+      <Field label="Check every (minutes)" type="number" min={min} max={1440} value={fast ? '' : value} disabled={fast}
+        placeholder={fast ? 'Every 30 seconds' : undefined} onChange={(e) => onChange(e.target.value)} error={error}
+        hint={fast ? 'Checked every 30 seconds.' : hint} />
+      {onFast && (
+        <div className="field">
+          <Toggle checked={fast} onToggle={onFast}>Check every {FAST_SECONDS} seconds</Toggle>
+          <small className="hint">
+            Twice the requests to your site, and you hear about an outage sooner. Each check’s details are kept for 30 days; uptime, charts and
+            reports keep your plan’s full history.
+          </small>
+        </div>
+      )}
+    </>
   )
 }

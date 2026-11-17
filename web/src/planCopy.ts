@@ -9,7 +9,7 @@ import type { Plan } from './api'
 const TAGLINES: Record<string, string> = {
   free: 'Everything you need to watch a personal site or a small project.',
   pro: 'Faster checks and deeper history for growing websites.',
-  agency: 'Room for many client websites, with the longest history.',
+  agency: 'Room for many client websites, with the fastest checks and the longest history.',
 }
 
 export function planTagline(code: string): string | undefined {

@@ -11,7 +11,7 @@ import { CertBadge } from '../components/Certificate'
 import { StatusBadge } from '../components/StatusBadge'
 import { TagList } from '../components/Tags'
 import { BulkAlertTiming, type AlertTimingChange } from '../components/AlertTiming'
-import { formatPeriod } from '../format'
+import { formatPeriod, shortInterval } from '../format'
 
 const PAGE_SIZE = 25
 
@@ -39,7 +39,7 @@ export function UsagePanel({ usage }: { usage: Usage }) {
       {atLimit && next && (
         <p>
           {next.name} ({money(next.monthly_price_cents)}) includes {next.max_monitors} monitors and checks every{' '}
-          {Math.round(next.minimum_check_interval_seconds / 60)} minute(s).
+          {formatPeriod(next.minimum_check_interval_seconds)}.
         </p>
       )}
     </section>
@@ -172,11 +172,6 @@ function TagManager({ tags, onChanged }: { tags: TagSummary[]; onChanged: () => 
 /** "3 minutes ago", with the exact date and time on hover. */
 function Ago({ iso, now, what }: { iso: string; now: number; what: string }) {
   return <time dateTime={iso} title={`${what}: ${formatDateTime(iso)}`}>{timeAgo(iso, now)}</time>
-}
-
-/** A check interval short enough for one line of the table: "10 min", "1 hour", "1 day". The full wording is in the cell's title. */
-function shortPeriod(seconds: number): string {
-  return seconds < 3600 ? `${Math.round(seconds / 60)} min` : formatPeriod(seconds)
 }
 
 export function MonitorsPage() {
@@ -390,7 +385,7 @@ export function MonitorsPage() {
                   <td><StatusBadge monitor={m} /></td>
                   <td>{m.type === 'dns' ? <span className="hint">—</span> : <CertBadge monitor={m} />}</td>
                   <td title={m.type === 'heartbeat' ? `A ping is expected every ${formatPeriod(m.effective_check_interval_seconds)}` : `Checked every ${formatPeriod(m.effective_check_interval_seconds)}`}>
-                    {shortPeriod(m.effective_check_interval_seconds)}
+                    {shortInterval(m.effective_check_interval_seconds)}
                   </td>
                   <td>{m.type === 'heartbeat' && m.heartbeat
                     ? m.heartbeat.last_ping_at ? <Ago iso={m.heartbeat.last_ping_at} now={now} what="Last ping" /> : 'No ping yet'

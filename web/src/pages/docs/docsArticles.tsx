@@ -29,7 +29,7 @@ export function GettingStarted() {
       <p>To add one yourself, choose <strong>Add monitor</strong> on the <strong>Monitors</strong> page, then pick what to watch:</p>
       <ul>
         <li>
-          <strong>A website or API.</strong> Enter its address. HawkEye requests it on a schedule (every 5 minutes on Free, every minute on paid plans)
+          <strong>A website or API.</strong> Enter its address. HawkEye requests it on a schedule (every 5 minutes on Free, every minute on Pro, as often as every 30 seconds on Agency)
           and opens an incident when the failure is confirmed by consecutive failed checks, so a single blip never alerts anyone. You can also
           check for words on the page, check JSON values, send headers or authentication, get warned about slow responses, and send a trace context header so each check shows up in your tracing tool. For an API, choose <strong>Paste a cURL command</strong>: paste one
           from your API docs, a terminal or your browser’s developer tools (Copy as cURL), and HawkEye fills in the address, method, headers, body and

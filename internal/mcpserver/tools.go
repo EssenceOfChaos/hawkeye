@@ -200,7 +200,8 @@ type CreateMonitorInput struct {
 	Host                 string `json:"host,omitempty" jsonschema:"dns only: the host name to look up, such as example.com"`
 	RecordType           string `json:"record_type,omitempty" jsonschema:"dns only: A, AAAA, MX, NS or TXT (default A)"`
 	Expected             string `json:"expected,omitempty" jsonschema:"dns only: a value the answer must contain; leave out to accept any answer"`
-	CheckIntervalMinutes int    `json:"check_interval_minutes,omitempty" jsonschema:"how often to check (website, dns), or how often the job runs (heartbeat); the plan sets the minimum"`
+	CheckIntervalMinutes int    `json:"check_interval_minutes,omitempty" jsonschema:"how often to check (website, dns), or how often the job runs (heartbeat); the plan sets the minimum; default 1 minute (website, dns)"`
+	CheckIntervalSeconds int    `json:"check_interval_seconds,omitempty" jsonschema:"website and dns only, instead of check_interval_minutes: how often to check, in seconds; the Agency plan allows 30"`
 	GraceMinutes         int    `json:"grace_minutes,omitempty" jsonschema:"heartbeat only: how late a ping may be before it counts as missed"`
 }
 
@@ -694,7 +695,15 @@ func (s *tools) pause(pause bool) func(context.Context, Caller, PauseInput) (Cha
 
 func (s *tools) createMonitor(ctx context.Context, c Caller, in CreateMonitorInput) (MonitorDetail, error) {
 	ci := monitors.CreateInput{Name: in.Name}
-	if in.CheckIntervalMinutes > 0 {
+	switch {
+	case in.CheckIntervalMinutes > 0 && in.CheckIntervalSeconds > 0:
+		return MonitorDetail{}, refuse("Give check_interval_minutes or check_interval_seconds, not both.")
+	case in.CheckIntervalSeconds > 0 && in.Type == "heartbeat":
+		return MonitorDetail{}, refuse("A heartbeat takes check_interval_minutes: how often its job runs.")
+	case in.CheckIntervalSeconds > 0:
+		secs := in.CheckIntervalSeconds
+		ci.CheckIntervalSeconds = &secs
+	case in.CheckIntervalMinutes > 0:
 		secs := in.CheckIntervalMinutes * 60
 		ci.CheckIntervalSeconds = &secs
 	}

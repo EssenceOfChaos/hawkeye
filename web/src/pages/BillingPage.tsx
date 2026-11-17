@@ -8,6 +8,7 @@ import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { redirectTo } from '../navigation'
 import { markCheckoutReturn, reportPurchaseIfPaid } from '../purchaseConversion'
+import { shortInterval } from '../format'
 
 const POLL_MS = 3000
 const POLL_MAX = 20 // about a minute
@@ -157,7 +158,7 @@ export function BillingPage() {
           )}
           <p>
             <strong>{usage.monitors_used}</strong> of <strong>{usage.monitor_limit}</strong> monitors used · checks every{' '}
-            {Math.round(usage.plan.minimum_check_interval_seconds / 60)} min · {usage.plan.history_retention_days} days of history
+            {shortInterval(usage.plan.minimum_check_interval_seconds)} · {usage.plan.history_retention_days} days of history
           </p>
           {usage.over_limit && (
             <Alert>

@@ -188,10 +188,11 @@ export function LandingPage() {
   const [period, setPeriod] = useState<BillingInterval>('month')
   const multiLocation = plans?.some((p) => (p.max_regions ?? 1) > 1) ?? false
   const multiSeat = plans?.some((p) => (p.max_team_members ?? 1) > 1) ?? false
+  const subMinute = plans?.some((p) => p.minimum_check_interval_seconds < 60) ?? false
   // What paid plans add over Free, in words with no numbers (the cards carry those). Keep it in step with PlanDetails when a plan feature is added.
   const paidAdvantages =
     `Paid plans add more monitors, faster checks, longer history, a higher domain limit, ${multiLocation ? 'checks from several locations, ' : ''}maintenance windows, more multi-step API checks, monthly PDF uptime reports, AI-drafted incident updates and API keys that can make every change. ` +
-    (multiSeat ? 'Agency also adds team members, reports with your own name and logo, and status pages on your clients’ own domains.' : 'Agency adds reports with your own name and logo, and status pages on your clients’ own domains.')
+    `Agency ${multiSeat ? 'also ' : ''}adds ${subMinute ? 'the fastest checks, ' : ''}${multiSeat ? 'team members, ' : ''}reports with your own name and logo, and status pages on your clients’ own domains.`
 
   const signedIn = status === 'authenticated'
 
