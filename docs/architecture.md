@@ -34,6 +34,7 @@ internal/heartbeats    heartbeat (cron job) monitors: records pings from /ping/<
 internal/statuspage public status pages (`/status/<slug>`; migration `000014`, several per organization up to `plans.max_status_pages` since `000022`; 30 s cache; exposes only owner-chosen monitor names, states, daily uptime and incident times), internal/maintenance windows (rule in SQL: `in_maintenance`, migration `000013`; `checks.Store.Record` skips state changes and incidents while one applies), internal/notifications recipients + confirmation, enqueue (idempotent), email rendering, webhook/Slack channels (`channels.go`: sealed URLs, signing, SSRF-safe delivery; migration `000012`), retrying dispatcher
 internal/reports       range resolution (plan-clamped), check-based uptime, bucketed series, check history, dashboard summary
 internal/retention     batched per-plan data retention + credential housekeeping (runs inside cmd/worker)
+internal/rollups       hourly totals of check results (check_rollups) built by a job beside the scheduler, and rollups.Source, which readers use to combine them with raw results
 internal/billing       Stripe: provider interface (+ SDK implementation and fake), checkout/portal/cancel/resync, signed webhook intake, event processing
 internal/email         Sender interface (console, in-memory and SMTP senders)
 internal/account       data export, account deletion, change password
