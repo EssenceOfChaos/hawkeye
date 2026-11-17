@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"hawkeye/internal/waitlist"
 )
 
 var (
@@ -179,5 +181,20 @@ func TestWaitlistEmailBudgetPerAddress(t *testing.T) {
 	anon.call("POST", "/api/v1/waitlist", map[string]any{"feature": "status_page_subscribers", "email": "other@example.com"})
 	if exists, _ := waitlistRow(t, e, "status_page_subscribers", "target@example.com"); exists {
 		t.Fatal("an expired, unconfirmed sign-up is removed")
+	}
+}
+
+// Every feature the code offers must be accepted by the database's CHECK (a feature added in one place but not the other fails every sign-up).
+func TestEveryWaitlistFeatureCanBeJoined(t *testing.T) {
+	e := newEnv(t, 1000)
+	c, _ := e.register(t, "member@example.com")
+	e.markVerified(t, "member@example.com")
+	for feature := range waitlist.Features {
+		if r := c.call("POST", "/api/v1/waitlist", map[string]any{"feature": feature}); r.Status != 200 || r.Body["status"] != "added" {
+			t.Fatalf("%s: %d %v", feature, r.Status, r.Body)
+		}
+		if exists, _ := waitlistRow(t, e, feature, "member@example.com"); !exists {
+			t.Fatalf("%s: no row", feature)
+		}
 	}
 }

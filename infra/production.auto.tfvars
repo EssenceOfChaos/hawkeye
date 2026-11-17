@@ -1,5 +1,5 @@
 # The production server as it really is (committed, read on every run, nothing secret). It was created by hand on 2026-10-17, before infra/
-# existed, and is adopted into the state rather than rebuilt: see adopt.tf. Change a value here only on purpose, in a reviewed pull request;
+# existed, and is adopted into the state rather than rebuilt: see adopt.tf. Since adopted: the Vultr firewall group (SSH, HTTP, HTTPS). Change a value here only on purpose, in a reviewed pull request;
 # CI shows the plan and refuses to replace or delete anything unless that run is told to (docs/deployment.md, "Infrastructure changes").
 
 name    = "hawkeye.observer" # its hostname and label today

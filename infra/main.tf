@@ -16,15 +16,15 @@ resource "vultr_ssh_key" "admin" {
   ssh_key = local.ssh_key
 }
 
-# Vultr's network firewall drops everything that is not listed. ufw on the server is a second layer. An adopted server (adopt.tf) has none yet.
+# Vultr's network firewall drops everything that is not listed. ufw on the server is a second layer. It filters incoming traffic only: the
+# server's own connections (checks, backups, email) are not affected.
 resource "vultr_firewall_group" "web" {
-  count       = local.adopted ? 0 : 1
   description = "${local.server_name}: SSH, HTTP, HTTPS"
 }
 
 resource "vultr_firewall_rule" "ssh" {
-  for_each          = local.adopted ? toset([]) : toset(var.ssh_allowed_cidrs)
-  firewall_group_id = vultr_firewall_group.web[0].id
+  for_each          = toset(var.ssh_allowed_cidrs)
+  firewall_group_id = vultr_firewall_group.web.id
   protocol          = "tcp"
   ip_type           = "v4"
   subnet            = split("/", each.value)[0]
@@ -34,8 +34,7 @@ resource "vultr_firewall_rule" "ssh" {
 }
 
 resource "vultr_firewall_rule" "http" {
-  count             = local.adopted ? 0 : 1
-  firewall_group_id = vultr_firewall_group.web[0].id
+  firewall_group_id = vultr_firewall_group.web.id
   protocol          = "tcp"
   ip_type           = "v4"
   subnet            = "0.0.0.0"
@@ -45,8 +44,7 @@ resource "vultr_firewall_rule" "http" {
 }
 
 resource "vultr_firewall_rule" "https" {
-  count             = local.adopted ? 0 : 1
-  firewall_group_id = vultr_firewall_group.web[0].id
+  firewall_group_id = vultr_firewall_group.web.id
   protocol          = "tcp"
   ip_type           = "v4"
   subnet            = "0.0.0.0"
@@ -56,8 +54,8 @@ resource "vultr_firewall_rule" "https" {
 }
 
 resource "vultr_firewall_rule" "http_v6" {
-  count             = var.enable_ipv6 && !local.adopted ? 1 : 0
-  firewall_group_id = vultr_firewall_group.web[0].id
+  count             = var.enable_ipv6 ? 1 : 0
+  firewall_group_id = vultr_firewall_group.web.id
   protocol          = "tcp"
   ip_type           = "v6"
   subnet            = "::"
@@ -66,8 +64,8 @@ resource "vultr_firewall_rule" "http_v6" {
 }
 
 resource "vultr_firewall_rule" "https_v6" {
-  count             = var.enable_ipv6 && !local.adopted ? 1 : 0
-  firewall_group_id = vultr_firewall_group.web[0].id
+  count             = var.enable_ipv6 ? 1 : 0
+  firewall_group_id = vultr_firewall_group.web.id
   protocol          = "tcp"
   ip_type           = "v6"
   subnet            = "::"
@@ -91,7 +89,7 @@ resource "vultr_instance" "server" {
   label             = local.server_name
   tags              = ["hawkeye", terraform.workspace == "default" ? "production" : terraform.workspace]
   ssh_key_ids       = [vultr_ssh_key.admin.id]
-  firewall_group_id = local.adopted ? null : vultr_firewall_group.web[0].id
+  firewall_group_id = vultr_firewall_group.web.id
   reserved_ip_id    = local.adopted ? null : vultr_reserved_ip.main[0].id
   enable_ipv6       = var.enable_ipv6
   backups           = var.enable_backups ? "enabled" : "disabled"

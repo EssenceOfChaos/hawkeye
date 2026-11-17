@@ -131,8 +131,8 @@ Our own Chrome, for comparison (estimate, not measured): a $20-a-month 2-CPU, 4 
 
 ## Order of work
 
-0. **Validate demand.** Add `browser_checks` to the "Get notified" waitlist (`internal/waitlist` `Features`, `web/src/comingSoon.ts`) on the
-   pricing page and the multi-step API check editor. Ask in the onboarding and weekly summary emails which journeys people would want checked. Go
+0. **Validate demand.** Done 2026-11-17: `browser_checks` is on the "Get notified" waitlist in the landing page's *Coming soon* section
+   (migration `000049`; count it with the query in `docs/operations.md`, *Feature waitlists*). Still to do: offer it in the multi-step API check editor too. Ask in the onboarding and weekly summary emails which journeys people would want checked. Go
    ahead when there are confirmed sign-ups from paying customers, not only visitors.
 1. **Spike (a few days).** From our server, run 20–30 real sites through Browser Run: run time per check, how many are blocked, whether CDP from
    outside Cloudflare is reliable, and session closures over a week. Check the terms. Set the allowances and intervals from what it measures.

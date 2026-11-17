@@ -30,6 +30,7 @@ import (
 // landing page (web/src/components/ComingSoon.tsx).
 var Features = map[string]string{
 	"status_page_subscribers": "email subscribers for status pages",
+	"browser_checks":          "browser checks (a real browser clicking through your site)",
 }
 
 const confirmTTL = 48 * time.Hour

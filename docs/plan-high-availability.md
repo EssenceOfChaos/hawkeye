@@ -14,7 +14,7 @@ The inventory taken while adopting it into OpenTofu (2026-11-17) found it differ
 | Size | `vc2-2c-4gb` (2 vCPU / 4 GB) | `vc2-1c-2gb` (1 vCPU / 2 GB) |
 | OS | Ubuntu 24.04 LTS | Ubuntu 26.10 (not LTS: about 9 months of updates) |
 | Address | a reserved IP | the server's own address (45.77.216.247) |
-| Network firewall | a Vultr firewall group | none (ufw on the server only) |
+| Network firewall | a Vultr firewall group | none (ufw on the server only); added 2026-11-17 (step 1.1) |
 
 Backups: a nightly encrypted database dump to Vultr Object Storage, and Vultr's whole-server backups. Recovery today is a rebuild from those
 (`docs/rebuild.md`), documented at under an hour. A failed server means **an outage of up to an hour, and up to a day of lost writes** if the
@@ -44,7 +44,8 @@ a goal any single-location design meets; surviving a location needs a second reg
 
 Each is a small reviewed change applied by CI; the guard refuses anything that would replace the server.
 
-1. **Vultr firewall group** on the server (SSH, HTTP, HTTPS), as for any server `infra/` creates: make the firewall resources independent of `adopted` in `infra/main.tf`.
+1. **Done: Vultr firewall group** on the server (SSH, HTTP, HTTPS), as for any server `infra/` creates. Before attaching it, only TCP 22, 80 and 443
+   answered from outside (2026-11-17), so it closes nothing that was in use.
    In place, no restart. Also a prerequisite for regional workers (their tunnel rule lives in that group).
 2. **Resize to `vc2-2c-4gb`** (`plan` in `infra/production.auto.tfvars`). In place; Vultr restarts the server, so a few minutes of downtime: do it
    in a quiet hour and say so on the status page.
@@ -98,7 +99,7 @@ replica in another location is the hard part (lost writes, split brain), so this
 
 ## Order and when
 
-1. Step 1.1 and 1.2 now: the firewall group is free, and the resize is needed for 30-second checks.
+1. Step 1.2 now (1.1 is done): the resize is needed for 30-second checks.
 2. Step 2 now: free, and it is what makes the current one-hour recovery real.
 3. Steps 1.3, 1.4 before 26.10's updates end.
 4. Steps 3 and 4 before HawkEye has many paying customers: a monitoring service that is down can't tell its customers their sites are down. Step 3

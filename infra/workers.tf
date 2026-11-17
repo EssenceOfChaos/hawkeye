@@ -51,18 +51,13 @@ resource "vultr_instance" "worker" {
 
   lifecycle {
     ignore_changes = [user_data, ssh_key_ids, activation_email, os_id]
-    # Workers open their tunnel through the production server's Vultr firewall group, which an adopted server doesn't have yet.
-    precondition {
-      condition     = !local.adopted
-      error_message = "Regional workers need the production server's Vultr firewall group: finish adopting it first (docs/plan-high-availability.md, step 1)."
-    }
   }
 }
 
 # Only the workers may reach the tunnel port on the production server. WireGuard ignores unauthenticated packets anyway; this keeps it invisible.
 resource "vultr_firewall_rule" "wireguard" {
   for_each          = local.workers
-  firewall_group_id = vultr_firewall_group.web[0].id
+  firewall_group_id = vultr_firewall_group.web.id
   protocol          = "udp"
   ip_type           = "v4"
   subnet            = vultr_instance.worker[each.key].main_ip
