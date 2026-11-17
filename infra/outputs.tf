@@ -21,8 +21,8 @@ output "next_steps" {
 }
 
 output "stage_host" {
-  description = "A real hostname (with a real certificate) that reaches this server before the production name does."
-  value       = "${local.stage}.${var.domain}"
+  description = "A real hostname (with a real certificate) that reaches this server before the production name does. None for an adopted server."
+  value       = local.adopted ? null : "${local.stage}.${var.domain}"
 }
 
 output "workers" {
