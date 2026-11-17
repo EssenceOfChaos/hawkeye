@@ -34,6 +34,7 @@ internal/heartbeats    heartbeat (cron job) monitors: records pings from /ping/<
 internal/statuspage public status pages (`/status/<slug>`; migration `000014`, several per organization up to `plans.max_status_pages` since `000022`; 30 s cache; exposes only owner-chosen monitor names, states, daily uptime and incident times), internal/maintenance windows (rule in SQL: `in_maintenance`, migration `000013`; `checks.Store.Record` skips state changes and incidents while one applies), internal/notifications recipients + confirmation, enqueue (idempotent), email rendering, webhook/Slack channels (`channels.go`: sealed URLs, signing, SSRF-safe delivery; migration `000012`), retrying dispatcher
 internal/reports       range resolution (plan-clamped), check-based uptime, bucketed series, check history, dashboard summary
 internal/retention     batched per-plan data retention + credential housekeeping (runs inside cmd/worker)
+internal/rollups       hourly totals of check results (check_rollups) built by a job beside the scheduler, and rollups.Source, which readers use to combine them with raw results
 internal/billing       Stripe: provider interface (+ SDK implementation and fake), checkout/portal/cancel/resync, signed webhook intake, event processing
 internal/email         Sender interface (console, in-memory and SMTP senders)
 internal/account       data export, account deletion, change password
@@ -66,6 +67,11 @@ web/           React + TypeScript (Vite, Vitest): the public site (landing, /mon
 
 ## Monitoring engine (Phase 4)
 
+Readers of history (uptime, status pages, charts, monthly and weekly reports) don't add up `check_results` directly: `internal/rollups` keeps hourly
+totals per monitor, and `rollups.Source` combines them with raw results for the partial hours at either end of a range and anything newer than
+`rollup_state.through`, so answers are the same as adding up raw results (an equivalence test checks every reader). Only the check history list and
+incidents read raw results. Why: `docs/plan-sub-minute-checks.md`.
+
 ```
 monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► worker.ProcessOne ──► check_results
    (due, enabled,           (SKIP LOCKED,      (UNIQUE per     (Claim w/ lease,     + monitors.current_status,
@@ -96,9 +102,10 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
   index: one open per monitor) and enqueues one `notification_deliveries` row per enabled, verified recipient; any move into `up` closes an
   open incident and enqueues recovery deliveries. Status, incident and deliveries therefore commit atomically
   (`TestIncidentAndNotificationsCommitAtomicallyWithTheResult`). The dispatcher (in `cmd/worker`) sends them; see `docs/api.md` for retry rules.
-- **Reporting (Phase 6):** reports read `check_results` directly (index `(monitor_id, checked_at)`); series are aggregated in SQL into at most 150
-  buckets so dashboards never load raw history. At current scale (a 1-minute plan with 200 monitors writes ≈ 288k rows/day) this is fast enough; if
-  org-wide 90–365-day charts become slow, add a pre-aggregated hourly rollup table fed by the retention job.
+- **Reporting (Phase 6):** reports add up hourly totals (`check_rollups`, `internal/rollups`) for whole hours and `check_results` (index
+  `(monitor_id, checked_at)`) for the rest; series are aggregated in SQL into at most 150 buckets so dashboards never load raw history. Adding up
+  raw results alone took seconds for 90 days of 50 monitors (a 1-minute plan with 200 monitors writes ≈ 288k rows/day), which the totals brought
+  to milliseconds (`docs/plan-sub-minute-checks.md`).
 - **Retention policy** (`internal/retention`, hourly, `DISABLE_RETENTION` to turn off per instance; one pass at a time via a PostgreSQL advisory lock):
   check results and *resolved* incidents older than the plan's history window are deleted in batches of `RETENTION_BATCH` with a short pause between
   statements; live monitors and open incidents are never deleted (a downgrade only shrinks the history window); monitors the user deleted are purged

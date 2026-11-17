@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"hawkeye/internal/rollups"
 	"hawkeye/internal/validation"
 )
 
@@ -110,9 +111,13 @@ func BuildMonthly(ctx context.Context, db DB, orgID, monitorID uuid.UUID, month,
 		return Monthly{}, err
 	}
 
-	rows, err := db.Query(ctx, `SELECT date_trunc('day', r.checked_at AT TIME ZONE 'UTC'), count(*), count(*) FILTER (WHERE NOT r.success)
-		FROM check_results r WHERE r.monitor_id = $1 AND r.checked_at >= $2 AND r.checked_at < $3 AND NOT r.in_maintenance
-		GROUP BY 1 ORDER BY 1`, monitorID, m.From, m.To)
+	a, b, err := rollups.SpanFor(ctx, db, m.From, m.To)
+	if err != nil {
+		return Monthly{}, err
+	}
+	rows, err := db.Query(ctx, `SELECT date_trunc('day', t AT TIME ZONE 'UTC'), sum(checks), sum(checks) - sum(successes)
+		FROM (`+rollups.Source(`SELECT $1::uuid`, "$2", "$3", "$4", "$5")+`) u WHERE NOT in_maintenance
+		GROUP BY 1 ORDER BY 1`, monitorID, m.From, m.To, a, b)
 	if err != nil {
 		return Monthly{}, err
 	}

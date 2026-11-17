@@ -2,7 +2,8 @@
 // traffic is never blocked, and tidies expired credentials.
 //
 // Policy:
-//   - check results older than the plan's history window are deleted;
+//   - check results older than the plan's history window are deleted, and so are their hourly totals (internal/rollups); monitors checked more
+//     often than once a minute keep their individual results for 30 days (rollups.RawRetention) and their totals for the whole window;
 //   - resolved incidents and slowdowns older than the window are deleted (with their delivery records);
 //   - open incidents, open slowdowns and live monitors are NEVER deleted, whatever the plan (a downgrade does not delete monitors);
 //   - monitors the user deleted are purged after a grace period, cascading to their remaining data;
@@ -25,6 +26,7 @@ import (
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/reports"
+	"hawkeye/internal/rollups"
 )
 
 // advisoryLockKey makes sure only one process runs a retention pass at a time (arbitrary constant).
@@ -55,8 +57,8 @@ func (c Config) withDefaults() Config {
 
 // Stats counts what one pass removed.
 type Stats struct {
-	CheckResults, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits, SentEmails, AuditEvents int
-	Skipped                                                                                                            bool // another instance holds the lock
+	CheckResults, Rollups, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits, SentEmails, AuditEvents int
+	Skipped                                                                                                                     bool // another instance holds the lock
 }
 
 type Job struct {
@@ -95,7 +97,7 @@ func (j *Job) Run(ctx context.Context) {
 			j.m.RetentionRuns.WithLabelValues("ok").Inc()
 			j.m.RetentionLastSuccess.SetToCurrentTime()
 			j.m.RetentionDuration.Set(time.Since(start).Seconds())
-			j.log.Info("retention pass complete", "check_results", st.CheckResults, "incidents", st.Incidents, "slowdowns", st.Slowdowns,
+			j.log.Info("retention pass complete", "check_results", st.CheckResults, "check_rollups", st.Rollups, "incidents", st.Incidents, "slowdowns", st.Slowdowns,
 				"monitors", st.Monitors, "sessions", st.Sessions, "tokens", st.Tokens, "seconds", time.Since(start).Seconds())
 		}
 		select {
@@ -166,6 +168,28 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 				WHERE m.organization_id = $1 AND r.checked_at < $2 LIMIT $3)`, id, cutoff)
 		st.CheckResults += n
 		note(err)
+		// Monitors checked more often than once a minute keep individual results for rollups.RawRetention, in whole hours, and never past the
+		// hours the totals already cover: deleting a result the totals don't include yet would lose it from uptime and status pages.
+		if raw := j.now().UTC().Add(-rollups.RawRetention).Truncate(time.Hour); raw.After(cutoff) {
+			through, err := rollups.Through(ctx, j.pool)
+			note(err)
+			if err == nil && !through.IsZero() {
+				if through.Before(raw) {
+					raw = through
+				}
+				n, err = j.batches(ctx, `DELETE FROM check_results WHERE id IN (
+						SELECT r.id FROM check_results r JOIN monitors m ON m.id = r.monitor_id
+						WHERE m.organization_id = $1 AND m.check_interval_seconds < `+fmt.Sprint(rollups.SubMinute)+` AND r.checked_at < $2 LIMIT $3)`, id, raw)
+				st.CheckResults += n
+				note(err)
+			}
+		}
+		// An hour's totals go once the whole hour is past the cutoff, like the last of its results. Rollups have no id, so rows are picked by ctid.
+		n, err = j.batches(ctx, `DELETE FROM check_rollups WHERE ctid IN (
+				SELECT c.ctid FROM check_rollups c JOIN monitors m ON m.id = c.monitor_id
+				WHERE m.organization_id = $1 AND c.hour <= $2::timestamptz - interval '1 hour' LIMIT $3)`, id, cutoff)
+		st.Rollups += n
+		note(err)
 		n, err = j.batches(ctx, `DELETE FROM incidents WHERE id IN (
 				SELECT i.id FROM incidents i JOIN monitors m ON m.id = i.monitor_id
 				WHERE m.organization_id = $1 AND i.status = 'resolved' AND i.resolved_at < $2 LIMIT $3)`, id, cutoff)
@@ -220,6 +244,7 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 	note(err2)
 
 	j.m.RetentionDeleted.WithLabelValues("check_results").Add(float64(st.CheckResults))
+	j.m.RetentionDeleted.WithLabelValues("check_rollups").Add(float64(st.Rollups))
 	j.m.RetentionDeleted.WithLabelValues("incidents").Add(float64(st.Incidents))
 	j.m.RetentionDeleted.WithLabelValues("slowdowns").Add(float64(st.Slowdowns))
 	j.m.RetentionDeleted.WithLabelValues("monitors").Add(float64(st.Monitors))

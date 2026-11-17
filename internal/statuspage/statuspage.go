@@ -22,6 +22,7 @@ import (
 	"hawkeye/internal/branding"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/reports"
+	"hawkeye/internal/rollups"
 	"hawkeye/internal/validation"
 )
 
@@ -613,8 +614,14 @@ func (s *Service) build(ctx context.Context, slug string, now time.Time) (Public
 	type tally struct{ total, ok int }
 	byDay := map[uuid.UUID]map[string]tally{}
 	totals := map[uuid.UUID]tally{}
-	dr, err := s.pool.Query(ctx, `SELECT monitor_id, to_char(checked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'), count(*), count(*) FILTER (WHERE success)
-		FROM check_results WHERE monitor_id = ANY($1) AND checked_at >= $2 AND NOT in_maintenance GROUP BY 1, 2`, ids, from)
+	// Up to 90 days of results for every monitor on the page: whole hours come from the hourly totals (internal/rollups).
+	until := now.Add(time.Hour) // everything recorded so far
+	a, b, err := rollups.SpanFor(ctx, s.pool, from, until)
+	if err != nil {
+		return Public{}, err
+	}
+	dr, err := s.pool.Query(ctx, `SELECT monitor_id, to_char(t AT TIME ZONE 'UTC', 'YYYY-MM-DD'), sum(checks), sum(successes)
+		FROM (`+rollups.Source(`SELECT unnest($1::uuid[])`, "$2", "$3", "$4", "$5")+`) u WHERE NOT in_maintenance GROUP BY 1, 2`, ids, from, until, a, b)
 	if err != nil {
 		return Public{}, err
 	}

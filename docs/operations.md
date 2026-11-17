@@ -36,6 +36,7 @@ only thing that can notice its own outage. Both probes answer GET and HEAD, so c
 | `hawkeye_domain_lookups_total{result}` | domain expiry lookups: `known`, `unavailable` (the registry gives no date: normal for some TLDs), `error` (transient). Alert if `error` dominates for hours: a registry, IANA or the worker's network is failing |
 | `hawkeye_retention_last_success_timestamp_seconds` | alert if older than ~3 × `RETENTION_INTERVAL`: retention is not completing and the database will grow |
 | `hawkeye_retention_deleted_rows_total{kind}`, `hawkeye_retention_runs_total{result}`, `hawkeye_retention_errors_total` | what is being removed; `skipped` means another worker held the lock (normal with several workers) |
+| `hawkeye_rollup_lag_seconds` | how far the hourly result totals are behind: normally between 15 and 75 minutes. Over 3 hours (`HawkEyeRollupsBehind`) the job is failing or still building totals for existing history (see *Hourly totals (rollups)*) |
 | `hawkeye_retention_last_duration_seconds` | a pass that takes much longer than usual may mean a backlog (e.g. a large downgrade) |
 
 | `hawkeye_billing_webhook_events_total{result}` | `received`, `duplicate`, `invalid_signature`, `processed`, `ignored`, `retry`, `failed`. A burst of `invalid_signature` = wrong `STRIPE_WEBHOOK_SECRET` (after rolling it?) or probing |
@@ -479,8 +480,23 @@ generate a new key (`openssl rand -base64 32`) and tell affected customers to en
 ### Database growing
 
 Check `hawkeye_retention_last_success_timestamp_seconds`, the worker log lines "retention pass complete / failed", and that
-`DISABLE_RETENTION` is not set on every worker. Table sizes: `SELECT pg_size_pretty(pg_total_relation_size('check_results'));`. A first pass after a long gap deletes in
+`DISABLE_RETENTION` is not set on every worker. Table sizes: `SELECT pg_size_pretty(pg_total_relation_size('check_results'));` (and `check_rollups`, about 1.5% of it at 60-second checks and under 1% at 30-second ones). A first pass after a long gap deletes in
 batches of `RETENTION_BATCH` (default 5000) with 50 ms pauses, so it can take a while but does not block checks or the API. Run a pass by restarting a worker, or lower `RETENTION_INTERVAL` temporarily.
+
+### Hourly totals (rollups)
+
+Uptime, status pages, the response-time chart (buckets of an hour or more), monthly reports and weekly summaries add up `check_rollups`, one row per
+monitor and UTC hour, instead of every result (`internal/rollups`). A job beside the scheduler adds up each hour 15 minutes after it ends and moves
+`rollup_state.through`; readers use totals before it and raw results after it, so a stopped job makes pages slower, never wrong.
+
+- **First deploy:** the job builds totals for all existing history from the oldest result, 6 hours per transaction with short pauses, so
+  `hawkeye_rollup_lag_seconds` starts high and falls. Pages get faster as it goes.
+- **Rebuild everything** (after restoring results from a backup, or if totals are ever in doubt): `UPDATE rollup_state SET through = NULL, seen_id = NULL;`
+  The job starts over from the oldest result and replaces each hour that still has results; readers read raw results until it is done. Hours
+  whose results are gone (monitors checked more often than once a minute keep results for 30 days, totals for the plan's history) keep their totals.
+- **Late results** (a heartbeat's missed deadlines recorded when the worker comes back) are found by id (`rollup_state.seen_id`) and their hour is
+  added up again on the next step.
+- Errors: worker log "rollup step failed", `hawkeye_worker_errors_total{stage="rollup"}`.
 
 ### History is missing
 

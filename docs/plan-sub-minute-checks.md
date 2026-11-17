@@ -1,7 +1,7 @@
 # Plan: checks under a minute (Agency)
 
-Status: **in progress** (2026-11-16). Load tested; `WORKER_CONCURRENCY` raised to 30 and a queue-wait alert added. Next: result rollups. The
-interval change itself comes last.
+Status: **in progress** (2026-11-16). Load tested; `WORKER_CONCURRENCY` raised to 30 and a queue-wait alert added; hourly result rollups built; sub-minute monitors keep
+individual results for 30 days (decided 2026-11-16). Next: the interval change itself.
 
 Agency customers will be able to check a monitor every 30 seconds. **New monitors keep the 60-second default**; a shorter interval is a choice
 an Agency customer makes per monitor. Free and Pro are unchanged.
@@ -52,13 +52,30 @@ worst gap was 61 s. The interval change will require the timeout to be shorter t
 A full Agency account has four times these monitors, and the dashboard also offers 365 days. Each result takes 225 bytes with its indexes, so a
 full Agency account (200 monitors, 365 days) is **22 GB a year at 60 s and 44 GB at 30 s**.
 
+**With hourly rollups** (`internal/rollups`), the same queries on the same data:
+
+| 50 monitors, 90 days (median of 5) | at 60 s | at 30 s |
+|---|---|---|
+| Dashboard uptime, all monitors, 30 days | 16 ms | 14 ms |
+| Dashboard uptime, all monitors, 90 days | 52 ms | 48 ms |
+| Public status page, 50 monitors, 90 days (uncached) | 83 ms | 93 ms |
+| One monitor's uptime, chart or monthly report | under 10 ms | under 10 ms |
+
+The interval no longer matters to these. The totals take about 21 MB here (1.5% of the raw results at 60 s), about 340 MB for a full Agency
+account's year whatever the interval, and were built from 13 million results in 24 seconds.
+
 ## Order of work
 
 1. **Done:** `WORKER_CONCURRENCY` default 30 (the worker's pool follows it: 34 connections), the `HawkEyeChecksDelayed` alert, and `cmd/loadtest`.
    Production takes the value from Infisical, so it changes there.
-2. **Rollups:** hourly and daily totals per monitor (checks, successes, response-time sum and maximum), kept up to date as results are recorded,
-   and read by uptime, status pages, dashboards, badges and reports instead of raw results. This also makes today's 60-second accounts faster.
-3. **Shorter raw retention for sub-minute monitors** (decision pending): keep their individual results for 30 days and their rollups for the plan's
-   full history, so uptime and charts keep 365 days while storage stays a few GB.
+2. **Done: rollups.** Hourly totals per monitor (checks, successes, response-time sum, count and maximum), added up by a job 15 minutes after
+   each hour, read by uptime, status pages, dashboards, badges, charts and monthly and weekly reports together with raw results for the rest
+   (same answers, checked by an equivalence test). This also makes today's 60-second accounts faster.
+3. **Done: shorter raw retention for sub-minute monitors** (decided 2026-11-16). Monitors checked more often than once a minute keep individual
+   results for 30 days (`rollups.RawRetention`) and their hourly totals for the plan's whole history, so uptime, status pages, charts and reports
+   keep 365 days and a full Agency account's year stays near 4 GB instead of 44 GB. Retention deletes whole hours, only hours the totals already
+   cover, and the rollup job never replaces totals whose results are gone. The rule follows a monitor's current interval. A range reaching back
+   past 30 days for such a monitor loses only the partial hour at its start (which comes from raw results); step 4 tells the person, on the check
+   history list, that individual checks go back 30 days.
 4. **The interval change:** migration (monitors may run every 30 s; Agency's minimum 30 s), new monitors default to 60 s whatever the plan's
    minimum, timeout below the interval, then the form, API, MCP, pricing card, docs and the Terms' plan list.

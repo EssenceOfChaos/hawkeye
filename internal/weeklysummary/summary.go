@@ -13,6 +13,7 @@ import (
 	"hawkeye/internal/email"
 	"hawkeye/internal/notifications"
 	"hawkeye/internal/reports"
+	"hawkeye/internal/rollups"
 )
 
 const (
@@ -52,13 +53,17 @@ type Summary struct {
 // Build gathers an organization's week from check results, incidents, certificates and domains. now is when the email is sent (for "expires in").
 func Build(ctx context.Context, db *pgxpool.Pool, orgID uuid.UUID, orgName string, from, to, now time.Time) (Summary, error) {
 	s := Summary{OrgName: orgName, From: from, To: to}
-	rows, err := db.Query(ctx, `SELECT m.id, m.name, m.ssl_expires_at,
-			count(r.id), count(r.id) FILTER (WHERE r.success),
-			avg(r.response_time_ms) FILTER (WHERE r.success AND r.response_time_ms IS NOT NULL)::float8
+	a, b, err := rollups.SpanFor(ctx, db, from, to)
+	if err != nil {
+		return s, err
+	}
+	rows, err := db.Query(ctx, `SELECT m.id, m.name, m.ssl_expires_at, COALESCE(u.checks, 0), COALESCE(u.successes, 0), u.avg
 		FROM monitors m
-		LEFT JOIN check_results r ON r.monitor_id = m.id AND r.checked_at >= $2 AND r.checked_at < $3 AND NOT r.in_maintenance
+		LEFT JOIN (SELECT monitor_id, sum(checks) AS checks, sum(successes) AS successes, (sum(ms_sum)::numeric / NULLIF(sum(ms_count), 0))::float8 AS avg
+			FROM (`+rollups.Source(`SELECT id FROM monitors WHERE organization_id = $1 AND deleted_at IS NULL`, "$2", "$3", "$4", "$5")+`) r
+			WHERE NOT in_maintenance GROUP BY monitor_id) u ON u.monitor_id = m.id
 		WHERE m.organization_id = $1 AND m.deleted_at IS NULL
-		GROUP BY m.id ORDER BY m.name, m.id`, orgID, from, to)
+		ORDER BY m.name, m.id`, orgID, from, to, a, b)
 	if err != nil {
 		return s, err
 	}

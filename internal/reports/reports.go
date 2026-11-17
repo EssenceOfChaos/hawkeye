@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hawkeye/internal/checks"
 	"hawkeye/internal/plans"
+	"hawkeye/internal/rollups"
 	"math"
 	"time"
 
@@ -69,14 +70,35 @@ func scope(orgID uuid.UUID, monitorID *uuid.UUID, r Range) (string, []any) {
 	return where, args
 }
 
+// source is the rollups.Source relation for a monitor, or for every live monitor of the organization, over r, and its arguments ($1 onward).
+// withRollups false reads raw results only (for charts whose buckets are shorter than an hour).
+func source(ctx context.Context, db DB, orgID uuid.UUID, monitorID *uuid.UUID, r Range, withRollups bool) (string, []any, error) {
+	a, b := r.From, r.From
+	if withRollups {
+		var err error
+		if a, b, err = rollups.SpanFor(ctx, db, r.From, r.To); err != nil {
+			return "", nil, err
+		}
+	}
+	monitors := `SELECT id FROM monitors WHERE organization_id = $1 AND deleted_at IS NULL`
+	args := []any{orgID, r.From, r.To, a, b}
+	if monitorID != nil {
+		monitors = `SELECT id FROM monitors WHERE organization_id = $1 AND id = $6`
+		args = append(args, *monitorID)
+	}
+	return rollups.Source(monitors, "$2", "$3", "$4", "$5"), args, nil
+}
+
 // ComputeUptime aggregates check results in the range for a monitor, or for every live monitor of the organization.
 func ComputeUptime(ctx context.Context, db DB, orgID uuid.UUID, monitorID *uuid.UUID, r Range) (Uptime, error) {
-	where, args := scope(orgID, monitorID, r)
+	src, args, err := source(ctx, db, orgID, monitorID, r, true)
+	if err != nil {
+		return Uptime{}, err
+	}
 	u := Uptime{From: r.From, To: r.To, Clamped: r.Clamped, MinChecks: MinChecksForUptime, Method: UptimeMethod}
 	var avg *float64
-	err := db.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE r.success),
-			avg(r.response_time_ms) FILTER (WHERE r.success AND r.response_time_ms IS NOT NULL)::float8
-		FROM check_results r JOIN monitors m ON m.id = r.monitor_id WHERE `+where+` AND NOT r.in_maintenance`, args...).
+	err = db.QueryRow(ctx, `SELECT COALESCE(sum(checks), 0), COALESCE(sum(successes), 0), (sum(ms_sum)::numeric / NULLIF(sum(ms_count), 0))::float8
+		FROM (`+src+`) u WHERE NOT in_maintenance`, args...).
 		Scan(&u.TotalChecks, &u.SuccessfulChecks, &avg)
 	if err != nil {
 		return Uptime{}, err
@@ -103,14 +125,16 @@ type Point struct {
 // checks are omitted so charts show gaps honestly.
 func Series(ctx context.Context, db DB, orgID uuid.UUID, monitorID *uuid.UUID, r Range) ([]Point, int, error) {
 	bucket := BucketSeconds(r.To.Sub(r.From))
-	where, args := scope(orgID, monitorID, r)
+	// An hour's totals fit inside a bucket only when buckets are whole hours (they are epoch-aligned, like the hours).
+	src, args, err := source(ctx, db, orgID, monitorID, r, bucket%3600 == 0)
+	if err != nil {
+		return nil, 0, err
+	}
 	args = append(args, float64(bucket))
-	rows, err := db.Query(ctx, fmt.Sprintf(`SELECT to_timestamp(floor(extract(epoch FROM r.checked_at) / $%[1]d) * $%[1]d) AS t,
-			round(avg(r.response_time_ms) FILTER (WHERE r.success AND r.response_time_ms IS NOT NULL))::int,
-			max(r.response_time_ms) FILTER (WHERE r.success),
-			count(*), count(*) FILTER (WHERE NOT r.success)
-		FROM check_results r JOIN monitors m ON m.id = r.monitor_id WHERE %[2]s
-		GROUP BY 1 ORDER BY 1`, len(args), where), args...)
+	rows, err := db.Query(ctx, fmt.Sprintf(`SELECT to_timestamp(floor(extract(epoch FROM u.t) / $%[1]d) * $%[1]d) AS t,
+			round(sum(ms_sum)::numeric / NULLIF(sum(ms_count), 0))::int, max(ms_max), sum(checks), sum(checks) - sum(successes)
+		FROM (%[2]s) u
+		GROUP BY 1 ORDER BY 1`, len(args), src), args...)
 	if err != nil {
 		return nil, 0, err
 	}

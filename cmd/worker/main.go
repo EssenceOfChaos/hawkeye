@@ -37,6 +37,7 @@ import (
 	"hawkeye/internal/oauth"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/retention"
+	"hawkeye/internal/rollups"
 	"hawkeye/internal/safehttp"
 	"hawkeye/internal/scheduler"
 	"hawkeye/internal/statusbeat"
@@ -134,6 +135,11 @@ func run() error {
 		store := checks.NewStore(pool, heartbeats.Thresholds, incidents.Engine{}).WithRegions(cfg.Regions())
 		sweeper := heartbeats.NewSweeper(pool, store, heartbeats.SweeperConfig{}, log).WithReporter(reporter)
 		spawn(func() { sweeper.Run(ctx) })
+	}
+	if cfg.RunScheduler {
+		// Hourly totals of check results for uptime, status pages, charts and reports. Runs beside the scheduler; instances take turns.
+		job := rollups.NewJob(pool, rollups.JobConfig{}, m, log).WithReporter(reporter)
+		spawn(func() { job.Run(ctx) })
 	}
 	if cfg.RunRetention {
 		job := retention.New(pool, retention.Config{Interval: cfg.RetentionInterval, Batch: cfg.RetentionBatch, Pause: 50 * time.Millisecond}, m, log).WithReporter(reporter)
