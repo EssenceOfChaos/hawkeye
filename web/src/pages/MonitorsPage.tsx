@@ -301,10 +301,10 @@ export function MonitorsPage() {
       </div>
       {canAdd && (
         <nav className="add-more hint" aria-label="Other ways to add monitors">
-          Or: <Link to="/monitors/import">import from OpenAPI or Postman</Link>
-          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=heartbeat">monitor a cron job</Link>
-          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=dns">monitor a DNS record</Link>
-          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=workflow">add a multi-step API check</Link>
+          <Link to="/monitors/import">Import from OpenAPI or Postman</Link>
+          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=heartbeat">Monitor a cron job</Link>
+          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=dns">Monitor a DNS record</Link>
+          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=workflow">Add a multi-step API check</Link>
         </nav>
       )}
       {!canAdd && <p id="limit-reason" className="hint">Plan limit reached — see the usage box below.</p>}
