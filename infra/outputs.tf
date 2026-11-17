@@ -12,7 +12,8 @@ output "server_id" {
 }
 
 output "next_steps" {
-  value = <<-EOT
+  # Steps for a server OpenTofu has just created; an adopted server is already set up and serving.
+  value = local.adopted ? null : <<-EOT
     1. Wait about 3 minutes for first-boot setup, then: ssh deploy@${local.server_ip}   (log: /var/log/hawkeye-cloud-init.log)
     2. Point DNS (A record) at ${local.server_ip}.
     3. Settings: nothing to do if you use scripts/rebuild.sh: `create` gives the server its secret manager credentials and `stage` has it fetch every setting itself (docs/secrets.md). Only if you apply this by hand, without rebuild.sh: copy ~/.hawkeye-secrets/.hawkeye-infisical.env to ~/.hawkeye-infisical.env on the server (chmod 600) and run scripts/sync-secrets.sh in /home/deploy/hawkeye.

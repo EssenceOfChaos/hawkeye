@@ -67,6 +67,12 @@ variable "enable_backups" {
   default     = true
 }
 
+variable "backup_schedule" {
+  description = "Vultr's whole-server backup schedule: type (daily, daily_alt_even, daily_alt_odd, weekly, monthly) and hour (UTC)."
+  type        = object({ type = string, hour = number })
+  default     = { type = "daily", hour = 8 } # away from the 03:15 server-time database dump
+}
+
 variable "swap_gb" {
   description = "Swap file size. Building the Go and Node images on a 2 GB server needs it."
   type        = number

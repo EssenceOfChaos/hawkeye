@@ -9,6 +9,9 @@ os_name = "Ubuntu 26.10 x64" # not an LTS release: see docs/plan-high-availabili
 ssh_public_key_path   = "./keys/admin.pub"
 deploy_authorized_key = "restrict,command=\"cd /home/deploy/hawkeye && scripts/deploy.sh\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGYQp5QH2FK86eZ4omsSEDZeNljTUeeyc1eN8DB9o7Ha github-actions-deploy"
 
+# Vultr's backups as they were set by hand: every other day at 05:00 UTC.
+backup_schedule = { type = "daily_alt_even", hour = 5 }
+
 # The apex record points at the adopted server's own address (it has no reserved IP yet).
 cutover = true
 

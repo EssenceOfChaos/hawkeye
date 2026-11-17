@@ -101,8 +101,8 @@ resource "vultr_instance" "server" {
   dynamic "backups_schedule" {
     for_each = var.enable_backups ? [1] : []
     content {
-      type = "daily"
-      hour = 8 # UTC, away from the 03:15 server-time database dump
+      type = var.backup_schedule.type
+      hour = var.backup_schedule.hour
     }
   }
 
