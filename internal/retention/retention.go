@@ -2,7 +2,7 @@
 // traffic is never blocked, and tidies expired credentials.
 //
 // Policy:
-//   - check results older than the plan's history window are deleted;
+//   - check results older than the plan's history window are deleted, and so are their hourly totals (internal/rollups);
 //   - resolved incidents and slowdowns older than the window are deleted (with their delivery records);
 //   - open incidents, open slowdowns and live monitors are NEVER deleted, whatever the plan (a downgrade does not delete monitors);
 //   - monitors the user deleted are purged after a grace period, cascading to their remaining data;
@@ -55,8 +55,8 @@ func (c Config) withDefaults() Config {
 
 // Stats counts what one pass removed.
 type Stats struct {
-	CheckResults, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits, SentEmails, AuditEvents int
-	Skipped                                                                                                            bool // another instance holds the lock
+	CheckResults, Rollups, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits, SentEmails, AuditEvents int
+	Skipped                                                                                                                     bool // another instance holds the lock
 }
 
 type Job struct {
@@ -95,7 +95,7 @@ func (j *Job) Run(ctx context.Context) {
 			j.m.RetentionRuns.WithLabelValues("ok").Inc()
 			j.m.RetentionLastSuccess.SetToCurrentTime()
 			j.m.RetentionDuration.Set(time.Since(start).Seconds())
-			j.log.Info("retention pass complete", "check_results", st.CheckResults, "incidents", st.Incidents, "slowdowns", st.Slowdowns,
+			j.log.Info("retention pass complete", "check_results", st.CheckResults, "check_rollups", st.Rollups, "incidents", st.Incidents, "slowdowns", st.Slowdowns,
 				"monitors", st.Monitors, "sessions", st.Sessions, "tokens", st.Tokens, "seconds", time.Since(start).Seconds())
 		}
 		select {
@@ -166,6 +166,12 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 				WHERE m.organization_id = $1 AND r.checked_at < $2 LIMIT $3)`, id, cutoff)
 		st.CheckResults += n
 		note(err)
+		// An hour's totals go once the whole hour is past the cutoff, like the last of its results. Rollups have no id, so rows are picked by ctid.
+		n, err = j.batches(ctx, `DELETE FROM check_rollups WHERE ctid IN (
+				SELECT c.ctid FROM check_rollups c JOIN monitors m ON m.id = c.monitor_id
+				WHERE m.organization_id = $1 AND c.hour <= $2::timestamptz - interval '1 hour' LIMIT $3)`, id, cutoff)
+		st.Rollups += n
+		note(err)
 		n, err = j.batches(ctx, `DELETE FROM incidents WHERE id IN (
 				SELECT i.id FROM incidents i JOIN monitors m ON m.id = i.monitor_id
 				WHERE m.organization_id = $1 AND i.status = 'resolved' AND i.resolved_at < $2 LIMIT $3)`, id, cutoff)
@@ -220,6 +226,7 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 	note(err2)
 
 	j.m.RetentionDeleted.WithLabelValues("check_results").Add(float64(st.CheckResults))
+	j.m.RetentionDeleted.WithLabelValues("check_rollups").Add(float64(st.Rollups))
 	j.m.RetentionDeleted.WithLabelValues("incidents").Add(float64(st.Incidents))
 	j.m.RetentionDeleted.WithLabelValues("slowdowns").Add(float64(st.Slowdowns))
 	j.m.RetentionDeleted.WithLabelValues("monitors").Add(float64(st.Monitors))

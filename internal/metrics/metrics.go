@@ -35,11 +35,12 @@ type Metrics struct {
 	StatusPageDomainChecks *prometheus.CounterVec // result=ok|problem|no_answer|error: re-checks of status pages' custom domains
 	LifecycleEmails        *prometheus.CounterVec // kind=no_monitor_*|weekly_summary, result=sent|refused|failed
 	MonthlyReportEmails    *prometheus.CounterVec // result=sent|refused|failed
-	RetentionDeleted       *prometheus.CounterVec // kind=check_results|incidents|monitors|sessions|tokens
+	RetentionDeleted       *prometheus.CounterVec // kind=check_results|check_rollups|incidents|monitors|sessions|tokens
 	RetentionRuns          *prometheus.CounterVec // result=ok|error|skipped
 	RetentionErrors        prometheus.Counter
 	RetentionLastSuccess   prometheus.Gauge
 	RetentionDuration      prometheus.Gauge
+	RollupLag              prometheus.Gauge // how far the hourly result totals are behind: now minus rollup_state.through
 
 	BillingEvents        *prometheus.CounterVec // result=received|duplicate|invalid_signature|processed|ignored|retry|failed
 	BillingRisk          *prometheus.CounterVec // type=charge.dispute.created|charge.refunded|radar.early_fraud_warning.created
@@ -48,7 +49,7 @@ type Metrics struct {
 	BillingFailed        prometheus.Gauge
 	BillingPriceMismatch *prometheus.GaugeVec // plan: 1 while the Stripe price does not match the plan advertised on the site (checkout for it is refused)
 
-	WorkerErrors *prometheus.CounterVec // stage=claim|load|record|complete|sample|schedule|secrets
+	WorkerErrors *prometheus.CounterVec // stage=claim|load|record|complete|sample|schedule|secrets|rollup
 	LastPollUnix prometheus.Gauge
 }
 
@@ -91,6 +92,7 @@ func newOn(r *prometheus.Registry) *Metrics {
 		RetentionDeleted:     prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_retention_deleted_rows_total", Help: "Rows removed by retention, by kind."}, []string{"kind"}),
 		RetentionRuns:        prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_retention_runs_total", Help: "Retention passes by result."}, []string{"result"}),
 		RetentionErrors:      prometheus.NewCounter(prometheus.CounterOpts{Name: "hawkeye_retention_errors_total", Help: "Failed retention steps."}),
+		RollupLag:            prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_rollup_lag_seconds", Help: "How far the hourly check result totals are behind (reads fall back to raw results meanwhile)."}),
 		RetentionLastSuccess: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_retention_last_success_timestamp_seconds", Help: "Unix time of the last successful retention pass."}),
 		RetentionDuration:    prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_retention_last_duration_seconds", Help: "Duration of the last successful retention pass."}),
 		BillingEvents:        prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_billing_webhook_events_total", Help: "Billing webhook events by result."}, []string{"result"}),
@@ -105,7 +107,7 @@ func newOn(r *prometheus.Registry) *Metrics {
 		LastPollUnix: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_worker_last_poll_timestamp_seconds", Help: "Unix time of the last queue poll."}),
 	}
 	for _, c := range []prometheus.Collector{m.ChecksTotal, m.CheckDuration, m.Scheduled, m.Skipped, m.Missed, m.Backpressure,
-		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.CanaryUp, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.DomainLookups, m.StatusPageDomainChecks, m.LifecycleEmails, m.MonthlyReportEmails, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed, m.BillingPriceMismatch} {
+		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.CanaryUp, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.DomainLookups, m.StatusPageDomainChecks, m.LifecycleEmails, m.MonthlyReportEmails, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.RollupLag, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed, m.BillingPriceMismatch} {
 		f(c)
 	}
 	m.CanaryUp.Set(1)                                                               // no verdict yet counts as healthy
