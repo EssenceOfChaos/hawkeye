@@ -296,15 +296,22 @@ export function MonitorsPage() {
         <span className="spacer" />
         {canAdd ? (
           <>
-            <Link className="button" to="/monitors/new">Add monitor</Link>
-            <Link to="/monitors/setup">Set up from a domain</Link>
-            <Link to="/monitors/new?type=heartbeat">Monitor a cron job</Link>
-            <Link to="/monitors/new?type=dns">Monitor a DNS record</Link>
+            {/* The quickest way to add monitors is the one offered first: HawkEye looks at the site and proposes them. */}
+            <Link className="button primary" to="/monitors/setup">Set up from your domain</Link>
+            <Link className="button" to="/monitors/new">Add a monitor yourself</Link>
           </>
         ) : (
           <button disabled aria-describedby="limit-reason">Add monitor</button>
         )}
       </div>
+      {canAdd && (
+        <nav className="add-more hint" aria-label="Other ways to add monitors">
+          Or: <Link to="/monitors/import">import from OpenAPI or Postman</Link>
+          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=heartbeat">monitor a cron job</Link>
+          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=dns">monitor a DNS record</Link>
+          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=workflow">add a multi-step API check</Link>
+        </nav>
+      )}
       {!canAdd && <p id="limit-reason" className="hint">Plan limit reached — see the usage box below.</p>}
       {error && <Alert>{error}</Alert>}
       {notice && <p role="status">{notice}</p>}
@@ -345,7 +352,7 @@ export function MonitorsPage() {
             <div className="d-divider sm:d-divider-horizontal">OR</div>
             <Link to="/monitors/new">Add a website yourself</Link>
           </div>
-          <p className="hint">Or <Link to="/monitors/new?type=heartbeat">monitor a cron job or scheduled task</Link>: backups, reports, queue workers.</p>
+          <p className="hint">Or <Link to="/monitors/new?type=heartbeat">monitor a cron job or scheduled task</Link>: backups, reports, queue workers. Have an API spec or a Postman collection? <Link to="/monitors/import">Import it</Link>.</p>
         </section>
       )}
       {monitors?.length === 0 && filtered && <p>No monitors match these filters.</p>}

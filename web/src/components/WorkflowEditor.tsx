@@ -14,7 +14,9 @@ import {
   type WorkflowRun as Run,
 } from '../api'
 import { Alert } from './Alert'
-import { key, newStep, stepsInput, type SecretDraft, type StepDraft } from '../workflowDrafts'
+import { CurlImport } from './CurlImport'
+import type { CurlRequest } from '../curl'
+import { key, newStep, secretNameFor, stepsInput, type SecretDraft, type StepDraft } from '../workflowDrafts'
 import { Field } from './Field'
 import { Toggle } from './Toggle'
 import { WorkflowRun } from './WorkflowRun'
@@ -77,6 +79,22 @@ export function WorkflowEditor({ steps, onSteps, secrets, onSecrets, cookies, on
     ;[next[i], next[i + by]] = [next[i + by], next[i]]
     onSteps(next)
   }
+  // A pasted cURL command replaces a step's request. Its credential becomes a new secret, so it stays hidden in results, and the step uses
+  // {{secret.name}}.
+  const importInto = (i: number, r: CurlRequest) => {
+    const patch: Partial<StepDraft> = {
+      method: r.method, url: r.url, headers: r.headers, body: r.body, authType: r.auth.type, authUsername: r.auth.username ?? '',
+      authHeaderName: r.auth.headerName ?? '', authSecret: '',
+    }
+    if (r.timeoutSeconds) patch.timeout = String(r.timeoutSeconds)
+    if (r.auth.type !== 'none' && r.auth.secret) {
+      const name = secretNameFor(r.auth, secrets)
+      onSecrets([...secrets, { key: key(), name, value: r.auth.secret, stored: false, pending: false, removed: false }])
+      patch.authSecret = `{{secret.${name}}}`
+    }
+    if (r.headers.length > 0 || r.body !== '' || r.auth.type !== 'none') patch.optionsOpen = true
+    set(i, patch)
+  }
   const liveSecrets = secrets.filter((s) => !s.removed && s.name.trim() !== '')
   // A test sends everything it needs: secrets that are saved but not typed in again can't be used.
   const missingForTest = liveSecrets.filter((s) => s.stored && s.value === '').map((s) => s.name)
@@ -107,7 +125,7 @@ export function WorkflowEditor({ steps, onSteps, secrets, onSecrets, cookies, on
       {f.steps && <Alert>{f.steps}</Alert>}
       {steps.map((s, i) => (
         <StepCard key={s.key} step={s} index={i} count={steps.length} errors={{ ...f, ...testFields }} onChange={(p) => set(i, p)}
-          onMove={(by) => move(i, by)} onRemove={() => onSteps(steps.filter((_, j) => j !== i))}
+          onMove={(by) => move(i, by)} onRemove={() => onSteps(steps.filter((_, j) => j !== i))} onImport={(r) => importInto(i, r)}
           values={[...steps.slice(0, i).flatMap((x) => x.extractions.map((e) => e.name.trim())).filter(Boolean).map((n) => `{{${n}}}`),
             ...liveSecrets.map((x) => `{{secret.${x.name.trim()}}}`)]} />
       ))}
@@ -160,11 +178,13 @@ interface CardProps {
   onChange: (p: Partial<StepDraft>) => void
   onMove: (by: number) => void
   onRemove: () => void
+  /** Fills the step from a pasted cURL command. */
+  onImport: (r: CurlRequest) => void
   /** Placeholders this step may use: values saved by earlier steps, and secrets. */
   values: string[]
 }
 
-function StepCard({ step: s, index: i, count, errors, onChange, onMove, onRemove, values }: CardProps) {
+function StepCard({ step: s, index: i, count, errors, onChange, onMove, onRemove, onImport, values }: CardProps) {
   const err = (k: string) => errors[`steps[${i}].${k}`]
   const prefix = `steps[${i}].`
   const optionError = Object.keys(errors).some((k) => k.startsWith(prefix) && !['name', 'method', 'url', 'extractions'].some((x) => k === prefix + x || k.startsWith(prefix + 'extractions')))
@@ -181,6 +201,7 @@ function StepCard({ step: s, index: i, count, errors, onChange, onMove, onRemove
       <legend>
         <span className="wf-no" aria-hidden="true">{n}</span> Step {n}
       </legend>
+      <CurlImport timeout target={`step ${n}`} onImport={onImport} onRestore={(h) => onChange({ headers: [...s.headers, h], optionsOpen: true })} />
       <Field label="Name" required maxLength={100} value={s.name} onChange={(e) => onChange({ name: e.target.value })} error={err('name')}
         placeholder="Sign in" />
       <div className="workflow-request">

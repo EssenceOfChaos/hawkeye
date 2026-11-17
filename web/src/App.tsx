@@ -41,6 +41,8 @@ import { findPage, usePageMeta } from './usePageMeta'
 
 // The chart pages pull in the charting library; load them only when visited so the landing and auth pages stay light.
 const DashboardPage = lazyWithReload(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
+// Lazy: it brings a YAML parser that no other page needs.
+const OpenApiImportPage = lazyWithReload(() => import('./pages/OpenApiImportPage').then((m) => ({ default: m.OpenApiImportPage })))
 const MonitorDetailPage = lazyWithReload(() => import('./pages/MonitorDetailPage').then((m) => ({ default: m.MonitorDetailPage })))
 
 function RequireAuth() {
@@ -139,6 +141,7 @@ export function AppRoutes() {
         <Route path="/monitors" element={<MonitorsPage />} />
         <Route path="/monitors/new" element={<MonitorFormPage />} />
         <Route path="/monitors/setup" element={<SetupPage />} />
+        <Route path="/monitors/import" element={<Lazy><OpenApiImportPage /></Lazy>} />
         <Route path="/monitors/:monitorID" element={<Lazy><MonitorDetailPage /></Lazy>} />
         <Route path="/monitors/:monitorID/edit" element={<MonitorFormPage />} />
       </Route>
