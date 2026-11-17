@@ -1,8 +1,8 @@
 # Plan: multi-step API checks (synthetic API monitoring)
 
 Status: **built** (2026-11-11). Plan limits as recommended (Free 1 workflow of up to 3 steps, Pro 5 of 10, Agency 50 of 10; each counts as a monitor).
-The API is in `docs/api.md` (*Multi-step API checks*), security in `docs/security.md`, and the user guide at `/docs/api-workflows`. Browser checks and
-the "Validating demand" steps are still open.
+The API is in `docs/api.md` (*Multi-step API checks*), security in `docs/security.md`, and the user guide at `/docs/api-workflows`. Browser checks are
+planned in `docs/plan-browser-checks.md`; the "Validating demand" steps are still open.
 
 A multi-step API check (a "workflow") runs a short sequence of HTTP requests in order, carrying values from one response into the next request,
 and fails when any step fails: for example, sign in → fetch the account → check the plan is active. It answers "does the thing my customers do
@@ -147,6 +147,6 @@ gradually.
 
 ## Not in this plan
 
-- **Browser checks** (Playwright and Chromium workers, screenshots, run metering and add-ons). Decide after the waitlist and workflow numbers.
-  If yes, start with a cost test: one worker, measured CPU, memory and seconds per run, to set run allowances and a price.
+- **Browser checks**: now planned separately in `docs/plan-browser-checks.md` (a hosted browser first, our own Chrome later if the numbers
+  justify it).
 - No-code recorders, visual regression, AI-generated tests, scripting in workflows, file uploads, and GraphQL- or gRPC-specific steps.
