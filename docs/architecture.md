@@ -10,11 +10,13 @@ A modular monolith: one Go module, one PostgreSQL database, and separately runna
 ```
 cmd/api        REST API process (Echo)
 cmd/migrate    applies embedded SQL migrations
+cmd/oauthclient registers OAuth clients for the MCP server (Claude's connector)
+cmd/loadtest   measures what the engine and history queries cost at a given check interval, on a scratch database (docs/plan-sub-minute-checks.md)
 internal/auth          register/login/sessions/password reset/email verification (Argon2id, hashed tokens)
 internal/organizations tenant access; every query scoped by membership; removing members and leaving
 internal/invitations   team invitations: an emailed, single-address link that adds a member (seats are held by pending invitations)
 internal/oauth         OAuth 2.1 for the MCP server: registered clients (cmd/oauthclient), consent, codes with PKCE, rotating refresh tokens, revocation; access tokens are API tokens of their own kind
-internal/mcpserver     the MCP server (POST /mcp, mounted in internal/httpapi/mcp.go): 17 tools over the same services as the REST handlers, acting as the API key's person with the same checks
+internal/mcpserver     the MCP server (POST /mcp, mounted in internal/httpapi/mcp.go): 18 tools over the same services as the REST handlers, acting as the API key's person with the same checks
 internal/twofactor     two-factor sign-in: TOTP (RFC 6238, codes used once), sealed secrets, hashed recovery codes, and an owner's requirement for their organization (7-day grace per member)
 internal/attribution   how a new account found HawkEye (campaign tags, ?ref=, kind of ad click, linking site, landing page), cleaned and stored at sign-up
 internal/audit         the security log: append-only events (who, with which key or app, from where), an owner's organization log and each person's account log, 365 days
@@ -23,7 +25,6 @@ internal/plans         plan catalog + the entitlement service (all limit decisio
 internal/monitors      monitor CRUD, validation, soft delete, per-organization scoping
 cmd/worker             monitoring engine process: scheduler + check workers + metrics endpoint (:9090)
 internal/safehttp      SSRF-safe HTTP client (see docs/security.md)
-internal/publichost    decides whether a typed host name is a public one, for the free tools and DNS monitors
 internal/checks        runs one check (`Check` for websites, `CheckDNS` for DNS records, `RunWorkflow` for multi-step API checks, in workflow.go: values passed between steps, redaction), classifies errors, applies results to monitor state (`Apply`, `Store.Record`)
 internal/queue         durable PostgreSQL job queue (claim / lease / complete / release)
 internal/scheduler     finds due monitors, enqueues jobs, jitter, backpressure
@@ -32,7 +33,15 @@ internal/metrics       Prometheus metrics
 internal/incidents     incident engine (opened/resolved inside the result transaction), incident queries, and incident updates (notes posted on an incident, shown on status pages; migration `000032`)
 internal/heartbeats    heartbeat (cron job) monitors: records pings from /ping/<token> as check results (`checks.Store.RecordTx`), and a sweeper in the worker records missed deadlines; never schedules a check
 internal/statuspage public status pages (`/status/<slug>`; migration `000014`, several per organization up to `plans.max_status_pages` since `000022`; 30 s cache; exposes only owner-chosen monitor names, states, daily uptime and incident times), internal/maintenance windows (rule in SQL: `in_maintenance`, migration `000013`; `checks.Store.Record` skips state changes and incidents while one applies), internal/notifications recipients + confirmation, enqueue (idempotent), email rendering, webhook/Slack channels (`channels.go`: sealed URLs, signing, SSRF-safe delivery; migration `000012`), retrying dispatcher
-internal/reports       range resolution (plan-clamped), check-based uptime, bucketed series, check history, dashboard summary
+internal/reports       range resolution (plan-clamped), check-based uptime, bucketed series, check history, dashboard summary, monthly report data
+internal/reportpdf     draws a monthly uptime report as a PDF (plain Go, standard fonts, its own charts)
+internal/branding      an organization's report branding (name and logo on PDF reports) and the monthly report email setting
+internal/monthlyreport emails owners last month's PDF reports on the 1st, when they asked for it (worker)
+internal/weeklysummary the Monday summary email (uptime, incidents, slowest sites, expiring certificates and domains) (worker)
+internal/lifecycle     onboarding emails that nudge new accounts toward their first monitor (worker)
+internal/badges        public uptime badges (SVG, opt-in per monitor, addressed by a random token)
+internal/incidentdraft AI-drafted incident updates with Claude, opt-in per organization on paid plans; never posts anything itself
+internal/waitlist      "Get notified" sign-ups for coming-soon features
 internal/retention     batched per-plan data retention + credential housekeeping (runs inside cmd/worker)
 internal/rollups       hourly totals of check results (check_rollups) built by a job beside the scheduler, and rollups.Source, which readers use to combine them with raw results
 internal/billing       Stripe: provider interface (+ SDK implementation and fake), checkout/portal/cancel/resync, signed webhook intake, event processing
@@ -47,13 +56,14 @@ internal/canary        tells our own network trouble apart from a customer's sit
 internal/errtrack      optional Sentry error tracking (scrubbed)
 internal/healthcheck   container health probes
 internal/secrets       AES-256-GCM sealing of stored credentials and webhook URLs
-internal/publichost    reads a visitor's input for the free tools into a public host name (no IPs, credentials or odd ports)
+internal/publichost    reads a typed host name into a public one (no IPs, credentials or odd ports), for the free tools and DNS monitors
 internal/toolguard     abuse limits shared by the free checkers: result cache, concurrency cap, per-host budget, deadline
 internal/sslcheck      the SSL certificate checker: reads and verifies the certificate a host presents on port 443
 internal/sitecheck     the website status checker: one GET / of a public host, with status, timing and verdict
 internal/discovery     "set up from your domain": proposes monitors (home page, health endpoint, api subdomain, MX) from outside
 internal/validation    field-level validation error
 internal/testutil      per-test isolated, migrated PostgreSQL databases
+internal/e2e           one acceptance test of the whole system (API, engine, incidents, alerts, billing webhooks, account deletion)
 internal/config    env loading + validation (fails fast, no production fallbacks)
 internal/logging   slog (JSON in production, text otherwise)
 internal/database  pgx pool + golang-migrate
@@ -126,12 +136,15 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
 ## Decisions and assumptions
 
 - **Module name `hawkeye`**, matching the repository directory.
-- **Versions:** Go 1.26.11, Echo v4.16, pgx v5, golang-migrate v4, React 19, Vite 8. Echo v4 is used because it is the current stable major available.
+- **Versions:** Go 1.26.11, Echo v5, pgx v5, golang-migrate v4, React 19, Vite 8 (exact versions in `go.mod` and `web/package.json`). Echo moved from v4 to v5
+  because the Go vulnerability database listed `GO-2026-6872` and `GO-2026-6875` against every v4 release; v5 refuses a cross-site request marked
+  `Sec-Fetch-Site: same-site` even with a valid CSRF token (`docs/security-review.md`).
 - **Data access:** pgx with explicit SQL in the service packages. `sqlc` was considered for Phase 2 and dropped: the queries are few and the extra code generator added more machinery than it saved. Revisit if query volume grows.
 - **Migrations tool:** golang-migrate as a library, wrapped by `cmd/migrate`, so containers need no extra tooling.
 - **Process layout:** the scheduler runs inside `cmd/worker` (separate package, `DISABLE_SCHEDULER=true` turns it off per instance); there is no `cmd/scheduler` binary.
 - **Job queue:** PostgreSQL-backed (`FOR UPDATE SKIP LOCKED`), durable across restarts; no Redis.
-- **Go dependency pins:** `prometheus/client_golang` v1.23.2 and `golang.org/x/{net,sys,text,sync}` are pinned because newer releases require Go 1.26; revisit when the toolchain image moves.
+- **Go toolchain:** Go 1.26.11 in `go.mod`, which the build images (`deploy/Dockerfile.api`, `deploy/Dockerfile.worker`) and CI follow. The earlier pins of
+  `prometheus/client_golang` and `golang.org/x/*` that waited for Go 1.26 no longer apply.
 - **Auth:** server-side sessions in HTTP-only same-site cookies plus double-submit CSRF (see `docs/api.md`, `docs/security.md`).
 - **Entitlements** (`internal/plans`): handlers never compare limits; they call the service. Methods take a `DB` so checks run
   inside the caller's transaction. The effective plan comes from the organization's subscription:

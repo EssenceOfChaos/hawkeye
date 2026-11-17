@@ -145,8 +145,9 @@ step 4.
 
 - DNS: `domains.hawkeye.observer` is a CNAME to the apex, DNS only (`cloudflare_dns_record.status_domains` in `infra/main.tf`). Apply it
   before launch. Customers' CNAMEs then resolve through it to the server's reserved IP, which verification accepts (the address check).
-- Metrics: `hawkeye_status_page_domains{state}` and `hawkeye_status_page_domain_checks_total{result}`; an alert when on-demand issuance fails
-  repeatedly (Caddy logs `obtaining certificate` errors).
+- Metrics: `hawkeye_status_page_domain_checks_total{result}`. The planned `hawkeye_status_page_domains{state}` gauge and an alert on repeated
+  certificate failures weren't built: failed issuance shows in Caddy's logs (`obtaining certificate`), and domains by state are a query in
+  `docs/operations.md` (*Status pages on customers' own domains*).
 - Let's Encrypt limits are per registered domain (50 certificates a week), so one client can't affect another.
 
 ## Not in this plan

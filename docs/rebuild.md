@@ -17,7 +17,7 @@ files on your laptop: see `docs/secrets.md`. What you keep:
 | `.hawkeye-infisical.env` | `~/.hawkeye-secrets/` | the credentials of a read-only machine identity. `create` copies it to each new server, which then fetches every setting itself. Keep a copy in the password manager. |
 | `hawkeye-backup-key.txt` | `~/` (or set `AGE_KEY_FILE`) | the age **private** key: the only way to read a backup |
 | `hawkeye-deploy-key.pub` | `~/` | the GitHub Actions deploy key's public half |
-| tokens | shell environment | `VULTR_API_KEY`, `CF_DNS_API_TOKEN` (Zone > DNS > Edit, this zone only), `CF_ZONE_ID`, `CF_ACC_ID` |
+| tokens | shell environment | `VULTR_API_KEY`, `CF_DNS_API_TOKEN` (Zone > DNS > Edit, this zone only), `CF_ZONE_ID` (the status page's deploy takes the Cloudflare account id separately, as `CLOUDFLARE_ACCOUNT_ID` in GitHub: `docs/operations.md`) |
 
 Keep copies of the first three in a password manager: they are the recovery kit if the laptop dies. **Before the secret manager is set up** (or if you prefer not to use it),
 `rebuild.sh` still works from the older files: `.env.production`, `.hawkeye-backup.env` and (optional) `.hawkeye-heartbeat.env` in `~/.hawkeye-secrets/`, which it copies onto
