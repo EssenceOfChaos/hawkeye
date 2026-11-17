@@ -50,7 +50,7 @@ func TestEntitlementsByPlanAndStatus(t *testing.T) {
 		{"pro", "active", 50, 60, 90, true},
 		{"pro", "trialing", 50, 60, 90, true},
 		{"pro", "past_due", 50, 60, 90, true},
-		{"agency", "active", 200, 60, 365, true},
+		{"agency", "active", 200, 30, 365, true},
 		{"pro", "canceled", 5, 300, 7, false},      // falls back to free
 		{"agency", "incomplete", 5, 300, 7, false}, // checkout without payment grants nothing
 	}

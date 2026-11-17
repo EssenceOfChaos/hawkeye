@@ -202,8 +202,8 @@ malformed ID gives 404) or, if absent, the organization the caller **owns** (the
 | `DELETE /tags/:id` | 204; the tag's monitors are kept |
 
 **Monitor fields.** `type` is `http` (a website or API, the default), `heartbeat` or `dns`, set on create and fixed after that. Editable: `name` (1–100), `url`, `method` (`GET` default, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`), `expected_status_code`
-(100–599 or null; null means any response below 400 is up), `check_interval_seconds` (60–86400, default = plan minimum),
-`timeout_seconds` (1–30, default 10), `slow_threshold_ms` (100–60000 and below the timeout, or null = off; see *Slow-response alerts*) and `slow_checks` (2–10, default 3), `trace_context` (boolean, default false; see *Trace context*), `tag_ids`, `alert_delay_minutes` (0–1440, default 0) and `quiet_hours` (`{start, end, timezone}` or null; see *Alert routing, alert delay and quiet hours*). Read-only and ignored if sent: `slow_since`, `current_status`, `consecutive_*`, `last_*`,
+(100–599 or null; null means any response below 400 is up), `check_interval_seconds` (30–86400, at least the plan minimum: 300 on Free, 60 on Pro, 30 on Agency; default 60, or the plan minimum
+when that is longer, so 30 s is only ever chosen), `timeout_seconds` (1–30 and **at most half the interval**, so 15 at 30 s; default 10), `slow_threshold_ms` (100–60000 and below the timeout, or null = off; see *Slow-response alerts*) and `slow_checks` (2–10, default 3), `trace_context` (boolean, default false; see *Trace context*), `tag_ids`, `alert_delay_minutes` (0–1440, default 0) and `quiet_hours` (`{start, end, timezone}` or null; see *Alert routing, alert delay and quiet hours*). Read-only and ignored if sent: `slow_since`, `current_status`, `consecutive_*`, `last_*`,
 `enabled` (use pause/resume), `organization_id`. `effective_check_interval_seconds` is what the scheduler will use: the stored
 interval raised to the plan minimum, so a downgrade takes effect without rewriting data.
 
@@ -275,7 +275,8 @@ each monitor's tag names.
 `check_interval_seconds`), `add_tags` or `remove_tags` (with `tag_ids`), or `set_alert_timing` (with `alert_delay_minutes`, `quiet_hours`, or both: whichever is left out stays as it is on each monitor, and `quiet_hours: null` turns quiet hours off; validated like the single-monitor fields). It is **all or nothing**: if any listed monitor is missing, deleted or in
 another organization the result is 404 and nothing changes, and if the action is not allowed for any of them (an interval below the plan's minimum,
 403 `PLAN_LIMIT_REACHED`; below 5 minutes for a monitor using a state-changing method, or a monitor left with more than 10 tags, 400) nothing
-changes either. `set_interval` changes website and DNS monitors only: a heartbeat's period follows its job's schedule, so heartbeats in the selection keep theirs. Repeated ids count once; `updated` is how many monitors were changed. The same rules as the single-monitor endpoints apply
+changes either; nor below 60 s with a multi-step API check selected, or below twice the longest selected timeout (400 on `check_interval_seconds`).
+`set_interval` changes website and DNS monitors only: a heartbeat's period follows its job's schedule, so heartbeats in the selection keep theirs. Repeated ids count once; `updated` is how many monitors were changed. The same rules as the single-monitor endpoints apply
 (resume makes a monitor due at once; delete erases credentials, closes open incidents without alerts and frees plan slots).
 
 ## Team
@@ -355,7 +356,7 @@ the retention cutoff. Every response echoes the effective window: `range: {from,
 |---|---|
 | `GET /monitors/:id/uptime` | `{range, uptime}` (see below) |
 | `GET /monitors/:id/response-times` | `{range, bucket_seconds, points: [{t, avg_ms, max_ms, checks, failed}]}`. At most 150 points: the bucket width (1 min up to 3 days) is chosen from the window. Buckets with no checks are **omitted**, so charts show gaps rather than zeros. `avg_ms`/`max_ms` cover successful checks only and are null for a bucket that only had failures |
-| `GET /monitors/:id/results` | check history, newest first: `{range, results: [{id, checked_at, success, http_status_code, response_time_ms, error_category, error_summary, region, steps, trace_id}], total, limit, offset}`; `limit` 1–200 (default 50) |
+| `GET /monitors/:id/results` | check history, newest first: `{range, results: [{id, checked_at, success, http_status_code, response_time_ms, error_category, error_summary, region, steps, trace_id}], total, limit, offset}`; `limit` 1–200 (default 50). A monitor checked more often than once a minute keeps individual results for 30 days (`rollups.RawRetention`); its uptime, charts and reports still cover the plan's history |
 | `GET /dashboard/summary` | `{range, summary: {monitors: {total, up, down, pending, paused}, open_incidents, uptime, certificates, certificates_tracked, domains, domains_tracked, generated_at}}`. `certificates` lists up to five enabled HTTPS monitors whose certificate expires within 30 days or already has (`{monitor_id, monitor_name, expires_at, days_remaining, status: expiring|expired}`, soonest first); `certificates_tracked` counts monitors with a known expiry. `domains` is the same for tracked domains (`{domain_id, name, expires_at, days_remaining, status}`); `domains_tracked` counts those within the plan's limit that have a known expiry. Counts and open incidents are *current*; `uptime` follows the range. Paused wins over status in the counts; deleted monitors are excluded |
 | `GET /dashboard/recent-incidents` | `limit` 1–20 (default 5) |
 | `GET /dashboard/response-times` | same shape as the per-monitor series, averaged across all live monitors |
@@ -497,7 +498,7 @@ Alerts to these chats are sent by the worker with the token from configuration, 
 
 A heartbeat (`type: "heartbeat"`) monitors a cron job or scheduled task: HawkEye checks nothing, and the job requests its ping address each time it
 runs. Available on every plan; a heartbeat counts toward the monitor limit like any monitor. `check_interval_seconds` is the **period**, the expected
-time between pings (default 86400; from the plan's minimum interval up to 2592000, 30 days), and `grace_seconds` how late a ping may be before it
+time between pings (default 86400; from the plan's minimum interval, and never below 60, up to 2592000, 30 days), and `grace_seconds` how late a ping may be before it
 counts as missed (60–604800, default 3600). `url` is `""`, and the website-only fields (`url`, `regions`, `slow_threshold_ms`, `headers`, `body`,
 `auth`, `assertions`, `expected_status_code`) must be left out (400 otherwise); `grace_seconds` on a website monitor is a 400 too. Heartbeats carry
 `heartbeat: {ping_token, grace_seconds, last_ping_at, due_by}` (null for website monitors).

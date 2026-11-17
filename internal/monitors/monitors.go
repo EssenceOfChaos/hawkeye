@@ -39,7 +39,14 @@ const (
 	MinSlowChecks      = 2
 	MaxSlowChecks      = 10
 	MaxIntervalSeconds = 86400
-	MinIntervalSeconds = 60
+	// MinIntervalSeconds is the shortest check interval any plan can allow (Agency's). Heartbeats and multi-step API checks stay at
+	// MinPeriodSeconds or more, and a monitor's timeout may be at most half its interval, so a 30-second check gives up after 15.
+	MinIntervalSeconds = 30
+	MinPeriodSeconds   = 60
+	// DefaultIntervalSeconds is how often a new monitor is checked when nothing is chosen, whatever shorter interval the plan allows: checking
+	// every 30 seconds doubles the requests a site receives, so it is something a person picks.
+	DefaultIntervalSeconds = 60
+	MaxTimeoutSeconds      = 30
 
 	// Heartbeat monitors: the expected time between pings (stored as the check interval, so the plan's minimum applies) and the grace time.
 	MaxPeriodSeconds     = 30 * 86400
@@ -675,8 +682,8 @@ func (f *fields) validate() error {
 
 // validateHeartbeat checks a heartbeat's period (the interval) and grace time. A heartbeat makes no request, so the website fields must be left out.
 func (f *fields) validateHeartbeat(bad map[string]string) {
-	if f.interval < MinIntervalSeconds || f.interval > MaxPeriodSeconds {
-		bad["check_interval_seconds"] = fmt.Sprintf("must be between %d seconds and %d days", MinIntervalSeconds, MaxPeriodSeconds/86400)
+	if f.interval < MinPeriodSeconds || f.interval > MaxPeriodSeconds {
+		bad["check_interval_seconds"] = fmt.Sprintf("must be between %d seconds and %d days", MinPeriodSeconds, MaxPeriodSeconds/86400)
 	}
 	if f.grace < MinGraceSeconds || f.grace > MaxGraceSeconds {
 		bad["grace_seconds"] = fmt.Sprintf("must be between %d seconds and %d days", MinGraceSeconds, MaxGraceSeconds/86400)
@@ -741,6 +748,10 @@ func (f *fields) validateWorkflowMonitor(bad map[string]string) {
 	f.draft = validateWorkflow(f.steps, f.newSecrets, f.declared, f.cookies, f.curWorkflow, bad)
 	f.timeout = workflowTimeoutSeconds
 	f.validateTiming(bad)
+	if f.interval < MinPeriodSeconds {
+		bad["check_interval_seconds"] = fmt.Sprintf("must be at least %d seconds for a multi-step API check, whose steps together may take %d seconds",
+			MinPeriodSeconds, int(checks.WorkflowTimeout.Seconds()))
+	}
 	if t := f.slowThreshold; t != nil && (*t < MinSlowThresholdMs || *t > MaxSlowThresholdMs) {
 		bad["slow_threshold_ms"] = fmt.Sprintf("must be between %d and %d milliseconds (for all the steps together), or null", MinSlowThresholdMs, MaxSlowThresholdMs)
 	}
@@ -762,8 +773,11 @@ func (f *fields) validateTiming(bad map[string]string) {
 	if f.interval < MinIntervalSeconds || f.interval > MaxIntervalSeconds {
 		bad["check_interval_seconds"] = fmt.Sprintf("must be between %d and %d", MinIntervalSeconds, MaxIntervalSeconds)
 	}
-	if f.timeout < 1 || f.timeout > 30 {
-		bad["timeout_seconds"] = "must be between 1 and 30"
+	if f.timeout < 1 || f.timeout > MaxTimeoutSeconds {
+		bad["timeout_seconds"] = fmt.Sprintf("must be between 1 and %d", MaxTimeoutSeconds)
+	} else if f.kind != TypeWorkflow && f.timeout > f.interval/2 && f.interval >= MinIntervalSeconds {
+		// A check still waiting when the next is due makes that one wait too, so the timeout leaves at least half the interval free.
+		bad["timeout_seconds"] = fmt.Sprintf("must be at most %d seconds (half the check interval)", f.interval/2)
 	}
 }
 
@@ -840,7 +854,7 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 			return err
 		}
 		f := fields{kind: TypeHTTP, name: in.Name, url: in.URL, method: "GET", expected: in.ExpectedStatusCode,
-			interval: minInterval, timeout: DefaultTimeoutSeconds}
+			interval: max(DefaultIntervalSeconds, minInterval), timeout: DefaultTimeoutSeconds}
 		switch strings.TrimSpace(in.Type) {
 		case "", TypeHTTP:
 		case TypeHeartbeat:

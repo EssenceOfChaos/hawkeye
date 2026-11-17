@@ -28,7 +28,7 @@ const SUPPORT = 'customer_support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 15, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 17, 2026</p>
       <p>
         HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -261,6 +261,10 @@ export function PrivacyPage() {
         <li><strong>Pro:</strong> 90 days.</li>
         <li><strong>Agency:</strong> 365 days.</li>
       </ul>
+      <p>
+        For a monitor checked more often than once a minute, the details of each individual check are kept for 30 days; its hourly totals (number
+        of checks, failures and response times) are kept for the plan’s period above.
+      </p>
       <p>Other retention periods:</p>
       <ul>
         <li><strong>Resolved incidents</strong> follow the same plan periods. Incidents that are still open are kept until they are resolved.</li>
@@ -395,7 +399,7 @@ export function PrivacyPage() {
 export function TermsPage() {
   return (
     <Shell title="HawkEye Terms and Conditions" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 13, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 17, 2026</p>
       <p>
         These Terms and Conditions (“Terms”) govern access to and use of the HawkEye website, applications, and website-monitoring services (together, the “Service”).
       </p>
@@ -488,7 +492,7 @@ export function TermsPage() {
       <ul>
         <li><strong>Free:</strong> up to 5 monitors, checks every 5 minutes, and 7 days of monitoring history.</li>
         <li><strong>Pro:</strong> up to 50 monitors, checks every minute, and 90 days of monitoring history.</li>
-        <li><strong>Agency:</strong> up to 200 monitors, checks every minute, 365 days of monitoring history, and up to 5 team members (you and up to four invited colleagues).</li>
+        <li><strong>Agency:</strong> up to 200 monitors, checks as often as every 30 seconds, 365 days of monitoring history, and up to 5 team members (you and up to four invited colleagues).</li>
       </ul>
       <p>
         Paid plans may check each monitor from several locations, up to the limit shown at checkout. Every plan includes email, chat (Slack, Discord, Microsoft Teams and Telegram), PagerDuty and webhook alerts and at least one public status page; the number of status pages depends on the plan, up to the limit shown at checkout. Maintenance windows are included in the Pro and Agency plans. If you move to a plan that does not include maintenance windows, windows you
@@ -669,6 +673,10 @@ export function TermsPage() {
         <li>Pro: 90 days.</li>
         <li>Agency: 365 days.</li>
       </ul>
+      <p>
+        For a monitor checked more often than once a minute, the details of each individual check are kept for 30 days, and its hourly totals for the
+        period above.
+      </p>
       <p>
         Older history is deleted automatically. If you move to a plan with a shorter period, history older than the new period is removed. If your subscription ends, your account returns to the Free plan and Free plan
         retention applies. You can export your data and delete your account at any time from your account page; deletion is immediate and described in the <Link to="/privacy">Privacy Policy</Link>.

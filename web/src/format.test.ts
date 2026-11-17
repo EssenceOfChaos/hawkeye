@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { availableRanges, formatMoney, formatMs, formatUptime, reportMonths, reportPdfPath, timeAgo } from './format'
+import { availableRanges, formatMoney, formatMs, formatPeriod, formatUptime, reportMonths, reportPdfPath, shortInterval, timeAgo } from './format'
 
 describe('format', () => {
   it('formats uptime without false precision or rounding up', () => {
@@ -80,5 +80,16 @@ describe('timeAgo', () => {
   it('treats a time slightly in the future, or nonsense, as now', () => {
     expect(ago(-30)).toBe('just now')
     expect(timeAgo('not a date', now)).toBe('just now')
+  })
+})
+
+describe('check intervals', () => {
+  it('says seconds for intervals under a minute', () => {
+    expect(formatPeriod(30)).toBe('30 seconds')
+    expect(formatPeriod(60)).toBe('1 minute')
+    expect(formatPeriod(300)).toBe('5 minutes')
+    expect(shortInterval(30)).toBe('30 sec')
+    expect(shortInterval(600)).toBe('10 min')
+    expect(shortInterval(3600)).toBe('1 hour')
   })
 })

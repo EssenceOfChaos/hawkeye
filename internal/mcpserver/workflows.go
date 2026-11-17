@@ -53,7 +53,7 @@ type CreateWorkflowInput struct {
 	Steps                []WorkflowStep `json:"steps" jsonschema:"the requests, in the order they run"`
 	Secrets              []string       `json:"secrets,omitempty" jsonschema:"names of the secrets the steps use as {{secret.name}}; a person enters their values in HawkEye, never here"`
 	Cookies              bool           `json:"cookies,omitempty" jsonschema:"carry cookies from step to step, for sites that sign in with a session cookie"`
-	CheckIntervalMinutes int            `json:"check_interval_minutes,omitempty" jsonschema:"how often to run it; default the plan's fastest (5 minutes when a step writes)"`
+	CheckIntervalMinutes int            `json:"check_interval_minutes,omitempty" jsonschema:"how often to run it; default 1 minute, or the plan's fastest when slower (5 minutes when a step writes)"`
 }
 
 type TestWorkflowInput struct {

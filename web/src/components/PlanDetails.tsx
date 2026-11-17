@@ -1,5 +1,5 @@
 import { type BillingInterval, type Plan } from '../api'
-import { formatMoney } from '../format'
+import { formatMoney, formatPeriod } from '../format'
 import { monthsFree, planTagline } from '../planCopy'
 
 /**
@@ -26,7 +26,6 @@ export function IntervalToggle({ value, onChange, plans }: { value: BillingInter
  * billing page all render this, so a new plan feature is added in one place and the three can never disagree (PlanCardsInSync.test.tsx guards it).
  */
 export function PlanDetails({ plan, interval = 'month' }: { plan: Plan; interval?: BillingInterval }) {
-  const mins = Math.round(plan.minimum_check_interval_seconds / 60)
   const tagline = planTagline(plan.code)
   const yearly = interval === 'year' && plan.annual_price_cents != null && plan.monthly_price_cents > 0
   const free = monthsFree(plan)
@@ -51,7 +50,7 @@ export function PlanDetails({ plan, interval = 'month' }: { plan: Plan; interval
       )}
       <ul>
         <li>{plan.max_monitors} monitors</li>
-        <li>Checks every {mins} minute{mins === 1 ? '' : 's'}</li>
+        <li>Checks every {formatPeriod(plan.minimum_check_interval_seconds)}</li>
         <li>{plan.history_retention_days} days of history</li>
         {(plan.max_regions ?? 1) > 1 && <li>Checks from up to {plan.max_regions} locations</li>}
         {(plan.max_team_members ?? 1) > 1 && <li>{plan.max_team_members} team members</li>}

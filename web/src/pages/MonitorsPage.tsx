@@ -11,7 +11,7 @@ import { CertBadge } from '../components/Certificate'
 import { StatusBadge } from '../components/StatusBadge'
 import { TagList } from '../components/Tags'
 import { BulkAlertTiming, type AlertTimingChange } from '../components/AlertTiming'
-import { formatPeriod } from '../format'
+import { formatPeriod, shortInterval } from '../format'
 
 const PAGE_SIZE = 25
 
@@ -39,7 +39,7 @@ export function UsagePanel({ usage }: { usage: Usage }) {
       {atLimit && next && (
         <p>
           {next.name} ({money(next.monthly_price_cents)}) includes {next.max_monitors} monitors and checks every{' '}
-          {Math.round(next.minimum_check_interval_seconds / 60)} minute(s).
+          {formatPeriod(next.minimum_check_interval_seconds)}.
         </p>
       )}
     </section>
@@ -174,11 +174,6 @@ function Ago({ iso, now, what }: { iso: string; now: number; what: string }) {
   return <time dateTime={iso} title={`${what}: ${formatDateTime(iso)}`}>{timeAgo(iso, now)}</time>
 }
 
-/** A check interval short enough for one line of the table: "10 min", "1 hour", "1 day". The full wording is in the cell's title. */
-function shortPeriod(seconds: number): string {
-  return seconds < 3600 ? `${Math.round(seconds / 60)} min` : formatPeriod(seconds)
-}
-
 export function MonitorsPage() {
   const [monitors, setMonitors] = useState<Monitor[] | null>(null)
   const [total, setTotal] = useState(0)
@@ -306,10 +301,10 @@ export function MonitorsPage() {
       </div>
       {canAdd && (
         <nav className="add-more hint" aria-label="Other ways to add monitors">
-          Or: <Link to="/monitors/import">import from OpenAPI or Postman</Link>
-          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=heartbeat">monitor a cron job</Link>
-          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=dns">monitor a DNS record</Link>
-          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=workflow">add a multi-step API check</Link>
+          <Link to="/monitors/import">Import from OpenAPI or Postman</Link>
+          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=heartbeat">Monitor a cron job</Link>
+          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=dns">Monitor a DNS record</Link>
+          <span aria-hidden="true"> · </span><Link to="/monitors/new?type=workflow">Add a multi-step API check</Link>
         </nav>
       )}
       {!canAdd && <p id="limit-reason" className="hint">Plan limit reached — see the usage box below.</p>}
@@ -390,7 +385,7 @@ export function MonitorsPage() {
                   <td><StatusBadge monitor={m} /></td>
                   <td>{m.type === 'dns' ? <span className="hint">—</span> : <CertBadge monitor={m} />}</td>
                   <td title={m.type === 'heartbeat' ? `A ping is expected every ${formatPeriod(m.effective_check_interval_seconds)}` : `Checked every ${formatPeriod(m.effective_check_interval_seconds)}`}>
-                    {shortPeriod(m.effective_check_interval_seconds)}
+                    {shortInterval(m.effective_check_interval_seconds)}
                   </td>
                   <td>{m.type === 'heartbeat' && m.heartbeat
                     ? m.heartbeat.last_ping_at ? <Ago iso={m.heartbeat.last_ping_at} now={now} what="Last ping" /> : 'No ping yet'

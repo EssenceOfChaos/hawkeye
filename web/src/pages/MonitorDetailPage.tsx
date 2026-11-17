@@ -11,7 +11,7 @@ import { ResponseChart } from '../components/ResponseChart'
 import { StatusBadge } from '../components/StatusBadge'
 import { AvgResponseTile, StatTile, UptimeHero } from '../components/Uptime'
 import { WorkflowRun } from '../components/WorkflowRun'
-import { availableRanges, formatDateTime, formatDuration, formatMs, formatPeriod, RANGE_LABELS, reportMonths, reportPdfPath } from '../format'
+import { availableRanges, formatDateTime, formatDuration, formatMs, formatPeriod, RANGE_LABELS, shortInterval, reportMonths, reportPdfPath } from '../format'
 import { useApi } from '../hooks'
 import { IncidentStatus } from './IncidentsPage'
 
@@ -97,18 +97,18 @@ export function MonitorDetailPage() {
           ) : m.workflow ? (
             <p className="hint">
               Multi-step API check · {m.workflow.steps.length} step{m.workflow.steps.length === 1 ? '' : 's'} · every{' '}
-              {Math.round(m.effective_check_interval_seconds / 60)} min ·{' '}
+              {shortInterval(m.effective_check_interval_seconds)} ·{' '}
               {m.last_checked_at ? `last run ${formatDateTime(m.last_checked_at)}` : 'not run yet'}
             </p>
           ) : dns ? (
             <p className="hint">
               {dns.record_type} record of {m.url} · {dns.expected ? `must match ${dns.expected}` : 'any answer will do'} · every{' '}
-              {Math.round(m.effective_check_interval_seconds / 60)} min ·{' '}
+              {shortInterval(m.effective_check_interval_seconds)} ·{' '}
               {m.last_checked_at ? `last checked ${formatDateTime(m.last_checked_at)}` : 'not checked yet'}
             </p>
           ) : (
             <p className="hint">
-              {m.method} {m.url} · every {Math.round(m.effective_check_interval_seconds / 60)} min ·{' '}
+              {m.method} {m.url} · every {shortInterval(m.effective_check_interval_seconds)} ·{' '}
               {m.last_checked_at ? `last checked ${formatDateTime(m.last_checked_at)}` : 'not checked yet'}
               {m.slow_threshold_ms != null && ` · slow-response alert over ${m.slow_threshold_ms.toLocaleString()} ms`}
             </p>
@@ -232,6 +232,12 @@ export function MonitorDetailPage() {
 
           <section aria-labelledby="hist-h" style={{ opacity: results.loading ? 0.55 : 1 }}>
             <h2 id="hist-h">{hb ? 'Run history' : 'Check history'}</h2>
+            {m.check_interval_seconds < 60 && (
+              <p className="hint">
+                Checked more often than once a minute, so each check’s details are kept for 30 days. Uptime and response times above cover your
+                plan’s full history.
+              </p>
+            )}
             {hb && <p className="hint">Each ping and each missed run, which is what the uptime above is calculated from.</p>}
             {results.data?.results.length === 0 && <p>No {hb ? 'pings' : 'checks'} in this period yet.</p>}
             {results.data && results.data.results.length > 0 && (

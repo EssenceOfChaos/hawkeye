@@ -126,10 +126,17 @@ export function durationUnitFor(seconds: number): number {
   return DURATION_UNITS.find((u) => seconds % u.value === 0)?.value ?? 60
 }
 
-/** A duration in words: "5 minutes", "1 hour", "2 days". */
+/** A duration in words: "30 seconds", "5 minutes", "1 hour", "2 days". */
 export function formatPeriod(seconds: number): string {
+  if (seconds < 60) return `${seconds} second${seconds === 1 ? '' : 's'}`
   const unit = durationUnitFor(seconds)
   const n = Math.round(seconds / unit)
   const word = unit === 86400 ? 'day' : unit === 3600 ? 'hour' : 'minute'
   return `${n} ${word}${n === 1 ? '' : 's'}`
+}
+
+/** A check interval short enough for one line: "30 sec", "10 min", "1 hour", "1 day". */
+export function shortInterval(seconds: number): string {
+  if (seconds < 60) return `${seconds} sec`
+  return seconds < 3600 ? `${Math.round(seconds / 60)} min` : formatPeriod(seconds)
 }
