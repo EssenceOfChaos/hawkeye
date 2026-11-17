@@ -14,6 +14,14 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// RawRetention is how long the individual results of a monitor checked more often than once a minute are kept (by internal/retention). Its
+// hourly totals keep the plan's whole history, so uptime, status pages, charts and reports still cover it; only the list of individual checks is
+// shorter. At 30-second checks a full Agency account's year of results would be 44 GB; this keeps it near 4 GB (docs/plan-sub-minute-checks.md).
+const RawRetention = 30 * 24 * time.Hour
+
+// SubMinute is the check interval, in seconds, below which RawRetention applies.
+const SubMinute = 60
+
 // DB is satisfied by *pgxpool.Pool and pgx.Tx.
 type DB interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row

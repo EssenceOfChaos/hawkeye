@@ -2,7 +2,8 @@
 // traffic is never blocked, and tidies expired credentials.
 //
 // Policy:
-//   - check results older than the plan's history window are deleted, and so are their hourly totals (internal/rollups);
+//   - check results older than the plan's history window are deleted, and so are their hourly totals (internal/rollups); monitors checked more
+//     often than once a minute keep their individual results for 30 days (rollups.RawRetention) and their totals for the whole window;
 //   - resolved incidents and slowdowns older than the window are deleted (with their delivery records);
 //   - open incidents, open slowdowns and live monitors are NEVER deleted, whatever the plan (a downgrade does not delete monitors);
 //   - monitors the user deleted are purged after a grace period, cascading to their remaining data;
@@ -25,6 +26,7 @@ import (
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/reports"
+	"hawkeye/internal/rollups"
 )
 
 // advisoryLockKey makes sure only one process runs a retention pass at a time (arbitrary constant).
@@ -166,6 +168,22 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 				WHERE m.organization_id = $1 AND r.checked_at < $2 LIMIT $3)`, id, cutoff)
 		st.CheckResults += n
 		note(err)
+		// Monitors checked more often than once a minute keep individual results for rollups.RawRetention, in whole hours, and never past the
+		// hours the totals already cover: deleting a result the totals don't include yet would lose it from uptime and status pages.
+		if raw := j.now().UTC().Add(-rollups.RawRetention).Truncate(time.Hour); raw.After(cutoff) {
+			through, err := rollups.Through(ctx, j.pool)
+			note(err)
+			if err == nil && !through.IsZero() {
+				if through.Before(raw) {
+					raw = through
+				}
+				n, err = j.batches(ctx, `DELETE FROM check_results WHERE id IN (
+						SELECT r.id FROM check_results r JOIN monitors m ON m.id = r.monitor_id
+						WHERE m.organization_id = $1 AND m.check_interval_seconds < `+fmt.Sprint(rollups.SubMinute)+` AND r.checked_at < $2 LIMIT $3)`, id, raw)
+				st.CheckResults += n
+				note(err)
+			}
+		}
 		// An hour's totals go once the whole hour is past the cutoff, like the last of its results. Rollups have no id, so rows are picked by ctid.
 		n, err = j.batches(ctx, `DELETE FROM check_rollups WHERE ctid IN (
 				SELECT c.ctid FROM check_rollups c JOIN monitors m ON m.id = c.monitor_id

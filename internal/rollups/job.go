@@ -147,7 +147,11 @@ func (j *Job) Step(ctx context.Context) (more bool, err error) {
 			if to.After(target) {
 				to = target
 			}
-			if _, err := tx.Exec(ctx, `DELETE FROM check_rollups WHERE hour >= $1 AND hour < $2`, from, to); err != nil {
+			// Only hours that still have results are replaced: a monitor checked more often than once a minute keeps its results for RawRetention
+			// but its totals for the plan's whole history, so its older totals have nothing to be rebuilt from and must stay.
+			if _, err := tx.Exec(ctx, `DELETE FROM check_rollups c WHERE c.hour >= $1 AND c.hour < $2 AND EXISTS (
+				SELECT 1 FROM check_results r WHERE r.monitor_id = c.monitor_id AND r.checked_at >= c.hour AND r.checked_at < c.hour + interval '1 hour')`,
+				from, to); err != nil {
 				return err
 			}
 			if _, err := tx.Exec(ctx, insertTotals+`r.checked_at >= $1 AND r.checked_at < $2 GROUP BY 1, 2, 3`, from, to); err != nil {

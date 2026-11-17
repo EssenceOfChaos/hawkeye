@@ -1,7 +1,7 @@
 # Plan: checks under a minute (Agency)
 
-Status: **in progress** (2026-11-16). Load tested; `WORKER_CONCURRENCY` raised to 30 and a queue-wait alert added; hourly result rollups built.
-Next: the decision on raw retention for sub-minute monitors, then the interval change itself.
+Status: **in progress** (2026-11-16). Load tested; `WORKER_CONCURRENCY` raised to 30 and a queue-wait alert added; hourly result rollups built; sub-minute monitors keep
+individual results for 30 days (decided 2026-11-16). Next: the interval change itself.
 
 Agency customers will be able to check a monitor every 30 seconds. **New monitors keep the 60-second default**; a shorter interval is a choice
 an Agency customer makes per monitor. Free and Pro are unchanged.
@@ -71,7 +71,11 @@ account's year whatever the interval, and were built from 13 million results in 
 2. **Done: rollups.** Hourly totals per monitor (checks, successes, response-time sum, count and maximum), added up by a job 15 minutes after
    each hour, read by uptime, status pages, dashboards, badges, charts and monthly and weekly reports together with raw results for the rest
    (same answers, checked by an equivalence test). This also makes today's 60-second accounts faster.
-3. **Shorter raw retention for sub-minute monitors** (decision pending): keep their individual results for 30 days and their rollups for the plan's
-   full history, so uptime and charts keep 365 days while storage stays a few GB.
+3. **Done: shorter raw retention for sub-minute monitors** (decided 2026-11-16). Monitors checked more often than once a minute keep individual
+   results for 30 days (`rollups.RawRetention`) and their hourly totals for the plan's whole history, so uptime, status pages, charts and reports
+   keep 365 days and a full Agency account's year stays near 4 GB instead of 44 GB. Retention deletes whole hours, only hours the totals already
+   cover, and the rollup job never replaces totals whose results are gone. The rule follows a monitor's current interval. A range reaching back
+   past 30 days for such a monitor loses only the partial hour at its start (which comes from raw results); step 4 tells the person, on the check
+   history list, that individual checks go back 30 days.
 4. **The interval change:** migration (monitors may run every 30 s; Agency's minimum 30 s), new monitors default to 60 s whatever the plan's
    minimum, timeout below the interval, then the form, API, MCP, pricing card, docs and the Terms' plan list.

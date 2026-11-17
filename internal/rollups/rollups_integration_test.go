@@ -284,3 +284,79 @@ func TestRetentionDeletesTotalsWithTheResults(t *testing.T) {
 		t.Fatalf("totals from %s were kept past the 7-day history", oldTotal)
 	}
 }
+
+// A monitor checked every 30 seconds keeps 30 days of individual results and its totals for the plan's whole history: uptime over 40 days is
+// unchanged after retention, a rebuild keeps the totals whose results are gone, and nothing is deleted while totals aren't built.
+func TestSubMinuteMonitorsKeepTotalsLongerThanResults(t *testing.T) {
+	pool := testutil.NewPoolSize(t, 10)
+	ctx := context.Background()
+	// The interval change isn't released yet: allow 30-second checks in this test database only.
+	if _, err := pool.Exec(ctx, `ALTER TABLE monitors DROP CONSTRAINT monitors_check_interval_seconds_check`); err != nil {
+		t.Fatal(err)
+	}
+	org := newOrg(t, pool, "agency")
+	var fast, slow uuid.UUID
+	for _, m := range []struct {
+		id       *uuid.UUID
+		interval int
+	}{{&fast, 30}, {&slow, 60}} {
+		if err := pool.QueryRow(ctx, `INSERT INTO monitors (organization_id, name, url, check_interval_seconds) VALUES ($1, 'x', 'https://example.com', $2)
+			RETURNING id`, org, m.interval).Scan(m.id); err != nil {
+			t.Fatal(err)
+		}
+		results(t, pool, *m.id, 40, 900)
+	}
+	now := time.Now().UTC()
+	r := reports.Range{From: now.Add(-39 * 24 * time.Hour).Truncate(time.Hour), To: now, RetentionDays: 365}
+	uptime := func() reports.Uptime {
+		t.Helper()
+		u, err := reports.ComputeUptime(ctx, pool, org, &fast, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u
+	}
+	oldest := func(id uuid.UUID) time.Time {
+		t.Helper()
+		var at time.Time
+		if err := pool.QueryRow(ctx, `SELECT min(checked_at) FROM check_results WHERE monitor_id = $1`, id).Scan(&at); err != nil {
+			t.Fatal(err)
+		}
+		return at
+	}
+	keep := retention.New(pool, retention.Config{}, metrics.New(), quiet)
+
+	// No totals yet: nothing may be deleted.
+	if _, err := keep.RunOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if time.Since(oldest(fast)) < 35*24*time.Hour {
+		t.Fatalf("results were deleted before their totals existed (oldest %s)", oldest(fast))
+	}
+
+	want := uptime()
+	job := rollups.NewJob(pool, rollups.JobConfig{}, metrics.New(), quiet)
+	catchUp(t, job)
+	if _, err := keep.RunOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	limit := now.Add(-rollups.RawRetention).Truncate(time.Hour)
+	if got := oldest(fast); got.Before(limit) {
+		t.Fatalf("the 30-second monitor kept a result from %s, older than %s", got, limit)
+	}
+	if got := oldest(slow); time.Since(got) < 35*24*time.Hour {
+		t.Fatalf("the 60-second monitor lost results (oldest %s)", got)
+	}
+	if got := uptime(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("uptime over 39 days changed when old results went:\nbefore %+v\nafter  %+v", want, got)
+	}
+
+	// Rebuilding every total from scratch must not lose the ones whose results are gone.
+	if _, err := pool.Exec(ctx, `UPDATE rollup_state SET through = NULL, seen_id = NULL`); err != nil {
+		t.Fatal(err)
+	}
+	catchUp(t, job)
+	if got := uptime(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("uptime changed after a rebuild:\nbefore %+v\nafter  %+v", want, got)
+	}
+}

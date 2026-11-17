@@ -492,7 +492,8 @@ monitor and UTC hour, instead of every result (`internal/rollups`). A job beside
 - **First deploy:** the job builds totals for all existing history from the oldest result, 6 hours per transaction with short pauses, so
   `hawkeye_rollup_lag_seconds` starts high and falls. Pages get faster as it goes.
 - **Rebuild everything** (after restoring results from a backup, or if totals are ever in doubt): `UPDATE rollup_state SET through = NULL, seen_id = NULL;`
-  The job starts over from the oldest result and replaces each hour; readers read raw results until it is done.
+  The job starts over from the oldest result and replaces each hour that still has results; readers read raw results until it is done. Hours
+  whose results are gone (monitors checked more often than once a minute keep results for 30 days, totals for the plan's history) keep their totals.
 - **Late results** (a heartbeat's missed deadlines recorded when the worker comes back) are found by id (`rollup_state.seen_id`) and their hour is
   added up again on the next step.
 - Errors: worker log "rollup step failed", `hawkeye_worker_errors_total{stage="rollup"}`.
