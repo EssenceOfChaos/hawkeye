@@ -30,14 +30,14 @@ run "nothing_is_created_until_a_worker_is_listed" {
   }
 }
 
-run "the_committed_file_lists_frankfurt_and_los_angeles_with_the_committed_key" {
+run "the_committed_file_lists_amsterdam_and_los_angeles_with_the_committed_key" {
   command = plan
   variables {
     hub_regional_key_path = "keys/hub-regional.pub"
   }
   assert {
-    condition     = toset(keys(vultr_instance.worker)) == toset(["eu-central", "us-west"]) && vultr_instance.worker["eu-central"].region == "fra" && vultr_instance.worker["us-west"].region == "lax"
-    error_message = "Production's workers are Frankfurt and Los Angeles."
+    condition     = toset(keys(vultr_instance.worker)) == toset(["eu-central", "us-west"]) && vultr_instance.worker["eu-central"].region == "ams" && vultr_instance.worker["us-west"].region == "lax"
+    error_message = "Production's workers are Amsterdam and Los Angeles."
   }
   assert {
     condition     = strcontains(vultr_instance.worker["us-west"].user_data, trimspace(file("keys/hub-regional.pub")))
