@@ -129,3 +129,9 @@ variable "worker_swap_gb" {
   type        = number
   default     = 1
 }
+
+variable "hub_regional_key_path" {
+  description = "The production server's public key for reaching regional workers, relative to infra/. Only the tests change this."
+  type        = string
+  default     = "keys/hub-regional.pub"
+}

@@ -58,7 +58,7 @@ with open(os.environ["SSH_LOG"], "a") as f:
 if os.environ.get("SSH_BODY_DIR") and raw[:0] == b"" and len(raw) > 512:
     open(os.path.join(os.environ["SSH_BODY_DIR"], host + ".tar"), "wb").write(raw)
 keys = {"203.0.113.1": os.environ["KEY_HUB"], "203.0.113.2": os.environ["KEY_EU"], "203.0.113.3": os.environ["KEY_AU"]}
-if command.endswith("-key"): print(keys[host])
+if command.endswith("-key"): print(keys.get(host) or os.environ["KEY_NEW"])
 elif "hawkeye-regional.pub" in command: print(os.environ["RELEASE_KEY"])
 elif "s/^APP_VERSION=//p" in command: print(os.environ.get("WORKER_VERSION" if host != "203.0.113.1" else "HUB_VERSION", "abc123def456"))
 elif "State.Health.Status" in command: print(os.environ.get("HEALTH", "healthy"))
@@ -106,10 +106,10 @@ class Link(Base):
         self.assertIn(f"{KEY_AU}=10.66.0.3", apply_hub["command"])
         self.assertTrue(any(f"worker-apply {KEY_HUB} {HUB} 10.66.0.2" in c["command"] for c in self.calls(EU)))
 
-    def test_the_release_key_can_only_run_the_receiver_and_only_from_the_tunnel(self):
+    def test_the_release_key_can_only_run_the_receiver_and_only_from_the_hub(self):
         self.assertEqual(self.run_script("link").returncode, 0)
         line = next(c["stdin"] for c in self.calls(EU) if "authorized_keys" in c["command"])
-        self.assertEqual(line.strip(), f'from="10.66.0.1",restrict,command="/home/deploy/hawkeye/scripts/regional-receive.sh" {RELEASE_KEY}')
+        self.assertEqual(line.strip(), f'from="10.66.0.1,{HUB}",restrict,command="/home/deploy/hawkeye/scripts/regional-receive.sh" {RELEASE_KEY}')
 
     def test_a_replaced_hubs_key_replaces_the_old_one_instead_of_adding_to_it(self):
         self.run_script("link")
@@ -147,6 +147,143 @@ class Link(Base):
 
     def test_an_unknown_region_is_refused(self):
         self.assertIn("no worker called", self.run_script("verify", "mars").stderr)
+
+
+SUDO_STUB = r"""#!/usr/bin/env python3
+import json, os, sys
+args = [a for a in sys.argv[1:] if a != "-n"]
+with open(os.environ["SUDO_LOG"], "a") as f:
+    f.write(json.dumps(args) + chr(10))
+if os.environ.get("NO_SUDO"): sys.exit(1)
+if args == ["true"]: sys.exit(0)
+if args[:3] == ["wg", "show", "wg0"]:
+    sys.stdout.write("privkey pubkey 51820 off" + chr(10) + os.environ.get("WG_DUMP", "")); sys.exit(0)
+if args[:3] == ["bash", "deploy/wireguard.sh", "hub-key"]: print(os.environ["KEY_HUB"]); sys.exit(0)
+sys.exit(0)
+"""
+
+KEYGEN_STUB = r"""#!/bin/sh
+echo "ssh-keygen $*" >> "$KEYGEN_LOG"
+case "$*" in *-R*) exit 0;; esac
+while [ $# -gt 0 ]; do [ "$1" = -f ] && { f="$2"; break; }; shift; done
+printf 'private\n' > "$f"; printf 'ssh-ed25519 AAAAhubkey hawkeye-regional\n' > "$f.pub"
+"""
+
+
+@unittest.skipUnless(int(subprocess.run(["bash", "-c", "echo ${BASH_VERSINFO[0]}"], capture_output=True, text=True).stdout or 0) >= 4, "needs bash 4 (Linux)")
+class HubLink(Base):
+    """scripts/regional-link.sh on the production server, as the Infrastructure workflow runs it through scripts/deploy.sh regions."""
+
+    def setUp(self):
+        super().setUp()
+        self.repo = self.tmp / "repo"
+        (self.repo / "scripts").mkdir(parents=True)
+        (self.repo / "infra/keys").mkdir(parents=True)
+        shutil.copy(ROOT / "scripts/regional-link.sh", self.repo / "scripts/regional-link.sh")
+        self.home = self.tmp / "home"
+        self.home.mkdir()
+        self.sudo_log, self.keygen_log = self.tmp / "sudo.log", self.tmp / "keygen.log"
+        stub(self.bin / "sudo", SUDO_STUB)
+        stub(self.bin / "ssh-keygen", KEYGEN_STUB)
+        stub(self.bin / "sleep", "#!/bin/sh\nexit 0\n")
+        self.env.update(HOME=str(self.home), SUDO_LOG=str(self.sudo_log), KEYGEN_LOG=str(self.keygen_log), REGIONAL_TRIES="2", REGIONAL_WAIT="0")
+        self.args = [f"eu-central={EU},10.66.0.2", f"ap-southeast={AU},10.66.0.3"]
+
+    def link(self, *args, **env):
+        return subprocess.run(["bash", str(self.repo / "scripts/regional-link.sh"), *args], cwd=self.repo, stdin=subprocess.DEVNULL, capture_output=True,
+                              text=True, timeout=60, env={**self.env, **env})
+
+    def sudo(self):
+        return [json.loads(line) for line in self.sudo_log.read_text().splitlines()] if self.sudo_log.exists() else []
+
+    def hub_apply(self):
+        return [c for c in self.sudo() if c[:3] == ["bash", "deploy/wireguard.sh", "hub-apply"]]
+
+    def linked_before(self):
+        """The state after a first successful link of both workers."""
+        self.assertEqual(self.link(*self.args).returncode, 0)
+        self.log.write_text(""); self.sudo_log.write_text("")
+        return f"{KEY_EU} (none) 1.2.3.4:51820 10.66.0.2/32 0 0 0 off\n{KEY_AU} (none) 5.6.7.8:51820 10.66.0.3/32 0 0 0 off\n"
+
+    def test_new_workers_become_peers_and_are_told_the_hubs_key(self):
+        r = self.link(*self.args)
+        self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+        self.assertEqual(self.hub_apply(), [["bash", "deploy/wireguard.sh", "hub-apply", f"{KEY_AU}=10.66.0.3", f"{KEY_EU}=10.66.0.2"]])
+        for host in (EU, AU):
+            commands = [c["command"] for c in self.calls(host)]
+            self.assertEqual(commands, ["ready", "link-key", f"link-apply {KEY_HUB}"])
+        self.assertEqual([c["command"] for c in self.calls("10.66.0.2")], ["ready"])   # proven through the tunnel
+        self.assertIn("eu-central is linked", r.stdout)
+
+    def test_only_public_keys_and_fixed_words_reach_a_worker(self):
+        self.link(*self.args)
+        for c in self.calls():
+            self.assertRegex(c["command"], r"^(ready|link-key|link-apply [A-Za-z0-9+/]{43}=)$")
+
+    def test_a_worker_is_reached_with_its_own_host_key_entry_and_the_hubs_own_key(self):
+        self.link(*self.args)
+        args = next(c["args"] for c in self.calls(EU))
+        self.assertIn("HostKeyAlias=hawkeye-worker-eu-central", args)
+        self.assertIn("StrictHostKeyChecking=accept-new", args)
+        self.assertIn(str(self.home / ".ssh/hawkeye-regional"), args)
+
+    def test_linked_workers_are_left_alone(self):
+        dump = self.linked_before()
+        r = self.link(*self.args, WG_DUMP=dump)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.calls(), [])
+        self.assertEqual(self.hub_apply(), [])
+
+    def test_a_replaced_worker_is_linked_again_and_its_old_host_key_forgotten(self):
+        dump = self.linked_before()
+        new_key = "N" * 43 + "="
+        r = self.link("eu-central=203.0.113.9,10.66.0.2", f"ap-southeast={AU},10.66.0.3", WG_DUMP=dump, KEY_NEW=new_key)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("-R hawkeye-worker-eu-central", self.keygen_log.read_text())
+        self.assertEqual(self.calls(AU), [])
+        self.assertEqual(self.hub_apply(), [["bash", "deploy/wireguard.sh", "hub-apply", f"{KEY_AU}=10.66.0.3", f"{new_key}=10.66.0.2"]])
+
+    def test_a_worker_that_is_gone_stops_being_a_peer(self):
+        dump = self.linked_before()
+        r = self.link(f"eu-central={EU},10.66.0.2", WG_DUMP=dump)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.hub_apply(), [["bash", "deploy/wireguard.sh", "hub-apply", f"{KEY_EU}=10.66.0.2"]])
+
+    def test_a_worker_whose_first_boot_never_ends_fails_the_run_but_not_the_others(self):
+        r = self.link(*self.args, SSH_FAIL_HOSTS=AU)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("not linked: ap-southeast", r.stderr)
+        self.assertEqual(self.hub_apply(), [["bash", "deploy/wireguard.sh", "hub-apply", f"{KEY_EU}=10.66.0.2"]])
+        state = (self.home / ".hawkeye-regional-links").read_text()
+        self.assertIn("eu-central", state)
+        self.assertNotIn("ap-southeast", state)
+
+    def test_malformed_workers_are_refused_before_anything_happens(self):
+        for bad in ("eu-central", f"eu-central={EU}", f"EU={EU},10.66.0.2", f"eu-central=1.2.3,10.66.0.2", f"eu-central={EU},10.66.0.1", f"x;y={EU},10.66.0.2"):
+            self.assertEqual(self.link(bad).returncode, 2, bad)
+        self.assertEqual(self.link(f"a1={EU},10.66.0.2", f"b1={AU},10.66.0.2").returncode, 2)
+        self.assertEqual((self.calls(), self.sudo()), ([], []))
+
+    def test_without_passwordless_sudo_it_says_so_and_changes_nothing(self):
+        r = self.link(*self.args, NO_SUDO="1")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("sudo", r.stderr)
+        self.assertEqual(self.calls(), [])
+
+    def test_no_workers_is_nothing_to_do(self):
+        r = self.link()
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual((self.calls(), self.sudo()), ([], []))
+
+    def test_the_key_is_made_once_and_the_line_to_commit_is_printed_until_it_is(self):
+        r = self.link("--key")
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("ssh-ed25519 AAAAhubkey hawkeye-regional", r.stderr)
+        self.assertTrue((self.home / ".ssh/hawkeye-regional").exists())
+        (self.repo / "infra/keys/hub-regional.pub").write_text("ssh-ed25519 AAAAhubkey hawkeye-regional\n")
+        r = self.link("--key")
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        self.assertEqual(self.keygen_log.read_text().count("-t ed25519"), 1)
 
 
 class Sync(Base):
@@ -380,6 +517,39 @@ exit 0
         for bad in ("", "main", "abc; rm -rf /", "../../x"):
             self.assertEqual(self.receive(bad, body=b"").returncode, 2, bad)
         self.assertFalse(self.docker_log.exists())
+
+    def verb(self, command, **env):
+        full = {**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}", "HOME": str(self.home), "HAWKEYE_ROOT": str(self.repo), "SSH_ORIGINAL_COMMAND": command,
+                "HAWKEYE_REGION_ENV": str(self.tmp / "region.env"), "HAWKEYE_FIRSTBOOT": str(self.tmp / "firstboot"), **env}
+        return subprocess.run(["bash", str(self.repo / "scripts/regional-receive.sh")], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60, env=full)
+
+    def with_sudo(self):
+        log = self.tmp / "sudo.log"
+        stub(self.bin / "sudo", f'#!/bin/sh\necho "$*" >> {log}\n[ "$3" = deploy/wireguard.sh ] && [ "$4" = worker-key ] && echo {KEY_EU}\nexit 0\n')
+        return log
+
+    def test_ready_answers_only_once_the_first_boot_has_finished(self):
+        self.assertNotEqual(self.verb("ready").returncode, 0)
+        (self.tmp / "firstboot").write_text("")
+        self.assertEqual(self.verb("ready").returncode, 0)
+
+    def test_link_key_prints_this_hosts_wireguard_key(self):
+        log = self.with_sudo()
+        r = self.verb("link-key")
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, KEY_EU))
+        self.assertEqual(log.read_text().strip(), "-n bash deploy/wireguard.sh worker-key")
+
+    def test_link_apply_takes_only_the_hubs_key_and_the_addresses_from_the_first_boot(self):
+        log = self.with_sudo()
+        (self.tmp / "region.env").write_text("REGION=eu-central\nTUNNEL_IP=10.66.0.2\nHUB_IP=203.0.113.1\n")
+        r = self.verb(f"link-apply {KEY_HUB}")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(log.read_text().strip(), f"-n bash deploy/wireguard.sh worker-apply {KEY_HUB} 203.0.113.1 10.66.0.2")
+
+    def test_link_apply_refuses_without_the_first_boots_addresses(self):
+        log = self.with_sudo()
+        self.assertEqual(self.verb(f"link-apply {KEY_HUB}").returncode, 2)
+        self.assertFalse(log.exists())
 
     def test_it_leaves_no_copy_of_the_settings_behind(self):
         self.receive(self.two)

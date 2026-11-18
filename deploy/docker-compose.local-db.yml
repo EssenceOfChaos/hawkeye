@@ -7,6 +7,9 @@ services:
   db:
     image: postgres:17.11-alpine
     restart: unless-stopped
+    # The default of 100 is too few once regional workers connect: the API (10), the worker (WORKER_CONCURRENCY + 4, so 34 at 30) and each regional
+    # worker (another 34) can reach about 115 between them at peak. A connection that is open but idle costs a few MB, and the server has 4 GB.
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-hawkeye}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}

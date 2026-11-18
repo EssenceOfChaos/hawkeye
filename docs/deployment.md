@@ -233,8 +233,9 @@ How the production server (the hub) and a small server per extra location fit to
 | Piece | Where | What it does |
 |---|---|---|
 | The list of locations | `infra/regions.json` | the one source. OpenTofu creates a host for each worker in it, and each release works out `CHECK_REGIONS` from it. Nobody sets that by hand: a value in the secret manager is overwritten |
-| Hosts and firewall rules | `infra/workers.tf` | one small server per worker (production workspace only). Nothing exists until the file lists one |
-| First boot | `infra/worker-cloud-init.yaml.tftpl` | Docker, key-only SSH, SSH-only `ufw`, the egress firewall, the heartbeat. No secrets and no secret manager credentials |
+| Hosts and firewall rules | `infra/workers.tf` | one small server per worker (production workspace only), created by the Infrastructure workflow. Nothing exists until the file lists one |
+| First boot | `infra/worker-cloud-init.yaml.tftpl` | Docker, key-only SSH, SSH-only `ufw`, the egress firewall, the heartbeat, and the production server's key (`infra/keys/hub-regional.pub`) allowed to run only `scripts/regional-receive.sh`. No secrets and no secret manager credentials |
+| Linking | `scripts/regional-link.sh` | run on the production server by the Infrastructure workflow after each apply: it waits for a new host's first boot, joins it to the tunnel and sends it the release |
 | Tunnel | `deploy/wireguard.sh` | each host makes its own key, which never leaves it |
 | Worker | `deploy/docker-compose.worker.yml` | one container with `WORKER_CHECKS_ONLY=true`. It never builds: it runs the image production is running |
 | Every release | `scripts/regional-sync.sh`, `scripts/regional-receive.sh` | the production server sends each worker the image and its settings through the tunnel, by itself |
@@ -252,20 +253,41 @@ How the production server (the hub) and a small server per extra location fit to
 
 **Migrations.** A deploy migrates first and updates workers just after, so for a moment workers run the previous code against the new schema. A migration therefore has to work with the release before it: add now, remove in a later release. `scripts/check_migrations.py` fails CI on a new migration that drops or renames something, unless it carries a `-- worker-safe: reason` line. It reads the SQL, so it cannot catch every unsafe change.
 
-**Adding a region.** Customers see nothing until the last step.
+**Adding a region.** Two pull requests, nothing run by hand. Customers see nothing until the second.
 
-1. Add it to `infra/regions.json` with `"launched": false` and a new `tunnel_ip`, and merge. Nothing happens yet, because the worker does not exist.
-2. From your machine: `scripts/rebuild.sh regions`. It shows the plan and asks you to type `regions`. It stops if the plan touches anything except workers. It then creates the host, builds the tunnel (which installs WireGuard on the production server the first time, restarting nothing), sends it production's release, and proves it is healthy, on the right release, and behind a working egress firewall. Running tunnels are not interrupted.
-3. Leave it running and read `scripts/regional.sh status`. It is idle, because nothing queues jobs for it yet.
-4. **Launch:** set `"launched": true` and merge. The deploy updates `CHECK_REGIONS` and customers can choose it.
-5. Watch how fast regional jobs complete. Every database call from Sydney crosses the Pacific, so a regional worker handles fewer checks per minute than the primary. Measure this on real traffic before promoting the feature.
+1. Add it to `infra/regions.json` with `"launched": false` and a new `tunnel_ip`, and merge. The Infrastructure workflow creates the host; its
+   `regional-workers` job then has the production server wait for the host's first boot (a few minutes), build the tunnel (which installs
+   WireGuard on the production server the first time, restarting nothing), and send it production's release. Running tunnels are not
+   interrupted. The job fails, and says why, if a worker is not linked; running the workflow again (Actions → Infrastructure → Run workflow) retries.
+2. Check that it is healthy: the "HawkEye worker <code>" check in healthchecks.io pings every minute once the worker runs, and the
+   `regional-workers` job's log ends with "linked: the tunnel works". (`scripts/regional.sh status` shows the same from your machine.) It is idle:
+   nothing queues jobs for it yet.
+3. **Launch:** set `"launched": true` and merge. The deploy updates `CHECK_REGIONS` and customers can choose it.
+4. Watch how fast regional jobs complete. Every database call from another continent crosses an ocean, so a regional worker handles fewer checks
+   per minute than the primary. Measure this on real traffic before promoting the feature.
 
-**Taking a region away.** Set `"launched": false` and merge: monitors that used it fall back to the locations that remain. Then remove it from the file, merge, and run `scripts/rebuild.sh regions`, which deletes the host.
+**How the production server gets into a new worker.** The first boot authorizes the production server's public key from `infra/keys/hub-regional.pub`,
+only from the production server's address or the tunnel, with `scripts/regional-receive.sh` as its only command: it can ask whether the first boot
+finished, for the worker's WireGuard public key, to join the tunnel, and to take a release. The workflow reaches the production server with the
+deploy key, which runs only `scripts/deploy.sh`; that accepts `regions CODE=PUBLIC_IP,TUNNEL_IP ...` besides a commit, and waits for a deploy that
+is running. No new secret is involved, and only public keys travel. The production server makes its key the first time a deploy runs
+`scripts/regional-link.sh --key`, and every deploy log says so (with the line to commit) while `infra/keys/hub-regional.pub` doesn't match it;
+OpenTofu refuses to create a worker until that file holds a key. The deploy user needs passwordless `sudo` for WireGuard; the job says so if it hasn't.
+
+**Taking a region away.** Set `"launched": false` and merge: monitors that used it fall back to the locations that remain. Then remove it from the
+file and merge. The guard refuses deletions, so the merge's apply stops there: run the Infrastructure workflow by hand with
+`vultr_instance.worker["<code>"] vultr_firewall_rule.wireguard["<code>"]` in *allow_replace* (and the worker firewall group and SSH rules when it was
+the last worker). The job that follows drops its tunnel peer.
 
 **When something breaks.**
 
-- *A worker died:* `tofu taint 'vultr_instance.worker["<code>"]'`, then `scripts/rebuild.sh regions`. Only that region is affected, and the rest of the quorum decides meanwhile.
-- *The production server was replaced:* `scripts/rebuild.sh cutover` reconnects the workers by itself. Their tunnel is down from the moment the old server stops until then. After a `rollback` they stay offline until you cut over again.
+- *A worker died:* destroy the host in Vultr, then run the Infrastructure workflow by hand (Actions → Infrastructure → Run workflow) with
+  `vultr_firewall_rule.wireguard["<code>"]` in *allow_replace* (the tunnel rule names the old address). OpenTofu sees the host is gone and creates a
+  new one, and the job links it: it has a new address, so the production server forgets the
+  old host key. Only that region is affected, and the rest of the quorum decides meanwhile.
+- *The production server was replaced:* `scripts/rebuild.sh cutover` reconnects the workers by itself from your machine. Their tunnel is down from
+  the moment the old server stops until then. After a `rollback` they stay offline until you cut over again. The new server has a new key: commit
+  the line its first deploy prints as `infra/keys/hub-regional.pub`, so workers created later trust it.
 - *The hub's tunnel restarted:* workers reconnect by themselves within about 15 seconds.
 
 ## Local production-like stack

@@ -1,8 +1,9 @@
 #cloud-config
 # First-boot setup for a regional check worker. Runs once. Rendered by OpenTofu/Terraform (infra/workers.tf); NO secrets belong in this file.
 # What it leaves you with: the deploy user, key-only SSH, ufw (SSH only), fail2ban, Docker, WireGuard with this host's own key, the repo at
-# /home/deploy/hawkeye, the worker egress firewall and the heartbeat. What it does not do: join the tunnel, write .env.worker or start the
-# worker. `scripts/rebuild.sh regions` joins it to the tunnel; after that the production server sends it every release and its settings
+# /home/deploy/hawkeye, the worker egress firewall and the heartbeat, and the production server's key, allowed to run one script. What it does
+# not do: join the tunnel, write .env.worker or start the worker. The production server does those, through that key: the Infrastructure
+# workflow asks it to right after creating this host (scripts/regional-link.sh), and every release after that reaches it the same way
 # (scripts/regional-sync.sh). This host never gets the secret manager's credentials.
 package_update: true
 package_upgrade: true
@@ -26,8 +27,18 @@ users:
     lock_passwd: true
     ssh_authorized_keys:
       - ${jsonencode(ssh_public_key)}
+      # The production server: only from its address or the tunnel, and only scripts/regional-receive.sh (first-boot status, the tunnel, releases).
+      - ${jsonencode(hub_authorized_key)}
 
 write_files:
+  # Who this host is, for scripts/regional-receive.sh: read when it joins the tunnel, so the production server only has to send its own public key.
+  - path: /etc/hawkeye-region.env
+    permissions: "0644"
+    content: |
+      REGION=${region}
+      TUNNEL_IP=${tunnel_ip}
+      HUB_IP=${hub_ip}
+
   # Key-only SSH, no root login. This file sorts before cloud-init's own 50-cloud-init.conf, and sshd uses the first value it sees.
   - path: /etc/ssh/sshd_config.d/10-hawkeye.conf
     permissions: "0644"

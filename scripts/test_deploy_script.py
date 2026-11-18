@@ -43,6 +43,7 @@ class DeployScriptTests(Base):
         (self.repo / "infra/regions.json").write_text('{"primary": {"name": "US East"}, "workers": {}}')
         # Records that it ran, and fails when the test asks it to.
         (self.repo / "scripts/regional-sync.sh").write_text('#!/bin/sh\necho regional-sync >> "$HOME/events"\n[ ! -f "$HOME/sync-fails" ]\n')
+        (self.repo / "scripts/regional-link.sh").write_text('#!/bin/sh\necho "regional-link $*" >> "$HOME/events"\n[ ! -f "$HOME/link-fails" ]\n')
         shutil.copy(HERE.parent / "deploy" / "env.manifest", self.repo / "deploy" / "env.manifest")
         (self.repo / "scripts/backup-offsite.sh").write_text("#!/bin/sh\necho backup-ran >> \"$HOME/events\"\n")
         # The smoke test fails while the settings contain SMOKE=fail.
@@ -324,6 +325,29 @@ class DeployScriptTests(Base):
             r = self.deploy(bad)
             self.assertEqual(r.returncode, 2, bad)
         self.assertEqual(self.deploy(ssh_command="rm -rf /").returncode, 2)
+
+    # ---- regional workers, from the Infrastructure workflow ----
+
+    def test_regions_links_the_workers_and_sends_them_the_running_release_without_deploying(self):
+        r = self.deploy(ssh_command="regions eu-central=203.0.113.2,10.66.0.2 us-west=203.0.113.3,10.66.0.3")
+        self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+        self.assertEqual(self.events(), ["regional-link eu-central=203.0.113.2,10.66.0.2 us-west=203.0.113.3,10.66.0.3", "regional-sync"])
+        self.assertEqual((self.head(), self.docker_calls()), (self.sha1, []))
+
+    def test_regions_fails_when_a_worker_is_not_linked(self):
+        (self.home / "link-fails").write_text("")
+        r = self.deploy(ssh_command="regions eu-central=203.0.113.2,10.66.0.2")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("regional-sync", self.events())   # the ones that are linked still get the release
+
+    def test_regions_accepts_nothing_but_workers(self):
+        for bad in ("regions; rm -rf /", "regions eu-central=203.0.113.2", "regions eu-central=203.0.113.2,10.66.0.2;id", "regions $(id)=1.2.3.4,10.66.0.2"):
+            self.assertEqual(self.deploy(ssh_command=bad).returncode, 2, bad)
+        self.assertEqual(self.events(), [])
+
+    def test_every_healthy_deploy_checks_the_key_new_workers_will_trust(self):
+        self.assertEqual(self.deploy(self.sha2).returncode, 0)
+        self.assertIn("regional-link --key", self.events())
 
     def test_the_backup_runs_when_the_host_settings_exist(self):
         (self.home / ".hawkeye-host.env").write_text("BACKUP_BUCKET=x\n")

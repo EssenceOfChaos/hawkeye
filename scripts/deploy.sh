@@ -3,9 +3,11 @@
 #
 #   scripts/deploy.sh [COMMIT_SHA]        # default: the tip of origin/main
 #   scripts/deploy.sh secrets-only        # no new code: refresh the settings from the secret manager and restart what changed
+#   scripts/deploy.sh regions CODE=PUBLIC_IP,TUNNEL_IP ...
+#                                         # no new code: link these regional workers (every one OpenTofu has) and send them this release
 #
 # Run on the VM as the deploy user (from the repo root) or over SSH by the GitHub Actions workflow (.github/workflows/deploy.yml). When the
-# SSH key is restricted with a forced command (docs/deployment.md), the sha (or "secrets-only") arrives in $SSH_ORIGINAL_COMMAND. Exit 0 means
+# SSH key is restricted with a forced command (docs/deployment.md), the sha (or "secrets-only", or "regions ...") arrives in $SSH_ORIGINAL_COMMAND. Exit 0 means
 # the new version is live and healthy; non-zero means it was rolled back (or never started) and the log says why.
 #
 # Settings: when this machine has credentials for the secret manager (~/.hawkeye-infisical.env), every release first refreshes .env.production
@@ -19,11 +21,21 @@ main() {
   cd "$(dirname "$0")/.."
   ROOT="$PWD"
 
-  TARGET="${1:-${SSH_ORIGINAL_COMMAND:-}}"
-  if [ -n "$TARGET" ] && [ "$TARGET" != "secrets-only" ] && ! [[ "$TARGET" =~ ^[0-9a-f]{40}$ ]]; then echo "refusing: '$TARGET' is not a full commit sha (or secrets-only)" >&2; exit 2; fi
+  TARGET="${*:-${SSH_ORIGINAL_COMMAND:-}}"
+  # "regions" is followed by the workers OpenTofu has, from the Infrastructure workflow: CODE=PUBLIC_IP,TUNNEL_IP each. scripts/regional-link.sh
+  # checks every value again; this only keeps anything else off the command line.
+  local worker_re='[a-z0-9][a-z0-9-]{0,18}[a-z0-9]=([0-9]{1,3}\.){3}[0-9]{1,3},10\.66\.0\.[0-9]{1,3}'
+  if [ -n "$TARGET" ] && [ "$TARGET" != "secrets-only" ] && ! [[ "$TARGET" =~ ^[0-9a-f]{40}$ ]] && ! [[ "$TARGET" =~ ^regions(\ $worker_re)*$ ]]; then
+    echo "refusing: '$TARGET' is not a full commit sha (or secrets-only, or regions CODE=PUBLIC_IP,TUNNEL_IP ...)" >&2; exit 2
+  fi
 
   exec 9>"$ROOT/.deploy.lock"
-  flock -n 9 || { echo "another deploy is running" >&2; exit 1; }
+  if [[ "$TARGET" == regions* ]]; then
+    # Runs right after an infrastructure apply, often while the release from the same merge is deploying: wait for it rather than fail.
+    flock -w "${REGIONS_LOCK_WAIT:-1800}" 9 || { echo "a deploy has held the lock too long: try the Infrastructure workflow again" >&2; exit 1; }
+  else
+    flock -n 9 || { echo "another deploy is running" >&2; exit 1; }
+  fi
   # This copy, as parsed: compared with the checked-out one after a healthy release.
   SELF_SUM="$(sha256sum scripts/deploy.sh | cut -d' ' -f1)"
 
@@ -42,7 +54,10 @@ main() {
   apply_regions() { [ ! -f scripts/regions.py ] || python3 scripts/regions.py apply-env .env.production; }
   # Sends this release and its settings to the regional workers. A problem with a worker never fails production: it stays on the release it had and an
   # alert goes out (scripts/regional-sync.sh). The script is missing when rolling back to a release from before it existed.
-  update_regions() { [ ! -x scripts/regional-sync.sh ] || scripts/regional-sync.sh || echo "!! not every regional worker was updated; production is fine" >&2; }
+  update_regions() {
+    [ ! -x scripts/regional-link.sh ] || scripts/regional-link.sh --key || true   # says so if new workers would not trust this server
+    [ ! -x scripts/regional-sync.sh ] || scripts/regional-sync.sh || echo "!! not every regional worker was updated; production is fine" >&2
+  }
   healthy() { # smoke test against the public URL, retrying while containers settle
     local i
     for i in $(seq 1 "${HEALTH_TRIES:-6}"); do   # HEALTH_TRIES and HEALTH_WAIT exist so the tests need not wait a minute
@@ -74,6 +89,16 @@ main() {
 
   # The settings as they are now: what a rollback puts back (a new release may bring new settings, and they are part of what failed).
   cp -p .env.production .env.production.previous
+
+  if [[ "$TARGET" == regions* ]]; then
+    # No new code and no settings change: join the workers to the tunnel, then send them the release this server is running.
+    local workers rc=0
+    read -ra workers <<<"${TARGET#regions}"
+    [ -x scripts/regional-link.sh ] || { echo "this release has no scripts/regional-link.sh: deploy a newer one first" >&2; exit 1; }
+    scripts/regional-link.sh "${workers[@]}" || rc=$?
+    [ "${#workers[@]}" -eq 0 ] || scripts/regional-sync.sh || rc=1
+    exit "$rc"
+  fi
 
   if [ "$TARGET" = "secrets-only" ]; then
     echo "== refreshing settings from the secret manager (no new code)"

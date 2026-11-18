@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Regional check workers, from YOUR machine. You rarely run this directly: `scripts/rebuild.sh regions` creates the hosts and runs `link` and `verify`, and
-# `scripts/rebuild.sh cutover` runs `link`. Releases and settings are not done here at all: the production server sends them on every deploy
+# Regional check workers, from YOUR machine, for looking and for break-glass. The Infrastructure workflow creates and links them (scripts/regional-link.sh
+# on the production server); `scripts/rebuild.sh regions` and `scripts/rebuild.sh cutover` run `link` from here when that cannot.
+# Releases and settings are not done here at all: the production server sends them on every deploy
 # (scripts/regional-sync.sh). docs/deployment.md, "Regional worker hosts", has the whole picture.
 #
 #   scripts/regional.sh status          what each host is doing, and which regions customers can choose
@@ -24,7 +25,7 @@ load_infra() {
   [ "$(tf workspace show)" = default ] || die "select the production workspace first: regional workers exist only there"
   HUB="$(tf output -raw public_ip)"
   WORKERS="$(tf output -json workers)"
-  [ "$(jq length <<<"$WORKERS")" -gt 0 ] || die "no workers in infra/: list them in infra/regions.json and run scripts/rebuild.sh regions"
+  [ "$(jq length <<<"$WORKERS")" -gt 0 ] || die "no workers in infra/: list them in infra/regions.json and merge (the Infrastructure workflow creates them)"
 }
 codes() { # the region given, or all of them
   if [ -n "${1:-}" ]; then
@@ -62,8 +63,9 @@ cmd_link() {
     ip="$(ip_of "$code")"
     echo "== $code $ip"
     on "$ip" "sudo bash -s -- worker-apply $hub_pub $HUB $(tunnel_of "$code")" < deploy/wireguard.sh
-    # Only from the hub's tunnel address, and only the release receiver. Replaces any earlier key, so a replaced hub takes over.
-    printf 'from="%s",restrict,command="/home/deploy/hawkeye/scripts/regional-receive.sh" %s\n' "$HUB_TUNNEL_IP" "$release_key" |
+    # Only from the hub (its tunnel address or its own), and only the receiver: the same line a worker's first boot writes. Replaces any earlier
+    # key, so a replaced hub takes over.
+    printf 'from="%s,%s",restrict,command="/home/deploy/hawkeye/scripts/regional-receive.sh" %s\n' "$HUB_TUNNEL_IP" "$HUB" "$release_key" |
       on "$ip" 'sed -i "/ hawkeye-regional$/d" ~/.ssh/authorized_keys && cat >> ~/.ssh/authorized_keys'
     on "$ip" "ping -c 2 -W 5 $HUB_TUNNEL_IP >/dev/null" || die "$code cannot reach the hub through the tunnel: check the UDP rule in infra/workers.tf and 'sudo wg show' on both ends"
     echo "   tunnel up"

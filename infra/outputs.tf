@@ -27,7 +27,7 @@ output "stage_host" {
 }
 
 output "workers" {
-  description = "Regional worker hosts, read by scripts/regional.sh."
+  description = "Regional worker hosts: the Infrastructure workflow hands them to the production server to link (scripts/regional-link.sh); scripts/regional.sh reads them too."
   value = { for code, w in local.workers : code => {
     ip           = vultr_instance.worker[code].main_ip
     tunnel_ip    = w.tunnel_ip
