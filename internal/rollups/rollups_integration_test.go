@@ -265,7 +265,8 @@ func TestRetentionDeletesTotalsWithTheResults(t *testing.T) {
 		RETURNING id`, org).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
-	results(t, pool, id, 10, 600)
+	const interval = 600
+	results(t, pool, id, 10, interval)
 	catchUp(t, rollups.NewJob(pool, rollups.JobConfig{}, metrics.New(), quiet))
 	if _, err := retention.New(pool, retention.Config{}, metrics.New(), quiet).RunOnce(ctx); err != nil {
 		t.Fatal(err)
@@ -277,7 +278,10 @@ func TestRetentionDeletesTotalsWithTheResults(t *testing.T) {
 	if oldResult == nil || oldTotal == nil {
 		t.Fatal("everything was deleted")
 	}
-	if oldTotal.Add(time.Hour).Before(*oldResult) {
+	// An hour's totals stay until the whole hour is past the cutoff, while its results go one by one. So when the cutoff falls late in an hour,
+	// that hour's last results can already be gone while its totals rightly stay: the oldest result left can be up to one gap between results
+	// (the interval plus up to half of it, see results) after the end of the oldest hour of totals, and no more.
+	if gap := interval * 3 / 2 * time.Second; oldTotal.Add(time.Hour + gap).Before(*oldResult) {
 		t.Fatalf("totals from %s outlived the results (oldest %s)", oldTotal, oldResult)
 	}
 	if time.Since(*oldTotal) > 8*24*time.Hour {
