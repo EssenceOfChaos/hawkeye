@@ -19,11 +19,29 @@ variables {
   hub_regional_key_path = "tests/hub-regional.pub"
 }
 
-run "the_committed_file_creates_nothing_until_a_worker_is_listed" {
+run "nothing_is_created_until_a_worker_is_listed" {
   command = plan
+  variables {
+    regions_file = "tests/no-workers.json"
+  }
   assert {
     condition     = length(vultr_instance.worker) == 0 && length(vultr_firewall_rule.wireguard) == 0 && length(vultr_firewall_group.worker) == 0
     error_message = "With no workers in regions.json, the plan must add nothing."
+  }
+}
+
+run "the_committed_file_lists_frankfurt_and_los_angeles_with_the_committed_key" {
+  command = plan
+  variables {
+    hub_regional_key_path = "keys/hub-regional.pub"
+  }
+  assert {
+    condition     = toset(keys(vultr_instance.worker)) == toset(["eu-central", "us-west"]) && vultr_instance.worker["eu-central"].region == "fra" && vultr_instance.worker["us-west"].region == "lax"
+    error_message = "Production's workers are Frankfurt and Los Angeles."
+  }
+  assert {
+    condition     = strcontains(vultr_instance.worker["us-west"].user_data, trimspace(file("keys/hub-regional.pub")))
+    error_message = "Workers trust the production server's committed key."
   }
 }
 
