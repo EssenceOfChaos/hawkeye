@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -39,6 +40,13 @@ func (e *APIError) StatusCode() int { return e.Status }
 func errorHandler(log *slog.Logger, rep errtrack.Reporter) echo.HTTPErrorHandler {
 	return func(c *echo.Context, err error) {
 		if resp, _ := echo.UnwrapResponse(c.Response()); resp != nil && resp.Committed {
+			return
+		}
+		// The request itself was canceled: the visitor closed the page or navigated away, or the API is stopping for a deploy. Nobody is left to
+		// read a response and there is nothing to fix, so it is not an error worth reporting. A handler's own cancellation, while the request is
+		// still live, is a real error and goes on below.
+		if errors.Is(err, context.Canceled) && c.Request().Context().Err() != nil {
+			log.DebugContext(c.Request().Context(), "request canceled", "route", c.Path(), "request_id", c.Response().Header().Get(echo.HeaderXRequestID))
 			return
 		}
 		status, body := http.StatusInternalServerError, ErrorDetail{Code: "INTERNAL_ERROR", Message: "An internal error occurred."}

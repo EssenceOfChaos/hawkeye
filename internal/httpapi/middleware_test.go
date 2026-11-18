@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -131,5 +132,35 @@ func TestAPIMetricsRecordTheStatusOfAnUnrenderedError(t *testing.T) {
 				t.Fatalf("recorded %v, want %s", seen, tc.want)
 			}
 		})
+	}
+}
+
+func handled(t *testing.T, ctx context.Context, handler echo.HandlerFunc) (*httptest.ResponseRecorder, *captured) {
+	t.Helper()
+	rep := &captured{}
+	e := echo.New()
+	e.HTTPErrorHandler = errorHandler(slog.New(slog.NewTextHandler(io.Discard, nil)), rep)
+	e.GET("/x", handler)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", nil).WithContext(ctx))
+	return rec, rep
+}
+
+// A visitor who leaves mid-request (or a deploy stopping the API) cancels the request: that is no error of ours, and it reached Sentry as
+// "context canceled" until this was handled.
+func TestARequestTheVisitorCanceledIsNotReported(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, rep := handled(t, ctx, func(c *echo.Context) error { return fmt.Errorf("list monitors: %w", c.Request().Context().Err()) })
+	if len(rep.errs) != 0 {
+		t.Fatalf("reported %v", rep.errs)
+	}
+}
+
+// The same error while the request is still live means our own code canceled something it needed: that is a bug, so it is reported.
+func TestACancellationWhileTheRequestIsLiveIsReported(t *testing.T) {
+	rec, rep := handled(t, context.Background(), func(*echo.Context) error { return fmt.Errorf("query: %w", context.Canceled) })
+	if len(rep.errs) != 1 || rec.Code != http.StatusInternalServerError {
+		t.Fatalf("got %d, reports %v", rec.Code, rep.errs)
 	}
 }
