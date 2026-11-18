@@ -1,14 +1,33 @@
 #!/usr/bin/env bash
-# Takes a release from the production server and starts it. Runs on a regional worker as the forced command of the production server's key, so this script is
-# all that key can do here. The release's commit arrives as the SSH command, and a tar of image.tar.gz, worker.env and heartbeat.url arrives on stdin.
+# What the production server's key may do on a regional worker: it runs as that key's forced command (installed by the worker's first boot,
+# infra/worker-cloud-init.yaml.tftpl), so this script is all the key can do here. The SSH command is one of:
 #
-# If the new release does not become healthy, the worker goes back to what it was running and this exits non-zero, which is how the production server finds out.
+#   COMMIT                 take a release and start it: a tar of image.tar.gz, worker.env and heartbeat.url arrives on stdin
+#   ready                  succeed once this host's first boot has finished (scripts/regional-link.sh waits for it)
+#   link-key               print this host's WireGuard public key, making the key the first time
+#   link-apply HUB_PUBKEY  join the tunnel to the production server; its address and this host's tunnel address come from the first boot
+#
+# If a new release does not become healthy, the worker goes back to what it was running and this exits non-zero, which is how the production server finds out.
 set -euo pipefail
+REGION_ENV="${HAWKEYE_REGION_ENV:-/etc/hawkeye-region.env}"
+FIRSTBOOT="${HAWKEYE_FIRSTBOOT:-/var/lib/hawkeye-firstboot-done}"
+# One value from the first boot's file, read rather than sourced.
+region_value() { sed -n "s/^$1=\\([0-9.]*\\)\$/\\1/p" "$REGION_ENV" | tail -1; }
 # Everything lives in one function that is parsed before it runs: the checkout below replaces this very file, and bash must not read a half-changed script.
 main() {
   local version="${SSH_ORIGINAL_COMMAND:-}" previous_commit rc
-  [[ "$version" =~ ^[0-9a-f]{7,40}$ ]] || { echo "refusing: '$version' is not a commit" >&2; exit 2; }
   cd "${HAWKEYE_ROOT:-$HOME/hawkeye}"
+  case "$version" in
+    ready) [ -f "$FIRSTBOOT" ]; exit $? ;;
+    link-key) exec sudo -n bash deploy/wireguard.sh worker-key ;;
+    "link-apply "*)
+      local hub_pub="${version#link-apply }" hub_ip tunnel_ip
+      hub_ip="$(region_value HUB_IP)"; tunnel_ip="$(region_value TUNNEL_IP)"
+      [ -n "$hub_ip" ] && [ -n "$tunnel_ip" ] || { echo "refusing: $REGION_ENV has no HUB_IP or TUNNEL_IP" >&2; exit 2; }
+      # wireguard.sh checks the key and both addresses before it writes anything.
+      exec sudo -n bash deploy/wireguard.sh worker-apply "$hub_pub" "$hub_ip" "$tunnel_ip" ;;
+  esac
+  [[ "$version" =~ ^[0-9a-f]{7,40}$ ]] || { echo "refusing: '$version' is not a commit" >&2; exit 2; }
   exec 9>"$HOME/.regional.lock"
   flock -n 9 || { echo "another release is being received" >&2; exit 1; }
   umask 077

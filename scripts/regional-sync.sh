@@ -24,7 +24,8 @@ SSH=(ssh -i "$KEY" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecki
 WORKERS="$(python3 scripts/regions.py workers)" || { echo "regional: infra/regions.json is not valid" >&2; exit 1; }
 [ -n "$WORKERS" ] || exit 0   # the usual case until a worker is listed
 
-# A worker is listed before it exists: the pull request comes first, then `scripts/rebuild.sh regions`. Until it is linked, there is nothing to send it to.
+# A worker is listed before it is linked: the merge deploys this list, while the Infrastructure workflow creates the host and links it
+# (scripts/regional-link.sh). Until it is linked, there is nothing to send it to; the link sends it this release itself.
 linked() { [ -f "$KEY" ] && sudo -n wg show wg0 allowed-ips 2>/dev/null | grep -qF "$1/32"; }
 
 # shellcheck disable=SC1090
@@ -43,7 +44,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 failed=""; sent=0; image=""
 while read -r code tunnel_ip; do
-  if ! linked "$tunnel_ip"; then echo "regional: $code is listed but not linked yet: skipping it (scripts/rebuild.sh regions)"; continue; fi
+  if ! linked "$tunnel_ip"; then echo "regional: $code is listed but not linked yet: skipping it (the Infrastructure workflow links it)"; continue; fi
   if [ -z "$image" ]; then
     docker save "hawkeye-worker:$VERSION" | gzip > "$WORK/image.tar.gz" || { echo "regional: cannot read the image for $VERSION" >&2; exit 1; }
     image=done

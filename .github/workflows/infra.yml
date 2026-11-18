@@ -2,7 +2,8 @@ name: Infrastructure
 
 # Every change to the servers, firewall and DNS goes through here (docs/deployment.md, "Infrastructure changes"): nobody runs `tofu apply` by hand.
 #   pull request touching infra/   check (format, validate, tests) and plan against production; the plan is on the run's summary page
-#   merge to main                  plan again and apply exactly that plan, unless it deletes or replaces something
+#   merge to main                  plan again and apply exactly that plan, unless it deletes or replaces something; then the production
+#                                  server links any new regional worker and sends it its release (the regional-workers job)
 #   run by hand (Actions tab)      the same apply, optionally allowing named resources to be deleted or replaced (a server rebuild)
 # One-time setup (Vultr API user, R2 state bucket, secrets): docs/deployment.md, "Infrastructure changes".
 
@@ -56,6 +57,8 @@ jobs:
     # Applies run in the "infrastructure" environment: add required reviewers there for an approval click before each apply.
     environment: ${{ github.event_name == 'pull_request' && 'infrastructure-plan' || 'infrastructure' }}
     timeout-minutes: 30
+    outputs:
+      workers: ${{ steps.workers.outputs.workers }}
     defaults:
       run:
         working-directory: infra
@@ -88,3 +91,36 @@ jobs:
       - name: Apply exactly the plan above
         if: github.event_name != 'pull_request'
         run: tofu apply plan.bin
+      - name: The regional workers that exist now, for the next job (public addresses only)
+        id: workers
+        if: github.event_name != 'pull_request'
+        run: echo "workers=$(tofu output -json workers | jq -c .)" >> "$GITHUB_OUTPUT"
+
+  # The production server joins every regional worker OpenTofu has to the tunnel (a new or replaced one is linked, a removed one dropped) and sends
+  # it the release production runs: scripts/regional-link.sh, through the deploy key. It waits for a new host's first boot, and for a deploy that is
+  # running. It needs no secret of its own: the deploy key can run nothing but scripts/deploy.sh, which accepts only "regions CODE=IP,TUNNEL_IP ...".
+  regional-workers:
+    needs: plan-or-apply
+    # Skipped while there are none. (After the last one is removed, the server keeps a peer that nothing answers for: harmless, and gone at the next link.)
+    if: github.event_name != 'pull_request' && needs.plan-or-apply.outputs.workers != '' && needs.plan-or-apply.outputs.workers != '{}'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    steps:
+      - name: Set up SSH
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Link the workers and send them production's release
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER_NAME: ${{ secrets.DEPLOY_USER }}
+          WORKERS: ${{ needs.plan-or-apply.outputs.workers }}
+        run: |
+          args="$(jq -r 'to_entries | map("\(.key)=\(.value.ip),\(.value.tunnel_ip)") | join(" ")' <<<"$WORKERS")"
+          echo "workers: ${args:-none}"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 "$USER_NAME@$HOST" "regions $args"

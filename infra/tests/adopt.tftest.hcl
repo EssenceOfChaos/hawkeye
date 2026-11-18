@@ -49,10 +49,15 @@ run "a_rebuilt_production_server_gets_a_reserved_ip_and_firewall" {
 run "workers_can_join_the_adopted_server_now_it_has_a_firewall_group" {
   command = plan
   variables {
-    regions_file = "tests/two-regions.json"
+    regions_file          = "tests/two-regions.json"
+    hub_regional_key_path = "tests/hub-regional.pub"
   }
   assert {
     condition     = length(vultr_instance.worker) == 2 && length(vultr_firewall_rule.wireguard) == 2
     error_message = "Each worker gets a host and a tunnel rule in the production server's firewall group."
+  }
+  assert {
+    condition     = strcontains(vultr_instance.worker["eu-central"].user_data, "HUB_IP=${vultr_instance.server.main_ip}")
+    error_message = "A worker joins the tunnel at the adopted server's own address."
   }
 }

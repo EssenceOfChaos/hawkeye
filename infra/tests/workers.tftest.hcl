@@ -15,7 +15,8 @@ variables {
   cutover             = true
   state_passphrase    = "test-passphrase-not-secret"
   # These tests are about a server OpenTofu creates; production.auto.tfvars adopts one (tests/adopt.tftest.hcl covers that).
-  adopted_server_id = ""
+  adopted_server_id     = ""
+  hub_regional_key_path = "tests/hub-regional.pub"
 }
 
 run "the_committed_file_creates_nothing_until_a_worker_is_listed" {
@@ -43,6 +44,34 @@ run "each_region_gets_a_host_and_its_own_tunnel_rule" {
     condition     = strcontains(vultr_instance.worker["eu-central"].user_data, "ALLOW_TCP=10.66.0.1:5432") && strcontains(vultr_instance.worker["eu-central"].user_data, "regional-heartbeat.sh") && !strcontains(vultr_instance.worker["eu-central"].user_data, "INFISICAL")
     error_message = "cloud-init allows the database's tunnel address, sets up the heartbeat, and holds no secret manager credentials."
   }
+}
+
+run "the_production_server_may_reach_a_new_worker_only_through_the_receiver" {
+  command = plan
+  variables {
+    regions_file = "tests/two-regions.json"
+  }
+  assert {
+    condition     = strcontains(vultr_instance.worker["eu-central"].user_data, "restrict,command=\\\"/home/deploy/hawkeye/scripts/regional-receive.sh\\\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHViLXJlZ2lvbmFsLWtleS1mb3ItdGVzdHMtb25seQ hawkeye-regional")
+    error_message = "The production server's key is installed with the receiver as its only command."
+  }
+  assert {
+    condition     = strcontains(vultr_instance.worker["eu-central"].user_data, "from=\\\"10.66.0.1,")
+    error_message = "The production server's key is accepted only from the tunnel and the production server's address."
+  }
+  assert {
+    condition     = strcontains(vultr_instance.worker["eu-central"].user_data, "REGION=eu-central") && strcontains(vultr_instance.worker["eu-central"].user_data, "TUNNEL_IP=10.66.0.2") && strcontains(vultr_instance.worker["ap-southeast"].user_data, "TUNNEL_IP=10.66.0.3")
+    error_message = "Each worker knows its own code and tunnel address, so joining the tunnel needs only the production server's public key."
+  }
+}
+
+run "no_worker_is_created_before_the_production_servers_key_is_committed" {
+  command = plan
+  variables {
+    regions_file          = "tests/two-regions.json"
+    hub_regional_key_path = "tests/missing.pub"
+  }
+  expect_failures = [vultr_instance.worker]
 }
 
 run "a_tunnel_address_cannot_be_shared" {
