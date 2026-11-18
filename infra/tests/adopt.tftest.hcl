@@ -26,8 +26,8 @@ run "production_adopts_the_existing_server_with_a_firewall_but_no_reserved_ip" {
     error_message = "The adopted server's firewall group admits SSH, HTTP and HTTPS, the ports it serves today."
   }
   assert {
-    condition     = vultr_instance.server.hostname == "hawkeye.observer" && vultr_instance.server.plan == "vc2-1c-2gb"
-    error_message = "The adopted server must be described as it is, or the plan would reinstall or resize it."
+    condition     = vultr_instance.server.hostname == "hawkeye.observer" && vultr_instance.server.plan == "vc2-2c-4gb"
+    error_message = "The adopted server must be described as it is (resized to vc2-2c-4gb on 2026-11-18), or the plan would reinstall or resize it."
   }
   assert {
     condition     = toset(keys(cloudflare_dns_record.prod)) == toset(["apex", "www", "domains"])

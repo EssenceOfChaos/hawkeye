@@ -1,9 +1,9 @@
 # The production server as it really is (committed, read on every run, nothing secret). It was created by hand on 2026-10-17, before infra/
-# existed, and is adopted into the state rather than rebuilt: see adopt.tf. Since adopted: the Vultr firewall group (SSH, HTTP, HTTPS). Change a value here only on purpose, in a reviewed pull request;
+# existed, and is adopted into the state rather than rebuilt: see adopt.tf. Since adopted: the Vultr firewall group (SSH, HTTP, HTTPS) and the resize to 2 vCPU / 4 GB. Change a value here only on purpose, in a reviewed pull request;
 # CI shows the plan and refuses to replace or delete anything unless that run is told to (docs/deployment.md, "Infrastructure changes").
 
 name    = "hawkeye.observer" # its hostname and label today
-plan    = "vc2-1c-2gb"       # 1 vCPU / 2 GB
+plan    = "vc2-2c-4gb"       # 2 vCPU / 4 GB, resized from vc2-1c-2gb in place (Vultr restarts the server for it)
 os_name = "Ubuntu 26.10 x64" # not an LTS release: see docs/plan-high-availability.md
 
 ssh_public_key_path   = "./keys/admin.pub"

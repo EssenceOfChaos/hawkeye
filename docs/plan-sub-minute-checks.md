@@ -15,8 +15,8 @@ an Agency customer makes per monitor. Free and Pro are unchanged.
 - **read** fills in history at an interval and times the queries that read it: dashboard uptime, status pages, charts, history and monthly reports.
 
 PostgreSQL 17 ran in a container capped at 2 CPUs and 2 GB, on 2026-11-16. That was meant to match production, but production turned out to be
-`vc2-1c-2gb` (1 vCPU / 2 GB for everything, 55 GB disk; found 2026-11-17): resize it before 30-second checks are sold at volume
-(`docs/plan-high-availability.md`, step 1).
+`vc2-1c-2gb` (1 vCPU / 2 GB for everything, 55 GB disk; found 2026-11-17). It was resized to `vc2-2c-4gb` (2 vCPU / 4 GB) on 2026-11-18
+(`docs/plan-high-availability.md`, step 1.2); rerun the load test against that shape.
 
 ```sh
 go run ./cmd/loadtest -db 'postgres://…' live -interval 30 -orgs 5 -base 400 -concurrency 30 -duration 5m
