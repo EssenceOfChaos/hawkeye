@@ -43,7 +43,9 @@ body::before { content: ""; position: fixed; inset: 0; z-index: 0; pointer-event
 main { flex: 1; width: 100%; box-sizing: border-box; max-width: 64rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
 h1 { font-size: 1.6rem; margin: 0 0 1rem; }
 a { color: var(--accent); }
-.topbar { display: flex; gap: 1rem; align-items: center; padding: .65rem clamp(1rem, 3vw, 2rem); border-bottom: 1px solid var(--line); flex-wrap: wrap; background: #07162af0; backdrop-filter: blur(6px); }
+/* position and z-index: backdrop-filter makes the header a stacking context of its own, so without a z-index of its own the account menu's z-index
+   only counts inside the header, and anything positioned later on the page (the sticky bulk-action bar, filter chips, tooltips) paints over the menu. */
+.topbar { position: relative; z-index: 40; display: flex; gap: 1rem; align-items: center; padding: .65rem clamp(1rem, 3vw, 2rem); border-bottom: 1px solid var(--line); flex-wrap: wrap; background: #07162af0; backdrop-filter: blur(6px); }
 .topbar .logo { display: block; height: 30px; width: auto; }
 .brand { font-weight: 700; text-decoration: none; color: inherit; }
 .spacer { flex: 1; }
