@@ -136,7 +136,7 @@ people share one copy and no laptop holds it. It has a bucket and a token of its
 its buckets, so a state bucket next to the backups would let CI's key delete the backups, and the server's backup key reach the state. A few
 kilobytes is well inside R2's free tier. `infra/production.auto.tfvars` (committed) describes production. The production server and its
 DNS records were created by hand on 2026-10-17 and are **adopted**, not rebuilt (`infra/adopt.tf`): the first apply imports them, and the code
-describes them as they are (1 vCPU / 2 GB, Ubuntu 26.10, no reserved IP), plus what reviewed changes have added since (the Vultr firewall group). Bringing them in line with the rest of `infra/`
+describes them as they are (Ubuntu 26.10, no reserved IP), plus what reviewed changes have added since (the Vultr firewall group, the resize from 1 vCPU / 2 GB to 2 vCPU / 4 GB). Bringing them in line with the rest of `infra/`
 is a series of reviewed pull requests, listed in `docs/plan-high-availability.md`.
 
 **One-time setup**

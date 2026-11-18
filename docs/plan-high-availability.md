@@ -11,7 +11,7 @@ The inventory taken while adopting it into OpenTofu (2026-11-17) found it differ
 
 | | The docs assumed | Actually |
 |---|---|---|
-| Size | `vc2-2c-4gb` (2 vCPU / 4 GB) | `vc2-1c-2gb` (1 vCPU / 2 GB) |
+| Size | `vc2-2c-4gb` (2 vCPU / 4 GB) | `vc2-1c-2gb` (1 vCPU / 2 GB); resized to `vc2-2c-4gb` 2026-11-18 (step 1.2) |
 | OS | Ubuntu 24.04 LTS | Ubuntu 26.10 (not LTS: about 9 months of updates) |
 | Address | a reserved IP | the server's own address (45.77.216.247) |
 | Network firewall | a Vultr firewall group | none (ufw on the server only); added 2026-11-17 (step 1.1) |
@@ -21,7 +21,7 @@ Backups: a nightly encrypted database dump to Vultr Object Storage, and Vultr's 
 nightly dump is the newest copy.
 
 **The size matters before anything else.** The load test behind 30-second checks (`docs/plan-sub-minute-checks.md`) gave PostgreSQL 2 CPUs and
-2 GB on its own; production has 1 CPU and 2 GB for everything. Resize before selling 30-second checks at volume (step 1).
+2 GB on its own; production had 1 CPU and 2 GB for everything, hence the resize (step 1.2). Rerun the load test against the new shape.
 
 ## What a load balancer does and doesn't do
 
@@ -47,8 +47,8 @@ Each is a small reviewed change applied by CI; the guard refuses anything that w
 1. **Done: Vultr firewall group** on the server (SSH, HTTP, HTTPS), as for any server `infra/` creates. Before attaching it, only TCP 22, 80 and 443
    answered from outside (2026-11-17), so it closes nothing that was in use.
    In place, no restart. Also a prerequisite for regional workers (their tunnel rule lives in that group).
-2. **Resize to `vc2-2c-4gb`** (`plan` in `infra/production.auto.tfvars`). In place; Vultr restarts the server, so a few minutes of downtime: do it
-   in a quiet hour and say so on the status page.
+2. **Done: resize to `vc2-2c-4gb`** (`plan` in `infra/production.auto.tfvars`), 2026-11-18. In place; Vultr restarts the server, so a few minutes
+   of downtime, applied when the pull request was merged. The disk grows with the plan (55 to 80 GB) and Ubuntu grows the root filesystem at boot.
 3. **A reserved IP**: convert the server's current address into a reserved IP so DNS and `DEPLOY_HOST` never change when the server is replaced.
    Check that the provider can do this without a new address; if not, convert it with Vultr's API and import the result.
 4. **An LTS OS**: moving from 26.10 to 24.04 LTS (or the next LTS) means a new server: a deliberate rebuild (`docs/rebuild.md`, run from the
@@ -99,7 +99,7 @@ replica in another location is the hard part (lost writes, split brain), so this
 
 ## Order and when
 
-1. Step 1.2 now (1.1 is done): the resize is needed for 30-second checks.
+1. Steps 1.1 and 1.2 are done. Next: regional check workers (`docs/deployment.md`, "Regional worker hosts"), which paid plans already offer.
 2. Step 2 now: free, and it is what makes the current one-hour recovery real.
 3. Steps 1.3, 1.4 before 26.10's updates end.
 4. Steps 3 and 4 before HawkEye has many paying customers: a monitoring service that is down can't tell its customers their sites are down. Step 3
