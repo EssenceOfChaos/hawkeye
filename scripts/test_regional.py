@@ -227,12 +227,34 @@ class HubLink(Base):
         self.assertIn("StrictHostKeyChecking=accept-new", args)
         self.assertIn(str(self.home / ".ssh/hawkeye-regional"), args)
 
-    def test_linked_workers_are_left_alone(self):
+    def test_linked_workers_are_left_alone_but_the_tunnel_config_is_applied_again(self):
         dump = self.linked_before()
         r = self.link(*self.args, WG_DUMP=dump)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(self.calls(), [])
-        self.assertEqual(self.hub_apply(), [])
+        # The same peers: wireguard.sh keeps live tunnels up and restarts only if this release changed the tunnel's rules.
+        self.assertEqual(self.hub_apply(), [["bash", "deploy/wireguard.sh", "hub-apply", f"{KEY_AU}=10.66.0.3", f"{KEY_EU}=10.66.0.2"]])
+
+    def test_every_deploy_reapplies_the_tunnel_for_the_workers_linked_already(self):
+        dump = self.linked_before()
+        r = self.link("--known", WG_DUMP=dump)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.calls(), [])
+        self.assertEqual(self.hub_apply(), [["bash", "deploy/wireguard.sh", "hub-apply", f"{KEY_AU}=10.66.0.3", f"{KEY_EU}=10.66.0.2"]])
+
+    def test_known_keeps_a_peer_the_state_remembers_and_drops_nothing(self):
+        dump = self.linked_before()
+        stranger = "S" * 43 + "="   # a peer linked by another run that this release's list doesn't know yet
+        r = self.link("--known", WG_DUMP=dump + f"{stranger} (none) 9.9.9.9:51820 10.66.0.4/32 0 0 0 off\n")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        (apply,) = self.hub_apply()
+        self.assertIn(f"{KEY_EU}=10.66.0.2", apply)
+        self.assertIn(f"{stranger}=10.66.0.4", apply)
+
+    def test_known_does_nothing_where_nothing_was_ever_linked(self):
+        r = self.link("--known")
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual((self.calls(), self.sudo()), ([], []))
 
     def test_a_replaced_worker_is_linked_again_and_its_old_host_key_forgotten(self):
         dump = self.linked_before()
@@ -680,6 +702,40 @@ class Render(unittest.TestCase):
         # Each rule goes in at position 1, so the ACCEPT must be inserted last to end up above the DROP.
         self.assertIn("-j DROP", up[0])
         self.assertIn("-j ACCEPT", up[1])
+
+    def test_tunnel_traffic_reaches_the_database_from_its_own_network(self):
+        # The database container's default route is its other network, so it would not answer a tunnel address (found 2026-11-19).
+        conf = self.wg("render-hub").stdout
+        self.assertIn("PostUp = iptables -w -t nat -A POSTROUTING -s 10.66.0.0/24 -d 172.30.10.5 -p tcp --dport 5432 -j MASQUERADE", conf)
+
+    def hub_apply_with(self, existing):
+        """Runs hub-apply against a config already installed, with systemctl, wg, wg-quick and ufw recording what they were asked."""
+        d = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, d)
+        (d / "private.key").write_text("the-private-key\n")
+        if existing is not None:
+            (d / "wg0.conf").write_text(existing)
+        bin_ = d / "bin"; bin_.mkdir(); log = d / "log"
+        for name in ("systemctl", "wg", "wg-quick", "ufw"):
+            stub(bin_ / name, f'#!/bin/sh\necho "{name} $*" >> {log}\nexit 0\n')
+        script = (ROOT / "deploy/wireguard.sh").read_text().replace("DIR=/etc/wireguard", f"DIR={d}").replace("/etc/systemd/system", str(d / "systemd"))
+        (d / "wg.sh").write_text(script)
+        r = subprocess.run(["bash", str(d / "wg.sh"), "hub-apply", f"{KEY_EU}=10.66.0.2"], capture_output=True, text=True,
+                           env={**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return log.read_text(), (d / "wg0.conf").read_text()
+
+    def test_new_peers_alone_keep_the_running_tunnel_up(self):
+        current = self.wg("render-hub").stdout.replace("[Interface]\n", "[Interface]\nPrivateKey = the-private-key\n", 1)
+        log, _ = self.hub_apply_with(current)
+        self.assertNotIn("systemctl restart", log)
+        self.assertIn("wg syncconf", log)
+
+    def test_a_release_that_changes_the_tunnels_rules_restarts_it_once(self):
+        old = self.wg("render-hub").stdout.replace("[Interface]\n", "[Interface]\nPrivateKey = the-private-key\n", 1)
+        old = "\n".join(l for l in old.splitlines() if "MASQUERADE" not in l) + "\n"   # the config before this rule existed
+        log, new = self.hub_apply_with(old)
+        self.assertIn("systemctl restart wg-quick@wg0", log)
+        self.assertIn("MASQUERADE", new)
 
     def test_every_rule_added_is_removed_again(self):
         conf = self.wg("render-hub").stdout
