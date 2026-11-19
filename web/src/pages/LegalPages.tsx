@@ -28,7 +28,7 @@ const SUPPORT = 'customer_support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 17, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 19, 2026</p>
       <p>
         HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -208,7 +208,7 @@ export function PrivacyPage() {
       <h3>A. Service providers</h3>
       <p>We use these providers to operate HawkEye. They may process information only to provide their services to us.</p>
       <ul>
-        <li><strong>Vultr</strong>: server hosting. Our application and database run on servers in the United States. If we run checks from additional locations, the servers there also temporarily handle your monitor settings and credentials while they perform your checks.</li>
+        <li><strong>Vultr</strong>: server hosting. Our application and database run on servers in the United States. We also run checks from servers in the Netherlands and in the western United States; for monitors checked from those locations, the servers there temporarily handle your monitor settings and credentials while they perform your checks, and send the results back to our database.</li>
         <li><strong>Stripe</strong>: payment processing and subscription billing.</li>
         <li><strong>Resend</strong>: delivery of our emails, such as verification, password reset, and alert emails. Resend processes the recipient address and the content of those emails.</li>
         <li><strong>Cloudflare</strong>: domain name (DNS) services and the forwarding of messages sent to our support address.</li>
@@ -315,7 +315,7 @@ export function PrivacyPage() {
 
       <h2>7. International Processing</h2>
       <p>
-        Our servers are in the United States, and our service providers may process information in the United States and other countries where they operate. If you use the Service from outside the United States, your information
+        Our application and database servers are in the United States. Monitors checked from our European location are checked from a server in the Netherlands, which handles their settings and credentials only while performing those checks. Our service providers may process information in the United States and other countries where they operate. If you use the Service from outside the United States, your information
         will be transferred to, stored, and processed in the United States, where privacy laws may differ from those where you live.
       </p>
       <p>
