@@ -139,9 +139,20 @@ fi
 
 for code in "${NEW[@]}"; do
   public "$code" "link-apply $hub_pub" >/dev/null 2>&1 || { warn "$code could not join the tunnel"; failed="$failed $code"; unset 'PEER[$code]'; continue; }
+done
+
+# Every worker must answer through the tunnel before this returns, not only the new ones: when this release changed the tunnel's rules the
+# tunnel was just restarted, and until each worker makes a new handshake (up to about a minute, it is the side that knows the other's address)
+# a release sent to it would fail. TUNNEL_TRIES x 5 seconds: two minutes by default.
+for code in $(printf '%s\n' "${!PEER[@]}" | sort); do
   up=0
-  for _ in 1 2 3 4 5 6; do if tunnel "$code" ready 2>/dev/null; then up=1; break; fi; sleep 3; done
-  if [ "$up" = 1 ]; then say "$code is linked: the tunnel works"; else warn "$code joined but the tunnel does not answer (the UDP rule in infra/workers.tf, 'sudo wg show' on both ends)"; failed="$failed $code"; unset 'PEER[$code]'; fi
+  for _ in $(seq 1 "${TUNNEL_TRIES:-24}"); do if tunnel "$code" ready 2>/dev/null; then up=1; break; fi; sleep "${TUNNEL_WAIT:-5}"; done
+  if [ "$up" = 1 ]; then
+    for n in "${NEW[@]}"; do [ "$n" != "$code" ] || say "$code is linked: the tunnel works"; done
+  else
+    warn "$code does not answer through the tunnel (the UDP rule in infra/workers.tf, 'sudo wg show' on both ends)"; failed="$failed $code"
+    for n in "${NEW[@]}"; do [ "$n" != "$code" ] || unset 'PEER[$code]'; done   # a worker linked before stays remembered; a new one is tried again
+  fi
 done
 
 # Remember what is linked, so the next run skips it and can tell a replaced host from the same one.

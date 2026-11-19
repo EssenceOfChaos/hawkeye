@@ -231,7 +231,7 @@ class HubLink(Base):
         dump = self.linked_before()
         r = self.link(*self.args, WG_DUMP=dump)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.calls(), [])
+        self.assertEqual(self.calls(EU) + self.calls(AU), [])   # nothing over their public addresses
         # The same peers: wireguard.sh keeps live tunnels up and restarts only if this release changed the tunnel's rules.
         self.assertEqual(self.hub_apply(), [["bash", "deploy/wireguard.sh", "hub-apply", f"{KEY_AU}=10.66.0.3", f"{KEY_EU}=10.66.0.2"]])
 
@@ -239,7 +239,9 @@ class HubLink(Base):
         dump = self.linked_before()
         r = self.link("--known", WG_DUMP=dump)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.calls(), [])
+        # Nothing over the public address, and each worker proven through the tunnel before the release goes out (it may just have restarted).
+        self.assertEqual(sorted(c["host"] for c in self.calls()), ["10.66.0.2", "10.66.0.3"])
+        self.assertEqual({c["command"] for c in self.calls()}, {"ready"})
         self.assertEqual(self.hub_apply(), [["bash", "deploy/wireguard.sh", "hub-apply", f"{KEY_AU}=10.66.0.3", f"{KEY_EU}=10.66.0.2"]])
 
     def test_known_keeps_a_peer_the_state_remembers_and_drops_nothing(self):
@@ -250,6 +252,13 @@ class HubLink(Base):
         (apply,) = self.hub_apply()
         self.assertIn(f"{KEY_EU}=10.66.0.2", apply)
         self.assertIn(f"{stranger}=10.66.0.4", apply)
+
+    def test_a_worker_linked_before_that_stops_answering_fails_the_run_but_stays_remembered(self):
+        dump = self.linked_before()
+        r = self.link("--known", WG_DUMP=dump, SSH_FAIL_HOSTS="10.66.0.3", TUNNEL_TRIES="2", TUNNEL_WAIT="0")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("ap-southeast does not answer through the tunnel", r.stderr)
+        self.assertIn("ap-southeast", (self.home / ".hawkeye-regional-links").read_text())
 
     def test_known_does_nothing_where_nothing_was_ever_linked(self):
         r = self.link("--known")
