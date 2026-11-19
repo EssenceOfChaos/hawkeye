@@ -14,6 +14,11 @@
 # packet arriving on the tunnel is dropped, including one worker trying to reach another. These are firewall rules on the tunnel and no change to the
 # Compose stack, on purpose: publishing the port on the tunnel address would stop the database from starting whenever the tunnel is down.
 #
+# The forwarded connection also arrives looking as if it came from the checks network's gateway (MASQUERADE). The database container is on two
+# networks and its default route is the other one (backend), so a tunnel address would be reached only that way: the container would have to
+# answer through a different interface than the request came in on, and it drops the request instead (found 2026-11-19: every SYN reached the
+# container and none was answered). From the gateway's address, the answer goes straight back the way it came.
+#
 # Private keys are created on the host that uses them and never leave it: only that host's root-only /etc/wireguard holds them, not OpenTofu state,
 # cloud-init or the secret manager.
 # The database has no TLS (docker-compose.local-db.yml), so the tunnel is what encrypts this traffic.
@@ -21,6 +26,7 @@ set -euo pipefail
 IFACE=wg0
 PORT=51820
 HUB_TUNNEL_IP=10.66.0.1
+TUNNEL_NET=10.66.0.0/24
 DB_ADDR="${HAWKEYE_DB_ADDR:-172.30.10.5}"   # fixed in docker-compose.local-db.yml
 DB_PORT=5432
 DIR=/etc/wireguard
@@ -38,10 +44,12 @@ PostUp = iptables -w -t nat -A PREROUTING -i %i -d $HUB_TUNNEL_IP -p tcp --dport
 PostUp = iptables -w -I DOCKER-USER 1 -i %i -j DROP
 PostUp = iptables -w -I DOCKER-USER 1 -i %i -d $DB_ADDR -p tcp --dport $DB_PORT -j ACCEPT
 PostUp = iptables -w -t mangle -A FORWARD -o %i -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+PostUp = iptables -w -t nat -A POSTROUTING -s $TUNNEL_NET -d $DB_ADDR -p tcp --dport $DB_PORT -j MASQUERADE
 PostDown = iptables -w -t nat -D PREROUTING -i %i -d $HUB_TUNNEL_IP -p tcp --dport $DB_PORT -j DNAT --to-destination $DB_ADDR:$DB_PORT
 PostDown = iptables -w -D DOCKER-USER -i %i -d $DB_ADDR -p tcp --dport $DB_PORT -j ACCEPT
 PostDown = iptables -w -D DOCKER-USER -i %i -j DROP
 PostDown = iptables -w -t mangle -D FORWARD -o %i -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+PostDown = iptables -w -t nat -D POSTROUTING -s $TUNNEL_NET -d $DB_ADDR -p tcp --dport $DB_PORT -j MASQUERADE
 CONF
   local peer pub ip
   for peer in "$@"; do
@@ -80,6 +88,9 @@ ensure_key() {
 # without a key would wipe it from the running interface and drop every tunnel. awk reads it from the key file, which keeps it out of any command line.
 with_key() { awk -v keyfile="$DIR/private.key" '{ print } /^\[Interface\]$/ { getline key < keyfile; print "PrivateKey = " key }'; }
 
+# The [Interface] part of a config (its rules), without the key: what decides whether hub-apply has to restart the tunnel.
+interface_section() { [ -f "$1" ] && awk '/^\[Peer\]$/ { exit } !/^PrivateKey/ { print }' "$1" || true; }
+
 install_config() { # stdin -> the config, atomically
   (umask 077; with_key > "$DIR/$IFACE.conf.new")
   mv "$DIR/$IFACE.conf.new" "$DIR/$IFACE.conf"
@@ -97,12 +108,18 @@ case "$ACTION" in
   with-key) with_key ;;
   hub-key|worker-key) ensure_key ;;
   hub-apply)
+    # The rules above run only when the tunnel comes up, so a release that changes them restarts it once (a second or two; workers reconnect by
+    # themselves). A change of peers alone does not: live tunnels stay up.
+    before="$(interface_section "$DIR/$IFACE.conf")"
     render_hub "$@" | install_config
     ufw allow "$PORT/udp" >/dev/null   # Vultr's network firewall admits only the workers (infra/workers.tf)
-    if systemctl is-active --quiet "wg-quick@$IFACE"; then
-      wg syncconf "$IFACE" <(wg-quick strip "$IFACE")   # peers change, live tunnels stay up
-    else
+    if ! systemctl is-active --quiet "wg-quick@$IFACE"; then
       systemctl start "wg-quick@$IFACE"
+    elif [ "$before" != "$(interface_section "$DIR/$IFACE.conf")" ]; then
+      echo "the tunnel's rules changed: restarting it" >&2
+      systemctl restart "wg-quick@$IFACE"
+    else
+      wg syncconf "$IFACE" <(wg-quick strip "$IFACE")   # peers change, live tunnels stay up
     fi ;;
   worker-apply)
     render_worker "$@" | install_config

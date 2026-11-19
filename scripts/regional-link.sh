@@ -5,6 +5,8 @@
 #
 #   scripts/regional-link.sh CODE=PUBLIC_IP,TUNNEL_IP ...   make exactly these workers the hub's peers: link the new or replaced ones, drop the rest
 #   scripts/regional-link.sh --key                         make this server's key for reaching workers, once, and say if infra/ trusts another one
+#   scripts/regional-link.sh --known                       every deploy: the workers linked already, so this release's tunnel rules apply;
+#                                                          links nothing new and drops nothing
 #
 # The list is every worker OpenTofu has, from its state, so it is complete: a peer that is not on it belongs to a worker that no longer exists.
 #
@@ -43,7 +45,12 @@ ensure_key() {
 }
 
 if [ "${1:-}" = --key ]; then ensure_key; exit 0; fi
-[ $# -gt 0 ] || { say "no workers were given: nothing to link"; exit 0; }
+KNOWN_ONLY=0
+if [ "${1:-}" = --known ]; then
+  KNOWN_ONLY=1; shift
+  [ -s "$STATE" ] || exit 0   # nothing was ever linked here: the usual case until a worker exists
+fi
+[ $# -gt 0 ] || [ "$KNOWN_ONLY" = 1 ] || { say "no workers were given: nothing to link"; exit 0; }
 
 # --- the list ------------------------------------------------------------------------------------------------------------------------------
 declare -A PUBLIC TUNNEL
@@ -63,6 +70,13 @@ declare -A HAS   # tunnel address -> WireGuard key
 while read -r pub tip; do [ -n "${tip:-}" ] && HAS[$tip]="$pub"; done < <(current_peers)
 declare -A WAS_IP WAS_KEY   # from the last run: which address and key each code had
 if [ -f "$STATE" ]; then while read -r c ip k; do [ -n "${k:-}" ] && { WAS_IP[$c]="$ip"; WAS_KEY[$c]="$k"; }; done < "$STATE"; fi
+if [ "$KNOWN_ONLY" = 1 ]; then
+  # The list is what is linked now: each remembered worker whose key is still one of the hub's peers, at that peer's tunnel address.
+  for c in "${!WAS_KEY[@]}"; do
+    for tip in "${!HAS[@]}"; do [ "${HAS[$tip]}" = "${WAS_KEY[$c]}" ] && { PUBLIC[$c]="${WAS_IP[$c]}"; TUNNEL[$c]="$tip"; }; done
+  done
+  [ ${#PUBLIC[@]} -gt 0 ] || exit 0
+fi
 
 # --- reaching a worker ---------------------------------------------------------------------------------------------------------------------
 # Over its public address until the tunnel exists. Its host key is learned on first contact under the worker's code, so a different host at that
@@ -103,18 +117,24 @@ done
 # The hub's peers become exactly the workers that exist (and have a key). A peer left over from a removed or replaced worker goes.
 peers=()
 for code in $(printf '%s\n' "${!PEER[@]}" | sort); do peers+=("${PEER[$code]}=${TUNNEL[$code]}"); done
+if [ "$KNOWN_ONLY" = 1 ]; then
+  # A deploy knows only what it linked before: a peer it doesn't know (linked by a run of the workflow since) stays as it is.
+  for tip in $(printf '%s\n' "${!HAS[@]}" | sort); do
+    mine=0; for code in "${!TUNNEL[@]}"; do [ "${TUNNEL[$code]}" != "$tip" ] || mine=1; done
+    [ "$mine" = 1 ] || peers+=("${HAS[$tip]}=$tip")
+  done
+fi
 want="$(printf '%s\n' "${peers[@]}" | sed '/^$/d' | sort)"
 have="$(for t in "${!HAS[@]}"; do echo "${HAS[$t]}=$t"; done | sort)"
 hub_pub=""
-if [ "$want" != "$have" ] || [ ${#NEW[@]} -gt 0 ]; then
+if [ ${#peers[@]} -gt 0 ] || [ "$want" != "$have" ]; then
   # Installs WireGuard here the first time and makes this server's tunnel key once; printing it changes nothing.
   hub_pub="$(sudo -n bash deploy/wireguard.sh hub-key | tail -1)"
   [[ "$hub_pub" =~ $WG_RE ]] || { warn "could not set up WireGuard on this server"; exit 1; }
-fi
-if [ "$want" != "$have" ]; then
+  # Applied even when the peers are the same: a release may change the tunnel's rules (deploy/wireguard.sh restarts it only then).
   if [ ${#peers[@]} -gt 0 ]; then sudo -n bash deploy/wireguard.sh hub-apply "${peers[@]}" || { warn "could not update this server's tunnel"; exit 1; }
   else sudo -n bash deploy/wireguard.sh hub-apply || { warn "could not update this server's tunnel"; exit 1; }; fi
-  say "tunnel peers: ${#peers[@]}"
+  [ "$want" = "$have" ] || say "tunnel peers: ${#peers[@]}"
 fi
 
 for code in "${NEW[@]}"; do

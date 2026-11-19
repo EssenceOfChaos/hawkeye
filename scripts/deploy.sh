@@ -56,6 +56,7 @@ main() {
   # alert goes out (scripts/regional-sync.sh). The script is missing when rolling back to a release from before it existed.
   update_regions() {
     [ ! -x scripts/regional-link.sh ] || scripts/regional-link.sh --key || true   # says so if new workers would not trust this server
+    [ ! -x scripts/regional-link.sh ] || scripts/regional-link.sh --known || true   # this release's tunnel rules, for the workers linked already
     [ ! -x scripts/regional-sync.sh ] || scripts/regional-sync.sh || echo "!! not every regional worker was updated; production is fine" >&2
   }
   healthy() { # smoke test against the public URL, retrying while containers settle
