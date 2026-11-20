@@ -112,10 +112,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       register: async (email, password) => {
         // How this browser first found HawkEye, recorded with the account (nothing while analytics is off).
-        await api('POST', '/auth/register', { email, password, attribution: attributionForSignup(analyticsEnabled()) })
+        const r = await api<{ conversion_event_id?: string }>('POST', '/auth/register', { email, password, attribution: attributionForSignup(analyticsEnabled()) })
         forgetArrival()
         trackEvent('sign_up', { method: 'email' })
-        trackRegistration()
+        trackRegistration(r?.conversion_event_id)
         await refresh()
       },
       logout: async () => {

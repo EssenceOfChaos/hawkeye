@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/account"
+	"hawkeye/internal/adconversions"
 	"hawkeye/internal/apitokens"
 	"hawkeye/internal/attribution"
 	"hawkeye/internal/audit"
@@ -63,6 +64,7 @@ type handlers struct {
 	heartbeats      *heartbeats.Service
 	regions         regions.Set
 	billing         *billing.Service
+	adConversions   *adconversions.Recorder
 	account         *account.Service
 	contact         *contact.Service
 	invitations     *invitations.Service
@@ -242,7 +244,11 @@ func (h *handlers) register(c *echo.Context) error {
 		return mapError(err)
 	}
 	h.setSessionCookie(c, session)
-	return c.JSON(http.StatusCreated, map[string]any{"user": u})
+	// OpenAI Ads hears of the sign-up from the browser pixel and from us; both send this id, so it is counted once.
+	if err := h.adConversions.Registration(c.Request().Context(), adconversions.FromRequest(c.Request()), u.ID); err != nil {
+		h.log.WarnContext(c.Request().Context(), "could not record the sign-up for OpenAI Ads", "error", err)
+	}
+	return c.JSON(http.StatusCreated, map[string]any{"user": u, "conversion_event_id": adconversions.RegistrationEventID(u.ID)})
 }
 
 func (h *handlers) login(c *echo.Context) error {

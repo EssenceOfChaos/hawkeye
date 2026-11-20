@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/adconversions"
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/metrics"
 	"hawkeye/internal/plans"
@@ -70,6 +71,9 @@ type View struct {
 	CurrentPeriodEnd  *time.Time `json:"current_period_end"`
 	CanManage         bool       `json:"can_manage"` // a billing account exists, so the portal can be opened
 	HasSubscription   bool       `json:"has_subscription"`
+	// PurchaseEventID identifies the current paid period to OpenAI Ads, while the organization pays (else null). The pixel sends it with the purchase
+	// and the server's report uses the same one (internal/adconversions), so the purchase is counted once. It is a hash and reveals nothing.
+	PurchaseEventID *string `json:"purchase_event_id"`
 }
 
 type row struct {
@@ -120,6 +124,7 @@ func (s *Service) Subscription(ctx context.Context, orgID uuid.UUID) (View, erro
 	v.HasSubscription = r.subscriptionID != nil && r.planCode != plans.FreeCode
 	if v.PaidAccess {
 		v.BillingInterval = r.interval
+		v.PurchaseEventID = purchaseEventID(orgID, r.periodEnd)
 	} else {
 		v.CancelAtPeriodEnd, v.CurrentPeriodEnd = false, nil // stale paid-period details are not shown for a free organization
 	}
@@ -337,5 +342,37 @@ func (s *Service) apply(ctx context.Context, tx pgx.Tx, orgID uuid.UUID, st Subs
 	if err != nil {
 		return "", err
 	}
+	if !cur.hasPaidAccess() && planCode != plans.FreeCode && plans.GrantsPaidAccess(mapped) && st.PeriodEnd != nil {
+		s.recordPurchase(ctx, tx, orgID, planCode, interval, *st.PeriodEnd)
+	}
 	return outcomeApplied, nil
+}
+
+// recordPurchase reports an organization's move to a paid plan to OpenAI Ads (internal/adconversions), when the checkout that led to it was
+// recorded. It runs in a savepoint and never fails the billing change: a missed ad conversion is not worth a subscription left unapplied.
+func (s *Service) recordPurchase(ctx context.Context, tx pgx.Tx, orgID uuid.UUID, planCode string, interval *string, periodEnd time.Time) {
+	iv := IntervalMonth
+	if interval != nil {
+		iv = *interval
+	}
+	err := pgx.BeginFunc(ctx, tx, func(sp pgx.Tx) error {
+		p, err := adconversions.PlanFor(ctx, sp, planCode, iv)
+		if err != nil {
+			return err
+		}
+		_, err = adconversions.RecordPurchase(ctx, sp, orgID, periodEnd, p)
+		return err
+	})
+	if err != nil {
+		s.log.WarnContext(ctx, "could not record the purchase for OpenAI Ads", "organization_id", orgID, "error", err)
+	}
+}
+
+// purchaseEventID is the id the browser pixel sends with a purchase, so OpenAI counts it once with the server's report.
+func purchaseEventID(orgID uuid.UUID, periodEnd *time.Time) *string {
+	if periodEnd == nil {
+		return nil
+	}
+	id := adconversions.PurchaseEventID(orgID, *periodEnd)
+	return &id
 }

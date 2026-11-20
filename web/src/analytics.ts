@@ -220,14 +220,28 @@ export function trackPurchase(valueUsd: number, transactionId: string) {
   gtag('event', 'conversion', { send_to: ADS_PURCHASE_SEND_TO, value: valueUsd, currency: 'USD', transaction_id: transactionId })
 }
 
-/** A completed registration, for OpenAI Ads (Google Analytics gets the sign_up event through trackEvent). */
-export function trackRegistration() {
-  measure('registration_completed', { type: 'customer_action' })
+/**
+ * A completed registration, for OpenAI Ads (Google Analytics gets the sign_up event through trackEvent). `eventId` comes from the sign-up response: our
+ * server reports the same sign-up with it (internal/adconversions), and OpenAI keeps one of the two.
+ */
+export function trackRegistration(eventId?: string) {
+  if (eventId) measure('registration_completed', { type: 'customer_action' }, { event_id: eventId })
+  else measure('registration_completed', { type: 'customer_action' })
+}
+
+/**
+ * An owner leaving for Checkout, for OpenAI Ads: the plan as the one item and its price for the period, in cents. `eventId` comes from the checkout
+ * response; the server reports the same checkout with it, which matters here because the redirect to Stripe can cut the pixel's request short.
+ */
+export function trackCheckoutStarted(cents: number, planCode: string, interval: 'month' | 'year', eventId: string) {
+  const id = `${planCode}_${interval}`
+  measure('checkout_started', { type: 'contents', amount: cents, currency: 'USD', contents: [{ id, content_type: 'plan', quantity: 1, amount: cents, currency: 'USD' }] },
+    { event_id: eventId })
 }
 
 /**
  * A confirmed paid subscription, for OpenAI Ads: what was paid, in cents (a year's price for yearly billing), and the plan and interval. `eventId` is the
- * same value Google gets as the transaction id, so a repeat is dropped.
+ * subscription's purchase_event_id, which our server's report of the same purchase also uses, so OpenAI counts it once.
  */
 export function trackSubscription(cents: number, planCode: string, interval: 'month' | 'year', eventId: string) {
   measure('subscription_created', { type: 'plan_enrollment', plan_id: `${planCode}_${interval}`, amount: cents, currency: 'USD' }, { event_id: eventId })

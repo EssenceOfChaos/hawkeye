@@ -478,6 +478,24 @@ generate a new key (`openssl rand -base64 32`) and tell affected customers to en
 (4) Events `failed` → fix the cause, then `UPDATE billing_webhook_events SET status='received', attempt_count=0, next_attempt_at=now() WHERE status='failed' AND id='…';`
 (5) Fastest repair for one organization: the owner (or you, via the API as them) calls `POST /api/v1/billing/sync`, which re-reads the subscription from Stripe.
 
+### OpenAI Ads conversions
+
+The browser pixel and the server both report sign-ups (`registration_completed`), checkouts (`checkout_started`) and first paid periods
+(`subscription_created`) to OpenAI Ads, with the same event id, so OpenAI counts each once (`internal/adconversions`, `docs/security.md`).
+The server side is off until `OPENAI_ADS_API_KEY` is set (Ads Manager → Conversions → the pixel's data source → Conversions API key; add it in
+Infisical and apply with `secrets-only`). The API then records events in `ad_conversion_events` (only for visitors who have analytics on) and the
+primary worker sends them every 30 seconds. The worker logs "OpenAI Ads server-side conversions off" while the key is missing.
+
+- **Check it works:** `SELECT event_type, status, attempt_count, last_error, occurred_at FROM ad_conversion_events ORDER BY created_at DESC LIMIT 20;`
+  and `hawkeye_ad_conversions_total`. Ads Manager's "No recent server-to-server events" warning clears within a day of the first `sent` row.
+- **`failed` with `HTTP 400`:** OpenAI refused that event's contents (the other events in its batch were still sent). Read `last_error`, fix the
+  payload in `internal/adconversions`; those events are not resent.
+- **Pending with `HTTP 401`/`403`:** the key is wrong or was revoked. Replace it in Infisical; events keep retrying for up to 10 attempts (about 6
+  hours apart at most) and those older than 7 days are marked `expired`, because OpenAI refuses them.
+- **A purchase was not reported:** it is only reported when that organization's checkout was recorded in the 7 days before Stripe confirmed it
+  (the buyer had analytics on, and the key was set). This is deliberate: a webhook has no browser, so the checkout is the record of the buyer's choice.
+- Rows are deleted 30 days after they were recorded, and with the account or organization.
+
 ### Database growing
 
 Check `hawkeye_retention_last_success_timestamp_seconds`, the worker log lines "retention pass complete / failed", and that

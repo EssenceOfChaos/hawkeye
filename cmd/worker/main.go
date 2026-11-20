@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"hawkeye/internal/adconversions"
 	"hawkeye/internal/apitokens"
 	"hawkeye/internal/audit"
 	"hawkeye/internal/billing"
@@ -175,6 +176,14 @@ func run() error {
 				}
 			}
 		})
+		// Sign-ups, checkouts and purchases reported to OpenAI Ads' Conversions API, alongside the browser pixel (internal/adconversions).
+		if cfg.OpenAIAdsAPIKey != "" {
+			sender := adconversions.NewSender(pool, adconversions.SenderConfig{APIKey: cfg.OpenAIAdsAPIKey, PixelID: cfg.OpenAIAdsPixelID,
+				AppBaseURL: cfg.AppBaseURL}, m, log).WithReporter(reporter)
+			spawn(func() { sender.Run(ctx) })
+		} else {
+			log.Info("OpenAI Ads server-side conversions off (set OPENAI_ADS_API_KEY to send them)")
+		}
 		// Alert emails.
 		mailer, err := email.New(cfg.EmailProvider, email.SMTPConfig{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername,
 			Password: cfg.SMTPPassword, TLS: cfg.SMTPTLS, CAFile: cfg.SMTPCAFile, From: cfg.EmailFromAddress}, log)

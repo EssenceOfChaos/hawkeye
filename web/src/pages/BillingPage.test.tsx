@@ -7,8 +7,8 @@ import { BillingPage } from './BillingPage'
 
 vi.mock('../navigation', () => ({ redirectTo: vi.fn() }))
 import { redirectTo } from '../navigation'
-vi.mock('../analytics', async (orig) => ({ ...(await orig<typeof import('../analytics')>()), trackPurchase: vi.fn() }))
-import { trackPurchase } from '../analytics'
+vi.mock('../analytics', async (orig) => ({ ...(await orig<typeof import('../analytics')>()), trackPurchase: vi.fn(), trackSubscription: vi.fn(), trackCheckoutStarted: vi.fn() }))
+import { trackCheckoutStarted, trackPurchase, trackSubscription } from '../analytics'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -18,6 +18,8 @@ beforeEach(() => {
   document.cookie = 'csrf_token=t; path=/'
   vi.mocked(redirectTo).mockClear()
   vi.mocked(trackPurchase).mockClear()
+  vi.mocked(trackSubscription).mockClear()
+  vi.mocked(trackCheckoutStarted).mockClear()
   localStorage.clear()
 })
 
@@ -61,6 +63,13 @@ describe('BillingPage', () => {
     expect(posts[0].url).toBe('/api/v1/billing/checkout-session')
     expect(posts[0].body).toEqual({ plan: 'pro' }) // never a price or amount
     expect(redirectTo).toHaveBeenCalledWith('https://checkout.stripe.test/c/1')
+  })
+
+  it('reports the checkout to OpenAI Ads with the id the server reports it with, before leaving for Checkout', async () => {
+    setup({ post: () => json(200, { url: 'https://checkout.stripe.test/c/1', conversion_event_id: 'chk_1' }) })
+    await userEvent.click(await screen.findByRole('button', { name: 'Choose Agency' }))
+    expect(trackCheckoutStarted).toHaveBeenCalledWith(5900, 'agency', 'month', 'chk_1')
+    expect(vi.mocked(trackCheckoutStarted).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(redirectTo).mock.invocationCallOrder[0])
   })
 
   it('shows the free plan limits and no cancel button', async () => {
@@ -144,6 +153,13 @@ describe('BillingPage', () => {
     await screen.findByRole('heading', { name: 'Current plan: Pro' })
     await vi.waitFor(() => expect(trackPurchase).toHaveBeenCalledTimes(1))
     expect(trackPurchase).toHaveBeenCalledWith(19, '2026-11-30T00:00:00Z')
+  })
+
+  it('reports the purchase to OpenAI Ads with the purchase id the server uses for the same purchase', async () => {
+    const paid = sub({ plan: pro, paid_access: true, current_period_end: '2026-11-30T00:00:00Z', can_manage: true, has_subscription: true, purchase_event_id: 'sub_abc' })
+    setup({ path: '/billing?checkout=success', subscription: paid, usage: usage(pro) })
+    await vi.waitFor(() => expect(trackSubscription).toHaveBeenCalledTimes(1))
+    expect(trackSubscription).toHaveBeenCalledWith(1900, 'pro', 'month', 'sub_abc')
   })
 
   it('does not report a purchase for an unpaid return from Checkout or for a customer just opening the page', async () => {

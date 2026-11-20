@@ -543,6 +543,8 @@ export interface BillingSubscription {
   current_period_end: string | null
   can_manage: boolean
   has_subscription: boolean
+  /** Identifies the paid period to OpenAI Ads, so the pixel and the server's report count one purchase; null while not paying. */
+  purchase_event_id?: string | null
 }
 
 export interface RangeInfo {

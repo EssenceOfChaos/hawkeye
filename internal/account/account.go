@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/adconversions"
 	"hawkeye/internal/attribution"
 	"hawkeye/internal/audit"
 	"hawkeye/internal/auth"
@@ -54,6 +55,8 @@ type Export struct {
 	SecurityLog []audit.Entry `json:"security_log"`
 	// SignupAttribution is how the account's browser said it found HawkEye when it signed up (internal/attribution), or null.
 	SignupAttribution *attribution.Attribution `json:"signup_attribution"`
+	// AdConversions are the sign-up, checkout and purchase events our server reported (or will report) to OpenAI Ads, kept 30 days (internal/adconversions).
+	AdConversions []adconversions.Exported `json:"ad_conversions"`
 }
 
 type ExportUser struct {
@@ -204,6 +207,9 @@ func (s *Service) Export(ctx context.Context, userID uuid.UUID) (Export, error) 
 		return out, err
 	}
 	if out.SignupAttribution, err = attribution.ForUser(ctx, s.pool, userID); err != nil {
+		return out, err
+	}
+	if out.AdConversions, err = adconversions.ForUser(ctx, s.pool, userID); err != nil {
 		return out, err
 	}
 	rows, err := s.pool.Query(ctx, `SELECT o.id, o.name, m.role, o.created_at,

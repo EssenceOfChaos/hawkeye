@@ -49,6 +49,8 @@ type Metrics struct {
 	BillingFailed        prometheus.Gauge
 	BillingPriceMismatch *prometheus.GaugeVec // plan: 1 while the Stripe price does not match the plan advertised on the site (checkout for it is refused)
 
+	AdConversions *prometheus.CounterVec // result=sent|rejected|retry|failed|expired: events sent to OpenAI Ads' Conversions API (internal/adconversions)
+
 	WorkerErrors *prometheus.CounterVec // stage=claim|load|record|complete|sample|schedule|secrets|rollup
 	LastPollUnix prometheus.Gauge
 }
@@ -101,14 +103,19 @@ func newOn(r *prometheus.Registry) *Metrics {
 		BillingOldest:        prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_billing_oldest_pending_seconds", Help: "Age of the oldest unprocessed billing event."}),
 		BillingPriceMismatch: prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hawkeye_billing_price_mismatch", Help: "1 while the Stripe price for a plan does not match the advertised price, so its checkout is refused."}, []string{"plan"}),
 		BillingFailed:        prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_billing_events_failed", Help: "Billing events that gave up and need manual attention."}),
+		AdConversions: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_ad_conversions_total",
+			Help: "Conversion events sent to OpenAI Ads from the server, by result."}, []string{"result"}),
 		WorkerErrors: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_worker_errors_total",
 			Help: "Internal errors by stage."}, []string{"stage"}),
 		CanaryUp:     prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_canary_up", Help: "1 if this worker reaches independent public sites (the canary), 0 if its own network looks impaired."}),
 		LastPollUnix: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_worker_last_poll_timestamp_seconds", Help: "Unix time of the last queue poll."}),
 	}
 	for _, c := range []prometheus.Collector{m.ChecksTotal, m.CheckDuration, m.Scheduled, m.Skipped, m.Missed, m.Backpressure,
-		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.CanaryUp, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.DomainLookups, m.StatusPageDomainChecks, m.LifecycleEmails, m.MonthlyReportEmails, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.RollupLag, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed, m.BillingPriceMismatch} {
+		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.CanaryUp, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.DomainLookups, m.StatusPageDomainChecks, m.LifecycleEmails, m.MonthlyReportEmails, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.RollupLag, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed, m.BillingPriceMismatch, m.AdConversions} {
 		f(c)
+	}
+	for _, result := range []string{"sent", "rejected", "retry", "failed", "expired"} { // exported from the start, so the alert rule's series exists
+		m.AdConversions.WithLabelValues(result).Add(0)
 	}
 	m.CanaryUp.Set(1)                                                               // no verdict yet counts as healthy
 	for _, plan := range []string{"pro", "agency", "pro_annual", "agency_annual"} { // billing.PriceKeys (not imported: billing depends on metrics)

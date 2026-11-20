@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"hawkeye/internal/account"
+	"hawkeye/internal/adconversions"
 	"hawkeye/internal/apitokens"
 	"hawkeye/internal/audit"
 	"hawkeye/internal/auth"
@@ -159,10 +160,12 @@ func run() error {
 	e := httpapi.New(httpapi.Options{
 		Logger: log, DB: pool, RequestTimeout: cfg.RequestTimeout, BodyLimit: cfg.BodyLimit,
 		Auth: authSvc, Orgs: organizations.NewService(pool), Plans: planSvc, Monitors: monitorSvc, Pool: pool, PgPool: pool,
-		Billing:   billingSvc,
-		Account:   account.NewService(pool, authSvc, provider, mailer, log, cfg.AppBaseURL),
-		SSLCheck:  freeTools.ssl,
-		SiteCheck: freeTools.site,
+		Billing: billingSvc,
+		// Sign-ups and checkouts for OpenAI Ads' Conversions API, sent by the worker. Off (nothing recorded) without OPENAI_ADS_API_KEY.
+		AdConversions: adconversions.NewRecorder(pool, cfg.OpenAIAdsAPIKey != ""),
+		Account:       account.NewService(pool, authSvc, provider, mailer, log, cfg.AppBaseURL),
+		SSLCheck:      freeTools.ssl,
+		SiteCheck:     freeTools.site,
 		// "Set up from your domain" is for signed-in customers, so it stays on when the public free tools are turned off.
 		Discovery: discovery.New(safehttp.Config{}),
 		Drafts:    newDrafts(cfg.AnthropicAPIKey, log),

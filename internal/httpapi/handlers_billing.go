@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"hawkeye/internal/adconversions"
 	"hawkeye/internal/audit"
 	"hawkeye/internal/billing"
 )
@@ -57,11 +58,17 @@ func (h *handlers) billingCheckout(c *echo.Context) error {
 	if err := bind(c, &in); err != nil {
 		return err
 	}
-	url, err := h.billing.CreateCheckout(c.Request().Context(), currentOrg(c), currentUser(c).Email, in.Plan, in.Interval)
+	ctx := c.Request().Context()
+	url, err := h.billing.CreateCheckout(ctx, currentOrg(c), currentUser(c).Email, in.Plan, in.Interval)
 	if err != nil {
 		return h.billingError(c, err)
 	}
-	return c.JSON(http.StatusOK, map[string]string{"url": url})
+	// Reported to OpenAI Ads by the pixel and by us with the same id. This checkout's context is also what the purchase is later reported with.
+	eventID := adconversions.NewCheckoutEventID()
+	if err := h.adConversions.Checkout(ctx, adconversions.FromRequest(c.Request()), currentUser(c).ID, currentOrg(c), eventID, in.Plan, in.Interval); err != nil {
+		h.log.WarnContext(ctx, "could not record the checkout for OpenAI Ads", "error", err)
+	}
+	return c.JSON(http.StatusOK, map[string]string{"url": url, "conversion_event_id": eventID})
 }
 
 func (h *handlers) billingPortal(c *echo.Context) error {
