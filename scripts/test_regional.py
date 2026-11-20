@@ -629,6 +629,13 @@ class Regions(unittest.TestCase):
     def test_only_launched_regions_reach_customers_and_the_primary_stays_first(self):
         self.assertEqual(self.regions("check-regions").stdout.strip(), "primary:US East,eu-central:Europe")
 
+    def test_a_country_code_travels_with_the_name(self):
+        data = json.loads(json.dumps(REGIONS))
+        data["primary"]["country"] = "US"
+        data["workers"]["eu-central"]["country"] = "NL"
+        self.file.write_text(json.dumps(data))
+        self.assertEqual(self.regions("check-regions").stdout.strip(), "primary:US East:US,eu-central:Europe:NL")
+
     def test_nothing_launched_means_nothing_is_set(self):
         data = json.loads(json.dumps(REGIONS))
         data["workers"]["eu-central"]["launched"] = False
@@ -651,7 +658,7 @@ class Regions(unittest.TestCase):
         self.assertEqual(env.read_text(), "A=1\n")
 
     def test_mistakes_are_refused(self):
-        for change, why in (({"tunnel_ip": "10.66.0.1"}, "tunnel_ip"), ({"tunnel_ip": "10.66.0.3"}, "already taken"), ({"name": "Europe, West"}, "name"), ({"launched": "yes"}, "launched"), ({"vultr_region": ""}, "vultr_region")):
+        for change, why in (({"tunnel_ip": "10.66.0.1"}, "tunnel_ip"), ({"tunnel_ip": "10.66.0.3"}, "already taken"), ({"name": "Europe, West"}, "name"), ({"launched": "yes"}, "launched"), ({"vultr_region": ""}, "vultr_region"), ({"country": "nl"}, "country"), ({"country": "NLD"}, "country")):
             data = json.loads(json.dumps(REGIONS))
             data["workers"]["eu-central"].update(change)
             self.file.write_text(json.dumps(data))

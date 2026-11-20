@@ -1,7 +1,7 @@
 {
-  "primary": { "name": "US East" },
+  "primary": { "name": "New York", "country": "US" },
   "workers": {
-    "eu-central": { "name": "Europe", "vultr_region": "ams", "tunnel_ip": "10.66.0.2", "launched": true },
-    "us-west": { "name": "US West", "vultr_region": "lax", "tunnel_ip": "10.66.0.3", "launched": true }
+    "eu-central": { "name": "Amsterdam", "country": "NL", "vultr_region": "ams", "tunnel_ip": "10.66.0.2", "launched": true },
+    "us-west": { "name": "Los Angeles", "country": "US", "vultr_region": "lax", "tunnel_ip": "10.66.0.3", "launched": true }
   }
 }

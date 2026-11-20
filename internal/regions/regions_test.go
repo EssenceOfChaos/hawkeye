@@ -20,6 +20,24 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestParseCountry(t *testing.T) {
+	s, err := Parse("primary:New York:US, eu-central:Amsterdam:nl, us-west:Los Angeles")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Country("primary") != "US" || s.Country("eu-central") != "NL" || s.Country("us-west") != "" || s.Country("zz") != "" {
+		t.Fatalf("countries: %+v", s.List())
+	}
+	if s.Name("eu-central") != "Amsterdam" || s.Name("us-west") != "Los Angeles" {
+		t.Fatalf("names: %+v", s.List())
+	}
+	for _, bad := range []string{"a1:A:USA", "a1:A:U", "a1:A:1X"} {
+		if _, err := Parse(bad); err == nil {
+			t.Errorf("%q should be rejected", bad)
+		}
+	}
+}
+
 func TestEffective(t *testing.T) {
 	s, _ := Parse("a1,b2,c3,d4")
 	cases := []struct {

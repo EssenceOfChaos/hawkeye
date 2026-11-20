@@ -942,3 +942,9 @@ button.value-chip { font: .85rem/1.4 var(--font-mono); padding: .1rem .55rem; bo
 .custom-domain .dns-record { border-top: 1px solid var(--line); padding-top: .6rem; margin-top: .6rem; }
 .custom-domain .dns-record-type { margin: 0 0 .25rem; }
 .custom-domain .row-actions { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+
+/* A check location's flag (components/Flag.tsx): a small rectangle with softened corners, set on the text's baseline. */
+.location-name { display: inline-flex; align-items: center; gap: .4rem; }
+.flag { display: inline-block; width: 18px; height: 12px; border-radius: 2px; box-shadow: 0 0 0 1px #ffffff26; flex: none; }
+.location-picker > label { display: inline-flex; align-items: center; gap: .35rem; margin-right: 1.25rem; } /* each location reads as its own choice */
+.location-picker > small { display: block; margin-top: .35rem; }

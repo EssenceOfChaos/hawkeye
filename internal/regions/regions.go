@@ -14,11 +14,16 @@ import (
 // DefaultPrimary is the code of the only region when none is configured.
 const DefaultPrimary = "primary"
 
-var codeRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,18}[a-z0-9]$`)
+var (
+	codeRE    = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,18}[a-z0-9]$`)
+	countryRE = regexp.MustCompile(`^[A-Z]{2}$`)
+)
 
 type Region struct {
 	Code string `json:"code"`
 	Name string `json:"name"`
+	// Country is the ISO 3166-1 alpha-2 code of where the location is (US, NL), for the flag shown beside its name; empty when not given.
+	Country string `json:"country,omitempty"`
 }
 
 // Set is the configured list of regions, primary first. The zero value is not usable; use Parse or Default.
@@ -27,7 +32,7 @@ type Set struct{ list []Region }
 // Default is a single region, "primary".
 func Default() Set { return Set{list: []Region{{Code: DefaultPrimary, Name: "Primary"}}} }
 
-// Parse reads "code[:Display name],code[:Display name],…". An empty string gives Default.
+// Parse reads "code[:Display name[:CC]],…", CC being the location's two-letter country code. An empty string gives Default.
 func Parse(s string) (Set, error) {
 	if strings.TrimSpace(s) == "" {
 		return Default(), nil
@@ -35,10 +40,14 @@ func Parse(s string) (Set, error) {
 	var out Set
 	seen := map[string]bool{}
 	for _, part := range strings.Split(s, ",") {
-		code, name, _ := strings.Cut(strings.TrimSpace(part), ":")
-		code, name = strings.TrimSpace(code), strings.TrimSpace(name)
+		code, rest, _ := strings.Cut(strings.TrimSpace(part), ":")
+		name, country, _ := strings.Cut(rest, ":")
+		code, name, country = strings.TrimSpace(code), strings.TrimSpace(name), strings.ToUpper(strings.TrimSpace(country))
 		if !codeRE.MatchString(code) {
 			return Set{}, fmt.Errorf("region %q: use 2 to 20 lowercase letters, digits or hyphens", code)
+		}
+		if country != "" && !countryRE.MatchString(country) {
+			return Set{}, fmt.Errorf("region %q: the country must be a two-letter code such as US or NL", code)
 		}
 		if seen[code] {
 			return Set{}, fmt.Errorf("region %q is listed twice", code)
@@ -47,7 +56,7 @@ func Parse(s string) (Set, error) {
 		if name == "" {
 			name = code
 		}
-		out.list = append(out.list, Region{Code: code, Name: name})
+		out.list = append(out.list, Region{Code: code, Name: name, Country: country})
 	}
 	return out, nil
 }
@@ -79,6 +88,16 @@ func (s Set) Name(code string) string {
 		}
 	}
 	return code
+}
+
+// Country is the two-letter country code for a code, or "" when it is unknown or was not given.
+func (s Set) Country(code string) string {
+	for _, r := range s.list {
+		if r.Code == code {
+			return r.Country
+		}
+	}
+	return ""
 }
 
 // Effective is the regions a monitor actually runs in: the ones it chose that still exist, without repeats and in the order chosen,

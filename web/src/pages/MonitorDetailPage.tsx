@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import type { CheckResult, Incident, Monitor, Plan, RangeInfo, RegionStatus, SeriesPoint, Uptime, Usage } from '../api'
+import { LocationName } from '../components/Flag'
 import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { BadgeCard } from '../components/BadgeCard'
@@ -212,7 +213,7 @@ export function MonitorDetailPage() {
                   <tbody>
                     {locations.data.regions.map((r) => (
                       <tr key={r.region}>
-                        <td>{r.name}</td>
+                        <td><LocationName name={r.name} country={r.country} /></td>
                         <td>
                           {r.status === 'up' && <span className="d-badge d-badge-soft d-badge-success"><span aria-hidden="true">✔</span> Online</span>}
                           {r.status === 'down' && <span className="d-badge d-badge-soft d-badge-error"><span aria-hidden="true">✖</span> Offline</span>}
@@ -251,7 +252,10 @@ export function MonitorDetailPage() {
                     {results.data.results.map((r) => (
                       <tr key={r.id}>
                         <td><time dateTime={r.checked_at}>{formatDateTime(r.checked_at)}</time></td>
-                        {several && <td>{locations.data?.regions.find((x) => x.region === r.region)?.name ?? r.region}</td>}
+                        {several && <td>{(() => {
+                          const loc = locations.data?.regions.find((x) => x.region === r.region)
+                          return <LocationName name={loc?.name ?? r.region} country={loc?.country} />
+                        })()}</td>}
                         <td>
                           {r.success
                             ? <span className="badge up"><span aria-hidden="true">✔</span> {hb ? 'Ping' : 'Success'}</span>

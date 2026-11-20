@@ -1419,7 +1419,8 @@ func (s *Service) lockedDomainSync(ctx context.Context, tx pgx.Tx, orgID uuid.UU
 type RegionStatus struct {
 	Region        string     `json:"region"`
 	Name          string     `json:"name"`
-	Status        string     `json:"status"` // unknown, up or down
+	Country       string     `json:"country,omitempty"` // two-letter code, for the location's flag
+	Status        string     `json:"status"`            // unknown, up or down
 	LastCheckedAt *time.Time `json:"last_checked_at"`
 	LastError     *string    `json:"last_error"`
 }
@@ -1456,7 +1457,7 @@ func (s *Service) RegionStatuses(ctx context.Context, orgID, id uuid.UUID) ([]Re
 		if !ok {
 			r = RegionStatus{Region: code, Status: "unknown"}
 		}
-		r.Name = s.regs.Name(code)
+		r.Name, r.Country = s.regs.Name(code), s.regs.Country(code)
 		out = append(out, r)
 	}
 	return out, nil

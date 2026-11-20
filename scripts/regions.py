@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """The check locations, from their one source: infra/regions.json. OpenTofu reads the same file, and nothing else defines them.
 
-    {"primary": {"name": "US East"},
-     "workers": {"eu-central": {"name": "Europe", "vultr_region": "fra", "tunnel_ip": "10.66.0.2", "launched": false}}}
+    {"primary": {"name": "New York", "country": "US"},
+     "workers": {"eu-central": {"name": "Amsterdam", "country": "NL", "vultr_region": "ams", "tunnel_ip": "10.66.0.2", "launched": false}}}
+
+"name" is what customers see; "country" (optional, a two-letter code such as US or NL) puts that country's flag beside it. A country needs its flag
+in web/src/assets/flags (web/src/flags.test.ts checks).
 
 A worker exists as soon as it is listed. "launched" is the switch customers see: only launched regions reach CHECK_REGIONS, so a new worker can run
 and be proven first, and going live is a reviewed pull request that flips one word. The primary's code is always "primary": results are stored under it.
@@ -29,6 +32,7 @@ HEALTHCHECKS_API = os.environ.get("HEALTHCHECKS_API", "https://healthchecks.io/a
 CODE_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,18}[a-z0-9]$")  # the same rule as internal/regions
 TUNNEL_RE = re.compile(r"^10\.66\.0\.([2-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-4])$")
 BAD_NAME = re.compile(r"[,:'\"\n]")  # CHECK_REGIONS is separated by commas and colons, and written in single quotes
+COUNTRY_RE = re.compile(r"^[A-Z]{2}$")  # ISO 3166-1 alpha-2, as internal/regions expects
 
 
 def load():
@@ -45,6 +49,9 @@ def problems_in(data):
     out = []
     if BAD_NAME.search(data.get("primary", {}).get("name", "")) or not data.get("primary", {}).get("name"):
         out.append("primary needs a name, without commas, colons or quotes")
+    for code, r in [("primary", data.get("primary", {}))] + list(data.get("workers", {}).items()):
+        if "country" in r and not COUNTRY_RE.match(str(r["country"])):
+            out.append(f"{code}: country must be a two-letter code in capitals, such as US or NL")
     seen = set()
     for code, w in data.get("workers", {}).items():
         if not CODE_RE.match(code) or code == "primary":
@@ -68,7 +75,9 @@ def region_list(data, include=None):
     codes = sorted(c for c, w in data["workers"].items() if w["launched"] or c == include)
     if not codes:
         return ""
-    return ",".join([f"primary:{data['primary']['name']}"] + [f"{c}:{data['workers'][c]['name']}" for c in codes])
+    def entry(code, r):
+        return f"{code}:{r['name']}" + (f":{r['country']}" if r.get("country") else "")
+    return ",".join([entry("primary", data["primary"])] + [entry(c, data["workers"][c]) for c in codes])
 
 
 def apply_env(path, value):

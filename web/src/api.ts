@@ -580,11 +580,14 @@ export interface SeriesPoint {
 export interface RegionInfo {
   code: string
   name: string
+  /** Two-letter country code, for the flag beside the name; absent when not configured. */
+  country?: string
 }
 
 export interface RegionStatus {
   region: string
   name: string
+  country?: string
   status: 'unknown' | 'up' | 'down'
   last_checked_at: string | null
   last_error: string | null
