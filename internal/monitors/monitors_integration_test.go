@@ -317,7 +317,7 @@ func TestMonitorExposesCertificateExpiryAndResetsItWhenTheURLChanges(t *testing.
 func regionSvc(t *testing.T, plan string) (*monitors.Service, *pgxpool.Pool, uuid.UUID) {
 	t.Helper()
 	_, pool, org := setup(t, plan, "active")
-	set, _ := regions.Parse("us:US East,eu:Europe,ap:Asia,sa:South America")
+	set, _ := regions.Parse("us:US East:US,eu:Europe,ap:Asia,sa:South America")
 	return monitors.NewService(pool, plans.NewService("http://app.test"), monitors.WithSecretBox(testutil.SecretBox()), monitors.WithRegions(set)), pool, org
 }
 
@@ -382,7 +382,7 @@ func TestRegionStatusesShowEachRegionsView(t *testing.T) {
 	pool.Exec(t.Context(), `INSERT INTO monitor_region_state (monitor_id, region, status, consecutive_failures, last_checked_at, last_error)
 		VALUES ($1, 'eu', 'down', 2, now(), 'Received HTTP 503')`, m.ID)
 	got, err := svc.RegionStatuses(t.Context(), org, m.ID)
-	if err != nil || len(got) != 2 || got[0].Region != "us" || got[0].Status != "unknown" || got[0].Name != "US East" ||
+	if err != nil || len(got) != 2 || got[0].Region != "us" || got[0].Status != "unknown" || got[0].Name != "US East" || got[0].Country != "US" || got[1].Country != "" ||
 		got[1].Region != "eu" || got[1].Status != "down" || got[1].LastError == nil || *got[1].LastError != "Received HTTP 503" {
 		t.Fatalf("%+v %v", got, err)
 	}

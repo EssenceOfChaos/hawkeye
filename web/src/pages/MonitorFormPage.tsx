@@ -25,6 +25,7 @@ import {
   type TagSummary,
   type WorkflowInput,
 } from '../api'
+import { LocationName } from '../components/Flag'
 import { Field } from '../components/Field'
 import { KeywordChecks } from '../components/KeywordChecks'
 import { TagPicker } from '../components/Tags'
@@ -347,7 +348,7 @@ export function MonitorFormPage() {
   const generic = error && !Object.keys(f).length
   const secretLabel = authType === 'basic' ? 'Password' : authType === 'bearer' ? 'Token' : 'Header value'
   const regionPicker = allRegions.length > 1 && (
-    <fieldset className="group">
+    <fieldset className="group location-picker">
       <legend>Check from</legend>
       {allRegions.map((r, i) => {
         const on = chosen.includes(r.code) || (chosen.length === 0 && i === 0)
@@ -358,7 +359,7 @@ export function MonitorFormPage() {
                 // Leaving everything unticked would mean "primary", so the list always starts from what is shown.
                 const current = chosen.length === 0 ? [allRegions[0].code] : chosen
                 setChosen(e.target.checked ? [...current, r.code] : current.filter((c) => c !== r.code))
-              }} /> {r.name}
+              }} /> <LocationName name={r.name} country={r.country} />
           </label>
         )
       })}

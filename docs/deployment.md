@@ -211,7 +211,7 @@ By default there is one location, `primary`, and nothing to configure. To offer 
 
 This section explains how locations behave. On the hosted service they are configured in one place, `infra/regions.json`: see "Regional worker hosts" below.
 
-1. The API, the scheduler and every worker share one `CHECK_REGIONS`, for example `primary:US East,eu-central:Europe`. The first entry is the primary: monitors that chose no location run there, so **do not rename or reorder it** once monitors exist (old results are labeled with its code).
+1. The API, the scheduler and every worker share one `CHECK_REGIONS`, for example `primary:New York:US,eu-central:Amsterdam:NL` (`code:Name:CC`; the two-letter country code is optional and puts that country's flag beside the name in the app). The first entry is the primary: monitors that chose no location run there, so **do not rename or reorder it** once monitors exist (old results are labeled with its code).
 2. At least one worker runs per location, started with `WORKER_REGION=<code>` (default: the primary). Workers claim only the jobs queued for their location. Exactly one or two workers (any location) should run the scheduler; set `DISABLE_SCHEDULER=true` on the rest.
 3. Plans decide how many locations one monitor may use (`plans.max_regions`: Free 1, Pro 3, Agency 5), never more than you have configured. With one location configured nobody sees any multi-location options.
 
@@ -255,7 +255,7 @@ How the production server (the hub) and a small server per extra location fit to
 
 **Adding a region.** Two pull requests, nothing run by hand. Customers see nothing until the second.
 
-1. Add it to `infra/regions.json` with `"launched": false` and a new `tunnel_ip`, and merge. The Infrastructure workflow creates the host; its
+1. Add it to `infra/regions.json` with `"launched": false`, a new `tunnel_ip`, a city as its `name` and its `country` (two capital letters), and merge. If that country has no flag in `web/src/assets/flags` yet, add Untitled UI's rectangle flag as `<CC>.svg` in the same pull request (`web/src/flags.test.tsx` fails otherwise). Renaming a location is safe at any time: hosts and stored results use its code, never its name. The Infrastructure workflow creates the host; its
    `regional-workers` job then has the production server wait for the host's first boot (a few minutes), build the tunnel (which installs
    WireGuard on the production server the first time, restarting nothing), and send it production's release. Running tunnels are not
    interrupted. The job fails, and says why, if a worker is not linked; running the workflow again (Actions → Infrastructure → Run workflow) retries.

@@ -425,8 +425,8 @@ simply late (a stopped dispatcher) is never canceled. Held alerts keep the sched
 
 | Method & path | Who | Notes |
 |---|---|---|
-| `GET /regions` | any member | `{regions: [{code, name}], primary, max_regions}`: the installation's locations and how many one monitor may use on the caller's plan (never more than exist). A single-location installation returns one region |
-| `GET /monitors/:id/regions` | any member | `{regions: [{region, name, status, last_checked_at, last_error}]}`: the locations the monitor runs in now (in the order chosen), each with its own status (`unknown`, `up`, `down`) |
+| `GET /regions` | any member | `{regions: [{code, name, country?}], primary, max_regions}`: the installation's locations and how many one monitor may use on the caller's plan (never more than exist). A single-location installation returns one region |
+| `GET /monitors/:id/regions` | any member | `{regions: [{region, name, country?, status, last_checked_at, last_error}]}`: the locations the monitor runs in now (in the order chosen), each with its own status (`unknown`, `up`, `down`). `country` (both endpoints) is the location's two-letter country code, for its flag, when configured |
 
 Monitors have `regions` (create and PATCH accept it; `[]` means the primary location only). An unknown or repeated code is a 400 `VALIDATION_ERROR`; more than the plan allows is 403 `PLAN_LIMIT_REACHED` with `limit_type: "regions"`. A monitor is down while a **majority** of its locations are down. Check results carry `region`.
 
