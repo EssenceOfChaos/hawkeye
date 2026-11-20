@@ -13,7 +13,7 @@ function DocsShell({ children }: { children: ReactNode }) {
         <Link to="/" aria-label="HawkEye home"><img src={brand.logoWhite} alt="HawkEye" width={160} height={32} /></Link>
         <Link to="/docs">Docs</Link>
         <span className="spacer" />
-        {status === 'authenticated' ? <Link to="/dashboard">Dashboard</Link> : <Link to="/register">Start free</Link>}
+        {status === 'authenticated' ? <Link to="/dashboard">Dashboard</Link> : <Link to="/register">Sign up free</Link>}
       </header>
       <div className="docs-layout">
         <nav aria-label="Documentation" className="docs-nav">

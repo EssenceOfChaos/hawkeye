@@ -4,6 +4,7 @@ import { trackPageView } from './analytics'
 import { AuthProvider } from './AuthProvider'
 import { useAuth } from './auth'
 import { lazyWithReload } from './chunkReload'
+import { PageLoading } from './components/PageLoading'
 import { CookieBanner } from './components/CookieBanner'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
@@ -43,12 +44,14 @@ import { findPage, usePageMeta } from './usePageMeta'
 const DashboardPage = lazyWithReload(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
 // Lazy: it brings a YAML parser that no other page needs.
 const OpenApiImportPage = lazyWithReload(() => import('./pages/OpenApiImportPage').then((m) => ({ default: m.OpenApiImportPage })))
+// Lazy: a long page of copy that only visitors who open it need.
+const AboutPage = lazyWithReload(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })))
 const MonitorDetailPage = lazyWithReload(() => import('./pages/MonitorDetailPage').then((m) => ({ default: m.MonitorDetailPage })))
 
 function RequireAuth() {
   const { status } = useAuth()
   const location = useLocation()
-  if (status === 'loading') return <p role="status" className="center">Loading…</p>
+  if (status === 'loading') return <PageLoading />
   // Remember where they were going (an emailed "add your first website" link, say) so signing in brings them back to it.
   if (status === 'anonymous') return <Navigate to="/login" replace state={{ from: location.pathname }} />
   return <Layout />
@@ -59,7 +62,7 @@ function RequireAuth() {
 function RequireAuthStandalone() {
   const { status } = useAuth()
   const location = useLocation()
-  if (status === 'loading') return <p role="status" className="center">Loading…</p>
+  if (status === 'loading') return <PageLoading />
   if (status === 'anonymous') return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
   return (
     <main className="auth">
@@ -69,13 +72,13 @@ function RequireAuthStandalone() {
 }
 
 function Lazy({ children }: { children: React.ReactNode }) {
-  return <Suspense fallback={<p role="status" className="center">Loading…</p>}>{children}</Suspense>
+  return <Suspense fallback={<PageLoading />}>{children}</Suspense>
 }
 
 function PublicOnly() {
   const { status } = useAuth()
   const location = useLocation()
-  if (status === 'loading') return <p role="status" className="center">Loading…</p>
+  if (status === 'loading') return <PageLoading />
   if (status === 'authenticated') return <Navigate to={afterLoginPath(location.state)} replace />
   return (
     <main className="auth">
@@ -108,6 +111,7 @@ export function AppRoutes() {
       <Route path="/docs/alerts" element={<DocPage path="/docs/alerts" />} />
       <Route path="/docs/api" element={<DocPage path="/docs/api" />} />
       <Route path="/docs/claude" element={<DocPage path="/docs/claude" />} />
+      <Route path="/about" element={<Lazy><AboutPage /></Lazy>} />
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />

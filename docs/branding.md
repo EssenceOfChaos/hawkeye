@@ -49,6 +49,10 @@ with ChatGPT and then cut out, cropped and resized outside the repository. **The
 - **`monitoring-hawk-eye.webp`, `monitoring-earth-network.webp`:** the /monitoring page's background art (a gold hawk's eye on navy; the night Earth with connection arcs),
   lossy WebP at full width. No text in either. They are photographic gradients, so WebP is a fraction of a PNG's size with no visible banding.
 
+- **Technology logos** (`tech/go.svg`, `tech/postgresql.svg`, `tech/react.svg`): the About page's stack cards. The marks are from Simple Icons (CC0 path data;
+  the trademarks belong to their owners), each filled with its project's official color. They are decorative (empty alt text): the card heading names the
+  technology. List only technology HawkEye really runs on (`docs/architecture.md`).
+
 The old blue icons, `alert-bell.png`, `cloud-security.png`, `website-magnifier.png` and `dashboard-laptop.png` were removed.
 
 **Screenshots** (the landing page's "See it in action" section: `web/src/assets/brand/screens/{dashboard,incidents,alert-email}.webp`) are real captures of the app with

@@ -28,7 +28,7 @@ export const SHARE_IMAGE_ALT = 'HawkEye website monitoring dashboard on a glowin
 
 export const HOME_TITLE = 'HawkEye — Website Uptime Monitoring & Alerts'
 export const HOME_DESCRIPTION =
-  'Website and API uptime monitoring: alerts by email, chat apps, PagerDuty or webhook, SSL and domain expiry warnings, and status pages. Start free.'
+  'Website and API uptime monitoring: alerts by email, chat apps, PagerDuty or webhook, SSL and domain expiry warnings, and status pages. Free plan, not a trial.'
 
 /** A free tool page. With a name it also carries WebApplication structured data (a free, browser-based tool). */
 function tool(path: string, title: string, description: string, name?: string): PageMeta {
@@ -91,12 +91,25 @@ export const PAGES: readonly PageMeta[] = [
   { path: '/docs/alerts', title: 'Alerts, Routing & Quiet Hours | HawkEye Docs', description: 'Send HawkEye alerts by email, Slack, Teams, Discord, Telegram, PagerDuty or webhook, route them by client, and set alert delays and quiet hours.', index: true },
   { path: '/docs/claude', title: 'Use HawkEye with Claude (MCP) | HawkEye Docs', description: 'Add HawkEye from Claude’s connector directory, or connect Claude Code with an API key: ask what is down, check uptime, pause monitors and post incident updates.', index: true },
   { path: '/docs/api', title: 'API & API Keys | HawkEye Docs', description: 'Use the HawkEye API from scripts and tools: create a read-only or read and write API key, send requests, handle errors and keep keys safe.', index: true },
+  {
+    path: '/about',
+    title: 'About HawkEye | Developer-First Website & API Monitoring',
+    description: 'Meet HawkEye: website and API monitoring built by developers, for developers, with a mission to make powerful monitoring simple and accessible.',
+    index: true,
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'AboutPage',
+      name: 'About HawkEye',
+      url: `${SITE_URL}/about`,
+      about: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL, logo: `${SITE_URL}/icon-192.png` },
+    },
+  },
   { path: '/contact', title: 'Contact HawkEye', description: 'Questions about HawkEye website and API monitoring? Send us a message and we will get back to you.', index: true },
   { path: '/privacy', title: 'Privacy Policy | HawkEye', description: 'What personal information HawkEye collects, how it is used and shared, how long it is kept, and your privacy rights.', index: true },
   { path: '/terms', title: 'Terms of Service | HawkEye', description: 'The terms that apply when you use HawkEye website and API monitoring, including plans, acceptable use and your authority to monitor sites.', index: true },
 
   // Public, but not meant for search results.
-  { path: '/monitoring', title: 'HawkEye: Know Before Your Customers Do', description: 'Know when your website goes down before your customers do. Start monitoring free with HawkEye.', index: false },
+  { path: '/monitoring', title: 'HawkEye: Know Before Your Customers Do', description: 'Know when your website goes down before your customers do. HawkEye’s free plan is a real plan, not a trial.', index: false },
   { path: '/login', title: 'Log in | HawkEye', description: 'Log in to your HawkEye account.', index: false },
   { path: '/register', title: 'Create your free account | HawkEye', description: 'Create a free HawkEye account and start monitoring your websites and APIs.', index: false },
   { path: '/forgot-password', title: 'Reset your password | HawkEye', description: 'Request a link to reset your HawkEye password.', index: false },

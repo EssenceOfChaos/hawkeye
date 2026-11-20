@@ -147,6 +147,10 @@ progress::-webkit-progress-bar { background: #ffffff1f; }
 progress::-webkit-progress-value { background: linear-gradient(90deg, var(--gold-lo), var(--gold-hi)); border-radius: 999px; }
 progress::-moz-progress-bar { background: linear-gradient(90deg, var(--gold-lo), var(--gold-hi)); border-radius: 999px; }
 .center { text-align: center; padding: 3rem 1rem; }
+/* A whole page loading (components/PageLoading.tsx): a large gold ring, faded in after 150 ms so quick loads don't flash it. */
+.page-loading { display: flex; justify-content: center; align-items: center; min-height: 50vh; padding: 3rem 1rem; color: var(--gold-hi); animation: page-loading-in .3s ease .15s both; }
+.page-loading .d-loading { width: 4.5rem; }
+@keyframes page-loading-in { from { opacity: 0; } to { opacity: 1; } }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---- brand ---- */
@@ -196,7 +200,7 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .landing-logo { height: auto; }
 @media (max-width: 480px) { .landing-logo { width: 150px; } .landing-header { gap: .6rem; } }
 .landing-header a { white-space: nowrap; }
-/* The smallest phones (320px): a smaller logo and button so "Log in" and "Start free" both fit on one line. */
+/* The smallest phones (320px): a smaller logo and button so "Log in" and "Sign up free" both fit on one line. */
 @media (max-width: 22.5rem) { .landing-logo { width: 120px; } .landing-header { gap: .5rem; } .landing-header .button { padding: .45rem .7rem; font-size: .9rem; } }
 .hero { display: grid; grid-template-columns: 1fr 1fr; grid-template-areas: 'title title' 'text art'; column-gap: 2rem; row-gap: 1rem; align-items: center; padding-top: 2rem; padding-bottom: 3rem; }
 .hero-title { grid-area: title; }
@@ -789,6 +793,59 @@ main.auth .card p a { font-weight: 600; }
   .mon-hero-inner { grid-template-columns: 1fr; grid-template-areas: 'eyebrow' 'copy' 'art'; }
   .mon-hero::after { background: linear-gradient(180deg, #020b17f2 0%, #020b17cc 55%, #020b1788 100%); }
   .mon-earth::after { background: linear-gradient(180deg, #020b17f5 0%, #020b17d0 60%, #020b1790 100%); }
+}
+
+/* ---- /about (pages/AboutPage.tsx): the /monitoring page's art panels for the hero and closing call to action, the landing page's cards between ---- */
+.about-hero h1 { font-size: clamp(1.9rem, 5vw, 3rem); line-height: 1.1; margin: .25rem 0 1rem; font-family: var(--font-display); text-wrap: balance; max-width: 40rem; }
+.about-hero .mon-earth-copy h1 { text-shadow: 0 1px 14px #020b17, 0 0 3px #020b17b0; }
+.about-hero p { font-size: 1.1rem; }
+/* Full-bleed hero (.hero-bleed, on About and /monitoring): the artwork runs edge to edge and up behind the header (lifted above it by .bleed on the
+   page), and fades into the page at the bottom. The copy lines up with the 70rem column the rest of the page uses. It is pulled up further than the
+   header is tall (that height changes with the screen), so no strip of page shows above the image; the extra is off-screen. */
+.landing.bleed .landing-header { z-index: 2; }
+.about main { max-width: none; padding: 0; } /* not the app's 64rem padded column: the sections set their own 70rem width, and the hero is full-bleed */
+.hero-bleed { width: 100%; max-width: none; margin: -7rem 0 0; border: 0; border-radius: 0; }
+.hero-bleed::after { background:
+  linear-gradient(180deg, #020b17d9 0%, #020b1700 22%, #020b1700 72%, var(--navy) 100%),
+  linear-gradient(90deg, #020b17f2 0%, #020b17d9 38%, #020b1740 75%, #020b1710 100%); }
+.about-hero { padding: 9.75rem 0 5rem; min-height: min(46rem, 92vh); }
+.about-hero .mon-earth-copy { width: 100%; max-width: 70rem; margin: 0 auto; padding: 0 1rem; box-sizing: border-box; }
+.about-hero .mon-earth-bg { object-position: 70% 35%; }
+.mon-hero.hero-bleed { padding: 7rem 0 2.5rem; }
+.mon-hero.hero-bleed .mon-hero-inner { max-width: 70rem; margin: 0 auto; padding: 2.5rem 1rem 2rem; box-sizing: border-box; }
+@media (max-width: 52rem) {
+  .hero-bleed::after { background: linear-gradient(180deg, #020b17e6 0%, #020b17cc 55%, var(--navy) 100%); }
+  .about-hero { padding: 8.75rem 0 3.5rem; min-height: 0; }
+  .mon-hero.hero-bleed { padding: 7rem 0 1.5rem; }
+  .mon-hero.hero-bleed .mon-hero-inner { padding-top: 1.75rem; }
+}
+.about .about-tagline { font-family: var(--font-display); font-weight: 600; color: var(--gold-hi); }
+.about .section > p, .about-lede, .about-note { max-width: 46rem; }
+.about-prose p { font-size: 1.05rem; line-height: 1.65; }
+.about-note { margin-top: 1.5rem; color: var(--muted); }
+.about .features.about-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.about-tech img { display: block; }
+.about-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; margin-top: 1.5rem; }
+.about-panel { background: linear-gradient(180deg, #0f2744cc, #0b1f38cc); border: 1px solid var(--line); border-radius: .75rem; padding: clamp(1.25rem, 3vw, 2rem); }
+.about-panel h3 { font-size: 1.3rem; margin: 0 0 .75rem; text-wrap: balance; }
+.about-panel h4 { font-size: 1rem; margin: 1.25rem 0 .5rem; }
+.about-list { padding-left: 1.1rem; margin: 0 0 1rem; display: grid; gap: .5rem; }
+/* A small picture of the flow: what goes in, and the checks that come out. Text only, hidden from screen readers (the copy around it says the same). */
+.about-flow { display: flex; flex-direction: column; align-items: flex-start; gap: .35rem; margin: 1.25rem 0; padding: 1rem 1.1rem; border: 1px solid var(--line); border-radius: .6rem; background: #061222; }
+.about-flow-input { padding: .3rem .7rem; border: 1px solid var(--gold-lo); border-radius: 999px; color: var(--gold-hi); font-size: .9rem; }
+.about-flow-arrow { color: var(--gold); padding-left: 1rem; line-height: 1; }
+.about-flow-out { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; font-size: .92rem; }
+.about-flow-out.mono { font-size: .85rem; }
+.about-flow-out .tick { color: var(--up); font-weight: 700; margin-right: .35rem; }
+.about-team { align-items: center; padding: clamp(1.25rem, 3vw, 2.5rem); }
+.about-team .scout img { max-width: none; } /* .split img caps images at 30% of their box, which would shrink Scout inside his own frame */
+.mon-final-inner p:not(.hint) { font-size: 1.05rem; margin: 1rem 0 0; }
+@media (max-width: 60rem) { .about .features.about-three { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 52rem) { .about-panels { grid-template-columns: 1fr; } }
+@media (max-width: 40rem) {
+  .about .features.about-three { grid-template-columns: 1fr; }
+  .about-team { text-align: left; } /* .split centers text when it stacks; this is several paragraphs */
+  .about-team .about-scout { --scout-size: 160px !important; align-self: center; }
 }
 
 /* Two-factor sign-in (components/TwoFactor.tsx): the QR code stays black on white in both themes so every phone can read it. */

@@ -57,7 +57,7 @@ describe('LandingPage', () => {
     expect(screen.getByText('$19')).toBeInTheDocument()
     // Paid checkout is not built yet, so the page must not pretend it is.
     expect(screen.getByRole('button', { name: /open soon/i })).toBeDisabled()
-    expect(screen.getAllByRole('link', { name: /start monitoring free/i }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: 'Create free account' }).length).toBeGreaterThan(0)
     // Features that are not built (CSV exports, priority support, SMS) must not be advertised, and neither may team seats on plans that are for one person.
     expect(screen.queryByText(/priority support|team members|csv export/i)).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /Always in sight/ })).toBeInTheDocument()
@@ -67,8 +67,16 @@ describe('LandingPage', () => {
     renderLanding((url) =>
       url.includes('/plans') ? json(200, { plans, billing_enabled: true }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }),
     )
-    expect(await screen.findByRole('link', { name: /upgrade to Pro/ })).toHaveAttribute('href', '/register')
+    expect(await screen.findByRole('link', { name: 'Sign up, then choose Pro' })).toHaveAttribute('href', '/register')
     expect(screen.queryByRole('button', { name: /open soon/i })).not.toBeInTheDocument()
+  })
+
+  it('never words the free plan like a trial that runs out', async () => {
+    renderLanding((url) => (url.includes('/plans') ? json(200, { plans, billing_enabled: true }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } })))
+    await screen.findByText('50 monitors')
+    expect(document.body).not.toHaveTextContent(/start (monitoring )?(for )?free|free trial/i)
+    const freeCard = screen.getByRole('heading', { name: 'Free', level: 3 }).closest('.plan')!
+    expect(within(freeCard as HTMLElement).getByRole('link', { name: 'Create free account' })).toHaveAttribute('href', '/register')
   })
 
   it('still offers signup when pricing cannot be loaded', async () => {

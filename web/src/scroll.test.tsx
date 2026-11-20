@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Link, MemoryRouter, useNavigate } from 'react-router'
+import { Link, MemoryRouter, Route, Routes, useNavigate } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useScrollToTopOnNavigation } from './scroll'
 
@@ -39,6 +39,25 @@ describe('useScrollToTopOnNavigation', () => {
   it('leaves a link to a #section to scroll itself', async () => {
     render(<MemoryRouter><Page /></MemoryRouter>)
     await userEvent.click(screen.getByRole('link', { name: 'Tools list' }))
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+
+  it('scrolls to the section a link names on another page, which the browser does not do for an in-app link', async () => {
+    const scrollIntoView = vi.fn()
+    function Pricing() {
+      useScrollToTopOnNavigation()
+      return <h2 id="pricing-h" ref={(el) => { if (el) el.scrollIntoView = scrollIntoView }}>Pricing</h2>
+    }
+    render(
+      <MemoryRouter initialEntries={['/about']}>
+        <Routes>
+          <Route path="/about" element={<Link to="/#pricing-h">Explore Pricing</Link>} />
+          <Route path="/" element={<Pricing />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await userEvent.click(screen.getByRole('link', { name: 'Explore Pricing' }))
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
     expect(scrollTo).not.toHaveBeenCalled()
   })
 

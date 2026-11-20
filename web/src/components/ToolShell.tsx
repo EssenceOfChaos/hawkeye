@@ -34,7 +34,7 @@ export function ToolShell({ tool, title, intro, cta, children }: {
           <p>{cta.text}</p>
           <p>
             <Link className="button primary" to={signedIn ? '/dashboard' : '/register'} onClick={() => trackEvent('tool_cta_click', { tool })}>
-              {signedIn ? 'Open dashboard' : 'Start monitoring free'}
+              {signedIn ? 'Open dashboard' : 'Create free account'}
             </Link>
           </p>
         </section>
