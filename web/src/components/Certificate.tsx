@@ -131,7 +131,11 @@ export function CertificatesPanel({ certificates, tracked }: { certificates: Cer
   if (tracked === 0) return null
   return (
     <section className="card" aria-labelledby="certs-h">
-      <h2 id="certs-h">SSL certificates</h2>
+      <div className="row">
+        <h2 id="certs-h">SSL certificates</h2>
+        <span className="spacer" />
+        <Link to="/monitors">All monitors</Link>
+      </div>
       {certificates.length === 0 ? (
         <p>All {tracked} tracked certificate{tracked === 1 ? '' : 's'} {tracked === 1 ? 'has' : 'have'} more than 30 days left. 🔒</p>
       ) : (

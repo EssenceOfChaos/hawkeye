@@ -572,6 +572,11 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 .cert-timeline li.reached .d-timeline-middle { color: var(--accent); }
 .cert-timeline li.expired .d-timeline-middle { color: var(--down); }
 .cert-timeline .d-timeline-end { padding: .25rem 0; }
+/* The dashboard's SSL certificate and domain registration panels share a row: two columns once each can be 22rem wide, one otherwise. auto-fit
+   collapses the unused column, so a single panel (the other tracks nothing) spans the row. */
+.expiry-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1rem; margin: 1rem 0; }
+.expiry-panels:empty { display: none; }
+.expiry-panels > .card { margin: 0; }
 .cert-list { margin: 0; padding: 0; display: grid; gap: .5rem; }
 .cert-list li { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 
