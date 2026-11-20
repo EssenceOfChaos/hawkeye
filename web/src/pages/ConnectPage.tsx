@@ -79,7 +79,7 @@ export function ConnectPage() {
     return (
       <section className="card narrow">
         <BrandMark />
-        {error ? <Alert>{error}</Alert> : <p role="status">Loading…</p>}
+        {error ? <Alert>{error}</Alert> : <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>}
       </section>
     )
   }

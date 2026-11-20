@@ -4,6 +4,7 @@ import { trackPageView } from './analytics'
 import { AuthProvider } from './AuthProvider'
 import { useAuth } from './auth'
 import { lazyWithReload } from './chunkReload'
+import { PageLoading } from './components/PageLoading'
 import { CookieBanner } from './components/CookieBanner'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
@@ -50,7 +51,7 @@ const MonitorDetailPage = lazyWithReload(() => import('./pages/MonitorDetailPage
 function RequireAuth() {
   const { status } = useAuth()
   const location = useLocation()
-  if (status === 'loading') return <p role="status" className="center">Loading…</p>
+  if (status === 'loading') return <PageLoading />
   // Remember where they were going (an emailed "add your first website" link, say) so signing in brings them back to it.
   if (status === 'anonymous') return <Navigate to="/login" replace state={{ from: location.pathname }} />
   return <Layout />
@@ -61,7 +62,7 @@ function RequireAuth() {
 function RequireAuthStandalone() {
   const { status } = useAuth()
   const location = useLocation()
-  if (status === 'loading') return <p role="status" className="center">Loading…</p>
+  if (status === 'loading') return <PageLoading />
   if (status === 'anonymous') return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
   return (
     <main className="auth">
@@ -71,13 +72,13 @@ function RequireAuthStandalone() {
 }
 
 function Lazy({ children }: { children: React.ReactNode }) {
-  return <Suspense fallback={<p role="status" className="center">Loading…</p>}>{children}</Suspense>
+  return <Suspense fallback={<PageLoading />}>{children}</Suspense>
 }
 
 function PublicOnly() {
   const { status } = useAuth()
   const location = useLocation()
-  if (status === 'loading') return <p role="status" className="center">Loading…</p>
+  if (status === 'loading') return <PageLoading />
   if (status === 'authenticated') return <Navigate to={afterLoginPath(location.state)} replace />
   return (
     <main className="auth">

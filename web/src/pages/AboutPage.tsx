@@ -75,7 +75,7 @@ export function AboutPage() {
   const ctaTo = signedIn ? '/dashboard' : '/register'
 
   return (
-    <div className="landing mon about" data-theme="light">
+    <div className="landing mon about bleed" data-theme="light">
       <header className="landing-header">
         <Link to="/" aria-label="HawkEye home"><img className="landing-logo" src={brand.logoWhite} alt="HawkEye" width={220} height={43} /></Link>
         <span className="spacer" />
@@ -84,7 +84,7 @@ export function AboutPage() {
       </header>
 
       <main>
-        <section className="mon-earth about-hero" aria-labelledby="about-h1">
+        <section className="mon-earth hero-bleed about-hero" aria-labelledby="about-h1">
           <img className="mon-earth-bg" src={brand.art.earth} alt="" width={1774} height={887} decoding="async" />
           <div className="mon-earth-copy">
             <p className="eyebrow">Built by developers. For developers.</p>

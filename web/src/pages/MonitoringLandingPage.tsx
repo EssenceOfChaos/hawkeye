@@ -39,7 +39,7 @@ export function MonitoringLandingPage() {
   const ctaTo = signedIn ? '/dashboard' : '/register'
 
   return (
-    <div className="landing mon" data-theme="light">
+    <div className="landing mon bleed" data-theme="light">
       <header className="landing-header">
         <Link to="/" aria-label="HawkEye home"><img className="landing-logo" src={brand.logoWhite} alt="HawkEye" width={220} height={43} /></Link>
         <span className="spacer" />
@@ -47,7 +47,7 @@ export function MonitoringLandingPage() {
         <Link className="button primary" to={ctaTo}>{signedIn ? 'Open dashboard' : 'Sign up free'}</Link>
       </header>
 
-      <section className="mon-hero" aria-labelledby="mon-h1">
+      <section className="mon-hero hero-bleed" aria-labelledby="mon-h1">
         <img className="mon-hero-bg" src={brand.art.hawkEye} alt="" width={1672} height={941} decoding="async" />
         <div className="mon-hero-inner">
           <p className="eyebrow"><span className="eyebrow-part">Website monitoring,</span> <span className="eyebrow-part">without the guesswork</span></p>

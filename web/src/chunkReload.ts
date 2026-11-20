@@ -27,7 +27,7 @@ export function lazyWithReload(factory: () => Promise<{ default: ComponentType }
     try {
       return await factory()
     } catch (err) {
-      if (reloadForNewBuild()) return new Promise<never>(() => {}) // the page is reloading; keep showing "Loading…" until it does
+      if (reloadForNewBuild()) return new Promise<never>(() => {}) // the page is reloading; keep showing the loading ring until it does
       throw err
     }
   })

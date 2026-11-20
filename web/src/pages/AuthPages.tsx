@@ -375,7 +375,7 @@ export function AcceptInvitePage() {
       <BrandMark />
       <h1>Join a team on HawkEye</h1>
       {!loaded || status === 'loading' ? (
-        <p role="status">Loading…</p>
+        <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>
       ) : !invite ? (
         <Alert>This invitation link is not valid, or it has expired. Ask the person who invited you to send a new one.</Alert>
       ) : (

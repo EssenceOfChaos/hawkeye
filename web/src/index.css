@@ -147,6 +147,10 @@ progress::-webkit-progress-bar { background: #ffffff1f; }
 progress::-webkit-progress-value { background: linear-gradient(90deg, var(--gold-lo), var(--gold-hi)); border-radius: 999px; }
 progress::-moz-progress-bar { background: linear-gradient(90deg, var(--gold-lo), var(--gold-hi)); border-radius: 999px; }
 .center { text-align: center; padding: 3rem 1rem; }
+/* A whole page loading (components/PageLoading.tsx): a large gold ring, faded in after 150 ms so quick loads don't flash it. */
+.page-loading { display: flex; justify-content: center; align-items: center; min-height: 50vh; padding: 3rem 1rem; color: var(--gold-hi); animation: page-loading-in .3s ease .15s both; }
+.page-loading .d-loading { width: 4.5rem; }
+@keyframes page-loading-in { from { opacity: 0; } to { opacity: 1; } }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---- brand ---- */
@@ -795,6 +799,26 @@ main.auth .card p a { font-weight: 600; }
 .about-hero h1 { font-size: clamp(1.9rem, 5vw, 3rem); line-height: 1.1; margin: .25rem 0 1rem; font-family: var(--font-display); text-wrap: balance; max-width: 40rem; }
 .about-hero .mon-earth-copy h1 { text-shadow: 0 1px 14px #020b17, 0 0 3px #020b17b0; }
 .about-hero p { font-size: 1.1rem; }
+/* Full-bleed hero (.hero-bleed, on About and /monitoring): the artwork runs edge to edge and up behind the header (lifted above it by .bleed on the
+   page), and fades into the page at the bottom. The copy lines up with the 70rem column the rest of the page uses. It is pulled up further than the
+   header is tall (that height changes with the screen), so no strip of page shows above the image; the extra is off-screen. */
+.landing.bleed .landing-header { z-index: 2; }
+.about main { max-width: none; padding: 0; } /* not the app's 64rem padded column: the sections set their own 70rem width, and the hero is full-bleed */
+.hero-bleed { width: 100%; max-width: none; margin: -7rem 0 0; border: 0; border-radius: 0; }
+.hero-bleed::after { background:
+  linear-gradient(180deg, #020b17d9 0%, #020b1700 22%, #020b1700 72%, var(--navy) 100%),
+  linear-gradient(90deg, #020b17f2 0%, #020b17d9 38%, #020b1740 75%, #020b1710 100%); }
+.about-hero { padding: 9.75rem 0 5rem; min-height: min(46rem, 92vh); }
+.about-hero .mon-earth-copy { width: 100%; max-width: 70rem; margin: 0 auto; padding: 0 1rem; box-sizing: border-box; }
+.about-hero .mon-earth-bg { object-position: 70% 35%; }
+.mon-hero.hero-bleed { padding: 7rem 0 2.5rem; }
+.mon-hero.hero-bleed .mon-hero-inner { max-width: 70rem; margin: 0 auto; padding: 2.5rem 1rem 2rem; box-sizing: border-box; }
+@media (max-width: 52rem) {
+  .hero-bleed::after { background: linear-gradient(180deg, #020b17e6 0%, #020b17cc 55%, var(--navy) 100%); }
+  .about-hero { padding: 8.75rem 0 3.5rem; min-height: 0; }
+  .mon-hero.hero-bleed { padding: 7rem 0 1.5rem; }
+  .mon-hero.hero-bleed .mon-hero-inner { padding-top: 1.75rem; }
+}
 .about .about-tagline { font-family: var(--font-display); font-weight: 600; color: var(--gold-hi); }
 .about .section > p, .about-lede, .about-note { max-width: 46rem; }
 .about-prose p { font-size: 1.05rem; line-height: 1.65; }

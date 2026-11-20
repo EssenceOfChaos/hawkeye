@@ -136,7 +136,7 @@ export function TwoFactorCard() {
     <section className="card narrow-left" id="two-factor" aria-labelledby="tf-h">
       <h2 id="tf-h">Two-factor sign-in</h2>
       {error && <Alert>{error}</Alert>}
-      {status === null && <p role="status">Loading…</p>}
+      {status === null && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>}
 
       {step === 'codes' && <RecoveryCodes codes={codes} onDone={reset} />}
 
