@@ -184,10 +184,13 @@ export function days(outages: Outage[], count: number, now: number, measuredSinc
   return out
 }
 
-/** "99.98%": two decimals, rounded down, so any downtime at all keeps it below 100%. */
+/**
+ * "99.987%": three decimals, rounded down, so any downtime at all keeps it below 100% and 99.9% (three nines) and 99.99% (four nines) read apart.
+ * The epsilon undoes floating-point error in the multiplication, which could otherwise take a value one step down.
+ */
 export function percent(f: number | null): string {
   if (f === null) return '–'
-  return `${(Math.floor(f * 10_000) / 100).toFixed(2)}%`
+  return `${(Math.floor(f * 100_000 + 1e-6) / 1000).toFixed(3)}%`
 }
 
 /** "3 min", "1 h 20 min". */

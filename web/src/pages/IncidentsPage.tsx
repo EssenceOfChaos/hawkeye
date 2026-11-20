@@ -80,7 +80,7 @@ export function IncidentsPage() {
   return (
     <>
       <div className="row">
-        <PageIcon src={brand.icons.notifications} />
+        <PageIcon src={brand.icons.warning} />
         <h1>Incidents</h1>
         <span className="spacer" />
         <label className="inline-label">

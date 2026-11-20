@@ -89,7 +89,7 @@ export function LoginPage() {
   if (challenge) {
     return (
       <section className="card narrow">
-        <BrandMark />
+        <BrandMark linkHome />
         <h1>Enter your code</h1>
         <p>{useRecovery ? 'Enter one of the recovery codes you saved when you set up two-factor sign-in. Each works once.' : 'Open your authenticator app and enter the 6-digit code for HawkEye.'}</p>
         <form onSubmit={onCode}>
@@ -113,7 +113,7 @@ export function LoginPage() {
   }
   return (
     <section className="card narrow">
-      <BrandMark />
+      <BrandMark linkHome />
       <h1>Log in</h1>
       <form onSubmit={onSubmit}>
         <Field label="Email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -143,7 +143,7 @@ export function RegisterPage() {
   }
   return (
     <section className="card narrow">
-      <BrandMark />
+      <BrandMark linkHome />
       <h1>Start with a clearer view</h1>
       <p>Create your free HawkEye account and bring your website monitoring into one place. Monitor up to 5 websites free; no credit card needed.</p>
       <p className="hint">By creating an account you agree to the <Link to="/terms">Terms</Link> and the <Link to="/privacy">Privacy policy</Link>.</p>
@@ -173,7 +173,7 @@ export function ForgotPasswordPage() {
   }
   return (
     <section className="card narrow">
-      <BrandMark />
+      <BrandMark linkHome />
       <h1>Reset your password</h1>
       {sent ? (
         <p role="status">If an account exists for that address, a reset link is on its way.</p>
@@ -204,7 +204,7 @@ export function ResetPasswordPage() {
   }
   return (
     <section className="card narrow">
-      <BrandMark />
+      <BrandMark linkHome />
       <h1>Choose a new password</h1>
       {done ? (
         <p role="status">Password updated. <Link to="/login">Log in</Link></p>
@@ -240,7 +240,7 @@ export function VerifyEmailPage() {
 
   return (
     <section className="card narrow">
-      <BrandMark />
+      <BrandMark linkHome />
       <h1>Email verification</h1>
       {state === 'working' && <p role="status">Verifying…</p>}
       {state === 'ok' && <p role="status">Your email address is verified. <Link to="/monitors">Continue</Link></p>}
@@ -266,7 +266,7 @@ export function ConfirmAlertAddressPage() {
 
   return (
     <section className="card narrow">
-      <BrandMark />
+      <BrandMark linkHome />
       <h1>Alert address confirmation</h1>
       {state === 'working' && <p role="status">Confirming…</p>}
       {state === 'ok' && <p role="status">Thanks — this address will now receive HawkEye alerts. You can close this page.</p>}
@@ -307,7 +307,7 @@ export function UnsubscribePage() {
 
   return (
     <section className="card narrow">
-      <BrandMark />
+      <BrandMark linkHome />
       <h1>Stop these emails?</h1>
       {(state === 'ask' || state === 'working') && (
         <>
@@ -372,7 +372,7 @@ export function AcceptInvitePage() {
 
   return (
     <section className="card narrow">
-      <BrandMark />
+      <BrandMark linkHome />
       <h1>Join a team on HawkEye</h1>
       {!loaded || status === 'loading' ? (
         <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>
@@ -450,7 +450,7 @@ export function WaitlistConfirmPage() {
 
   return (
     <section className="card narrow">
-      <BrandMark />
+      <BrandMark linkHome />
       <h1>Confirm your spot</h1>
       {(state === 'ask' || state === 'working') && (
         <>
@@ -481,7 +481,7 @@ export function WaitlistLeavePage() {
 
   return (
     <section className="card narrow">
-      <BrandMark />
+      <BrandMark linkHome />
       <h1>Leave the list?</h1>
       {(state === 'ask' || state === 'working') && (
         <>

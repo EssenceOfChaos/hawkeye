@@ -78,7 +78,7 @@ export function SiteFooter({ onHome = false }: { onHome?: boolean }) {
           </div>
         </nav>
       </footer>
-      <p className="copyright">© {year} HawkEye. All rights reserved.</p>
+      <p className="copyright">© {year} HawkEye Observer. All rights reserved.</p>
     </>
   )
 }

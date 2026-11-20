@@ -14,7 +14,7 @@ import reactLogo from '../assets/brand/tech/react.svg'
 
 const PRINCIPLES = [
   {
-    icon: brand.icons.settings,
+    icon: brand.icons.simple,
     title: 'Simple',
     lead: 'Powerful technology should feel effortless.',
     text: 'We believe in minimalist interfaces, intuitive workflows, and eliminating unnecessary complexity. From the moment you create an account to the everyday monitoring experience, everything should feel natural and straightforward.',

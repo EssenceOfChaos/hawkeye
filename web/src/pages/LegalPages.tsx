@@ -30,14 +30,14 @@ export function PrivacyPage() {
     <Shell title="HawkEye Privacy Policy" draft={false}>
       <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 20, 2026</p>
       <p>
-        HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
+        HawkEye Observer (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
       </p>
 
       <h2>1. Who We Are</h2>
-      <p>The Service is operated by <strong>Hawkeye</strong>, a limited liability company.</p>
+      <p>The Service is operated by <strong>HawkEye Observer</strong>, a limited liability company.</p>
       <ul>
-        <li><strong>Legal business name:</strong> Hawkeye</li>
+        <li><strong>Legal business name:</strong> HawkEye Observer</li>
         <li><strong>Privacy and support contact:</strong> <a href={`mailto:${SUPPORT}`}>{SUPPORT}</a> (or use our <Link to="/contact">contact form</Link>)</li>
         <li><strong>Website:</strong> https://hawkeye.observer</li>
       </ul>
@@ -365,7 +365,7 @@ export function PrivacyPage() {
       <h2>10. European Economic Area, United Kingdom, and Other Regions</h2>
       <p>If you are in the European Economic Area (EEA), the United Kingdom, or another region with comprehensive data-protection law, the following also applies.</p>
       <ul>
-        <li><strong>Controller.</strong> Hawkeye is the controller of the personal information described in this Policy. For the website-monitoring data you ask us to process on your behalf, we act on your instructions as your service provider (processor); our Terms and this Policy describe that processing. Contact us if you need a data-processing agreement.</li>
+        <li><strong>Controller.</strong> HawkEye Observer is the controller of the personal information described in this Policy. For the website-monitoring data you ask us to process on your behalf, we act on your instructions as your service provider (processor); our Terms and this Policy describe that processing. Contact us if you need a data-processing agreement.</li>
         <li><strong>Legal bases.</strong> We process personal information on the bases described in Section 3: contract, legitimate interests, legal obligation, and consent where we ask for it.</li>
         <li><strong>Your rights.</strong> You have the rights described in Section 8, including access, rectification, erasure, restriction, objection, data portability, and the right to withdraw consent at any time. You may also complain to your local supervisory authority.</li>
         <li><strong>Transfers.</strong> Your information is processed in the United States, using the safeguards described in Section 7.</li>
@@ -391,7 +391,7 @@ export function PrivacyPage() {
       <h2>14. Contact Us</h2>
       <p>For privacy questions or requests, contact:</p>
       <p>
-        <strong>Hawkeye</strong><br />
+        <strong>HawkEye Observer</strong><br />
         Email: <a href={`mailto:${SUPPORT}`}>{SUPPORT}</a><br />
         Contact form: <Link to="/contact">hawkeye.observer/contact</Link>
       </p>
@@ -402,18 +402,18 @@ export function PrivacyPage() {
 export function TermsPage() {
   return (
     <Shell title="HawkEye Terms and Conditions" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 17, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 20, 2026</p>
       <p>
         These Terms and Conditions (“Terms”) govern access to and use of the HawkEye website, applications, and website-monitoring services (together, the “Service”).
       </p>
-      <p>The Service is operated by <strong>Hawkeye</strong> (“HawkEye,” “we,” “us,” or “our”).</p>
+      <p>The Service is operated by <strong>HawkEye Observer</strong>, a limited liability company (“HawkEye,” “we,” “us,” or “our”).</p>
       <p>
         By creating an account, purchasing a subscription, or using the Service, you agree to these Terms. If you do not agree, do not use the Service.
       </p>
 
       <h2>1. Business Information and Contact</h2>
       <ul>
-        <li><strong>Legal business name:</strong> Hawkeye, a limited liability company</li>
+        <li><strong>Legal business name:</strong> HawkEye Observer, a limited liability company</li>
         <li><strong>Email:</strong> <a href={`mailto:${SUPPORT}`}>{SUPPORT}</a> (or use our <Link to="/contact">contact form</Link>)</li>
         <li><strong>Website:</strong> https://hawkeye.observer</li>
       </ul>
@@ -793,7 +793,7 @@ export function TermsPage() {
       <h2>21. Contact</h2>
       <p>Questions about these Terms, subscriptions, or the Service can be sent to:</p>
       <p>
-        <strong>Hawkeye</strong><br />
+        <strong>HawkEye Observer</strong><br />
         Email: <a href={`mailto:${SUPPORT}`}>{SUPPORT}</a><br />
         Contact form: <Link to="/contact">hawkeye.observer/contact</Link>
       </p>

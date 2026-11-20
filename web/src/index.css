@@ -154,7 +154,8 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--gold-lo),
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---- brand ---- */
-.brandmark { display: inline-flex; align-items: center; gap: .5rem; }
+.brandmark { display: inline-flex; align-items: center; gap: .5rem; width: fit-content; border-radius: .25rem; }
+.brandmark:focus-visible { outline: 2px solid var(--gold, #d49a1c); outline-offset: 4px; }
 .brandmark img { display: block; height: auto; max-width: 100%; }
 .wordmark { font-weight: 800; font-size: 1.15rem; letter-spacing: -.01em; }
 .wordmark span { color: var(--gold, #d49a1c); } /* the gold "Eye" of the logo */
@@ -193,7 +194,7 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .landing { min-height: 100vh; position: relative; }
 .landing::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 34rem; pointer-events: none; background: radial-gradient(ellipse 55% 70% at 50% 0%, #c18d2530, transparent 70%); }
 .landing > * { position: relative; }
-.landing a:not(.button) { color: var(--gold); }
+.landing a:not(.button), .landing .link-button { color: var(--gold); }
 .landing-header, .hero, .section, .landing-footer { max-width: 70rem; margin: 0 auto; padding-left: 1rem; padding-right: 1rem; box-sizing: border-box; }
 .landing-header .button { white-space: nowrap; }
 .landing-header { display: flex; align-items: center; gap: 1rem; padding-top: 1rem; padding-bottom: 1rem; }
@@ -257,6 +258,7 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .landing-footer aside p { max-width: 20rem; margin: .5rem 0 0; opacity: .8; }
 .landing-footer nav { gap: .5rem; }
 .landing-footer .d-link { color: inherit; opacity: .85; }
+.landing-footer .link-button.d-link { color: var(--gold); } /* the footer's links are gold through .landing a:not(.button), which a button doesn't match */
 .landing-footer .social { display: flex; gap: .25rem; }
 .copyright { box-sizing: border-box; max-width: 70rem; margin: 0 auto; padding: 0 1rem 2.5rem; opacity: .7; font-size: .9rem; }
 @media (max-width: 760px) {
@@ -434,7 +436,7 @@ td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 .step-no { font-variant-numeric: tabular-nums; margin-right: .25rem; }
 .feature p + p { margin-top: .5rem; }
 .app-footer { width: 100%; box-sizing: border-box; border-top: 1px solid var(--line); padding: 1rem; text-align: center; font-size: .9rem; color: color-mix(in srgb, currentColor 75%, transparent); }
-.app-footer a { color: inherit; }
+.app-footer a, .app-footer .link-button { color: inherit; }
 .danger-zone { border-color: var(--down); }
 .danger-zone h2 { color: var(--down); }
 .legal { max-width: 46rem; margin: 0 auto; padding: 1rem; }
@@ -736,8 +738,13 @@ main.auth .card p a { font-weight: 600; }
 .cookie-banner-text p { margin: .25rem 0 0; font-size: .9rem; color: var(--muted); }
 .cookie-banner-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 .cookie-banner .hint { flex-basis: 100%; margin: 0; }
-.link-button { all: unset; cursor: pointer; text-decoration: underline; color: inherit; }
-.link-button:hover, .link-button:focus-visible { color: var(--gold-hi); }
+/* "Cookie settings" is a button (it opens a panel rather than going to a page) that sits among links, so it looks exactly like a link: the link color
+   and underline by default. Where a page restyles its links (.landing, .app-footer, .mon-footer, the landing footer's .d-link), that rule lists
+   .link-button too. */
+.link-button { all: unset; cursor: pointer; text-decoration: underline; color: var(--accent); }
+.link-button:focus-visible { outline: 2px solid var(--gold-hi); outline-offset: 2px; border-radius: 2px; } /* all: unset removed the focus ring */
+.link-button.d-link { text-decoration: none; }
+.link-button.d-link:hover, .link-button.d-link:focus-visible { text-decoration: underline; }
 
 /* ---- /monitoring campaign page: gold hawk's-eye hero, night-Earth false-alarm panel, no site navigation ---- */
 .mon .gold { color: var(--gold); }

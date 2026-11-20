@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
-import { ConfirmAlertAddressPage, ResetPasswordPage, UnsubscribePage, VerifyEmailPage } from './AuthPages'
+import { ConfirmAlertAddressPage, LoginPage, RegisterPage, ResetPasswordPage, UnsubscribePage, VerifyEmailPage } from './AuthPages'
 
 afterEach(() => vi.unstubAllGlobals())
 beforeEach(() => {
@@ -119,5 +119,15 @@ describe('unsubscribing from onboarding emails', () => {
     mount('/unsubscribe')
     expect(await screen.findByRole('alert')).toHaveTextContent(/This link is not valid/)
     expect(screen.queryByRole('button', { name: 'Stop these emails' })).not.toBeInTheDocument()
+  })
+})
+
+describe('the logo on the account pages', () => {
+  it('links back to the home page from sign-in and sign-up', () => {
+    for (const Page of [LoginPage, RegisterPage]) {
+      const { unmount } = render(<MemoryRouter><AuthProvider><Page /></AuthProvider></MemoryRouter>)
+      expect(screen.getByRole('link', { name: 'HawkEye home' })).toHaveAttribute('href', '/')
+      unmount()
+    }
   })
 })

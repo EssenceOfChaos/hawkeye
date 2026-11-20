@@ -77,13 +77,17 @@ function incident(i: Snapshot['incidents'][number]): string {
 /**
  * A maintenance window: when it runs, what it is for, and when it was announced (always before it started). Once it is over, it also says how much
  * downtime was recorded inside it, so the window's length is never read as the length of an outage.
+ * The two texts look different on purpose: the announcement (written by us) is a quoted note with an accent bar, and the outcome (measured by the
+ * page itself) is a small labeled line, so a reader never takes our words for a measurement or the other way around.
  */
 function maintenance(s: Snapshot, w: Snapshot['maintenance'][number]): string {
   const now = s.now
   const phase = w.ends_at <= now ? 'Completed' : w.starts_at <= now ? 'In progress' : 'Scheduled'
   let outcome = ''
+  let d0 = false // no downtime was measured inside the window
   if (w.ends_at <= now) {
     const d = downtimeIn(s.components, w, now)
+    d0 = d.seconds === 0
     outcome = d.seconds === 0
       ? 'No downtime was recorded during this window.'
       : `${d.names.join(' and ')} ${d.names.length > 1 ? 'were' : 'was'} unavailable for about ${duration(d.seconds)} of it.`
@@ -91,8 +95,8 @@ function maintenance(s: Snapshot, w: Snapshot['maintenance'][number]): string {
   return `<article class="incident maint${w.ends_at > now ? ' open' : ''}">
   <h3>Planned maintenance: ${esc(w.title)}</h3>
   <p><strong>${phase}</strong> · ${esc(stamp(w.starts_at))} to ${esc(stamp(w.ends_at))} (${esc(duration(w.ends_at - w.starts_at))} window)</p>
-  ${outcome ? `<p>${esc(outcome)}</p>` : ''}
   ${w.message ? `<p class="message">${esc(w.message)}</p>` : ''}
+  ${outcome ? `<p class="outcome ${d0 ? 'clean' : 'down'}"><span class="label">Measured:</span> ${esc(outcome)}</p>` : ''}
   <p class="hint">Announced ${esc(stamp(w.created_at))}.</p>
 </article>`
 }
@@ -146,7 +150,11 @@ h2 { font-size: 1.05rem; margin: 0; }
 .bars li:nth-last-child(-n+15):hover .tip { left: auto; right: 0; transform: none; }
 section.incidents h2 { margin-top: 2rem; }
 .incident h3 { margin: 0 0 .5rem; font-size: 1rem; } .incident.open { border-left: 4px solid var(--minor); } .incident.maint.open { border-left-color: var(--maint); }
-.incident p { margin: .25rem 0; } .incident .message { white-space: pre-line; }
+.incident p { margin: .25rem 0; }
+.incident .message { white-space: pre-line; margin: .6rem 0; padding: .4rem 0 .4rem .8rem; border-left: 3px solid var(--maint); color: var(--text); font-size: 1rem; }
+.incident .outcome { color: var(--muted); font-size: .875rem; }
+.incident .outcome .label { font-weight: 600; text-transform: uppercase; letter-spacing: .04em; font-size: .75rem; margin-right: .25rem; }
+.incident .outcome.clean .label { color: var(--up); } .incident .outcome.down .label { color: var(--minor); }
 .updates { list-style: none; padding: 0; margin: 0; } .updates li + li { margin-top: .75rem; }
 .updates time { color: var(--muted); font-size: .85rem; margin-left: .35rem; } .updates p { margin: .2rem 0 0; white-space: pre-line; }
 footer { margin-top: 2rem; color: var(--muted); font-size: .85rem; }

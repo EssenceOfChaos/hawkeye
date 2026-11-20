@@ -4,6 +4,7 @@ import { Alert } from '../components/Alert'
 import { UpdateStatusBadge } from '../components/UpdateStatusBadge'
 import { StatusNotFound } from '../statusLoad'
 import { isHexColor, readableTextOn } from '../color'
+import { statusUptime } from '../format'
 
 const OVERALL: Record<PublicStatus['overall'], string> = {
   operational: '✔ All systems operational',
@@ -142,7 +143,7 @@ export function StatusView({ load, onLoaded }: { load: () => Promise<PublicStatu
         <div className="d-stats">
           <div className="d-stat">
             <div className="d-stat-title">Average uptime</div>
-            <div className="d-stat-value">{average === null ? '—' : `${average.toFixed(2)}%`}</div>
+            <div className="d-stat-value">{average === null ? '—' : statusUptime(average)}</div>
             <div className="d-stat-desc">Last {data.history_days} days</div>
           </div>
         </div>
@@ -160,12 +161,12 @@ export function StatusView({ load, onLoaded }: { load: () => Promise<PublicStatu
           <section key={m.name} className="status-row" aria-label={m.name}>
             <div className="head">
               <span>{m.name}</span>
-              <span><span className={STATE[m.state].cls}>{STATE[m.state].text}</span>{m.uptime_percent !== null && <span className="hint"> · {m.uptime_percent.toFixed(2)}% uptime</span>}</span>
+              <span><span className={STATE[m.state].cls}>{STATE[m.state].text}</span>{m.uptime_percent !== null && <span className="hint"> · {statusUptime(m.uptime_percent)} uptime</span>}</span>
             </div>
             <div className="status-bars" role="img"
               aria-label={`Daily uptime for the last ${data.history_days} days: ${known.length} days with data, ${known.filter((d) => d.status === 'down').length} days with an outage`}>
               {m.days.map((d, i) => (
-                <span key={d.date} className={`d-tooltip${tipEdge(i, m.days.length)}`} data-tip={`${d.date}: ${d.uptime_percent === null ? 'no data' : `${d.uptime_percent.toFixed(2)}% uptime`}`}>
+                <span key={d.date} className={`d-tooltip${tipEdge(i, m.days.length)}`} data-tip={`${d.date}: ${d.uptime_percent === null ? 'no data' : `${statusUptime(d.uptime_percent)} uptime`}`}>
                   <span className={d.status} />
                 </span>
               ))}
