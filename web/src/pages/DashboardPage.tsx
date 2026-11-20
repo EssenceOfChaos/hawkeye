@@ -52,8 +52,11 @@ export function DashboardPage() {
             </Alert>
           )}
 
-          <CertificatesPanel certificates={s.certificates ?? []} tracked={s.certificates_tracked ?? 0} />
-          <DomainsPanel domains={s.domains ?? []} tracked={s.domains_tracked ?? 0} />
+          {/* Side by side on wide screens, stacked on narrow ones; one panel alone takes the full width. */}
+          <div className="expiry-panels">
+            <CertificatesPanel certificates={s.certificates ?? []} tracked={s.certificates_tracked ?? 0} />
+            <DomainsPanel domains={s.domains ?? []} tracked={s.domains_tracked ?? 0} />
+          </div>
 
           <RangePicker value={range} options={options} onChange={setRange} />
 
