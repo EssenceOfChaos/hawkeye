@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v5/middleware"
 
 	"hawkeye/internal/account"
+	"hawkeye/internal/adconversions"
 	"hawkeye/internal/apitokens"
 	"hawkeye/internal/audit"
 	"hawkeye/internal/auth"
@@ -70,6 +71,7 @@ type Options struct {
 	Badges        *badges.Service            // public uptime badges; nil turns them off
 	Heartbeats    *heartbeats.Service        // heartbeat pings (/ping/<token>) and ping logs; nil turns them off
 	Billing       *billing.Service
+	AdConversions *adconversions.Recorder // server-side conversion reports to OpenAI Ads; nil or disabled records nothing
 	Account       *account.Service
 	Contact       *contact.Service
 	Invitations   *invitations.Service   // team invitations; nil turns those endpoints off
@@ -201,7 +203,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, pageDomains: o.PageDomains, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, discovery: o.Discovery, drafts: o.Drafts, log: o.Logger, secureCookies: o.SecureCookies,
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, pageDomains: o.PageDomains, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, adConversions: o.AdConversions, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, discovery: o.Discovery, drafts: o.Drafts, log: o.Logger, secureCookies: o.SecureCookies,
 		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, workflowChecker: o.WorkflowChecker, tokenRoutes: map[string]bool{}, appBaseURL: o.AppBaseURL}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{

@@ -82,6 +82,10 @@ type Config struct {
 	AppVersion string
 	// AnthropicAPIKey turns on AI-drafted incident updates (internal/incidentdraft). Empty: the feature is off and says so.
 	AnthropicAPIKey string
+	// OpenAIAdsAPIKey turns on server-side conversion reporting to OpenAI Ads (internal/adconversions), for the pixel OpenAIAdsPixelID (the one the
+	// web app's pixel uses). Empty: nothing is recorded or sent from the server; the browser pixel still runs.
+	OpenAIAdsAPIKey  string
+	OpenAIAdsPixelID string
 
 	// Monitoring engine (worker process).
 	// CheckRegions lists where checks can run: "code[:Name],…", the first being the primary. WorkerRegion is the one this worker process serves
@@ -165,6 +169,7 @@ type Config struct {
 var (
 	telegramBotToken      = regexp.MustCompile(`^\d{3,20}:[A-Za-z0-9_-]{20,100}$`)
 	telegramWebhookSecret = regexp.MustCompile(`^[A-Za-z0-9_-]{16,256}$`)
+	openAIAdsToken        = regexp.MustCompile(`^[!#-&(-~]{1,512}$`) // visible ASCII without a space, double or single quote (unsafe in a .env file)
 )
 
 // dbSSLMode extracts sslmode from a PostgreSQL URL ("" if absent or unparseable).
@@ -420,6 +425,8 @@ func load(get func(string) string) (Config, error) {
 
 		SentryDSN:        str("SENTRY_DSN", ""),
 		AnthropicAPIKey:  str("ANTHROPIC_API_KEY", ""),
+		OpenAIAdsAPIKey:  str("OPENAI_ADS_API_KEY", ""),
+		OpenAIAdsPixelID: str("OPENAI_ADS_PIXEL_ID", "BQzFQqkTH5HXxdU4vT171u"), // OPENAI_PIXEL_ID in web/src/analytics.ts
 		AppVersion:       str("APP_VERSION", "dev"),
 		EmailFromAddress: str("EMAIL_FROM_ADDRESS", "alerts@example.com"),
 		SupportAddress:   str("CONTACT_TO_ADDRESS", "support@example.com"),
@@ -531,6 +538,12 @@ func load(get func(string) string) (Config, error) {
 		if _, err := mail.ParseAddress(v); err != nil {
 			errs = append(errs, fmt.Errorf("%s: must be a valid email address", key))
 		}
+	}
+	if c.OpenAIAdsAPIKey != "" && !openAIAdsToken.MatchString(c.OpenAIAdsAPIKey) {
+		errs = append(errs, errors.New("OPENAI_ADS_API_KEY: must be the Conversions API key from OpenAI Ads Manager (visible characters, no spaces or quotes)"))
+	}
+	if !openAIAdsToken.MatchString(c.OpenAIAdsPixelID) || len(c.OpenAIAdsPixelID) > 64 {
+		errs = append(errs, errors.New("OPENAI_ADS_PIXEL_ID: must be the pixel id from OpenAI Ads Manager (Conversions), at most 64 characters"))
 	}
 	if (c.TelegramBotToken == "") != (c.TelegramWebhookSecret == "") {
 		errs = append(errs, errors.New("TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET: set both or neither"))

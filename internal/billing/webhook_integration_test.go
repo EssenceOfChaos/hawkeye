@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"hawkeye/internal/adconversions"
 	"hawkeye/internal/billing"
 	"hawkeye/internal/billing/billingtest"
 	"hawkeye/internal/metrics"
@@ -775,5 +776,53 @@ func TestRiskEventsAreSurfacedButNeverChangeEntitlements(t *testing.T) {
 	}
 	if total != 3 {
 		t.Fatalf("risk event counter = %v, want 3", total)
+	}
+}
+
+// ---- OpenAI Ads purchase reports (internal/adconversions)
+
+func TestFirstPaidPeriodIsReportedForOpenAIAdsOnlyAfterARecordedCheckout(t *testing.T) {
+	e := newEnv(t)
+	adEvents := func() int {
+		return e.count(t, `SELECT count(*) FROM ad_conversion_events WHERE event_type = 'subscription_created' AND organization_id = $1`, e.org)
+	}
+	// Without a recorded checkout (the buyer opted out, or the server has no OpenAI key) nothing is reported.
+	e.deliver(t, billingtest.SubscriptionEvent("evt_1", "customer.subscription.created", at(0), e.sub("active", "price_pro")))
+	if adEvents() != 0 {
+		t.Fatal("reported a purchase without a recorded checkout")
+	}
+
+	// A buyer who allowed measurement: the checkout was recorded, then Stripe confirms the payment.
+	e2 := newEnv(t)
+	var uid uuid.UUID
+	if err := e2.pool.QueryRow(t.Context(), `INSERT INTO users (email, password_hash) VALUES ('buyer@example.test', 'x') RETURNING id`).Scan(&uid); err != nil {
+		t.Fatal(err)
+	}
+	rec := adconversions.NewRecorder(e2.pool, true)
+	if err := rec.Checkout(t.Context(), adconversions.Browser{Allowed: true, Oppref: "click-9"}, uid, e2.org, "chk_9", "pro", "year"); err != nil {
+		t.Fatal(err)
+	}
+	s := e2.sub("incomplete", "price_pro_year")
+	e2.deliver(t, billingtest.SubscriptionEvent("evt_a", "customer.subscription.created", at(0), s))
+	if n := e2.count(t, `SELECT count(*) FROM ad_conversion_events WHERE event_type = 'subscription_created'`); n != 0 {
+		t.Fatal("an unpaid subscription is not a purchase")
+	}
+	s.Status = "active"
+	e2.deliver(t, billingtest.SubscriptionEvent("evt_b", "customer.subscription.updated", at(10), s))
+	s.Price = "price_agency_year" // a plan change while paying is not a new purchase
+	e2.deliver(t, billingtest.SubscriptionEvent("evt_c", "customer.subscription.updated", at(20), s))
+
+	var id, oppref string
+	var data map[string]any
+	if err := e2.pool.QueryRow(t.Context(), `SELECT event_id, oppref, data FROM ad_conversion_events WHERE event_type = 'subscription_created'`).
+		Scan(&id, &oppref, &data); err != nil {
+		t.Fatalf("one purchase event expected: %v", err)
+	}
+	v, err := e2.svc.Subscription(t.Context(), e2.org)
+	if err != nil || v.PurchaseEventID == nil || *v.PurchaseEventID != id {
+		t.Fatalf("the billing view must give the browser the same purchase id: %v %v (want %s)", v.PurchaseEventID, err, id)
+	}
+	if oppref != "click-9" || data["plan_id"] != "pro_year" || data["amount"] != float64(19000) {
+		t.Fatalf("purchase %q %v", oppref, data)
 	}
 }

@@ -28,7 +28,7 @@ const SUPPORT = 'customer_support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 19, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 20, 2026</p>
       <p>
         HawkEye (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -125,10 +125,13 @@ export function PrivacyPage() {
         We also advertise in ChatGPT and use the <strong>OpenAI Ads measurement pixel</strong> (provided by OpenAI) to learn whether a visit that began with one of those ads led to a
         sign-up or a paid subscription. The pixel is a script from OpenAI that runs on our pages. It receives the address of the page (we load it only on pages whose address contains
         no one-time link, token, or other personal information, and never on pages that do), that a page was viewed, that an account was created (with no name or email
-        attached), and, when a payment is confirmed, a subscription event with the plan, the price you paid, and an identifier for that purchase, together with your IP address
+        attached), that you went to checkout (with the plan and its price), and, when a payment is confirmed, a subscription event with the plan, the price you paid, and an identifier for that purchase, together with your IP address
         and browser and device information. It stores two cookies, listed below: an ad-click reference when you arrive from an OpenAI ad, and a random reference for your browser.
+        Because ad blockers and closed tabs can stop the pixel, our servers also report the same sign-up, checkout and purchase events to OpenAI directly. Those reports contain
+        the event, its time, the page it happened on, the plan and price, the values of the two OpenAI cookies, and a one-way hash of your account’s internal identifier (not your
+        email address), so OpenAI can count each event once and connect it to the ad that led to it. They do not include your IP address, browser details, name, or email address. We keep them for 30 days, and they are deleted with your account.
         We do not send your name, email address, or monitoring data to OpenAI, and we use this only to measure our own advertising, not to build audiences or show you ads elsewhere.
-        The pixel is covered by the same opt-out as Google Analytics: when analytics is off, it is not loaded, nothing is sent to OpenAI, and its cookies are deleted. We do not
+        The pixel and our server’s reports are covered by the same opt-out as Google Analytics: when analytics is off (or your browser sends Global Privacy Control), the pixel is not loaded, nothing is sent to OpenAI from your browser or our servers, and its cookies are deleted. We do not
         use any other advertising or error-tracking service. If that changes, we will update this Policy first.
       </p>
       <p>
@@ -163,9 +166,9 @@ export function PrivacyPage() {
           <tr><td><code>hawkeye_analytics</code></td><td>Remembers your analytics choice (on or off) if you use “Cookie settings.”</td><td>Strictly necessary</td><td>1 year</td></tr>
           <tr><td><code>_ga</code>, <code>_ga_ZNT8EMTFGY</code></td><td>Set by Google Analytics, unless you turn analytics off, to tell visitors and sessions apart and measure site usage.</td><td>Analytics (opt-out)</td><td>Up to 2 years</td></tr>
           <tr><td><code>_gcl_au</code>, <code>_gcl_aw</code></td><td>Set by the Google tag for Google Ads conversion measurement, unless you turn analytics off, to connect a visit that began with one of our ads to a later purchase. <code>_gcl_aw</code> is set only when you arrive from a Google ad.</td><td>Advertising measurement (opt-out)</td><td>Up to 90 days</td></tr>
-          <tr><td><code>__oppref</code></td><td>Set by the OpenAI Ads pixel, unless you turn analytics off, when you arrive from an ad in ChatGPT, to connect that visit to a later sign-up or purchase.</td><td>Advertising measurement (opt-out)</td><td>30 days from your last visit from an OpenAI ad</td></tr>
+          <tr><td><code>__oppref</code></td><td>Set by the OpenAI Ads pixel, unless you turn analytics off, when you arrive from an ad in ChatGPT, to connect that visit to a later sign-up or purchase. Our servers read it when you sign up or go to checkout, to report those events to OpenAI.</td><td>Advertising measurement (opt-out)</td><td>30 days from your last visit from an OpenAI ad</td></tr>
           <tr><td><code>hawkeye_first_touch</code> (local storage)</td><td>Remembers how you first arrived (campaign tags, the kind of ad, the linking site and your first page) until you create an account, unless you turn analytics off. Kept by HawkEye only; see “How you found us” in Section C.</td><td>Analytics (opt-out)</td><td>Up to 90 days, or until you create an account</td></tr>
-          <tr><td><code>__obref</code></td><td>Set by the OpenAI Ads pixel, unless you turn analytics off: a random reference for your browser on our site, used for the same measurement.</td><td>Advertising measurement (opt-out)</td><td>1 year</td></tr>
+          <tr><td><code>__obref</code></td><td>Set by the OpenAI Ads pixel, unless you turn analytics off: a random reference for your browser on our site, used for the same measurement (our servers include it in the same reports).</td><td>Advertising measurement (opt-out)</td><td>1 year</td></tr>
         </tbody>
       </table>
       <p>
@@ -216,7 +219,7 @@ export function PrivacyPage() {
         <li><strong>Sentry</strong>: error tracking. When something unexpected goes wrong in our software, a technical error report is sent from our servers to Sentry so we can find and fix the problem. A report contains the error message, the software version and the part of the service that failed, and may include technical identifiers or a web address that appeared in the error. We remove email addresses, passwords, tokens and keys from it before it leaves our servers, and we do not send request contents, cookies, or the names of the people using the Service.</li>
         <li><strong>Google (Analytics and Ads)</strong>: website usage analytics and measurement of our own advertising, unless you opt out, as described in Section 2.C and E. Google receives page addresses without query strings or fragments, your IP address, browser and device information, and, when a payment is confirmed, a purchase event with the price paid.</li>
         <li><strong>Anthropic</strong>: AI-drafted incident updates, only for organizations whose owner turns them on (Pro and Agency). When the owner asks for a draft, we send Anthropic’s Claude model the incident’s details: the monitor’s name and kind, when the incident started and ended, the kind of failure and its summary, HTTP status codes, the locations of failed checks, and the updates already posted. We never send the monitored address, request settings, credentials, or response content, and we do not store the drafts. Anthropic processes this to return the draft and does not use it to train its models under its commercial terms.</li>
-        <li><strong>OpenAI (Ads measurement)</strong>: measurement of our own advertising in ChatGPT, unless you opt out, as described in Section 2.C and E. OpenAI receives page addresses that contain no personal information, page-view and sign-up events, your IP address, browser and device information, and, when a payment is confirmed, a subscription event with the plan and the price paid.</li>
+        <li><strong>OpenAI (Ads measurement)</strong>: measurement of our own advertising in ChatGPT, unless you opt out, as described in Section 2.C and E. OpenAI receives page addresses that contain no personal information, page-view, sign-up and checkout events, your IP address, browser and device information, and, when a payment is confirmed, a subscription event with the plan and the price paid. From our servers it also receives the sign-up, checkout and purchase events with OpenAI’s own cookie values and a one-way hash of your account identifier.</li>
       </ul>
       <p>
         To find when a domain’s registration expires, we ask the public registry that runs the domain’s top-level domain (and the Internet Assigned Numbers Authority, which tells us which registry to ask). Those requests contain the domain name

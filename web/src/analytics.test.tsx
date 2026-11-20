@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from './AuthProvider'
 import { useAuth } from './auth'
-import { addressIsShareable, analyticsEnabled, initAnalytics, readChoice, safeLocation, setChoice, trackEvent, trackPageView, trackRegistration, trackSubscription } from './analytics'
+import { addressIsShareable, analyticsEnabled, initAnalytics, readChoice, safeLocation, setChoice, trackCheckoutStarted, trackEvent, trackPageView, trackRegistration, trackSubscription } from './analytics'
 import { CookieBanner, CookieSettingsButton } from './components/CookieBanner'
 
 type G = { gtag?: unknown; dataLayer?: unknown[]; oaiq?: { q?: unknown[] } }
@@ -218,6 +218,18 @@ describe('OpenAI Ads pixel', () => {
     ])
   })
 
+  it('sends the server-issued ids with a registration and a checkout, so OpenAI counts the server and pixel copies once', () => {
+    at('https://hawkeye.observer/billing?interval=year')
+    initAnalytics()
+    trackRegistration('reg_1')
+    trackCheckoutStarted(19000, 'pro', 'year', 'chk_1')
+    expect(openAICalls().filter((c) => c[0] === 'measure')).toEqual([
+      ['measure', 'registration_completed', { type: 'customer_action' }, { event_id: 'reg_1' }],
+      ['measure', 'checkout_started', { type: 'contents', amount: 19000, currency: 'USD', contents: [{ id: 'pro_year', content_type: 'plan', quantity: 1, amount: 19000, currency: 'USD' }] },
+        { event_id: 'chk_1' }],
+    ])
+  })
+
   it('stays off for an opted-out visitor, and turning analytics off withdraws consent and deletes its cookies', () => {
     at('https://hawkeye.observer/')
     vi.stubGlobal('navigator', Object.assign(Object.create(navigator), { globalPrivacyControl: true }))
@@ -237,6 +249,7 @@ describe('OpenAI Ads pixel', () => {
     const before = openAIEvents().length
     trackPageView('/')
     trackSubscription(1900, 'pro', 'month', 'x')
+    trackCheckoutStarted(1900, 'pro', 'month', 'chk_x')
     expect(openAIEvents()).toHaveLength(before)
 
     setChoice('on')

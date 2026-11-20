@@ -7,7 +7,8 @@ import { useAuth } from '../auth'
 import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { redirectTo } from '../navigation'
-import { markCheckoutReturn, reportPurchaseIfPaid } from '../purchaseConversion'
+import { checkoutCents, markCheckoutReturn, reportPurchaseIfPaid } from '../purchaseConversion'
+import { trackCheckoutStarted } from '../analytics'
 import { shortInterval } from '../format'
 
 const POLL_MS = 3000
@@ -79,11 +80,12 @@ export function BillingPage() {
     if (sub) reportPurchaseIfPaid(sub)
   }, [sub])
 
-  async function go(kind: string, path: string, body?: unknown) {
+  async function go(kind: string, path: string, body?: unknown, beforeRedirect?: (r: { conversion_event_id?: string }) => void) {
     setBusy(kind)
     setError(null)
     try {
-      const r = await api<{ url: string }>('POST', path, body)
+      const r = await api<{ url: string; conversion_event_id?: string }>('POST', path, body)
+      beforeRedirect?.(r)
       redirectTo(r.url)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'That did not work. Try again.')
@@ -198,7 +200,10 @@ export function BillingPage() {
                   <PlanDetails plan={p} interval={shown} />
                   {!current && p.monthly_price_cents > 0 && !sub.paid_access && (
                     <button className="primary" disabled={!canBuy || busy !== null}
-                      onClick={() => void go(p.code, '/billing/checkout-session', shown === 'year' ? { plan: p.code, interval: 'year' } : { plan: p.code })}>
+                      onClick={() => void go(p.code, '/billing/checkout-session', shown === 'year' ? { plan: p.code, interval: 'year' } : { plan: p.code },
+                        (r) => {
+                          if (r.conversion_event_id) trackCheckoutStarted(checkoutCents(p, shown), p.code, shown, r.conversion_event_id)
+                        })}>
                       {busy === p.code ? 'Redirecting…' : `Choose ${p.name}`}
                     </button>
                   )}

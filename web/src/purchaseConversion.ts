@@ -1,7 +1,7 @@
 // Reports a paid subscription to Google Ads once the billing provider has confirmed it, even if the buyer was not looking at the billing page at that moment.
 // Returning from Checkout only marks the purchase as pending (the provider confirms by webhook, which can take longer than the buyer waits). The
 // conversion is sent the first time we see the subscription is paid, on the billing page or on any signed-in page, and only once per period paid for.
-import type { BillingSubscription } from './api'
+import type { BillingInterval, BillingSubscription, Plan } from './api'
 import { trackPurchase, trackSubscription } from './analytics'
 
 const PENDING_KEY = 'hawkeye_purchase_pending'
@@ -41,9 +41,15 @@ export function reportPurchaseIfPaid(sub: BillingSubscription) {
     s.removeItem(PENDING_KEY)
     return true
   }, false)
-  // The value is what was actually paid: a year's price for a yearly subscription.
-  const cents = sub.billing_interval === 'year' && sub.plan.annual_price_cents != null ? sub.plan.annual_price_cents : sub.plan.monthly_price_cents
+  const interval = sub.billing_interval === 'year' ? 'year' : 'month'
+  const cents = checkoutCents(sub.plan, interval)
   if (!first) return
   trackPurchase(cents / 100, sub.current_period_end)
-  trackSubscription(cents, sub.plan.code, sub.billing_interval === 'year' ? 'year' : 'month', sub.current_period_end)
+  // OpenAI gets the same id our server reports the purchase with (purchase_event_id), so the purchase is counted once.
+  trackSubscription(cents, sub.plan.code, interval, sub.purchase_event_id ?? sub.current_period_end)
+}
+
+/** What one period of a plan costs, in cents: a year's price for yearly billing (the amount actually paid). */
+export function checkoutCents(plan: Plan, interval: BillingInterval): number {
+  return interval === 'year' && plan.annual_price_cents != null ? plan.annual_price_cents : plan.monthly_price_cents
 }

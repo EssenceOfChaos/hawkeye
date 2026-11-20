@@ -19,6 +19,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/account"
+	"hawkeye/internal/adconversions"
 	"hawkeye/internal/apitokens"
 	"hawkeye/internal/audit"
 	"hawkeye/internal/auth"
@@ -83,6 +84,7 @@ type envOpts struct {
 	oauthPerM int                        // OAUTH_TOKEN_RATE_LIMIT_PER_MIN (0: the default)
 	clock     func() time.Time           // two-factor codes and grace periods (nil: the real clock)
 	dns       statuspagedomains.Resolver // custom domain lookups (nil: every name is unknown)
+	adConv    bool                       // record OpenAI Ads conversions (as with OPENAI_ADS_API_KEY set)
 }
 
 func newEnv(t *testing.T, rateLimit int) *env { return newEnvOpts(t, rateLimit, envOpts{}) }
@@ -144,6 +146,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 		AllowPort: func(int) bool { return true },
 	})
 	opts.OAuthTokenPerMin = o.oauthPerM
+	opts.AdConversions = adconversions.NewRecorder(pool, o.adConv)
 	if !o.noAPIKeys {
 		opts.OAuth = oauth.NewService(pool, planSvc, tf, mail, log, "http://app.test")
 		opts.APITokens = apitokens.NewService(pool, planSvc, mail, log, "http://app.test")

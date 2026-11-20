@@ -158,6 +158,10 @@ groups:
         expr: increase(hawkeye_billing_risk_events_total[1h]) > 0
         labels: {severity: page}
         annotations: {summary: "A dispute, refund or fraud warning needs human review in Stripe", runbook: "docs/billing.md"}
+      - alert: HawkEyeAdConversionsFailing
+        expr: sum(increase(hawkeye_ad_conversions_total{result=~"rejected|failed"}[6h])) > 0
+        labels: {severity: ticket}
+        annotations: {summary: "OpenAI Ads refused or gave up on server-side conversion events (wrong OPENAI_ADS_API_KEY or pixel id, or a payload OpenAI no longer accepts)", runbook: "docs/operations.md#openai-ads-conversions"}
       - alert: HawkEyeCanaryImpaired
         expr: hawkeye_canary_up{job="worker"} == 0
         for: 3m
