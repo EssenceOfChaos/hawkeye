@@ -196,7 +196,7 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .landing-logo { height: auto; }
 @media (max-width: 480px) { .landing-logo { width: 150px; } .landing-header { gap: .6rem; } }
 .landing-header a { white-space: nowrap; }
-/* The smallest phones (320px): a smaller logo and button so "Log in" and "Start free" both fit on one line. */
+/* The smallest phones (320px): a smaller logo and button so "Log in" and "Sign up free" both fit on one line. */
 @media (max-width: 22.5rem) { .landing-logo { width: 120px; } .landing-header { gap: .5rem; } .landing-header .button { padding: .45rem .7rem; font-size: .9rem; } }
 .hero { display: grid; grid-template-columns: 1fr 1fr; grid-template-areas: 'title title' 'text art'; column-gap: 2rem; row-gap: 1rem; align-items: center; padding-top: 2rem; padding-bottom: 3rem; }
 .hero-title { grid-area: title; }
@@ -789,6 +789,39 @@ main.auth .card p a { font-weight: 600; }
   .mon-hero-inner { grid-template-columns: 1fr; grid-template-areas: 'eyebrow' 'copy' 'art'; }
   .mon-hero::after { background: linear-gradient(180deg, #020b17f2 0%, #020b17cc 55%, #020b1788 100%); }
   .mon-earth::after { background: linear-gradient(180deg, #020b17f5 0%, #020b17d0 60%, #020b1790 100%); }
+}
+
+/* ---- /about (pages/AboutPage.tsx): the /monitoring page's art panels for the hero and closing call to action, the landing page's cards between ---- */
+.about-hero h1 { font-size: clamp(1.9rem, 5vw, 3rem); line-height: 1.1; margin: .25rem 0 1rem; font-family: var(--font-display); text-wrap: balance; max-width: 40rem; }
+.about-hero .mon-earth-copy h1 { text-shadow: 0 1px 14px #020b17, 0 0 3px #020b17b0; }
+.about-hero p { font-size: 1.1rem; }
+.about .about-tagline { font-family: var(--font-display); font-weight: 600; color: var(--gold-hi); }
+.about .section > p, .about-lede, .about-note { max-width: 46rem; }
+.about-prose p { font-size: 1.05rem; line-height: 1.65; }
+.about-note { margin-top: 1.5rem; color: var(--muted); }
+.about .features.about-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.about-tech img { display: block; }
+.about-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; margin-top: 1.5rem; }
+.about-panel { background: linear-gradient(180deg, #0f2744cc, #0b1f38cc); border: 1px solid var(--line); border-radius: .75rem; padding: clamp(1.25rem, 3vw, 2rem); }
+.about-panel h3 { font-size: 1.3rem; margin: 0 0 .75rem; text-wrap: balance; }
+.about-panel h4 { font-size: 1rem; margin: 1.25rem 0 .5rem; }
+.about-list { padding-left: 1.1rem; margin: 0 0 1rem; display: grid; gap: .5rem; }
+/* A small picture of the flow: what goes in, and the checks that come out. Text only, hidden from screen readers (the copy around it says the same). */
+.about-flow { display: flex; flex-direction: column; align-items: flex-start; gap: .35rem; margin: 1.25rem 0; padding: 1rem 1.1rem; border: 1px solid var(--line); border-radius: .6rem; background: #061222; }
+.about-flow-input { padding: .3rem .7rem; border: 1px solid var(--gold-lo); border-radius: 999px; color: var(--gold-hi); font-size: .9rem; }
+.about-flow-arrow { color: var(--gold); padding-left: 1rem; line-height: 1; }
+.about-flow-out { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; font-size: .92rem; }
+.about-flow-out.mono { font-size: .85rem; }
+.about-flow-out .tick { color: var(--up); font-weight: 700; margin-right: .35rem; }
+.about-team { align-items: center; padding: clamp(1.25rem, 3vw, 2.5rem); }
+.about-team .scout img { max-width: none; } /* .split img caps images at 30% of their box, which would shrink Scout inside his own frame */
+.mon-final-inner p:not(.hint) { font-size: 1.05rem; margin: 1rem 0 0; }
+@media (max-width: 60rem) { .about .features.about-three { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 52rem) { .about-panels { grid-template-columns: 1fr; } }
+@media (max-width: 40rem) {
+  .about .features.about-three { grid-template-columns: 1fr; }
+  .about-team { text-align: left; } /* .split centers text when it stacks; this is several paragraphs */
+  .about-team .about-scout { --scout-size: 160px !important; align-self: center; }
 }
 
 /* Two-factor sign-in (components/TwoFactor.tsx): the QR code stays black on white in both themes so every phone can read it. */

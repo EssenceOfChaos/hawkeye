@@ -33,6 +33,7 @@ HawkEye is for freelancers, web agencies, small businesses and small development
 ## Pages
 
 - [Home, features and pricing](https://hawkeye.observer/)
+- [About HawkEye](https://hawkeye.observer/about): who builds HawkEye and why, its principles (simple, effective, secure) and the technology it runs on (Go, PostgreSQL, React)
 - [Sign up](https://hawkeye.observer/register)
 - [Multi-step API checks guide](https://hawkeye.observer/docs/api-workflows)
 - [HawkEye status](https://status.hawkeye.observer): whether HawkEye itself is up, measured every minute from outside its own servers, with 90 days of uptime and any incidents

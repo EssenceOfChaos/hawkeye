@@ -31,8 +31,8 @@ describe('MonitoringLandingPage', () => {
   it('leads with the campaign headline and one clear call to action to sign up', async () => {
     renderPage(anonymous)
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Know Before Your Customers Do.')
-    expect(await screen.findAllByRole('link', { name: 'Start Monitoring Free' })).not.toHaveLength(0)
-    for (const link of screen.getAllByRole('link', { name: 'Start Monitoring Free' })) expect(link).toHaveAttribute('href', '/register')
+    expect(await screen.findAllByRole('link', { name: 'Create Your Free Account' })).not.toHaveLength(0)
+    for (const link of screen.getAllByRole('link', { name: 'Create Your Free Account' })) expect(link).toHaveAttribute('href', '/register')
     expect(screen.getByRole('link', { name: 'View Pricing' })).toHaveAttribute('href', '#pricing-h')
   })
 

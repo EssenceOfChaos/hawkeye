@@ -43,6 +43,8 @@ import { findPage, usePageMeta } from './usePageMeta'
 const DashboardPage = lazyWithReload(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
 // Lazy: it brings a YAML parser that no other page needs.
 const OpenApiImportPage = lazyWithReload(() => import('./pages/OpenApiImportPage').then((m) => ({ default: m.OpenApiImportPage })))
+// Lazy: a long page of copy that only visitors who open it need.
+const AboutPage = lazyWithReload(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })))
 const MonitorDetailPage = lazyWithReload(() => import('./pages/MonitorDetailPage').then((m) => ({ default: m.MonitorDetailPage })))
 
 function RequireAuth() {
@@ -108,6 +110,7 @@ export function AppRoutes() {
       <Route path="/docs/alerts" element={<DocPage path="/docs/alerts" />} />
       <Route path="/docs/api" element={<DocPage path="/docs/api" />} />
       <Route path="/docs/claude" element={<DocPage path="/docs/claude" />} />
+      <Route path="/about" element={<Lazy><AboutPage /></Lazy>} />
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />

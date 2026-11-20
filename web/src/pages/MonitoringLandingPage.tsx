@@ -35,7 +35,7 @@ export function MonitoringLandingPage() {
   const [period, setPeriod] = useState<BillingInterval>('month')
   const signedIn = status === 'authenticated'
   const multiLocation = plans?.some((p) => (p.max_regions ?? 1) > 1) ?? false
-  const cta = signedIn ? 'Open dashboard' : 'Start Monitoring Free'
+  const cta = signedIn ? 'Open dashboard' : 'Create Your Free Account'
   const ctaTo = signedIn ? '/dashboard' : '/register'
 
   return (
@@ -44,7 +44,7 @@ export function MonitoringLandingPage() {
         <Link to="/" aria-label="HawkEye home"><img className="landing-logo" src={brand.logoWhite} alt="HawkEye" width={220} height={43} /></Link>
         <span className="spacer" />
         {!signedIn && <Link to="/login">Log in</Link>}
-        <Link className="button primary" to={ctaTo}>{signedIn ? 'Open dashboard' : 'Start free'}</Link>
+        <Link className="button primary" to={ctaTo}>{signedIn ? 'Open dashboard' : 'Sign up free'}</Link>
       </header>
 
       <section className="mon-hero" aria-labelledby="mon-h1">
@@ -119,7 +119,7 @@ export function MonitoringLandingPage() {
 
       <section aria-labelledby="pricing-h" className="section">
         <h2 id="pricing-h">Simple plans. Clear visibility.</h2>
-        <p className="hint">Start free. Upgrade when your monitoring needs grow. The free plan is a real plan, not a trial.</p>
+        <p className="hint">Use HawkEye free for as long as you like. Upgrade when your monitoring needs grow. The free plan is a real plan, not a trial.</p>
         {plans === null && (
           <div role="status" aria-label="Loading plans" className="plans-loading">
             <div className="d-skeleton h-56 w-full" />
@@ -127,7 +127,7 @@ export function MonitoringLandingPage() {
             <div className="d-skeleton h-56 w-full" />
           </div>
         )}
-        {plans?.length === 0 && <p>Pricing is temporarily unavailable. You can still <Link to="/register">start for free</Link>.</p>}
+        {plans?.length === 0 && <p>Pricing is temporarily unavailable. You can still <Link to="/register">create a free account</Link>.</p>}
         {plans && plans.length > 0 && billingEnabled && annualEnabled && <IntervalToggle value={period} onChange={setPeriod} plans={plans} />}
         {plans && plans.length > 0 && (
           <Reveal as="ul" className="plans">

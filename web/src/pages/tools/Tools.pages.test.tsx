@@ -96,7 +96,7 @@ describe('UptimeSlaCalculatorPage', () => {
     await user.type(screen.getByLabelText('Uptime target (%)'), '9')
     expect(trackEvent).toHaveBeenCalledTimes(1)
     expect(trackEvent).toHaveBeenCalledWith('tool_use', { tool: 'uptime-sla-calculator' })
-    const cta = screen.getByRole('link', { name: 'Start monitoring free' })
+    const cta = screen.getByRole('link', { name: 'Create free account' })
     expect(cta).toHaveAttribute('href', '/register')
     await user.click(cta)
     expect(trackEvent).toHaveBeenLastCalledWith('tool_cta_click', { tool: 'uptime-sla-calculator' })
