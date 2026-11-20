@@ -21,7 +21,61 @@ Backups: a nightly encrypted database dump to Vultr Object Storage, and Vultr's 
 nightly dump is the newest copy.
 
 **The size matters before anything else.** The load test behind 30-second checks (`docs/plan-sub-minute-checks.md`) gave PostgreSQL 2 CPUs and
-2 GB on its own; production had 1 CPU and 2 GB for everything, hence the resize (step 1.2). Rerun the load test against the new shape.
+2 GB on its own; production had 1 CPU and 2 GB for everything, hence the resize (step 1.2). The test was rerun against the new shape on 2026-11-19:
+see *Capacity of the current server* below.
+
+## Capacity of the current server (load test, 2026-11-19)
+
+`cmd/loadtest live` (method in `docs/plan-sub-minute-checks.md`) against a copy of production's shape: PostgreSQL 17.11 with `max_connections=200`
+and default memory settings, limited to 2 CPUs and 2.25 GB (what is left of the 4 GB server after the app containers' limits), and the test itself
+running as the worker does in production (1 CPU, 512 MB) on **the same 2 CPUs**. Agency monitors at 30 s plus other monitors at 60 s; 5% of sites
+slow (3 s), 1% never answering (10 s timeout). "Late" is a gap over 1.5 times the interval. CPU is in cores (2.0 is the whole server).
+
+| Monitors (30 s + 60 s) | Checks/s nominal | `WORKER_CONCURRENCY` | 30 s checks late | Gap p99 (30 s / 60 s) | Oldest queued, max | Scheduler lag, max | Database CPU avg / p90 |
+|---|---|---|---|---|---|---|---|
+| 1,000 + 400 | 40 | 30 (production) | 0% | 33.9 s / 66.8 s | 2.0 s | 1.1 s | 0.22 / 0.25 |
+| 2,000 + 800 | 80 | 30 (production) | 0% | 39.5 s / 70.9 s | 15.3 s | 3.7 s | 0.40 / 0.63 |
+| 2,000 + 800 | 80 | 60 | 0% | 33.8 s / 66.7 s | 1.4 s | 1.5 s | 0.34 / 0.49 |
+| 3,000 + 1,200 | 120 | 80 | 3.0% | 49.4 s / 76.6 s | 17.1 s | 18.9 s | 1.08 / 1.75 |
+| 4,000 + 1,600 | 160 | 100 | 15.3% | 53.5 s / 85.5 s | 21.3 s | 21.1 s | 0.89 / 1.38 |
+
+What it says:
+
+- **The first limit is `WORKER_CONCURRENCY`, not the server.** At 30 (production's value), 1,000 Agency monitors at 30 s plus 400 others are
+  fine, but at 80 checks a second every slot is busy and checks wait up to 15 s, so 30-second monitors run up to 40 s apart. Nothing alerts:
+  `HawkEyeChecksDelayed` fired at 30 s (lowered to 15 s since: item 2 below). Doubling to 60 puts the same load back on time, with the database at about a third of a core.
+- **The server's limit is between 80 and 120 checks a second** (about 2,000 to 3,000 Agency monitors at 30 s, alongside others at 60 s). At 120 the
+  scheduler falls behind (lag up to 19 s) and the database uses most of the 2 CPUs at its peaks; at 160, 15% of 30-second checks are late. Adding
+  check slots past that point doesn't help: the database and the shared CPUs are the limit, which step 3 (a managed database) lifts.
+- **The database connection pool was never the limit** (no waits for a connection; 104 connections at 100 slots stay within `max_connections=200`).
+
+The real ceiling is likely lower than these numbers: the test ran on an Apple Silicon Mac, whose cores are faster than a shared Vultr vCPU; the fake
+site answers plain HTTP, so checks skip the DNS lookups and TLS handshakes real ones pay for; and in production the API, Caddy and Prometheus share
+the same 2 CPUs. The 3,000 + 1,200 run also overlapped with other work on the test machine, so treat it as approximate. The reading side (dashboards,
+status pages) was measured on 2026-11-16 with hourly rollups (`docs/plan-sub-minute-checks.md`); an Agency-sized rerun (200 monitors) was stopped
+before it finished, because generating the history needs more memory and disk than the test machine had free.
+
+**Production on 2026-11-19**, from its Prometheus: **0.03 checks a second** at the busiest point of the week (about 2 a minute), the oldest
+queued check waited at most 2.0 s, the worker runs with 30 slots (pool 34) and the API's pool is 20. That is about a thousandth of what 30 slots
+handle, so none of the steps below is needed yet. The regional workers are not scraped by this Prometheus, so their checks are not in the rate.
+To take the same readings (on the server, as the deploy user):
+
+```sh
+q() { docker exec hawkeye-prometheus-1 promtool query instant http://localhost:9090 "$1"; }
+q 'max_over_time(sum(rate(hawkeye_checks_total[15m]))[7d:15m])'   # busiest 15 minutes of the week, checks a second
+q 'max(max_over_time(hawkeye_queue_oldest_job_age_seconds[7d]))'    # longest queue wait of the week (healthy: 1-2 s)
+q 'hawkeye_db_pool_max_connections'                                 # each process's pool; a worker's is WORKER_CONCURRENCY + 4
+```
+
+**What to do with it:**
+
+1. Raise `WORKER_CONCURRENCY` to 60 in Infisical once sustained load passes about 20 checks a second, or the week's longest queue wait passes
+   5 s. Mind the connections: each worker's pool is its slots + 4, and the API's is 20, so 60 slots on the main worker *and* both regional workers
+   is 20 + 3 × 64 = 212, over production's `max_connections=200`. Raise it on the main worker only, or raise `max_connections` in
+   `deploy/docker-compose.local-db.yml` in the same change.
+2. **Done (2026-11-19):** `HawkEyeChecksDelayed` lowered from 30 s to 15 s: at 15 s of queue wait the slowest 30-second monitors were already
+   checked about 40 s apart, and the alert stayed silent.
+3. Plan step 3 (a managed database) before sustained load passes about 80 checks a second: past that, more slots or a bigger worker don't help.
 
 ## What a load balancer does and doesn't do
 

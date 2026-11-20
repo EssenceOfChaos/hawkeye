@@ -16,7 +16,8 @@ an Agency customer makes per monitor. Free and Pro are unchanged.
 
 PostgreSQL 17 ran in a container capped at 2 CPUs and 2 GB, on 2026-11-16. That was meant to match production, but production turned out to be
 `vc2-1c-2gb` (1 vCPU / 2 GB for everything, 55 GB disk; found 2026-11-17). It was resized to `vc2-2c-4gb` (2 vCPU / 4 GB) on 2026-11-18
-(`docs/plan-high-availability.md`, step 1.2); rerun the load test against that shape.
+(`docs/plan-high-availability.md`, step 1.2), and the test was rerun against that shape on 2026-11-19 (`docs/plan-high-availability.md`, *Capacity of the
+current server*).
 
 ```sh
 go run ./cmd/loadtest -db 'postgres://…' live -interval 30 -orgs 5 -base 400 -concurrency 30 -duration 5m
@@ -37,7 +38,7 @@ is busy.
 
 Saturation degrades everyone, not only the customers on fast checks, and none of the existing alerts noticed: the oldest queued job waited 48 s
 (alerts fired at 180 s and 300 s) and `missed_checks` stayed at 0, because it only counts lateness at scheduling time. Hence
-`WORKER_CONCURRENCY=30` by default and the `HawkEyeChecksDelayed` alert (oldest queued check over 30 s for 5 minutes).
+`WORKER_CONCURRENCY=30` by default and the `HawkEyeChecksDelayed` alert (oldest queued check over 30 s for 5 minutes; lowered to 15 s on 2026-11-19, `docs/plan-high-availability.md`).
 
 A 30-second timeout on a 30-second check skips a check now and then when the site stops answering (the previous one is still running): the
 worst gap was 61 s. The interval change will require the timeout to be shorter than the interval.

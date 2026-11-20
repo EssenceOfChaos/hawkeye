@@ -81,11 +81,12 @@ groups:
         annotations: {summary: "The oldest queued check has waited over 5 minutes: add workers or raise WORKER_CONCURRENCY"}
       - alert: HawkEyeChecksDelayed
         # Workers are saturated: checks wait in the queue, so every monitor runs late, long before the lag and backlog alerts above fire (a load test
-        # with 10 workers had 96% of 30-second checks late while the oldest job waited under a minute). Healthy waits are about 1 second.
-        expr: hawkeye_queue_oldest_job_age_seconds > 30
+        # with 10 workers had 96% of 30-second checks late while the oldest job waited under a minute). Healthy waits are about 1 second. 15 s, not
+        # 30: with waits of up to 15 s, 30-second monitors already ran up to 40 s apart (load test of 2026-11-19, docs/plan-high-availability.md).
+        expr: hawkeye_queue_oldest_job_age_seconds > 15
         for: 5m
         labels: {severity: ticket}
-        annotations: {summary: "Checks wait over 30 seconds in the queue, so monitors run late: raise WORKER_CONCURRENCY or add workers", runbook: "docs/operations.md#queue-full-backpressure"}
+        annotations: {summary: "Checks wait over 15 seconds in the queue, so monitors run late: raise WORKER_CONCURRENCY or add workers", runbook: "docs/operations.md#queue-full-backpressure"}
       - alert: HawkEyeRollupsBehind
         # Readers fall back to raw results after rollup_state.through, so nothing is wrong yet, but dashboards and status pages slow down.
         expr: hawkeye_rollup_lag_seconds > 10800
