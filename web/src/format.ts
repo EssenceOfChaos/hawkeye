@@ -1,3 +1,12 @@
+/**
+ * Uptime on a status page: always three decimals, truncated (never rounded up), so 99.9996% reads 99.999% and only a clean record reads 100.000%.
+ * Three decimals tell 99.9% (three nines) from 99.99% (four nines) apart at a glance.
+ */
+export function statusUptime(pct: number): string {
+  // The epsilon undoes floating-point error in the multiplication, so a value the API already truncated is never taken one step lower.
+  return `${(Math.floor(pct * 1000 + 1e-6) / 1000).toFixed(3)}%`
+}
+
 /** Formats a check-based uptime percentage; the API already truncates so 100 only means no failures. */
 export function formatUptime(pct: number): string {
   // Up to three decimals, trailing zeros removed (99.9, 99.966, 100).

@@ -100,7 +100,7 @@ export function NotFoundPage() {
         </section>
       </main>
       <footer className="nf-footer">
-        <span>© {year} HAWKEYE. ALL RIGHTS RESERVED.</span>
+        <span>© {year} HAWKEYE OBSERVER. ALL RIGHTS RESERVED.</span>
         <span>SEE MORE. STAY AHEAD.</span>
         <span>PRECISION THROUGH INTELLIGENCE</span>
       </footer>

@@ -153,7 +153,7 @@ export function MonitoringLandingPage() {
       </section>
 
       <footer className="mon-footer">
-        <span>© {year} HawkEye</span>
+        <span>© {year} HawkEye Observer</span>
         <nav aria-label="Legal">
           <Link to="/privacy">Privacy policy</Link>
           <Link to="/terms">Terms of service</Link>

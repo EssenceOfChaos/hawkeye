@@ -121,11 +121,13 @@ const AUDIENCES = [
   { icon: brand.audience.developer, title: 'Developers and small teams', lead: 'Make availability visible.', text: 'Check your APIs, cron jobs and DNS records too: authenticated requests, JSON checks, heartbeats and record lookups, no complex stack.' },
 ]
 
+// "Set up from your domain" (internal/discovery, SetupPage: the useful suggestions are preselected, one button adds them) and the OpenAPI/Postman
+// import (OpenApiImportPage). Keep this in step with what those pages do.
 const STEPS = [
-  { title: 'Add your website', text: 'Enter a name and URL. It joins your dashboard.' },
-  { title: 'Let HawkEye keep watch', text: 'Checked at your plan’s interval, with every result recorded.' },
-  { title: 'Get notified when something changes', text: 'Confirmed failures open an incident and alert you by email, Slack, Teams, Discord, Telegram, PagerDuty or webhook.' },
-  { title: 'Investigate and move forward', text: 'Review the incident. When checks recover, HawkEye resolves it and tells you.' },
+  { title: 'Enter your domain', text: 'HawkEye suggests monitors for your website, APIs, certificate, domain and mail records. Add them in one click.' },
+  { title: 'Or import your API', text: 'Upload an OpenAPI, Swagger or Postman file and get a check for every endpoint.' },
+  { title: 'Get notified when something changes', text: 'Confirmed failures open an incident and alert you by email, chat, PagerDuty or webhook.' },
+  { title: 'Investigate and move forward', text: 'Review the incident. HawkEye resolves it when checks recover.' },
 ]
 
 const FAQ = [
@@ -335,8 +337,9 @@ export function LandingPage() {
         </Reveal>
       </section>
 
-      <section aria-labelledby="how-h" className="section">
-        <h2 id="how-h">Up and running in minutes.</h2>
+      <section aria-labelledby="setup-h" className="section">
+        <h2 id="setup-h">Up and running in a few clicks.</h2>
+        <p className="hint">Point HawkEye at your domain or API spec. It sets up the monitoring for you.</p>
         <Reveal as="ol" className="steps">
           {STEPS.map((f, i) => (
             <li key={f.title} className="feature" data-reveal>

@@ -4,6 +4,8 @@
 > connected apps, and gave the go-ahead for launch and the Connectors Directory submission. Record here any change counsel asked for, and which of
 > the open questions below they settled; until then, treat those questions as still open.
 >
+> **Changed since that review (2026-11-20):** the Privacy Policy, the Terms and the site's copyright notices now give the legal name as **HawkEye Observer** (was "Hawkeye"), still described as a limited liability company; "HawkEye" remains the product name and the short form defined in both documents. The registered name is **HawkEye Observer LLC**; the owner chose to show it without "LLC" (the documents say "a limited liability company" instead). Confirm that is acceptable.
+>
 > **Changed since that review (2026-11-19):** the Privacy Policy now names the check locations (section 4.A, Vultr, and section 7): servers in
 > the Netherlands and the western United States that handle a monitor's settings and credentials while checking it.
 > The safeguards wording in section 7 was already there. Worth a look at the next review.

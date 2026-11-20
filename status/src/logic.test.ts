@@ -43,8 +43,10 @@ describe('uptime', () => {
   })
 
   it('never shows 100% when there was downtime', () => {
-    expect(percent(0.99999)).toBe('99.99%')
-    expect(percent(1)).toBe('100.00%')
+    expect(percent(0.99999)).toBe('99.999%')
+    expect(percent(0.999999)).toBe('99.999%') // rounded down, never up to 100%
+    expect(percent(0.9999)).toBe('99.990%')
+    expect(percent(1)).toBe('100.000%')
     expect(percent(null)).toBe('–')
   })
 
@@ -158,7 +160,7 @@ describe('planned maintenance', () => {
     expect(html).toContain('Scheduled maintenance in progress')
     expect(html).toContain('Under maintenance')
     expect(html).not.toContain('Down since')
-    expect(html).toContain('100.00% uptime')
+    expect(html).toContain('100.000% uptime')
 
     html = renderPage({ ...during, maintenance: [] })
     expect(html).toContain('Down since')
@@ -198,11 +200,22 @@ describe('a completed window says how much downtime it held', () => {
     const html = renderPage(snap([nov14]))
     expect(html).toContain('(9 min window)')
     expect(html).toContain('No downtime was recorded during this window.')
+    expect(html).toMatch(/<p class="outcome clean"><span class="label">Measured:<\/span> No downtime was recorded/)
+  })
+
+  it('sets our announcement apart from what the page measured', () => {
+    const w = { ...firstWindow, message: 'HawkEye may be unavailable for about 2 minutes.' }
+    const html = renderPage({ ...snap([]), maintenance: [w] })
+    const message = html.indexOf('<p class="message">HawkEye may be unavailable for about 2 minutes.</p>')
+    const outcome = html.indexOf('<p class="outcome clean">')
+    expect(message).toBeGreaterThan(-1)
+    expect(outcome).toBeGreaterThan(message) // the announcement first, then the measured result
   })
 
   it('says how long, and what, when there was downtime inside it', () => {
     const html = renderPage(snap([{ started_at: firstWindow.starts_at + 60, ended_at: firstWindow.starts_at + 180 }]))
     expect(html).toContain('Website and app was unavailable for about 2 min of it.')
     expect(html).not.toContain('No downtime was recorded')
+    expect(html).toContain('<p class="outcome down">')
   })
 })

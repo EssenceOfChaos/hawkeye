@@ -35,7 +35,7 @@ describe('public StatusPage', () => {
     renderPublic(() => json(200, page()))
     expect(await screen.findByText(/All systems operational/)).toBeInTheDocument()
     expect(screen.getByText('Website')).toBeInTheDocument()
-    expect(screen.getByText(/99.95% uptime/)).toBeInTheDocument()
+    expect(screen.getByText(/99\.950% uptime/)).toBeInTheDocument() // three decimals, so 99.9% and 99.99% read apart
     expect(screen.getByText('No incidents in the last 14 days.')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: /last 7 days/ })).toBeInTheDocument()
   })

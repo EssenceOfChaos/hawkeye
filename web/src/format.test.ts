@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { availableRanges, formatMoney, formatMs, formatPeriod, formatUptime, reportMonths, reportPdfPath, shortInterval, timeAgo } from './format'
+import { availableRanges, formatMoney, formatMs, formatPeriod, formatUptime, reportMonths, reportPdfPath, shortInterval, statusUptime, timeAgo } from './format'
 
 describe('format', () => {
   it('formats uptime without false precision or rounding up', () => {
@@ -7,6 +7,12 @@ describe('format', () => {
     expect(formatUptime(99.966)).toBe('99.966%')
     expect(formatUptime(99.9)).toBe('99.9%')
     expect(formatUptime(90)).toBe('90%')
+  })
+  it('shows status page uptime to three decimals, truncated, so 99.9% and 99.99% read apart and nothing rounds up to 100%', () => {
+    expect(statusUptime(100)).toBe('100.000%')
+    expect(statusUptime(99.9996)).toBe('99.999%')
+    expect(statusUptime(99.99)).toBe('99.990%')
+    for (const v of [99.957, 99.123, 98.765, 57.123, 99.001, 0.57]) expect(statusUptime(v)).toBe(`${v.toFixed(3)}%`) // floating-point error never costs a step
   })
   it('formats response times', () => {
     expect(formatMs(null)).toBe('—')

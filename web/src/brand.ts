@@ -22,6 +22,8 @@ import iconIncident from './assets/brand/icon-incident.png'
 import iconLocations from './assets/brand/icon-locations.png'
 import iconPdfReports from './assets/brand/icon-pdf-reports.png'
 import iconResponseTime from './assets/brand/icon-response-time.png'
+import iconWarning from './assets/brand/icon-warning.png'
+import iconSimple from './assets/brand/icon-simple.png'
 import emblem from './assets/brand/emblem.png'
 import screenAlertEmail from './assets/brand/screens/alert-email.webp'
 import screenDashboard from './assets/brand/screens/dashboard.webp'
@@ -92,6 +94,8 @@ export const brand = {
     locations: iconLocations,
     pdfReports: iconPdfReports,
     responseTime: iconResponseTime,
+    warning: iconWarning, // the Incidents page (the bell is for notifications)
+    simple: iconSimple, // the About page's "Simple" principle
   },
 }
 
