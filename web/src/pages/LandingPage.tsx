@@ -11,15 +11,10 @@ import { ProductShots } from '../components/ProductShots'
 import { Reveal } from '../components/Reveal'
 import { SiteFooter } from '../components/SiteFooter'
 import { AnimatedScout } from '../components/AnimatedScout'
+import { AgentTerminals } from '../components/AgentTerminals'
 import { inScope, parallax, prefersReducedMotion, rotateScramble } from '../motion'
 
 const PHRASES = ['watches your websites.', 'alerts you to incidents.', 'tracks your uptime.', 'measures response times.']
-
-const PROBLEMS = [
-  { title: 'The outage you didn’t see coming', text: 'Hear it from HawkEye, not from a customer.' },
-  { title: 'The slowdown hiding in plain sight', text: 'Slow responses are an early warning. Spot them sooner.' },
-  { title: 'The growing list of websites', text: 'Ten sites or a hundred: one dashboard shows what needs attention.' },
-]
 
 const FEATURES = [
   {
@@ -272,22 +267,7 @@ export function LandingPage() {
 
       <ProductShots />
 
-      <section aria-labelledby="problem-h" className="section">
-        <h2 id="problem-h">Your website doesn’t clock out. Neither should your monitoring.</h2>
-        <p>
-          A website can fail at midnight, slow to a crawl during a busy afternoon, or return an error while everything else appears
-          normal. You shouldn’t have to keep refreshing a browser to find out whether it’s working. HawkEye checks your websites on a
-          schedule, records their responses, and alerts you when repeated failures indicate a potential outage.
-        </p>
-        <Reveal as="ul" className="features">
-          {PROBLEMS.map((f) => (
-            <li key={f.title} className="feature" data-reveal>
-              <h3>{f.title}</h3>
-              <p>{f.text}</p>
-            </li>
-          ))}
-        </Reveal>
-      </section>
+      <AgentTerminals />
 
       <section className="section split" aria-labelledby="truth-h">
         <img src={brand.icons.websites} alt="" width={170} height={170} />
@@ -295,8 +275,8 @@ export function LandingPage() {
           <p className="eyebrow">Checks that tell the truth</p>
           <h2 id="truth-h">A failed check is not an incident.</h2>
           <p>
-            A site counts as offline only after consecutive failed checks, and as recovered only after consecutive successful ones. You get one alert when an
-            outage is confirmed and one when it ends.
+            A failed check is checked again 15 seconds later, and a site counts as offline only when that fails too; it counts as recovered only after
+            consecutive successful checks. You get one alert when an outage is confirmed and one when it ends.
           </p>
           <p>
             HawkEye verifies its own connection before reporting an outage. If other trusted websites are also unreachable, it disregards the failed check to help prevent false alarms.
