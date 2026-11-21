@@ -144,7 +144,7 @@ func (d *Dispatcher) ProcessOne(ctx context.Context) (bool, error) {
 			COALESCE(i.started_at, sd.started_at, now()), COALESCE(i.resolved_at, sd.resolved_at), COALESCE(i.summary, ''), COALESCE(m.id::text, ''), COALESCE(m.name, ''), COALESCE(m.url, ''), COALESCE(m.kind, 'http'),
 			COALESCE(p.ssl_expires_at, now()), COALESCE(p.ssl_bucket, 0),
 			COALESCE(dm.name, ''), COALESCE(p.domain_expires_at, now()), COALESCE(p.domain_bucket, 0),
-			COALESCE(sd.threshold_ms, 0), COALESCE(sd.peak_ms, 0)
+			COALESCE(sd.threshold_ms, 0), COALESCE(sd.peak_ms, 0), COALESCE(sd.cause, '')
 		FROM picked p
 		JOIN notification_settings s ON s.id = p.notification_setting_id
 		LEFT JOIN incidents i ON i.id = p.incident_id
@@ -155,7 +155,7 @@ func (d *Dispatcher) ProcessOne(ctx context.Context) (bool, error) {
 		Scan(&c.id, &c.settingID, &c.channel, &c.hawkeyeBot, &c.secret, &c.attempts, &c.alert.Event, &c.alert.To, &c.enabled, &c.verified,
 			&c.alert.StartedAt, &c.alert.ResolvedAt, &c.alert.Cause, &c.alert.MonitorID, &c.alert.MonitorName, &c.alert.MonitorURL, &c.alert.MonitorType,
 			&c.alert.SSLExpiresAt, &c.alert.SSLBucket, &c.alert.DomainName, &c.alert.DomainExpiresAt, &c.alert.DomainBucket,
-			&c.alert.SlowThresholdMs, &c.alert.SlowPeakMs)
+			&c.alert.SlowThresholdMs, &c.alert.SlowPeakMs, &c.alert.SlowCause)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}

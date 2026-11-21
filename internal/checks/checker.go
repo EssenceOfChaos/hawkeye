@@ -72,6 +72,9 @@ type Result struct {
 	CertExpiresAt *time.Time
 	// Region is where the check ran; the worker sets it. Empty means the primary region.
 	Region string
+	// Timings is where the time went (website and API checks that opened a connection; nil otherwise). A failed check keeps the phases it
+	// got through, and the one it was stuck in counts up to the failure.
+	Timings *Timings
 	// Recheck marks the immediate re-check after a failure (the worker sets it). It still decides the monitor's health, but it is left out of
 	// uptime, response times and slow-response streaks, so those stay one sample per interval.
 	Recheck bool
@@ -83,6 +86,26 @@ type Result struct {
 	ContentType string
 	// Steps is set for multi-step API checks: what each step that ran did (workflow.go). Stored with the result; never response content.
 	Steps []StepOutcome
+}
+
+// Timings splits a check's time into phases, each summed over every connection the check made (one per redirect). Their sum is close to
+// ResponseTimeMs; the small rest is the client's own work.
+type Timings struct {
+	DNSMs     int `json:"dns_ms"`     // looking up the host name (0 for an address)
+	ConnectMs int `json:"connect_ms"` // opening the TCP connection
+	TLSMs     int `json:"tls_ms"`     // the TLS handshake (0 for http://)
+	WaitMs    int `json:"wait_ms"`    // server wait: from sending the request to the first byte of the response
+	Redirects int `json:"redirects"`
+}
+
+// timingsFrom turns measured phases into Timings, or nil when no connection was attempted. Values are capped to fit their smallint columns
+// (a check's timeout is at most 30 s, so the cap is never reached in practice).
+func timingsFrom(p safehttp.PhaseTimes) *Timings {
+	if p.Connections == 0 {
+		return nil
+	}
+	ms := func(d time.Duration) int { return min(int(d/time.Millisecond), 32767) }
+	return &Timings{DNSMs: ms(p.DNS), ConnectMs: ms(p.Connect), TLSMs: ms(p.TLS), WaitMs: ms(p.Wait), Redirects: min(p.Connections-1, 32767)}
 }
 
 // Checker runs checks through the SSRF-safe HTTP client.
@@ -158,11 +181,20 @@ func (c *Checker) run(ctx context.Context, t Target, jar http.CookieJar, keep bo
 		res.TraceID = traceID
 	}
 
-	// Watch the TLS handshake with the monitored host (not hosts it redirects to) to learn when its certificate expires.
+	// Watch the TLS handshake with the monitored host (not hosts it redirects to) to learn when its certificate expires, and time each phase
+	// of the request. The client measures DNS and connect itself (it resolves and dials on its own); httptrace gives the TLS handshake and
+	// the server's wait.
 	cert := &certWatch{host: req.URL.Hostname()}
-	if req.URL.Scheme == "https" {
-		req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{TLSHandshakeDone: cert.handshakeDone}))
-	}
+	phases := &safehttp.Phases{}
+	req = req.WithContext(httptrace.WithClientTrace(safehttp.WithPhases(req.Context(), phases), &httptrace.ClientTrace{
+		TLSHandshakeStart: phases.TLSStart,
+		TLSHandshakeDone: func(cs tls.ConnectionState, err error) {
+			phases.TLSDone()
+			cert.handshakeDone(cs, err)
+		},
+		WroteRequest:         func(httptrace.WroteRequestInfo) { phases.WroteRequest() },
+		GotFirstResponseByte: phases.GotFirstByte,
+	}))
 
 	client := safehttp.New(c.cfg, t.Timeout)
 	client.Jar = jar
@@ -183,6 +215,7 @@ func (c *Checker) run(ctx context.Context, t Target, jar http.CookieJar, keep bo
 
 	resp, err := client.Do(req)
 	elapsed := int(c.now().Sub(res.CheckedAt) / time.Millisecond)
+	res.Timings = timingsFrom(phases.Snapshot())
 	res.CertExpiresAt = cert.expiry()
 	if err != nil {
 		if ctx.Err() != nil {

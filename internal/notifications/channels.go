@@ -224,7 +224,8 @@ type PayloadSlowdown struct {
 	StartedAt   time.Time  `json:"started_at"`
 	ResolvedAt  *time.Time `json:"resolved_at"`
 	ThresholdMs int        `json:"threshold_ms"`
-	PeakMs      int        `json:"peak_ms"` // the slowest successful check while it lasted
+	PeakMs      int        `json:"peak_ms"`         // the slowest successful check while it lasted
+	Cause       string     `json:"cause,omitempty"` // what got slower, compared with the past week
 }
 
 type PayloadDomain struct {
@@ -251,7 +252,7 @@ func buildWebhook(a Alert, now time.Time) WebhookPayload {
 		p.Certificate = &PayloadCertificate{ExpiresAt: a.SSLExpiresAt.UTC(), Bucket: a.SSLBucket}
 	case EventSlow, EventSlowRecovery:
 		p.URL = a.AppBaseURL + "/monitors/" + a.MonitorID
-		p.Slowdown = &PayloadSlowdown{StartedAt: a.StartedAt.UTC(), ThresholdMs: a.SlowThresholdMs, PeakMs: a.SlowPeakMs}
+		p.Slowdown = &PayloadSlowdown{StartedAt: a.StartedAt.UTC(), ThresholdMs: a.SlowThresholdMs, PeakMs: a.SlowPeakMs, Cause: a.SlowCause}
 		if a.Event == EventSlowRecovery && a.ResolvedAt != nil {
 			r := a.ResolvedAt.UTC()
 			p.Slowdown.ResolvedAt = &r
@@ -322,6 +323,9 @@ func chatContent(a Alert, now time.Time) chatMessage {
 	case EventSlow:
 		m.Title, m.Tone = "🐢 "+name+" is responding slowly", toneWarning
 		m.Lines = []string{"Online, but over " + Milliseconds(a.SlowThresholdMs) + " for several checks in a row (slowest " + Milliseconds(a.SlowPeakMs) + ")"}
+		if a.SlowCause != "" {
+			m.Lines = append(m.Lines, a.SlowCause)
+		}
 		m.Link = a.AppBaseURL + "/monitors/" + a.MonitorID
 	case EventSlowRecovery:
 		m.Title, m.Tone = "✅ "+name+" is responding normally again", toneGood

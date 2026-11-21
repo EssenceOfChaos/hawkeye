@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"hawkeye/internal/checks"
 	"hawkeye/internal/notifications"
 )
 
@@ -92,12 +93,21 @@ func (Engine) Resolved(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, succ
 
 // SlowStarted opens a slowdown for a monitor whose responses have stayed above its threshold, and queues the slow-response alerts. At most one
 // slowdown is open per monitor (partial unique index); a second call is a no-op.
-func (Engine) SlowStarted(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, thresholdMs, responseMs int, at time.Time) error {
+func (Engine) SlowStarted(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, thresholdMs, responseMs int, timings *checks.Timings, at time.Time) error {
+	// What got slower, compared with the past week: said in the alert and on the monitor's page.
+	var cause string
+	if timings != nil {
+		usual, err := usualTimings(ctx, tx, monitorID, at)
+		if err != nil {
+			return err
+		}
+		cause = SlowCause(timings, usual)
+	}
 	var id, orgID uuid.UUID
-	err := tx.QueryRow(ctx, `INSERT INTO slowdowns (monitor_id, started_at, threshold_ms, peak_ms)
-		SELECT id, $2, $3, $4 FROM monitors WHERE id = $1
+	err := tx.QueryRow(ctx, `INSERT INTO slowdowns (monitor_id, started_at, threshold_ms, peak_ms, cause)
+		SELECT id, $2, $3, $4, NULLIF($5, '') FROM monitors WHERE id = $1
 		ON CONFLICT (monitor_id) WHERE status = 'open' DO NOTHING
-		RETURNING id, (SELECT organization_id FROM monitors WHERE id = $1)`, monitorID, at, thresholdMs, responseMs).Scan(&id, &orgID)
+		RETURNING id, (SELECT organization_id FROM monitors WHERE id = $1)`, monitorID, at, thresholdMs, responseMs, cause).Scan(&id, &orgID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil // already open: do not notify twice
 	}

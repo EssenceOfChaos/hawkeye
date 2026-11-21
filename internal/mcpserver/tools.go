@@ -257,14 +257,15 @@ type MonitorList struct {
 }
 
 type UptimeResult struct {
-	From             time.Time `json:"from"`
-	To               time.Time `json:"to"`
-	Scope            string    `json:"scope" jsonschema:"the monitor's name, or all monitors"`
-	UptimePercent    *float64  `json:"uptime_percent,omitempty" jsonschema:"absent when there are too few checks to say"`
-	TotalChecks      int       `json:"total_checks"`
-	FailedChecks     int       `json:"failed_checks"`
-	AvgResponseMs    *int      `json:"avg_response_ms,omitempty"`
-	ClampedToHistory bool      `json:"clamped_to_history" jsonschema:"the range was shortened to the history the plan keeps"`
+	From             time.Time           `json:"from"`
+	To               time.Time           `json:"to"`
+	Scope            string              `json:"scope" jsonschema:"the monitor's name, or all monitors"`
+	UptimePercent    *float64            `json:"uptime_percent,omitempty" jsonschema:"absent when there are too few checks to say"`
+	TotalChecks      int                 `json:"total_checks"`
+	FailedChecks     int                 `json:"failed_checks"`
+	AvgResponseMs    *int                `json:"avg_response_ms,omitempty"`
+	AvgTimings       *reports.AvgTimings `json:"avg_timings,omitempty" jsonschema:"where the average successful check's time went: dns_ms (looking up the name), connect_ms, tls_ms (the TLS handshake) and wait_ms (the server's time to a first byte, usually the application); absent when no check measured them"`
+	ClampedToHistory bool                `json:"clamped_to_history" jsonschema:"the range was shortened to the history the plan keeps"`
 }
 
 type IncidentList struct {
@@ -540,7 +541,7 @@ func (s *tools) getUptime(ctx context.Context, c Caller, in UptimeInput) (Uptime
 		return UptimeResult{}, err
 	}
 	return UptimeResult{From: u.From, To: u.To, Scope: scope, UptimePercent: u.UptimePercent, TotalChecks: u.TotalChecks, FailedChecks: u.FailedChecks,
-		AvgResponseMs: u.AvgResponseMs, ClampedToHistory: u.Clamped}, nil
+		AvgResponseMs: u.AvgResponseMs, AvgTimings: u.AvgTimings, ClampedToHistory: u.Clamped}, nil
 }
 
 func (s *tools) listIncidents(ctx context.Context, c Caller, in ListIncidentsInput) (IncidentList, error) {

@@ -1,3 +1,5 @@
+import type { Timings } from './api'
+
 /**
  * Uptime on a status page: always three decimals, truncated (never rounded up), so 99.9996% reads 99.999% and only a clean record reads 100.000%.
  * Three decimals tell 99.9% (three nines) from 99.99% (four nines) apart at a glance.
@@ -148,4 +150,13 @@ export function formatPeriod(seconds: number): string {
 export function shortInterval(seconds: number): string {
   if (seconds < 60) return `${seconds} sec`
   return seconds < 3600 ? `${Math.round(seconds / 60)} min` : formatPeriod(seconds)
+}
+
+/** One check's breakdown as a line of text, for the check history: "DNS 12 ms · connect 31 ms · TLS 48 ms · server wait 410 ms · 1 redirect". */
+export function timingsLine(t: Timings): string {
+  const bits = [`DNS ${t.dns_ms.toLocaleString()} ms`, `connect ${t.connect_ms.toLocaleString()} ms`]
+  if (t.tls_ms > 0) bits.push(`TLS ${t.tls_ms.toLocaleString()} ms`)
+  bits.push(`server wait ${t.wait_ms.toLocaleString()} ms`)
+  if (t.redirects > 0) bits.push(`${t.redirects} redirect${t.redirects === 1 ? '' : 's'}`)
+  return bits.join(' · ')
 }

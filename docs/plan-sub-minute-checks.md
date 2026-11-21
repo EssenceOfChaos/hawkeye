@@ -52,7 +52,8 @@ worst gap was 61 s. The interval change will require the timeout to be shorter t
 | Public status page, 50 monitors, 90 days (uncached) | 3.9 s | 15.7 s |
 | One monitor's uptime, chart, history page or monthly report | under 0.2 s | under 0.2 s |
 
-A full Agency account has four times these monitors, and the dashboard also offers 365 days. Each result takes 225 bytes with its indexes, so a
+A full Agency account has four times these monitors, and the dashboard also offers 365 days. Each result takes 225 bytes with its indexes (plus 10
+for the timing breakdown since 2026-11, `docs/plan-timing-breakdown.md`), so a
 full Agency account (200 monitors, 365 days) is **22 GB a year at 60 s and 44 GB at 30 s**.
 
 **With hourly rollups** (`internal/rollups`), the same queries on the same data:

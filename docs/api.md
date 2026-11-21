@@ -374,12 +374,22 @@ the retention cutoff. Every response echoes the effective window: `range: {from,
 |---|---|
 | `GET /monitors/:id/uptime` | `{range, uptime}` (see below) |
 | `GET /monitors/:id/response-times` | `{range, bucket_seconds, points: [{t, avg_ms, max_ms, checks, failed}]}`. At most 150 points: the bucket width (1 min up to 3 days) is chosen from the window. Buckets with no checks are **omitted**, so charts show gaps rather than zeros. `avg_ms`/`max_ms` cover successful checks only and are null for a bucket that only had failures |
-| `GET /monitors/:id/results` | check history, newest first: `{range, results: [{id, checked_at, success, http_status_code, response_time_ms, error_category, error_summary, region, recheck, steps, trace_id}], total, limit, offset}`; `limit` 1–200 (default 50). A monitor checked more often than once a minute keeps individual results for 30 days (`rollups.RawRetention`); its uptime, charts and reports still cover the plan's history |
+| `GET /monitors/:id/results` | check history, newest first: `{range, results: [{id, checked_at, success, http_status_code, response_time_ms, error_category, error_summary, region, recheck, timings, steps, trace_id}], total, limit, offset}`; `limit` 1–200 (default 50). A monitor checked more often than once a minute keeps individual results for 30 days (`rollups.RawRetention`); its uptime, charts and reports still cover the plan's history |
 | `GET /dashboard/summary` | `{range, summary: {monitors: {total, up, down, pending, paused}, open_incidents, uptime, certificates, certificates_tracked, domains, domains_tracked, generated_at}}`. `certificates` lists up to five enabled HTTPS monitors whose certificate expires within 30 days or already has (`{monitor_id, monitor_name, expires_at, days_remaining, status: expiring|expired}`, soonest first); `certificates_tracked` counts monitors with a known expiry. `domains` is the same for tracked domains (`{domain_id, name, expires_at, days_remaining, status}`); `domains_tracked` counts those within the plan's limit that have a known expiry. Counts and open incidents are *current*; `uptime` follows the range. Paused wins over status in the counts; deleted monitors are excluded |
 | `GET /dashboard/recent-incidents` | `limit` 1–20 (default 5) |
 | `GET /dashboard/response-times` | same shape as the per-monitor series, averaged across all live monitors |
 
-**Uptime** — `{from, to, clamped_to_retention, total_checks, successful_checks, failed_checks, uptime_percent, insufficient_data, min_checks, avg_response_ms, method: "check_based"}`
+**Uptime** — `{from, to, clamped_to_retention, total_checks, successful_checks, failed_checks, uptime_percent, insufficient_data, min_checks, avg_response_ms, avg_timings, method: "check_based"}`
+
+**Timing breakdown.** A website or API check's `timings` is `{dns_ms, connect_ms, tls_ms, wait_ms, redirects}`: looking up the host name (0 for
+an address), opening the connection, the TLS handshake (0 for `http://`) and the server's wait from sending the request to the first byte of the
+response, each summed over every connection the check made (one per redirect), plus the number of redirects. The four add up to almost all of
+`response_time_ms`. A failed check keeps the phases it got through, the one it was stuck in counting up to the failure. `null` for DNS monitors,
+heartbeats and results from before it was measured; a multi-step check has none of its own, and each entry of its `steps` carries its own
+`timings`. `avg_timings` is `{dns_ms, connect_ms, tls_ms, wait_ms, other_ms, checks}`: the averages over the `checks` successful checks that have a
+breakdown (re-checks left out), or `null` when there are none; `other_ms` is the rest of `avg_response_ms`, set only when every successful check in
+the range has a breakdown. A slowdown's alert (and the monitor's `slow_cause` while it lasts) names the phase that accounts for at least half of the
+extra time compared with the monitor's week before the slowdown, given at least 10 measured checks.
 
 > uptime % = successful checks ÷ completed checks × 100, over the window
 

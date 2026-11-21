@@ -108,3 +108,33 @@ func TestOneSlowLocationIsNotASlowdown(t *testing.T) {
 		t.Fatalf("Europe back to normal leaves only one slow location: %v", tr)
 	}
 }
+
+// A slowdown says what got slower, compared with the monitor's past week.
+func TestASlowdownNamesThePhaseThatGotSlower(t *testing.T) {
+	e := newEnv(t, 5)
+	e.recipient(t, "ops@example.com", true, true)
+	e.pool.Exec(t.Context(), `UPDATE monitors SET slow_threshold_ms = 1000, slow_checks = 2 WHERE id = $1`, e.monitor)
+	// The usual week: quick checks, mostly server wait.
+	if _, err := e.pool.Exec(t.Context(), `INSERT INTO check_results (monitor_id, checked_at, finished_at, success, http_status_code, response_time_ms,
+			dns_ms, connect_ms, tls_ms, wait_ms, redirects)
+		SELECT $1, $2::timestamptz - make_interval(mins => g), $2::timestamptz - make_interval(mins => g), true, 200, 250, 10, 20, 40, 180, 0
+		FROM generate_series(10, 60) g`, e.monitor, e.clock); err != nil {
+		t.Fatal(err)
+	}
+	slow := func() {
+		e.clock = e.clock.Add(time.Minute)
+		ms := 2300
+		r := checks.Result{CheckedAt: e.clock, FinishedAt: e.clock, Success: true, ResponseTimeMs: &ms,
+			Timings: &checks.Timings{DNSMs: 11, ConnectMs: 22, TLSMs: 41, WaitMs: 2200}}
+		if _, err := e.store.Record(t.Context(), e.monitor, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	slow()
+	slow()
+	var cause string
+	e.pool.QueryRow(t.Context(), `SELECT COALESCE(cause, '') FROM slowdowns WHERE monitor_id = $1 AND status = 'open'`, e.monitor).Scan(&cause)
+	if cause != "Most of the extra time is the server's wait for a first byte: 2,200 ms, against 180 ms usually." {
+		t.Fatalf("cause %q", cause)
+	}
+}

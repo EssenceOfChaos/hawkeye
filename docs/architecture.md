@@ -117,6 +117,13 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
   out of uptime, response times, rollups and slow-response streaks. Per monitor, `monitors.recheck` is `auto` (only when every request is GET, HEAD
   or OPTIONS, including a workflow's steps; DNS lookups qualify), `always` or `off`; heartbeats never re-check. No re-check while the monitor or the
   location is down, from a re-check, during maintenance, or when the next scheduled check is within twice the delay (30-second checks).
+- **Timing breakdown (migration `000052`, `docs/plan-timing-breakdown.md`):** `safehttp` resolves host names and dials checked addresses
+  itself, so `httptrace` never sees DNS or connect: `safehttp.WithPhases` puts a `Phases` accumulator on the request context, `dialContext` adds
+  the DNS lookup and connect time (including failed attempts on other addresses), and `checks.run` adds the TLS handshake and the server's wait
+  (`WroteRequest` to `GotFirstResponseByte`) from `httptrace`. Every phase is summed over all hops of a redirect chain; a phase still in progress
+  when the request fails counts up to the failure. Stored as `smallint` columns on `check_results` (NULL without a breakdown) and as sums plus
+  `phase_count` in `check_rollups`, so `rollups.Source` gives averages from raw results and totals alike. `incidents.SlowStarted` compares the
+  confirming check with the monitor's week before its slow streak (`usualTimings`) and stores the explanation in `slowdowns.cause`.
 - **Incidents and alerts (Phase 5):** `Store.Record` calls `incidents.Engine` inside its transaction. `WentDown` opens an incident (partial unique
   index: one open per monitor) and enqueues one `notification_deliveries` row per enabled, verified recipient; any move into `up` closes an
   open incident and enqueues recovery deliveries. Status, incident and deliveries therefore commit atomically

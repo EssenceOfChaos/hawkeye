@@ -57,6 +57,7 @@ export function PlanDetails({ plan, interval = 'month' }: { plan: Plan; interval
         {(plan.max_team_members ?? 1) > 1 && <li>Require two-factor sign-in for your team</li>}
         <li>Website and API monitoring</li>
         <li>Failures re-checked within seconds before alerting</li>
+        <li>Response times split into DNS, connect, TLS and server time</li>
         {(plan.max_workflows ?? 0) > 0 && (
           <li>{plan.max_workflows === 1 ? 'One multi-step API check' : `${plan.max_workflows} multi-step API checks`} of up to {plan.max_workflow_steps} steps</li>
         )}
