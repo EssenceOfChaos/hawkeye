@@ -15,12 +15,17 @@ The person stays in charge: **nothing is created in HawkEye and no file is edite
 
 Call `get_account_overview`.
 
-- If the HawkEye tools are missing or the call is refused as unauthenticated, stop and tell the person how to connect: create a key with
-  **Read and write** access at https://hawkeye.observer/api-keys, then enter it when Claude Code asks for the plugin's API key (or run
-  `claude plugin configure hawkeye` in a terminal to set or change it) and restart Claude Code. Read and write keys can add monitors on every
-  plan, including Free. Never ask the person to paste the key into the conversation.
-- If `can_add_monitors` is false, the key is read only: you can still make the plan, but say that monitors can't be created until they use a read
-  and write key.
+- If the HawkEye tools are missing or the call is refused as unauthenticated, stop and tell the person how to connect the agent you are running in:
+  - **Claude Code:** create a key with **Read and write** access at https://hawkeye.observer/api-keys, then enter it when Claude Code asks for the
+    plugin's API key (or run `claude plugin configure hawkeye` in a terminal to set or change it) and restart Claude Code.
+  - **Cursor:** create a key with **Read and write** access at https://hawkeye.observer/api-keys, enter it as the API key in Cursor under
+    **Customize** > **Plugins** > **HawkEye** > **Configure**, and start a new chat.
+  - **Codex:** run `codex mcp login hawkeye` in a terminal, sign in to HawkEye, choose the organization and **Read and make changes**, and start a
+    new Codex session.
+
+  Read and write access can add monitors on every plan, including Free. Never ask the person to paste a key into the conversation.
+- If `can_add_monitors` is false, the connection is read only: you can still make the plan, but say that monitors can't be created until they
+  connect with read and write access.
 - Note `monitor_limit` minus `monitors_used`: the number of monitors there is room for.
 
 Also call `list_monitors` (raise `limit` until you have them all) so you don't propose anything already monitored.

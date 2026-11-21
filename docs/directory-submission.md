@@ -212,9 +212,15 @@ Publish on each one. Following `main`, every app deploy showed "publish again" t
 follows the **`plugin-latest` tag** instead ("Branch or tag" in the portal), and a tag stays on its commit until it is moved, so app deploys never
 create plugin versions (https://claude.com/docs/plugins/submit.md).
 
-To release a change to the plugin:
+The Cursor and Codex plugins (`plugins/hawkeye-cursor/`, listed through `.cursor-plugin/marketplace.json`, and `plugins/hawkeye-codex/`, listed
+through `.agents/plugins/marketplace.json`) release with it under one version. They carry copies of the Claude plugin's skill and icon, and
+`scripts/test_plugins.py` (run in CI) fails when a copy or a version drifts.
 
-1. Raise `version` in `plugins/hawkeye/.claude-plugin/plugin.json` (installed copies use it to tell that an update exists) and merge.
+To release a change to the plugins:
+
+1. Raise `version` in all three manifests (`plugins/hawkeye/.claude-plugin/plugin.json`, `plugins/hawkeye-cursor/.cursor-plugin/plugin.json`,
+   `plugins/hawkeye-codex/.codex-plugin/plugin.json`; installed copies use it to tell that an update exists), copy any skill change from
+   `plugins/hawkeye/` into the other two, and merge.
 2. Move the tag to that commit on `main`:
    ```bash
    git fetch origin
@@ -225,6 +231,24 @@ To release a change to the plugin:
 
 Never move the tag for a commit whose plugin files you haven't checked: whatever the tag points at is what the directory publishes. A deploy of the
 app needs nothing here.
+
+`codex plugin marketplace add EssenceOfChaos/hawkeye` reads the repository's default branch, not the tag, so Codex users get plugin changes as soon
+as they are merged. Merge plugin changes only once they are ready to ship.
+
+### The Codex OAuth client
+
+Codex signs in through OAuth with a public client registered once per environment, with the fixed loopback callback that
+`plugins/hawkeye-codex/.mcp.json` names (`callbackUrl` and `callbackPort`). Create it on the production server as for Claude (step 3 above):
+
+```sh
+docker compose --env-file .env.production -f deploy/docker-compose.prod.yml -f deploy/docker-compose.local-db.yml \
+  run --rm --entrypoint /usr/local/bin/oauthclient migrate create -name Codex -public -redirect http://127.0.0.1:47831/callback
+```
+
+Put the printed client ID (`hkc_…`) in `clientId` in `plugins/hawkeye-codex/.mcp.json`. It is public (no secret). `scripts/test_plugins.py` fails
+while the placeholder is there. Changing the callback port means registering the new redirect on the client too, or every Codex sign-in fails.
+
+Cursor needs no client: its plugin sends an API key (the `HAWKEYE_API_KEY` plugin variable).
 
 Original checklist:
 

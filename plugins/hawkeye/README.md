@@ -41,5 +41,9 @@ application or the rest of this repository, and it does not cover the HawkEye na
 
 ## Other coding agents
 
-The skill is a plain `SKILL.md` ([skills/set-up-monitoring/SKILL.md](skills/set-up-monitoring/SKILL.md)). Agents that read skills in that format
-can use it with HawkEye's MCP server configured the same way: the address above, and the key in an `Authorization: Bearer` header.
+The same plugin is available for [Cursor](../hawkeye-cursor) and [Codex](../hawkeye-codex). The skill is a plain `SKILL.md`
+([skills/set-up-monitoring/SKILL.md](skills/set-up-monitoring/SKILL.md)); other agents that read skills in that format can use it with HawkEye's MCP
+server configured the same way: the address above, and the key in an `Authorization: Bearer` header.
+
+This folder holds the skill's original. The Cursor and Codex plugins carry copies, and `scripts/test_plugins.py` fails when they differ, so edit it
+here and copy it over.
