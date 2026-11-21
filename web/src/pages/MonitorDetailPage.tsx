@@ -260,6 +260,7 @@ export function MonitorDetailPage() {
                           {r.success
                             ? <span className="badge up"><span aria-hidden="true">✔</span> {hb ? 'Ping' : 'Success'}</span>
                             : <span className="badge down"><span aria-hidden="true">✖</span> {hb ? (r.error_category === 'missed_ping' ? 'Missed' : 'Failed') : 'Failed'}</span>}
+                          {r.recheck && <div className="hint" title="Checked again right after a failure. Not counted in uptime.">Re-check</div>}
                         </td>
                         {!hb && (
                           <>

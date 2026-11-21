@@ -26,6 +26,7 @@ type Job struct {
 	MonitorID uuid.UUID
 	Attempts  int
 	Reclaimed bool // the previous holder's lease expired
+	Recheck   bool // an immediate re-check after a failure (see Recheck)
 }
 
 // DefaultRegion is the region of jobs queued without one.
@@ -55,8 +56,8 @@ func ClaimRegion(ctx context.Context, db DB, region string, lease time.Duration,
 			ORDER BY run_at
 			FOR UPDATE SKIP LOCKED
 			LIMIT 1)
-		RETURNING j.id, j.monitor_id, j.attempts, (j.attempts > 1)`, lease, region).
-		Scan(&j.ID, &j.MonitorID, &j.Attempts, &j.Reclaimed)
+		RETURNING j.id, j.monitor_id, j.attempts, (j.attempts > 1), j.recheck`, lease, region).
+		Scan(&j.ID, &j.MonitorID, &j.Attempts, &j.Reclaimed, &j.Recheck)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, dropped, nil
 	}
@@ -69,6 +70,15 @@ func ClaimRegion(ctx context.Context, db DB, region string, lease time.Duration,
 // Complete removes a finished job.
 func Complete(ctx context.Context, db DB, id int64) error {
 	_, err := db.Exec(ctx, `DELETE FROM check_jobs WHERE id = $1`, id)
+	return err
+}
+
+// Recheck puts a finished job back to run again after delay as an immediate re-check, instead of removing it. Reusing the row keeps the
+// one-job-per-monitor-and-region rule (the scheduler skips the region meanwhile) and adds nothing to the queue's depth. If the worker dies before
+// calling it, the lease expires and the job runs again as an ordinary check, so nothing is lost.
+func Recheck(ctx context.Context, db DB, id int64, delay time.Duration) error {
+	_, err := db.Exec(ctx, `UPDATE check_jobs SET status = 'queued', locked_until = NULL, run_at = now() + $2::interval, attempts = 0, recheck = true
+		WHERE id = $1`, id, delay)
 	return err
 }
 

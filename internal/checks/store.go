@@ -23,6 +23,9 @@ type Outcome struct {
 	Before, After State
 	Transition    Transition
 	Speed         SpeedTransition // a confirmed slowdown or return to normal speed (monitors with a slow-response threshold)
+	// Recheck asks the caller to check the monitor again from the same location after the store's re-check delay: the result was a first
+	// failure of a healthy monitor (wantRecheck).
+	Recheck bool
 }
 
 // Incidents reacts to confirmed state changes inside the transaction that records the result, so a
@@ -53,6 +56,7 @@ type Store struct {
 	thresholds Thresholds
 	incidents  Incidents // optional
 	regions    regions.Set
+	recheck    time.Duration // delay before an immediate re-check after a first failure; 0: no re-checks
 }
 
 func NewStore(pool *pgxpool.Pool, th Thresholds, inc Incidents) *Store {
@@ -64,6 +68,16 @@ func (s *Store) WithRegions(r regions.Set) *Store {
 	s.regions = r
 	return s
 }
+
+// WithRecheck turns on immediate re-checks: a first failure of a healthy monitor asks for another check from the same location after delay
+// (Outcome.Recheck), instead of waiting a whole interval to confirm it. 0 turns them off.
+func (s *Store) WithRecheck(delay time.Duration) *Store {
+	s.recheck = delay
+	return s
+}
+
+// RecheckDelay is the delay set by WithRecheck.
+func (s *Store) RecheckDelay() time.Duration { return s.recheck }
 
 // Record persists a result and updates the monitor's counters and status in one transaction. The monitor
 // row is locked, so concurrent results for one monitor are applied one at a time.
@@ -91,11 +105,18 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 		var orgID uuid.UUID
 		var chosen []string
 		var speed speedSettings
+		var rf recheckFacts
+		var untilNext float64
+		// Heartbeats are pinged, not checked, so there is nothing to re-check. readOnly: the monitor's own method, and for a multi-step check every
+		// step's. A DNS monitor's method column is the GET default.
 		err := tx.QueryRow(ctx, `SELECT current_status, consecutive_failures, consecutive_successes, enabled, in_maintenance(organization_id, id, $2), organization_id, regions,
-				slow_threshold_ms, slow_checks, slow_streak, normal_streak, EXISTS (SELECT 1 FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open')
+				slow_threshold_ms, slow_checks, slow_streak, normal_streak, EXISTS (SELECT 1 FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'),
+				CASE WHEN kind = 'heartbeat' THEN 'off' ELSE recheck END, upper(method) NOT IN `+writeMethodsSQL+` AND NOT EXISTS (SELECT 1 FROM monitor_steps WHERE monitor_id = monitors.id AND upper(method) IN `+writeMethodsSQL+`),
+				COALESCE(EXTRACT(EPOCH FROM next_check_at - $2), 0)::float8
 			FROM monitors WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, monitorID, r.FinishedAt).
 			Scan(&out.Before.Status, &out.Before.Failures, &out.Before.Successes, &enabled, &maintenance, &orgID, &chosen,
-				&speed.thresholdMs, &speed.checks, &speed.state.SlowStreak, &speed.state.NormalStreak, &speed.state.Slow)
+				&speed.thresholdMs, &speed.checks, &speed.state.SlowStreak, &speed.state.NormalStreak, &speed.state.Slow,
+				&rf.setting, &rf.readOnly, &untilNext)
 		if errors.Is(err, pgx.ErrNoRows) || err == nil && !enabled {
 			return ErrDiscarded
 		}
@@ -113,9 +134,9 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 			steps = r.Steps
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO check_results
-			(monitor_id, checked_at, finished_at, success, http_status_code, response_time_ms, error_category, error_summary, in_maintenance, region, steps, trace_id)
-			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''), $9, $10, $11, NULLIF($12, ''))`,
-			monitorID, r.CheckedAt, r.FinishedAt, r.Success, r.StatusCode, r.ResponseTimeMs, r.ErrorCategory, summary, maintenance, region, steps, r.TraceID); err != nil {
+			(monitor_id, checked_at, finished_at, success, http_status_code, response_time_ms, error_category, error_summary, in_maintenance, region, steps, trace_id, recheck)
+			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''), $9, $10, $11, NULLIF($12, ''), $13)`,
+			monitorID, r.CheckedAt, r.FinishedAt, r.Success, r.StatusCode, r.ResponseTimeMs, r.ErrorCategory, summary, maintenance, region, steps, r.TraceID, r.Recheck); err != nil {
 			return fmt.Errorf("insert result: %w", err)
 		}
 
@@ -132,16 +153,25 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 			out.After = out.Before
 		case len(effective) == 1:
 			out.After, out.Transition = Apply(out.Before, r.Success, s.thresholds)
+			rf.locationDown = out.After.Status == StatusDown
 		default:
 			var down []string
 			out.After, out.Transition, down, err = s.applyRegional(ctx, tx, monitorID, region, effective, r, out.Before)
 			if err != nil {
 				return err
 			}
+			rf.locationDown = slices.Contains(down, region)
 			if out.Transition == WentDown {
 				summary = truncate(fmt.Sprintf("%s (offline from %d of %d locations)", summary, len(down), len(effective)), maxSummaryLen)
 			}
 		}
+		if out.Transition == WentDown && r.Recheck {
+			summary = truncate(summary+" (confirmed by an immediate re-check)", maxSummaryLen)
+		}
+		rf.failed, rf.fromRecheck, rf.counts = !r.Success, r.Recheck, counts
+		rf.locationFailures, rf.monitorDown = out.After.Failures, out.Before.Status == StatusDown
+		rf.untilNextCheck = time.Duration(untilNext * float64(time.Second))
+		out.Recheck = wantRecheck(rf, s.thresholds.Failure, s.recheck)
 		_, err = tx.Exec(ctx, `UPDATE monitors SET current_status = $2, consecutive_failures = $3, consecutive_successes = $4,
 			last_checked_at = $5, last_success_at = CASE WHEN $6 THEN $5 ELSE last_success_at END
 			WHERE id = $1`, monitorID, out.After.Status, out.After.Failures, out.After.Successes, r.FinishedAt, r.Success)
@@ -151,7 +181,8 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 		if err := s.recordCertificate(ctx, tx, monitorID, r); err != nil {
 			return err
 		}
-		if counts && speed.thresholdMs != nil && r.Success && r.ResponseTimeMs != nil {
+		// A re-check is an extra sample, not one more interval: it doesn't move the slow-response streaks.
+		if counts && !r.Recheck && speed.thresholdMs != nil && r.Success && r.ResponseTimeMs != nil {
 			if out.Speed, err = s.recordSpeed(ctx, tx, monitorID, region, effective, *r.ResponseTimeMs, speed); err != nil {
 				return err
 			}
@@ -241,7 +272,9 @@ func (s *Store) effectiveRegions(ctx context.Context, tx pgx.Tx, orgID uuid.UUID
 // least a quorum (majority) of its regions are down, so a problem at one location alone never opens an incident. It returns the new
 // overall state (with the reporting region's streaks), the transition, and the regions currently down.
 func (s *Store) applyRegional(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, region string, effective []string, r Result, before State) (State, Transition, []string, error) {
-	var reg State
+	// A location's first result starts from "unknown" (the column's only valid starting value): with the zero State, a first result that failed
+	// would have been written with an empty status and rejected by the table's check, so it was never recorded.
+	reg := State{Status: StatusUnknown}
 	err := tx.QueryRow(ctx, `SELECT status, consecutive_failures, consecutive_successes FROM monitor_region_state
 		WHERE monitor_id = $1 AND region = $2`, monitorID, region).Scan(&reg.Status, &reg.Failures, &reg.Successes)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {

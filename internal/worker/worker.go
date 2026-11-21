@@ -194,7 +194,7 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 		w.retry(ctx, job)
 		return true, nil
 	}
-	res.Region = w.region
+	res.Region, res.Recheck = w.region, job.Recheck
 	if !res.Success && w.canary != nil && mayBeOurNetwork(res.ErrorCategory) && w.canary.Impaired(ctx) {
 		// Not recorded at all: no failed row in the history, no failure streak, no incident, no alert. The monitor's next scheduled check counts
 		// normally once the network is back.
@@ -203,7 +203,7 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 			"monitor_id", job.MonitorID, "category", res.ErrorCategory)
 		return true, w.complete(ctx, job)
 	}
-	_, err = w.store.Record(ctx, job.MonitorID, res)
+	out, err := w.store.Record(ctx, job.MonitorID, res)
 	switch {
 	case errors.Is(err, checks.ErrDiscarded):
 		return true, w.complete(ctx, job)
@@ -219,6 +219,17 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 	}
 	w.m.ChecksTotal.WithLabelValues(result, category).Inc()
 	w.m.CheckDuration.Observe(res.FinishedAt.Sub(res.CheckedAt).Seconds())
+	if job.Recheck {
+		w.m.Rechecks.WithLabelValues(map[bool]string{true: "passed", false: "failed"}[res.Success]).Inc()
+	}
+	if out.Recheck {
+		// A first failure: check again soon from here, rather than waiting a whole interval to confirm it. The job is reused, not removed.
+		if err := queue.Recheck(ctx, w.pool, job.ID, w.store.RecheckDelay()); err != nil {
+			w.m.WorkerErrors.WithLabelValues("complete").Inc()
+			return true, err // the lease expiry runs it again as an ordinary check
+		}
+		return true, nil
+	}
 	return true, w.complete(ctx, job)
 }
 

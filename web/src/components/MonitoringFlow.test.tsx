@@ -6,7 +6,7 @@ describe('MonitoringFlow', () => {
   it('describes the whole story to people who cannot see it', () => {
     render(<MonitoringFlow />)
     const fig = screen.getByRole('img', { name: 'How HawkEye confirms an outage and alerts you' })
-    expect(fig).toHaveAccessibleDescription(/checks again before alerting, confirms the outage after consecutive failed checks/)
+    expect(fig).toHaveAccessibleDescription(/checks again before alerting, confirms the outage with an immediate re-check/)
     expect(fig).toHaveAccessibleDescription(/sends a recovery alert/)
   })
 

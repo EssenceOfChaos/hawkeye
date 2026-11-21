@@ -15,6 +15,7 @@ type Metrics struct {
 	ChecksTotal   *prometheus.CounterVec // result=success|failure|inconclusive, category (inconclusive: dropped because the canary says our own network is down)
 	CanaryUp      prometheus.Gauge       // 1 while this worker can reach independent public sites, 0 while it cannot
 	CheckDuration prometheus.Histogram
+	Rechecks      *prometheus.CounterVec // result=failed|passed: immediate re-checks after a failure ("passed" is a false alarm avoided)
 
 	Scheduled    prometheus.Counter // jobs enqueued
 	Skipped      prometheus.Counter // monitor was due but its previous job had not finished
@@ -72,6 +73,8 @@ func newOn(r *prometheus.Registry) *Metrics {
 			Help: "Completed checks by result and error category."}, []string{"result", "category"}),
 		CheckDuration: prometheus.NewHistogram(prometheus.HistogramOpts{Name: "hawkeye_check_duration_seconds",
 			Help: "Wall time of completed checks.", Buckets: []float64{.1, .25, .5, 1, 2.5, 5, 10, 30}}),
+		Rechecks: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_rechecks_total",
+			Help: "Immediate re-checks after a failure, by result (failed: confirmed the failure; passed: a false alarm avoided)."}, []string{"result"}),
 		Scheduled:       prometheus.NewCounter(prometheus.CounterOpts{Name: "hawkeye_scheduler_jobs_scheduled_total", Help: "Check jobs enqueued."}),
 		Skipped:         prometheus.NewCounter(prometheus.CounterOpts{Name: "hawkeye_scheduler_skipped_total", Help: "Due monitors skipped because a previous job was still outstanding."}),
 		Missed:          prometheus.NewCounter(prometheus.CounterOpts{Name: "hawkeye_scheduler_missed_checks_total", Help: "Checks scheduled at least one interval late."}),
@@ -110,7 +113,7 @@ func newOn(r *prometheus.Registry) *Metrics {
 		CanaryUp:     prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_canary_up", Help: "1 if this worker reaches independent public sites (the canary), 0 if its own network looks impaired."}),
 		LastPollUnix: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_worker_last_poll_timestamp_seconds", Help: "Unix time of the last queue poll."}),
 	}
-	for _, c := range []prometheus.Collector{m.ChecksTotal, m.CheckDuration, m.Scheduled, m.Skipped, m.Missed, m.Backpressure,
+	for _, c := range []prometheus.Collector{m.ChecksTotal, m.CheckDuration, m.Rechecks, m.Scheduled, m.Skipped, m.Missed, m.Backpressure,
 		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.CanaryUp, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.DomainLookups, m.StatusPageDomainChecks, m.LifecycleEmails, m.MonthlyReportEmails, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.RollupLag, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed, m.BillingPriceMismatch, m.AdConversions} {
 		f(c)
 	}

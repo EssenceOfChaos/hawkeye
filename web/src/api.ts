@@ -206,6 +206,11 @@ export interface Monitor {
   slow_since: string | null
   /** Each check sends a W3C traceparent header with a new trace ID (website and API monitors; off by default). */
   trace_context?: boolean
+  /**
+   * After a first failure, check again from the same location 15 seconds later before alerting. `auto` does so only when every request is
+   * read-only (GET, HEAD, OPTIONS; DNS lookups), `always` whatever the methods, `off` never. Not used by heartbeats.
+   */
+  recheck?: RecheckSetting
   /** The public uptime badge's token (/badge/<token>.svg); null while the badge is off. */
   badge_token: string | null
   /** Sorted by name. */
@@ -602,6 +607,8 @@ export interface CheckResult {
   error_category: string | null
   error_summary: string | null
   region: string
+  /** An immediate re-check after a failure: it decides the monitor's health, but isn't counted in uptime. */
+  recheck?: boolean
   /** Multi-step API checks: what each step that ran did. */
   steps?: StepOutcome[] | null
   /** The trace ID the check sent in its traceparent header, when the monitor has trace context on. */
@@ -633,6 +640,7 @@ export interface MonitorInput {
   slow_threshold_ms?: number | null
   slow_checks?: number
   trace_context?: boolean
+  recheck?: RecheckSetting
   /** Replaces the monitor's tags. */
   tag_ids?: string[]
   alert_delay_minutes?: number
@@ -665,6 +673,7 @@ export interface WorkflowInput {
   tag_ids?: string[]
   alert_delay_minutes?: number
   quiet_hours?: QuietHours | null
+  recheck?: RecheckSetting
 }
 
 /** Creates or edits a heartbeat monitor. check_interval_seconds is the expected time between pings. */
@@ -690,7 +699,11 @@ export interface DnsInput {
   tag_ids?: string[]
   alert_delay_minutes?: number
   quiet_hours?: QuietHours | null
+  recheck?: RecheckSetting
 }
+
+/** See Monitor.recheck. */
+export type RecheckSetting = 'auto' | 'always' | 'off'
 
 /** An error response from the API, using the common `{error: {code, message, details}}` envelope. */
 export class ApiError extends Error {

@@ -30,7 +30,7 @@ export function GettingStarted() {
       <ul>
         <li>
           <strong>A website or API.</strong> Enter its address. HawkEye requests it on a schedule (every 5 minutes on Free, every minute on Pro, as often as every 30 seconds on Agency)
-          and opens an incident when the failure is confirmed by consecutive failed checks, so a single blip never alerts anyone. You can also
+          and opens an incident when the failure is confirmed: a failed check is checked again 15 seconds later, so a single blip never alerts anyone. You can also
           check for words on the page, check JSON values, send headers or authentication, get warned about slow responses, and send a trace context header so each check shows up in your tracing tool. For an API, choose <strong>Paste a cURL command</strong>: paste one
           from your API docs, a terminal or your browser’s developer tools (Copy as cURL), and HawkEye fills in the address, method, headers, body and
           authentication. It is read in your browser, and a token it finds goes into the encrypted authentication field rather than a plain header. Have an
@@ -374,7 +374,8 @@ export function Alerts() {
 
       <h2 id="what">What you are alerted about</h2>
       <ul>
-        <li><strong>Outages and recoveries</strong> of websites and APIs, confirmed by consecutive failed checks (and by most locations, when a monitor is checked from several).</li>
+        <li><strong>Outages and recoveries</strong> of websites and APIs, confirmed by consecutive failed checks (and by most locations, when a monitor is checked from several).
+          See <a href="#recheck">re-check before alerting</a>.</li>
         <li><strong>Cron jobs</strong> that miss a ping or report a failure (<Link to="/docs/cron-job-monitoring">heartbeat monitors</Link>).</li>
         <li><strong>DNS records</strong> that disappear or stop matching the value you expect (<Link to="/docs/dns-monitoring">DNS monitors</Link>).</li>
         <li><strong>Slow responses</strong>, if you turn this on for a monitor: when responses stay above your threshold for several checks in a row.</li>
@@ -390,6 +391,24 @@ export function Alerts() {
         An alert that no destination would receive is never dropped: it goes to your team members’ own email addresses instead, and the Alerts page
         warns you which monitors are not covered.
       </p>
+
+      <h2 id="recheck">Re-check before alerting</h2>
+      <p>
+        When a healthy monitor fails a check, HawkEye checks it again from the same location 15 seconds later instead of waiting for the next scheduled
+        check. If that fails too, the outage is confirmed and you are alerted right away; if it passes, the failure is forgotten. A five-minute monitor
+        on Free therefore alerts in seconds, not minutes, and two unrelated blips in a row no longer add up to an outage. With several locations, each
+        failing location re-checks itself, and most locations must still agree.
+      </p>
+      <ul>
+        <li>
+          It is on by default, and only for requests that are safe to repeat: GET, HEAD and OPTIONS, DNS lookups, and multi-step checks whose steps
+          all use those. A monitor that sends POST, PUT, PATCH or DELETE isn’t re-checked, so nothing that may change data is sent twice. Turn it on
+          for such a monitor if repeating the request is safe (a search, for example).
+        </li>
+        <li>Turn it off, or on, with <strong>Re-check right away before alerting</strong> under Alert timing on the monitor’s edit page.</li>
+        <li>A monitor that is already down isn’t re-checked, and 30-second checks aren’t either: the next check comes just as soon.</li>
+        <li>Re-checks appear in the check history, labeled <strong>Re-check</strong>, but don’t count in uptime or response times.</li>
+      </ul>
 
       <h2 id="timing">Alert delay and quiet hours</h2>
       <p>Each monitor has its own alert timing, set on its edit page or for many monitors at once from the Monitors list.</p>

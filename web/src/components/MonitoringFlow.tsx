@@ -25,7 +25,7 @@ import { inScope, prefersReducedMotion } from '../motion'
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>
 /**
- * The story, in order: all well; the API goes down (HawkEye has not checked yet); one failed check; a second failed check confirms the outage; the
+ * The story, in order: all well; the API goes down (HawkEye has not checked yet); one failed check; an immediate re-check fails too and confirms the outage; the
  * alerts arrive; the API comes back; HawkEye sees it recover; the recovery alerts arrive. CSS keys every visual change off these names.
  */
 type State = 'healthy' | 'down' | 'failing' | 'confirmed' | 'alerted' | 'resolving' | 'recovered' | 'closed'
@@ -134,7 +134,7 @@ const HEADER_TEXT: Record<string, string> = { '01': 'What HawkEye watches', '02'
 const STATUS: { state: State | State[]; tone: 'up' | 'warn' | 'down'; title: string; detail: string; short: string }[] = [
   { state: ['healthy', 'down'], tone: 'up', title: 'All checks passing', detail: 'Every check answered as expected', short: 'Every check answered' },
   { state: 'failing', tone: 'warn', title: 'API check failed', detail: 'Checking again before alerting', short: 'Checking again first' },
-  { state: ['confirmed', 'alerted', 'resolving'], tone: 'down', title: 'Outage confirmed', detail: 'Failed checks in a row, not a blip', short: 'Failed checks in a row' },
+  { state: ['confirmed', 'alerted', 'resolving'], tone: 'down', title: 'Outage confirmed', detail: 'Failed again on an immediate re-check', short: 'Failed again on a re-check' },
   { state: ['recovered', 'closed'], tone: 'up', title: 'API back online', detail: 'Recovered, incident closed', short: 'Incident closed' },
 ]
 
@@ -341,7 +341,7 @@ function run(root: SVGSVGElement): () => void {
 
 const DESCRIPTION =
   'HawkEye checks your website, API, cron jobs, DNS records and SSL certificates. In this example the API fails one check, HawkEye checks again before ' +
-  'alerting, confirms the outage after consecutive failed checks, and sends alerts by email, chat apps and webhook. When the API recovers, HawkEye ' +
+  'alerting, confirms the outage with an immediate re-check, and sends alerts by email, chat apps and webhook. When the API recovers, HawkEye ' +
   'sends a recovery alert and closes the incident.'
 
 /** The animated "how it works" figure. Illustration only. */
