@@ -203,7 +203,7 @@ malformed ID gives 404) or, if absent, the organization the caller **owns** (the
 
 **Monitor fields.** `type` is `http` (a website or API, the default), `heartbeat` or `dns`, set on create and fixed after that. Editable: `name` (1–100), `url`, `method` (`GET` default, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`), `expected_status_code`
 (100–599 or null; null means any response below 400 is up), `check_interval_seconds` (30–86400, at least the plan minimum: 300 on Free, 60 on Pro, 30 on Agency; default 60, or the plan minimum
-when that is longer, so 30 s is only ever chosen), `timeout_seconds` (1–30 and **at most half the interval**, so 15 at 30 s; default 10), `slow_threshold_ms` (100–60000 and below the timeout, or null = off; see *Slow-response alerts*) and `slow_checks` (2–10, default 3), `trace_context` (boolean, default false; see *Trace context*), `tag_ids`, `alert_delay_minutes` (0–1440, default 0) and `quiet_hours` (`{start, end, timezone}` or null; see *Alert routing, alert delay and quiet hours*). Read-only and ignored if sent: `slow_since`, `current_status`, `consecutive_*`, `last_*`,
+when that is longer, so 30 s is only ever chosen), `timeout_seconds` (1–30 and **at most half the interval**, so 15 at 30 s; default 10), `slow_threshold_ms` (100–60000 and below the timeout, or null = off; see *Slow-response alerts*) and `slow_checks` (2–10, default 3), `trace_context` (boolean, default false; see *Trace context*), `recheck` (`auto` default, `always` or `off`; see *Re-check before alerting*), `tag_ids`, `alert_delay_minutes` (0–1440, default 0) and `quiet_hours` (`{start, end, timezone}` or null; see *Alert routing, alert delay and quiet hours*). Read-only and ignored if sent: `slow_since`, `current_status`, `consecutive_*`, `last_*`,
 `enabled` (use pause/resume), `organization_id`. `effective_check_interval_seconds` is what the scheduler will use: the stored
 interval raised to the plan minimum, so a downgrade takes effect without rewriting data.
 
@@ -233,6 +233,24 @@ Validation errors for list items name the item, for example `headers[0].name` or
 **URL rules.** `http`/`https` only, no credentials, ports 80/443 only, no `localhost`/`.local`/`.internal`/single-label hosts,
 no literal private/loopback/link-local/metadata IPs. This is early feedback only; the real SSRF defense (DNS resolution and
 dial-time validation) is in the checker (`internal/safehttp`). Editing the URL, method, headers, body or authentication resets health state to `unknown`.
+
+### Re-check before alerting
+
+When a healthy monitor fails a check, the same location checks it again `RECHECK_DELAY` later (15 s by default) instead of waiting for the next
+scheduled check. A second failure confirms the outage at once (the incident's `summary` ends with "confirmed by an immediate re-check"); a success
+clears the failure. `recheck` chooses when this happens:
+
+- `auto` (the default, for existing monitors too): only when every request is read-only, meaning `GET`, `HEAD` or `OPTIONS` for the monitor and
+  for every step of a multi-step check. DNS monitors always qualify. A monitor that sends `POST`, `PUT`, `PATCH` or `DELETE` is not re-checked,
+  so a request that may change data is never repeated unasked. This is decided at each failure from the current methods, so editing a `GET`
+  monitor into a `POST` stops its re-checks.
+- `always`: whatever the methods, for a request that is safe to repeat (a search, a GraphQL query).
+- `off`: never.
+
+Heartbeat monitors are never re-checked; `recheck` other than `auto` is a 400 on them. There is at most one re-check per failure streak: none while the
+monitor (or, with several locations, that location) is down, none during maintenance, and none when the next scheduled check is due within twice the
+delay (30-second checks). Each location re-checks its own failure, and most locations must still agree. Re-checks are listed in the check history with
+`"recheck": true` but are left out of uptime, response times and slow-response streaks.
 
 ### Trace context
 
@@ -356,7 +374,7 @@ the retention cutoff. Every response echoes the effective window: `range: {from,
 |---|---|
 | `GET /monitors/:id/uptime` | `{range, uptime}` (see below) |
 | `GET /monitors/:id/response-times` | `{range, bucket_seconds, points: [{t, avg_ms, max_ms, checks, failed}]}`. At most 150 points: the bucket width (1 min up to 3 days) is chosen from the window. Buckets with no checks are **omitted**, so charts show gaps rather than zeros. `avg_ms`/`max_ms` cover successful checks only and are null for a bucket that only had failures |
-| `GET /monitors/:id/results` | check history, newest first: `{range, results: [{id, checked_at, success, http_status_code, response_time_ms, error_category, error_summary, region, steps, trace_id}], total, limit, offset}`; `limit` 1–200 (default 50). A monitor checked more often than once a minute keeps individual results for 30 days (`rollups.RawRetention`); its uptime, charts and reports still cover the plan's history |
+| `GET /monitors/:id/results` | check history, newest first: `{range, results: [{id, checked_at, success, http_status_code, response_time_ms, error_category, error_summary, region, recheck, steps, trace_id}], total, limit, offset}`; `limit` 1–200 (default 50). A monitor checked more often than once a minute keeps individual results for 30 days (`rollups.RawRetention`); its uptime, charts and reports still cover the plan's history |
 | `GET /dashboard/summary` | `{range, summary: {monitors: {total, up, down, pending, paused}, open_incidents, uptime, certificates, certificates_tracked, domains, domains_tracked, generated_at}}`. `certificates` lists up to five enabled HTTPS monitors whose certificate expires within 30 days or already has (`{monitor_id, monitor_name, expires_at, days_remaining, status: expiring|expired}`, soonest first); `certificates_tracked` counts monitors with a known expiry. `domains` is the same for tracked domains (`{domain_id, name, expires_at, days_remaining, status}`); `domains_tracked` counts those within the plan's limit that have a known expiry. Counts and open incidents are *current*; `uptime` follows the range. Paused wins over status in the counts; deleted monitors are excluded |
 | `GET /dashboard/recent-incidents` | `limit` 1–20 (default 5) |
 | `GET /dashboard/response-times` | same shape as the per-monitor series, averaged across all live monitors |

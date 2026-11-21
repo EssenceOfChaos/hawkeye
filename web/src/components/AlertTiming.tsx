@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { QuietHours } from '../api'
+import type { QuietHours, RecheckSetting } from '../api'
 import { localTimeZone } from '../format'
 import { Toggle } from './Toggle'
 
@@ -22,17 +22,20 @@ const delayLabel = (m: number) => (m === 0 ? 'As soon as an outage is confirmed'
  * When this monitor's alerts go out: an optional wait before an outage is announced (a short blip then alerts nobody), and quiet hours during which
  * alerts are held until morning. Both apply to every destination that receives this monitor's alerts.
  */
-export function AlertTiming({ delay, onDelay, quiet, onQuiet, errors }: {
+export function AlertTiming({ delay, onDelay, quiet, onQuiet, recheck, errors }: {
   delay: number
   onDelay: (minutes: number) => void
   quiet: QuietHours | null
   onQuiet: (q: QuietHours | null) => void
+  /** Checked monitors only (not heartbeats): the immediate re-check before alerting. */
+  recheck?: RecheckProps
   errors: Record<string, string | undefined>
 }) {
   const options = DELAYS.includes(delay) ? DELAYS : [...DELAYS, delay].sort((a, b) => a - b)
   return (
     <fieldset className="group">
       <legend>Alert timing</legend>
+      {recheck && <Recheck {...recheck} error={errors.recheck} />}
       <div className="field">
         <label htmlFor="alert-delay">Alert me</label>
         <select id="alert-delay" value={delay} onChange={(e) => onDelay(Number(e.target.value))} aria-invalid={errors.alert_delay_minutes ? true : undefined}>
@@ -73,6 +76,37 @@ export function AlertTiming({ delay, onDelay, quiet, onQuiet, errors }: {
         </>
       )}
     </fieldset>
+  )
+}
+
+export interface RecheckProps {
+  value: RecheckSetting
+  onChange: (v: RecheckSetting) => void
+  /** A request (or a step) uses POST, PUT, PATCH or DELETE, so a re-check would send it again. */
+  writes: boolean
+  /** Checked every 30 seconds: the next check comes about as soon as a re-check would. */
+  fast: boolean
+}
+
+/**
+ * The immediate re-check: a failed check is retried 15 seconds later, and only a second failure counts as an outage. It is on unless the request may
+ * change something ("auto" stays off for POST, PUT, PATCH and DELETE); turning it on for such a request stores "always".
+ */
+function Recheck({ value, onChange, writes, fast, error }: RecheckProps & { error?: string }) {
+  const on = value === 'always' || (value === 'auto' && !writes)
+  let hint = 'A failed check is retried 15 seconds later, and only a second failure counts as an outage: faster alerts, and fewer false alarms.'
+  if (writes && !on) {
+    hint = 'Off for this monitor: it sends a request that may change data, and a re-check would send it again. Turn it on only if repeating the request is safe.'
+  } else if (writes) {
+    hint = 'A failed check is retried 15 seconds later, which sends the request again. Keep this on only if repeating it is safe.'
+  }
+  if (fast && on) hint = 'Checks every 30 seconds aren’t re-checked: the next check comes just as soon.'
+  return (
+    <div className="field">
+      <Toggle checked={on} onToggle={(v) => onChange(v ? (writes ? 'always' : 'auto') : 'off')}>Re-check right away before alerting</Toggle>
+      <small className="hint">{hint}</small>
+      {error && <small className="error">{error}</small>}
+    </div>
   )
 }
 

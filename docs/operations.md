@@ -23,6 +23,7 @@ Starts with Phase 4; extended in Phase 8.
 | `hawkeye_scheduler_jobs_scheduled_total` | check jobs enqueued; its rate is the checks per second the installation asks for |
 | `hawkeye_checks_total{result,category}` | rate of checks; failures by category (`dns`, `connect`, `tls`, `timeout`, `redirect`, `blocked`, `http_status`, `assertion`, `workflow_config`, `other`; heartbeats record `missed_ping` and `job_failed` without a check) |
 | `hawkeye_check_duration_seconds` | histogram of check wall time |
+| `hawkeye_rechecks_total{result}` | immediate re-checks after a first failure: `failed` confirmed it, `passed` was a false alarm avoided. `passed` far above `failed` for one site usually means it is flapping |
 | `hawkeye_jobs_reclaimed_total` | jobs picked up after a worker died or a retry; a steady trickle after deploys is normal, a sustained rate is not |
 | `hawkeye_jobs_dropped_total` | jobs given up after `JOB_MAX_ATTEMPTS` — investigate worker errors |
 | `hawkeye_worker_errors_total{stage}` | internal errors (`claim`, `load`, `record`, `complete`, `sample`, `schedule`) |
@@ -605,4 +606,9 @@ and the job is completed so the monitor's next scheduled check counts normally. 
 
 ## Tuning
 
-`JOB_LEASE` must exceed the longest check: 30 s max timeout plus connection setup. Raising `FAILURE_THRESHOLD` reduces false alarms and delays detection by one interval per step.
+`JOB_LEASE` must exceed the longest check: 30 s max timeout plus connection setup. Raising `FAILURE_THRESHOLD` reduces false alarms and delays detection by one interval per step
+(the immediate re-check covers only the second failure; any further ones wait for their intervals).
+
+`RECHECK_DELAY` (default 15 s; 5 s to 5 min, or 0 to turn re-checks off for the installation) is how long after a healthy monitor's first failure the
+same location checks it again (`docs/plan-immediate-recheck.md`). Shorter alerts sooner but is more likely to land in the same blip. A re-check reuses
+the failed job's queue row, so it adds no queue depth; at most one runs per failure streak, and none while a monitor is down.

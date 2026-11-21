@@ -93,7 +93,7 @@ func run() error {
 	metrics.RegisterPool(m.Registry, pool)
 	w := worker.New(pool,
 		checks.NewChecker(safehttp.Config{}), // strict production SSRF policy
-		checks.NewStore(pool, checks.Thresholds{Failure: cfg.FailureThreshold, Recovery: cfg.RecoveryThreshold}, incidents.Engine{}).WithRegions(cfg.Regions()),
+		checks.NewStore(pool, checks.Thresholds{Failure: cfg.FailureThreshold, Recovery: cfg.RecoveryThreshold}, incidents.Engine{}).WithRegions(cfg.Regions()).WithRecheck(cfg.RecheckDelay),
 		worker.Config{Concurrency: cfg.WorkerConcurrency, Lease: cfg.JobLease, MaxAttempts: cfg.JobMaxAttempts, PollInterval: cfg.PollInterval},
 		m, log).WithReporter(reporter).WithSecrets(box).WithRegion(cfg.Region())
 

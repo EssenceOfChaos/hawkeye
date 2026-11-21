@@ -90,6 +90,41 @@ describe('MonitorFormPage', () => {
     expect(JSON.parse(post[1]!.body as string)).toMatchObject({ trace_context: true })
   })
 
+  it('re-checks GET monitors by default, and POST monitors only when turned on', async () => {
+    setup(() => json(201, { monitor: {} }))
+    const fetchMock = vi.mocked(globalThis.fetch)
+    await fill('API')
+    const toggle = () => screen.getByRole('checkbox', { name: 'Re-check right away before alerting' })
+    expect(toggle()).toBeChecked()
+    await userEvent.selectOptions(screen.getByLabelText('Request method'), 'POST')
+    expect(toggle()).not.toBeChecked()
+    expect(screen.getByText(/a re-check would send it again/)).toBeInTheDocument()
+    await userEvent.click(toggle())
+    expect(toggle()).toBeChecked()
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Monitor list' })).toBeInTheDocument())
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!
+    expect(JSON.parse(post[1]!.body as string)).toMatchObject({ method: 'POST', recheck: 'always' })
+  })
+
+  it('turns the re-check off', async () => {
+    setup(() => json(201, { monitor: {} }))
+    const fetchMock = vi.mocked(globalThis.fetch)
+    await fill('Site')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Re-check right away before alerting' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Monitor list' })).toBeInTheDocument())
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!
+    expect(JSON.parse(post[1]!.body as string)).toMatchObject({ recheck: 'off' })
+  })
+
+  it('does not offer the re-check for heartbeats', async () => {
+    setup(() => json(201, { monitor: {} }))
+    await userEvent.click(screen.getByLabelText(/A cron job or scheduled task/))
+    expect(await screen.findByLabelText('Name')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'Re-check right away before alerting' })).not.toBeInTheDocument()
+  })
+
   it('does not send a body for GET and hides assertions for HEAD', async () => {
     setup(() => json(201, { monitor: {} }))
     await fill('Site')
@@ -365,6 +400,7 @@ describe('MonitorFormPage: DNS monitors', () => {
     const post = vi.mocked(globalThis.fetch).mock.calls.find(([, init]) => init?.method === 'POST')!
     expect(JSON.parse(post[1]!.body as string)).toEqual({
       type: 'dns', name: 'Mail', url: 'example.com', dns_record_type: 'MX', dns_expected: 'mail.example.com', tag_ids: [], alert_delay_minutes: 0, quiet_hours: null,
+      recheck: 'auto',
     })
   })
 

@@ -109,6 +109,9 @@ type Config struct {
 	PollInterval      time.Duration
 	FailureThreshold  int
 	RecoveryThreshold int
+	// RecheckDelay is how long after a healthy monitor's first failure the same location checks it again, instead of waiting a whole interval to
+	// confirm the failure (docs/plan-immediate-recheck.md). 0 turns immediate re-checks off.
+	RecheckDelay      time.Duration
 	WorkerMetricsPort int
 	NotifyMaxAttempts int
 	// CanaryURLs: comma-separated https endpoints the worker probes to tell its own network trouble from a customer's site being down. Empty uses the
@@ -374,6 +377,7 @@ func load(get func(string) string) (Config, error) {
 		PollInterval:         duration("WORKER_POLL_INTERVAL", time.Second),
 		FailureThreshold:     integer("FAILURE_THRESHOLD", 2),
 		RecoveryThreshold:    integer("RECOVERY_THRESHOLD", 2),
+		RecheckDelay:         duration("RECHECK_DELAY", 15*time.Second),
 		WorkerMetricsPort:    integer("WORKER_METRICS_PORT", 9090),
 		NotifyMaxAttempts:    integer("NOTIFY_MAX_ATTEMPTS", 6),
 		RunRetention:         !boolean("DISABLE_RETENTION"),
@@ -515,6 +519,9 @@ func load(get func(string) string) (Config, error) {
 		if p, err := url.Parse(u); err != nil || p.Scheme != "https" || p.Hostname() == "" {
 			errs = append(errs, fmt.Errorf("CANARY_URLS: %q is not an https URL", u))
 		}
+	}
+	if c.RecheckDelay != 0 && (c.RecheckDelay < 5*time.Second || c.RecheckDelay > 5*time.Minute) {
+		errs = append(errs, errors.New("RECHECK_DELAY: must be 0 (off) or between 5s and 5m"))
 	}
 	if c.DomainCheckInterval < time.Minute {
 		errs = append(errs, errors.New("DOMAIN_CHECK_INTERVAL: must be at least 1m"))

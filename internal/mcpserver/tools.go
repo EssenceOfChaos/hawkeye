@@ -47,6 +47,7 @@ type MonitorDetail struct {
 	HeartbeatDueBy       *time.Time `json:"heartbeat_due_by,omitempty"`
 	WorkflowSteps        []string   `json:"workflow_steps,omitempty" jsonschema:"for a multi-step API check: its steps' names, in the order they run"`
 	AlertDelayMinutes    int        `json:"alert_delay_minutes"`
+	Recheck              string     `json:"recheck,omitempty" jsonschema:"auto, always or off: whether a first failure is checked again right away before alerting; absent for heartbeats"`
 	CreatedAt            time.Time  `json:"created_at"`
 }
 
@@ -101,6 +102,9 @@ func (s *tools) detail(m monitors.Monitor) MonitorDetail {
 	}
 	if m.DNS != nil {
 		d.DNSRecordType, d.DNSExpected = m.DNS.RecordType, m.DNS.Expected
+	}
+	if m.Type != monitors.TypeHeartbeat {
+		d.Recheck = m.Recheck
 	}
 	if m.Workflow != nil {
 		for _, st := range m.Workflow.Steps {
@@ -203,6 +207,7 @@ type CreateMonitorInput struct {
 	CheckIntervalMinutes int    `json:"check_interval_minutes,omitempty" jsonschema:"how often to check (website, dns), or how often the job runs (heartbeat); the plan sets the minimum; default 1 minute (website, dns)"`
 	CheckIntervalSeconds int    `json:"check_interval_seconds,omitempty" jsonschema:"website and dns only, instead of check_interval_minutes: how often to check, in seconds; the Agency plan allows 30"`
 	GraceMinutes         int    `json:"grace_minutes,omitempty" jsonschema:"heartbeat only: how late a ping may be before it counts as missed"`
+	Recheck              string `json:"recheck,omitempty" jsonschema:"website and dns only: after a first failure, check again 15 seconds later before alerting: auto (the default) only when every request is GET, HEAD or OPTIONS, so nothing that may change data is sent twice; always; or off"`
 }
 
 type PostUpdateInput struct {
@@ -695,6 +700,12 @@ func (s *tools) pause(pause bool) func(context.Context, Caller, PauseInput) (Cha
 
 func (s *tools) createMonitor(ctx context.Context, c Caller, in CreateMonitorInput) (MonitorDetail, error) {
 	ci := monitors.CreateInput{Name: in.Name}
+	if in.Recheck != "" {
+		if in.Type == "heartbeat" {
+			return MonitorDetail{}, refuse("A heartbeat takes no recheck: HawkEye waits for its pings instead of checking it.")
+		}
+		ci.Recheck = &in.Recheck
+	}
 	switch {
 	case in.CheckIntervalMinutes > 0 && in.CheckIntervalSeconds > 0:
 		return MonitorDetail{}, refuse("Give check_interval_minutes or check_interval_seconds, not both.")

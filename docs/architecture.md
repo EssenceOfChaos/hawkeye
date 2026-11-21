@@ -109,6 +109,14 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
 - **Status transitions:** configurable `FAILURE_THRESHOLD` (default 2) consecutive failures confirm an outage; `RECOVERY_THRESHOLD`
   (default 2) consecutive successes confirm recovery; `unknown → up` on the first success. `Store.Record` returns the `Transition`
   (`WentDown` / `Recovered`) that Phase 5 will turn into incidents and notifications inside the same transaction.
+- **Immediate re-check (migration `000051`, `docs/plan-immediate-recheck.md`):** a first failure of a healthy location on a healthy monitor sets
+  `Outcome.Recheck` (`checks.wantRecheck`): the worker then calls `queue.Recheck`, which puts the *same* job row back with `run_at = now() +
+  RECHECK_DELAY` (default 15 s), `attempts = 0` and `recheck = true`, instead of deleting it. Reusing the row keeps `UNIQUE (monitor_id, region)`,
+  adds nothing to queue depth, and the scheduler skips the region meanwhile; if the worker dies first, the lease expiry runs it as an ordinary check.
+  The re-check's result counts toward the streaks as usual (so it confirms or clears the failure), but is stored with `check_results.recheck` and left
+  out of uptime, response times, rollups and slow-response streaks. Per monitor, `monitors.recheck` is `auto` (only when every request is GET, HEAD
+  or OPTIONS, including a workflow's steps; DNS lookups qualify), `always` or `off`; heartbeats never re-check. No re-check while the monitor or the
+  location is down, from a re-check, during maintenance, or when the next scheduled check is within twice the delay (30-second checks).
 - **Incidents and alerts (Phase 5):** `Store.Record` calls `incidents.Engine` inside its transaction. `WentDown` opens an incident (partial unique
   index: one open per monitor) and enqueues one `notification_deliveries` row per enabled, verified recipient; any move into `up` closes an
   open incident and enqueues recovery deliveries. Status, incident and deliveries therefore commit atomically

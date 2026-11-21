@@ -211,6 +211,25 @@ func TestEveryReaderGivesTheSameAnswerWithRollups(t *testing.T) {
 	compare(t, raw, f.answers(t))
 }
 
+// Immediate re-checks decide a monitor's health but count in no uptime or response time, raw or added up: every reader's answer is the same
+// with them as without.
+func TestRechecksAreLeftOutOfEveryReader(t *testing.T) {
+	f := setup(t)
+	without := f.answers(t)
+	for _, id := range f.monitors {
+		if _, err := f.pool.Exec(t.Context(), `INSERT INTO check_results (monitor_id, checked_at, finished_at, success, http_status_code, response_time_ms, error_category, region, recheck)
+			SELECT monitor_id, checked_at + interval '15 seconds', finished_at + interval '15 seconds', g % 2 = 0, CASE WHEN g % 2 = 0 THEN 200 ELSE 503 END,
+				29000, CASE WHEN g % 2 = 0 THEN NULL ELSE 'http_status' END, region, true
+			FROM (SELECT *, row_number() OVER () AS g FROM check_results WHERE monitor_id = $1 AND NOT success) s`, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	compare(t, without, f.answers(t))
+	job := rollups.NewJob(f.pool, rollups.JobConfig{Now: func() time.Time { return f.now }}, metrics.New(), quiet)
+	catchUp(t, job)
+	compare(t, without, f.answers(t))
+}
+
 func TestStepsAreRepeatableAndOnlyAddClosedHours(t *testing.T) {
 	f := setup(t)
 	now := f.now

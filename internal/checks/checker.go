@@ -72,6 +72,9 @@ type Result struct {
 	CertExpiresAt *time.Time
 	// Region is where the check ran; the worker sets it. Empty means the primary region.
 	Region string
+	// Recheck marks the immediate re-check after a failure (the worker sets it). It still decides the monitor's health, but it is left out of
+	// uptime, response times and slow-response streaks, so those stay one sample per interval.
+	Recheck bool
 	// FinalURL is where the request ended up after redirects, when a response arrived. Credentials, query and fragment are not included.
 	FinalURL string
 	// TraceID is the trace ID sent in the traceparent header (32 lower-case hex digits), when the target asked for trace context.

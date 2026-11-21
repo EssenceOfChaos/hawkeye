@@ -74,13 +74,8 @@ var Methods = []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS
 
 // IsWriteMethod reports whether a method changes state on the target. Such monitors repeat a state-changing request on every check, so they
 // need a verified email address (enforced by the API layer) and a slower minimum interval.
-func IsWriteMethod(method string) bool {
-	switch strings.ToUpper(strings.TrimSpace(method)) {
-	case "POST", "PUT", "PATCH", "DELETE":
-		return true
-	}
-	return false
-}
+// They are also never re-checked after a failure unless the customer asks for it (checks.RecheckAlways).
+func IsWriteMethod(method string) bool { return checks.WriteMethod(method) }
 
 // MinWriteIntervalSeconds is the fastest a monitor using a write method may run, whatever the plan allows.
 const MinWriteIntervalSeconds = 300
@@ -129,6 +124,10 @@ type Monitor struct {
 	SlowSince       *time.Time `json:"slow_since"` // set while a slowdown is open: responses are confirmed slow
 	// TraceContext: each check sends a W3C traceparent header with a new trace ID (website and API monitors only; off by default).
 	TraceContext bool `json:"trace_context"`
+	// Recheck: after a first failure, check again from the same location shortly after instead of waiting a whole interval to confirm it.
+	// "auto" (the default) does so only when every request is read-only (GET, HEAD, OPTIONS; DNS lookups), "always" whatever the methods,
+	// "off" never. Not used by heartbeat monitors.
+	Recheck string `json:"recheck"`
 	// BadgeToken addresses the monitor's public uptime badge (/badge/<token>.svg); nil while the badge is off.
 	BadgeToken *string `json:"badge_token"`
 	Tags       []Tag   `json:"tags"` // sorted by name
@@ -270,6 +269,7 @@ type CreateInput struct {
 	SlowThresholdMs      *int               `json:"slow_threshold_ms"`
 	SlowChecks           *int               `json:"slow_checks"`
 	TraceContext         *bool              `json:"trace_context"`
+	Recheck              *string            `json:"recheck"` // auto (the default), always or off
 	TagIDs               []uuid.UUID        `json:"tag_ids"`
 	AlertDelayMinutes    *int               `json:"alert_delay_minutes"`
 	QuietHours           *QuietHours        `json:"quiet_hours"`
@@ -297,6 +297,7 @@ type UpdateInput struct {
 	SlowThresholdMs      Nullable[int]        `json:"slow_threshold_ms"`
 	SlowChecks           *int                 `json:"slow_checks"`
 	TraceContext         *bool                `json:"trace_context"`
+	Recheck              *string              `json:"recheck"`
 	TagIDs               *[]uuid.UUID         `json:"tag_ids"` // replaces the monitor's tags
 	AlertDelayMinutes    *int                 `json:"alert_delay_minutes"`
 	QuietHours           Nullable[QuietHours] `json:"quiet_hours"` // null turns quiet hours off
@@ -411,7 +412,7 @@ const cols = `id, organization_id, name, url, method, expected_status_code, chec
 	assertions, ssl_expires_at, ssl_checked_at, in_maintenance(organization_id, id, now()), regions,
 	slow_threshold_ms, slow_checks, (SELECT started_at FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'), badge_token, ` + tagsCol + `,
 	alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, COALESCE(ping_token, ''), COALESCE(heartbeat_grace_seconds, 0), last_ping_at, ping_deadline,
-	COALESCE(dns_record_type, ''), dns_expected, trace_context`
+	COALESCE(dns_record_type, ''), dns_expected, trace_context, recheck`
 
 func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	var m Monitor
@@ -425,7 +426,7 @@ func scan(row pgx.Row, minInterval int) (Monitor, error) {
 		&m.ConsecutiveSuccesses, &m.CreatedAt, &m.UpdatedAt, &m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username,
 		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked, &m.InMaintenance, &m.Regions,
 		&m.SlowThresholdMs, &m.SlowChecks, &m.SlowSince, &m.BadgeToken, &m.Tags, &m.AlertDelayMinutes, &quietStart, &quietEnd, &quietTZ,
-		&m.Type, &hb.PingToken, &hb.GraceSeconds, &hb.LastPingAt, &hb.DueBy, &dns.RecordType, &dns.Expected, &m.TraceContext)
+		&m.Type, &hb.PingToken, &hb.GraceSeconds, &hb.LastPingAt, &hb.DueBy, &dns.RecordType, &dns.Expected, &m.TraceContext, &m.Recheck)
 	if quietStart != nil && quietEnd != nil && quietTZ != nil {
 		m.QuietHours = &QuietHours{Start: formatClock(*quietStart), End: formatClock(*quietEnd), Timezone: *quietTZ}
 	}
@@ -464,7 +465,8 @@ type fields struct {
 	regions           []string
 	slowThreshold     *int // ms; nil: slow-response alerts off
 	slowChecks        int
-	traceContext      bool // website and API monitors: send a traceparent header
+	traceContext      bool   // website and API monitors: send a traceparent header
+	recheck           string // checks.RecheckAuto, RecheckAlways or RecheckOff
 	alertDelay        int
 	quiet             *QuietHours // nil: no quiet hours
 	quietStart        *int        // stored form of quiet, set by validate
@@ -663,6 +665,16 @@ func (f *fields) validate() error {
 	f.quietStart, f.quietEnd, f.quietTZ = cleanQuiet(f.quiet, bad)
 	if f.traceContext && f.kind != TypeHTTP {
 		bad["trace_context"] = "is only used by website and API monitors"
+	}
+	f.recheck = strings.ToLower(strings.TrimSpace(f.recheck))
+	switch {
+	case f.recheck == "":
+		f.recheck = checks.RecheckAuto
+	case f.recheck != checks.RecheckAuto && f.recheck != checks.RecheckAlways && f.recheck != checks.RecheckOff:
+		bad["recheck"] = "must be auto, always or off"
+	}
+	if f.kind == TypeHeartbeat && f.recheck != checks.RecheckAuto {
+		bad["recheck"] = "is not used by heartbeat monitors: HawkEye waits for their pings instead of checking them"
 	}
 	switch f.kind {
 	case TypeHeartbeat:
@@ -900,6 +912,9 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		if in.TraceContext != nil {
 			f.traceContext = *in.TraceContext
 		}
+		if in.Recheck != nil {
+			f.recheck = *in.Recheck
+		}
 		if in.SlowChecks != nil {
 			f.slowChecks = *in.SlowChecks
 		}
@@ -956,12 +971,12 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		out, err = scan(tx.QueryRow(ctx, `INSERT INTO monitors
 			(id, organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
 			 request_headers, request_body, auth_type, auth_username, auth_header_name, auth_secret, assertions, regions, slow_threshold_ms, slow_checks,
-			 alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, ping_token, heartbeat_grace_seconds, dns_record_type, dns_expected, trace_context, next_check_at)
-			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,
+			 alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, ping_token, heartbeat_grace_seconds, dns_record_type, dns_expected, trace_context, recheck, next_check_at)
+			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,
 				CASE WHEN $23 = 'heartbeat' THEN 'infinity'::timestamptz ELSE now() END) RETURNING `+cols,
 			orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout,
 			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, sealed, f.assertions, id, f.regions, f.slowThreshold, f.slowChecks,
-			f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, f.kind, pingToken, grace, dnsType, dnsExpected, f.traceContext), minInterval)
+			f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, f.kind, pingToken, grace, dnsType, dnsExpected, f.traceContext, f.recheck), minInterval)
 		if err != nil {
 			return err
 		}
@@ -1088,7 +1103,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		f := fields{kind: cur.Type, name: cur.Name, url: cur.URL, method: cur.Method, expected: cur.ExpectedStatusCode,
 			interval: cur.CheckIntervalSeconds, timeout: cur.TimeoutSeconds, headers: slices.Clone(cur.Headers),
 			body: cur.Body, assertions: slices.Clone(cur.Assertions), regions: slices.Clone(cur.Regions),
-			slowThreshold: cur.SlowThresholdMs, slowChecks: cur.SlowChecks, alertDelay: cur.AlertDelayMinutes, quiet: cur.QuietHours, traceContext: cur.TraceContext,
+			slowThreshold: cur.SlowThresholdMs, slowChecks: cur.SlowChecks, alertDelay: cur.AlertDelayMinutes, quiet: cur.QuietHours, traceContext: cur.TraceContext, recheck: cur.Recheck,
 			auth: checks.Auth{Type: cur.Auth.Type, Username: cur.Auth.Username, HeaderName: cur.Auth.HeaderName}}
 		f.setAuth(in.Auth, cur.Auth.Type, cur.Auth.SecretSet)
 		if in.Headers != nil {
@@ -1096,6 +1111,9 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		}
 		if in.TraceContext != nil {
 			f.traceContext = *in.TraceContext
+		}
+		if in.Recheck != nil {
+			f.recheck = *in.Recheck
 		}
 		if in.Body.Set {
 			f.body = in.Body.Value
@@ -1252,7 +1270,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			auth_secret = CASE WHEN $12 = 'none' THEN NULL WHEN $15 THEN auth_secret ELSE NULLIF($16,'') END,
 			assertions=$17, regions=$19, slow_threshold_ms=$20, slow_checks=$21,
 			alert_delay_minutes=$22, quiet_start=$23, quiet_end=$24, quiet_timezone=$25, heartbeat_grace_seconds=$26,
-			dns_record_type=$28, dns_expected=$29, trace_context=$30,
+			dns_record_type=$28, dns_expected=$29, trace_context=$30, recheck=$31,
 			ping_deadline = CASE WHEN ping_deadline IS NOT NULL AND last_ping_at IS NOT NULL AND (check_interval_seconds <> $7 OR heartbeat_grace_seconds <> $26)
 				THEN last_ping_at + make_interval(secs => GREATEST($7::int, $27::int) + $26::int) ELSE ping_deadline END,
 			ssl_expires_at = CASE WHEN $18 THEN NULL ELSE ssl_expires_at END, ssl_checked_at = CASE WHEN $18 THEN NULL ELSE ssl_checked_at END,
@@ -1260,7 +1278,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			WHERE id = $1 AND organization_id = $2 RETURNING `+cols,
 			id, orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout, reset,
 			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.keepSecret, sealed, f.assertions, f.url != cur.URL, f.regions,
-			f.slowThreshold, f.slowChecks, f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, grace, minInterval, dnsType, dnsExpected, f.traceContext), minInterval)
+			f.slowThreshold, f.slowChecks, f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, grace, minInterval, dnsType, dnsExpected, f.traceContext, f.recheck), minInterval)
 		if err != nil {
 			return err
 		}

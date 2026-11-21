@@ -91,7 +91,8 @@ export function MonitoringLandingPage() {
           <p className="eyebrow">Reduce false alarms</p>
           <h2 id="mon-truth-h">A failed check is <span className="gold">not <span className="nowrap">an incident.</span></span></h2>
           <p>
-            A site counts as offline only after consecutive failed checks, and as recovered only after consecutive successful ones. HawkEye also verifies its own
+            A failed check is checked again 15 seconds later, and a site counts as offline only when that fails too; it counts as recovered only after
+            consecutive successful checks. HawkEye also verifies its own
             connection before reporting an outage: if other trusted websites are unreachable too, it disregards the failed check to help prevent false alarms.
           </p>
           {multiLocation && (

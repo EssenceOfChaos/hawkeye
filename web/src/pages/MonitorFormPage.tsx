@@ -22,6 +22,7 @@ import {
   type RegionInfo,
   type RequestHeader,
   type QuietHours,
+  type RecheckSetting,
   type TagSummary,
   type WorkflowInput,
 } from '../api'
@@ -122,6 +123,7 @@ export function MonitorFormPage() {
   const [slowMs, setSlowMs] = useState(String(DEFAULT_SLOW_MS))
   const [slowChecks, setSlowChecks] = useState('3')
   const [traceOn, setTraceOn] = useState(false)
+  const [recheck, setRecheck] = useState<RecheckSetting>('auto')
   const [avgMs, setAvgMs] = useState<number | null>(null) // this monitor's average response over the last 24 hours, as a guide
   const [allTags, setAllTags] = useState<TagSummary[]>([])
   const [tagIDs, setTagIDs] = useState<string[]>([])
@@ -192,6 +194,7 @@ export function MonitorFormPage() {
         if (m.slow_threshold_ms != null) setSlowMs(String(m.slow_threshold_ms))
         setSlowChecks(String(m.slow_checks ?? 3))
         setTraceOn(Boolean(m.trace_context))
+        setRecheck(m.recheck ?? 'auto')
         setTagIDs((m.tags ?? []).map((t) => t.id))
         setAlertDelay(m.alert_delay_minutes ?? 0)
         setQuiet(m.quiet_hours ?? null)
@@ -234,7 +237,7 @@ export function MonitorFormPage() {
   async function onSubmitDns() {
     const payload: DnsInput = {
       name, url: host, dns_record_type: recordType, dns_expected: dnsExpected.trim() === '' ? null : dnsExpected,
-      tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet,
+      tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet, recheck,
     }
     if (allRegions.length > 1) payload.regions = chosen
     if (intervalSeconds() !== undefined) payload.check_interval_seconds = intervalSeconds()
@@ -251,7 +254,7 @@ export function MonitorFormPage() {
 
   async function onSubmitWorkflow() {
     const payload: WorkflowInput = {
-      name, steps: stepsInput(steps), secrets: secretsInput(secrets), cookies, tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet,
+      name, steps: stepsInput(steps), secrets: secretsInput(secrets), cookies, tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet, recheck,
     }
     if (allRegions.length > 1) payload.regions = chosen
     if (intervalSeconds() !== undefined) payload.check_interval_seconds = intervalSeconds()
@@ -298,6 +301,7 @@ export function MonitorFormPage() {
       slow_threshold_ms: slowOn ? Number(slowMs) : null,
       slow_checks: Number(slowChecks),
       trace_context: traceOn,
+      recheck,
       tag_ids: tagIDs,
       alert_delay_minutes: alertDelay,
       quiet_hours: quiet,
@@ -442,7 +446,8 @@ export function MonitorFormPage() {
           </div>
           <Field label={DNS_EXPECTED[recordType].label} value={dnsExpected} maxLength={255} placeholder={DNS_EXPECTED[recordType].placeholder}
             onChange={(e) => setDnsExpected(e.target.value)} error={f.dns_expected} hint={DNS_EXPECTED[recordType].hint} />
-          <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f} />
+          <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f}
+            recheck={{ value: recheck, onChange: setRecheck, writes: writeMethod, fast: fast && canFast }} />
           {regionPicker}
           <IntervalField min={minAllowed} value={intervalMin} onChange={setIntervalMin} fast={fast && canFast} onFast={canFast ? setFast : undefined}
             error={f.check_interval_seconds ?? f.timeout_seconds}
@@ -466,7 +471,8 @@ export function MonitorFormPage() {
               call again and again, such as a test account. This needs a verified email address, and checks run at most every {WRITE_MIN_MINUTES} minutes.
             </Alert>
           )}
-          <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f} />
+          <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f}
+            recheck={{ value: recheck, onChange: setRecheck, writes: writeMethod, fast: fast && canFast }} />
           {regionPicker}
           <IntervalField min={minIntervalMin} value={intervalMin} onChange={setIntervalMin} error={f.check_interval_seconds}
             hint={writeMethod ? `Checks that change data run at most every ${WRITE_MIN_MINUTES} minutes. Leave empty for the default (1 minute, or your plan's fastest).`
@@ -655,7 +661,8 @@ export function MonitorFormPage() {
             {f.trace_context && <small className="error">{f.trace_context}</small>}
           </fieldset>
 
-          <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f} />
+          <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f}
+            recheck={{ value: recheck, onChange: setRecheck, writes: writeMethod, fast: fast && canFast }} />
 
           {regionPicker}
 

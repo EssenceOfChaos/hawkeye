@@ -54,6 +54,7 @@ type CreateWorkflowInput struct {
 	Secrets              []string       `json:"secrets,omitempty" jsonschema:"names of the secrets the steps use as {{secret.name}}; a person enters their values in HawkEye, never here"`
 	Cookies              bool           `json:"cookies,omitempty" jsonschema:"carry cookies from step to step, for sites that sign in with a session cookie"`
 	CheckIntervalMinutes int            `json:"check_interval_minutes,omitempty" jsonschema:"how often to run it; default 1 minute, or the plan's fastest when slower (5 minutes when a step writes)"`
+	Recheck              string         `json:"recheck,omitempty" jsonschema:"after a first failure, check again 15 seconds later before alerting: auto (the default) only when every request is GET, HEAD or OPTIONS, so nothing that may change data is sent twice; always; or off; choose always only when the person confirms the steps are safe to repeat"`
 }
 
 type TestWorkflowInput struct {
@@ -133,6 +134,9 @@ func (s *tools) createWorkflow(ctx context.Context, c Caller, in CreateWorkflowI
 	ci := monitors.CreateInput{Type: monitors.TypeWorkflow, Name: in.Name, Steps: steps, SecretNames: in.Secrets}
 	cookies := in.Cookies
 	ci.Cookies = &cookies
+	if in.Recheck != "" {
+		ci.Recheck = &in.Recheck
+	}
 	if in.CheckIntervalMinutes > 0 {
 		secs := in.CheckIntervalMinutes * 60
 		ci.CheckIntervalSeconds = &secs

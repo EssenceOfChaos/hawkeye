@@ -264,8 +264,8 @@ export function LandingPage() {
         <p className="eyebrow">How it works</p>
         <h2 id="how-h">From a failed check to the right people.</h2>
         <p>
-          When a check fails, HawkEye checks again before raising the alarm, so a single blip never wakes anyone. Once the outage is confirmed it alerts you
-          by email, chat or webhook, and tells you again when it’s over.
+          When a check fails, HawkEye checks again 15 seconds later before raising the alarm, so a single blip never wakes anyone and a real outage is
+          confirmed in seconds. Then it alerts you by email, chat or webhook, and tells you again when it’s over.
         </p>
         <MonitoringFlow />
       </section>

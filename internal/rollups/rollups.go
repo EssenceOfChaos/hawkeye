@@ -76,13 +76,14 @@ func SpanFor(ctx context.Context, db DB, from, to time.Time) (a, b time.Time, er
 //
 // Between a and b each row is one rollup (t is its hour); outside, each row is one result (checks = 1). Sum the counts, divide ms_sum by ms_count
 // for an average response time over successful checks, and take max(ms_max). from, to, a and b are SQL parameter references such as "$2", with
-// a and b from Span. Use it as `FROM (<Source>) u`.
+// a and b from Span. Use it as `FROM (<Source>) u`. Immediate re-checks are left out, as they are from the rollups: uptime and response times count
+// one result per interval.
 func Source(monitors, from, to, a, b string) string {
 	raw := func(lo, hi string) string {
 		return fmt.Sprintf(`SELECT monitor_id, checked_at AS t, in_maintenance, 1 AS checks, success::int AS successes,
 			CASE WHEN success AND response_time_ms IS NOT NULL THEN response_time_ms ELSE 0 END::bigint AS ms_sum,
 			(success AND response_time_ms IS NOT NULL)::int AS ms_count, CASE WHEN success THEN response_time_ms END AS ms_max
-			FROM check_results WHERE monitor_id IN (%s) AND checked_at >= %s AND checked_at < %s`, monitors, lo, hi)
+			FROM check_results WHERE monitor_id IN (%s) AND checked_at >= %s AND checked_at < %s AND NOT recheck`, monitors, lo, hi)
 	}
 	return raw(from, a) + "\n\t\tUNION ALL " + raw(b, to) + fmt.Sprintf(`
 		UNION ALL SELECT monitor_id, hour, in_maintenance, checks, successes, ms_sum, ms_count, ms_max
