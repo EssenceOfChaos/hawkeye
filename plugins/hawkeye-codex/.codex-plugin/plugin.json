@@ -1,0 +1,44 @@
+{
+  "name": "hawkeye",
+  "version": "0.3.0",
+  "description": "Set up HawkEye monitoring from your codebase: heartbeats for your cron jobs and scheduled tasks, and monitors for your site, its health endpoint, API and email records.",
+  "author": {
+    "name": "HawkEye",
+    "url": "https://hawkeye.observer"
+  },
+  "homepage": "https://hawkeye.observer/docs/claude",
+  "repository": "https://github.com/EssenceOfChaos/hawkeye",
+  "license": "MIT",
+  "keywords": [
+    "monitoring",
+    "uptime",
+    "cron",
+    "heartbeat",
+    "dns",
+    "ssl",
+    "alerts",
+    "status page",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "HawkEye",
+    "shortDescription": "Monitoring from your code",
+    "longDescription": "Set up HawkEye monitoring from your repository. Codex finds your production domain, your cron jobs and scheduled tasks and your health endpoints, asks HawkEye to suggest monitors for your live site, and shows you one plan. Once you approve it, Codex creates the monitors, including a heartbeat for each job, and adds the ping to the end of each job, reading the private ping address from an environment variable or CI secret. You can also ask about your monitors, uptime and incidents.",
+    "developerName": "HawkEye",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://hawkeye.observer",
+    "supportURL": "https://hawkeye.observer/contact",
+    "privacyPolicyURL": "https://hawkeye.observer/privacy",
+    "termsOfServiceURL": "https://hawkeye.observer/terms",
+    "defaultPrompt": [
+      "Set up monitoring for this project.",
+      "Which of my HawkEye monitors are down right now?",
+      "Add heartbeats for the cron jobs in this repository."
+    ],
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/icon.png"
+  }
+}

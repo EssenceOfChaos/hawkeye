@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "hawkeye": {
+      "type": "http",
+      "url": "https://hawkeye.observer/mcp",
+      "oauth": {
+        "clientId": "REPLACE_WITH_CODEX_CLIENT_ID",
+        "callbackUrl": "http://127.0.0.1:47831/callback",
+        "callbackPort": 47831
+      }
+    }
+  }
+}

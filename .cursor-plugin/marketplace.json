@@ -1,0 +1,18 @@
+{
+  "name": "hawkeye",
+  "owner": {
+    "name": "HawkEye",
+    "url": "https://hawkeye.observer"
+  },
+  "metadata": {
+    "description": "HawkEye's plugin for Cursor: set up uptime, cron job and DNS monitoring from your codebase.",
+    "pluginRoot": "plugins"
+  },
+  "plugins": [
+    {
+      "name": "hawkeye",
+      "source": "hawkeye-cursor",
+      "description": "Set up HawkEye monitoring from your codebase: heartbeats for your cron jobs and scheduled tasks, and monitors for your site, its health endpoint, API and email records."
+    }
+  ]
+}

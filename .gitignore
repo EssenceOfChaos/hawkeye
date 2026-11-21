@@ -12,8 +12,9 @@ node_modules/
 web/dist/
 logs/*
 
-# Third-party agent skills (reinstall with: npx skills add https://docs.stripe.com)
-.agents/
+# Third-party agent skills (reinstall with: npx skills add https://docs.stripe.com). .agents/plugins/ is the Codex plugin marketplace: keep it.
+.agents/*
+!.agents/plugins/
 .claude/skills/
 skills-lock.json
 
