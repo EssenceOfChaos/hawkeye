@@ -9,10 +9,11 @@ import { CertificateCard } from '../components/Certificate'
 import { PingLog, PingSetup } from '../components/Heartbeat'
 import { RangePicker } from '../components/RangePicker'
 import { ResponseChart } from '../components/ResponseChart'
+import { TimingBar } from '../components/TimingBar'
 import { StatusBadge } from '../components/StatusBadge'
 import { AvgResponseTile, StatTile, UptimeHero } from '../components/Uptime'
 import { WorkflowRun } from '../components/WorkflowRun'
-import { availableRanges, formatDateTime, formatDuration, formatMs, formatPeriod, RANGE_LABELS, shortInterval, reportMonths, reportPdfPath } from '../format'
+import { availableRanges, formatDateTime, formatDuration, formatMs, formatPeriod, RANGE_LABELS, shortInterval, reportMonths, reportPdfPath, timingsLine } from '../format'
 import { useApi } from '../hooks'
 import { IncidentStatus } from './IncidentsPage'
 
@@ -118,6 +119,7 @@ export function MonitorDetailPage() {
             <Alert tone="warning" role="status">
               Responding slowly since {formatDateTime(m.slow_since)}: responses have been over {m.slow_threshold_ms?.toLocaleString()} ms for{' '}
               {m.slow_checks} checks in a row. The site is online; you will get one alert when response times are back to normal.
+              {m.slow_cause && <> {m.slow_cause}</>}
             </Alert>
           )}
 
@@ -181,6 +183,7 @@ export function MonitorDetailPage() {
               loading={series.loading}
             />
           )}
+          {!hb && !dns && uptime.data?.uptime.avg_timings && <TimingBar timings={uptime.data.uptime.avg_timings} loading={uptime.loading} />}
 
           <section className="card" aria-labelledby="inc-h">
             <div className="row">
@@ -270,6 +273,7 @@ export function MonitorDetailPage() {
                         )}
                         <td>
                           {r.error_summary ?? ''}
+                          {r.timings && <div className="hint">{timingsLine(r.timings)}</div>}
                           {r.trace_id && <div className="hint">Trace ID <code className="trace-id">{r.trace_id}</code></div>}
                         </td>
                       </tr>

@@ -204,6 +204,8 @@ export interface Monitor {
   slow_checks: number
   /** Set while responses are confirmed slow (a slowdown is open). */
   slow_since: string | null
+  /** While a slowdown is open: what got slower, compared with the past week; null when it can't be said. */
+  slow_cause?: string | null
   /** Each check sends a W3C traceparent header with a new trace ID (website and API monitors; off by default). */
   trace_context?: boolean
   /**
@@ -264,6 +266,8 @@ export interface StepOutcome {
   success: boolean
   status_code: number | null
   response_time_ms: number | null
+  /** Where this step's time went. */
+  timings?: Timings | null
   error_category?: string
   error_summary?: string
 }
@@ -571,7 +575,29 @@ export interface Uptime {
   insufficient_data: boolean
   min_checks: number
   avg_response_ms: number | null
+  /** Where the average successful check's time went (website and API checks); null when none was measured. */
+  avg_timings?: AvgTimings | null
   method: 'check_based'
+}
+
+/** A check's time split into phases, each summed over every connection it made (one per redirect). */
+export interface Timings {
+  dns_ms: number
+  connect_ms: number
+  tls_ms: number
+  /** Server wait: from sending the request to the first byte of the response. */
+  wait_ms: number
+  redirects: number
+}
+
+export interface AvgTimings {
+  dns_ms: number
+  connect_ms: number
+  tls_ms: number
+  wait_ms: number
+  /** The rest of the average response time; null unless every check in the range was measured. */
+  other_ms: number | null
+  checks: number
 }
 
 export interface SeriesPoint {
@@ -609,6 +635,8 @@ export interface CheckResult {
   region: string
   /** An immediate re-check after a failure: it decides the monitor's health, but isn't counted in uptime. */
   recheck?: boolean
+  /** Where the check's time went; null for other monitor types and older results. */
+  timings?: Timings | null
   /** Multi-step API checks: what each step that ran did. */
   steps?: StepOutcome[] | null
   /** The trace ID the check sent in its traceparent header, when the monitor has trace context on. */

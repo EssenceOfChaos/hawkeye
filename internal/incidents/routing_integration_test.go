@@ -244,7 +244,7 @@ func TestQuietHoursHoldSlowAlertsToo(t *testing.T) {
 		}
 	}
 	run(func(tx pgx.Tx) error {
-		return incidents.Engine{}.SlowStarted(t.Context(), tx, e.monitor, 1000, 2500, time.Now())
+		return incidents.Engine{}.SlowStarted(t.Context(), tx, e.monitor, 1000, 2500, nil, time.Now())
 	})
 	var due time.Time
 	e.pool.QueryRow(t.Context(), `SELECT next_attempt_at FROM notification_deliveries WHERE event_type = 'slow'`).Scan(&due)

@@ -45,7 +45,21 @@ type Uptime struct {
 	InsufficientData bool      `json:"insufficient_data"`
 	MinChecks        int       `json:"min_checks"`
 	AvgResponseMs    *int      `json:"avg_response_ms"` // over successful checks
-	Method           string    `json:"method"`
+	// AvgTimings is the average timing breakdown over the successful checks that have one (website and API checks); nil when there are none.
+	AvgTimings *AvgTimings `json:"avg_timings"`
+	Method     string      `json:"method"`
+}
+
+// AvgTimings is the average of each phase of a check (checks.Timings), over Checks successful checks.
+type AvgTimings struct {
+	DNSMs     int `json:"dns_ms"`
+	ConnectMs int `json:"connect_ms"`
+	TLSMs     int `json:"tls_ms"`
+	WaitMs    int `json:"wait_ms"`
+	// OtherMs is the rest of the average response time: the client's own work and redirect handling. Set only when every successful check in
+	// the range has a breakdown, since the average response time otherwise covers checks these averages don't.
+	OtherMs *int `json:"other_ms"`
+	Checks  int  `json:"checks"`
 }
 
 // Percent returns the truncated uptime percentage, or nil with insufficient=true when there is too little data.
@@ -97,9 +111,14 @@ func ComputeUptime(ctx context.Context, db DB, orgID uuid.UUID, monitorID *uuid.
 	}
 	u := Uptime{From: r.From, To: r.To, Clamped: r.Clamped, MinChecks: MinChecksForUptime, Method: UptimeMethod}
 	var avg *float64
-	err = db.QueryRow(ctx, `SELECT COALESCE(sum(checks), 0), COALESCE(sum(successes), 0), (sum(ms_sum)::numeric / NULLIF(sum(ms_count), 0))::float8
+	var sums [4]int64
+	var phased, timed int
+	var msSum int64
+	err = db.QueryRow(ctx, `SELECT COALESCE(sum(checks), 0), COALESCE(sum(successes), 0), (sum(ms_sum)::numeric / NULLIF(sum(ms_count), 0))::float8,
+			COALESCE(sum(dns_ms_sum), 0)::bigint, COALESCE(sum(connect_ms_sum), 0)::bigint, COALESCE(sum(tls_ms_sum), 0)::bigint, COALESCE(sum(wait_ms_sum), 0)::bigint,
+			COALESCE(sum(phase_count), 0)::int, COALESCE(sum(ms_count), 0)::int, COALESCE(sum(ms_sum), 0)::bigint
 		FROM (`+src+`) u WHERE NOT in_maintenance`, args...).
-		Scan(&u.TotalChecks, &u.SuccessfulChecks, &avg)
+		Scan(&u.TotalChecks, &u.SuccessfulChecks, &avg, &sums[0], &sums[1], &sums[2], &sums[3], &phased, &timed, &msSum)
 	if err != nil {
 		return Uptime{}, err
 	}
@@ -108,6 +127,14 @@ func ComputeUptime(ctx context.Context, db DB, orgID uuid.UUID, monitorID *uuid.
 	if avg != nil {
 		v := int(math.Round(*avg))
 		u.AvgResponseMs = &v
+	}
+	if phased > 0 {
+		a := func(sum int64) int { return int(math.Round(float64(sum) / float64(phased))) }
+		u.AvgTimings = &AvgTimings{DNSMs: a(sums[0]), ConnectMs: a(sums[1]), TLSMs: a(sums[2]), WaitMs: a(sums[3]), Checks: phased}
+		if phased == timed {
+			other := max(0, a(msSum)-a(sums[0])-a(sums[1])-a(sums[2])-a(sums[3]))
+			u.AvgTimings.OtherMs = &other
+		}
 	}
 	return u, nil
 }
@@ -162,6 +189,8 @@ type Result struct {
 	InMaintenance  bool      `json:"in_maintenance"` // recorded during a maintenance window; not counted in uptime
 	Region         string    `json:"region"`         // where the check ran
 	Recheck        bool      `json:"recheck"`        // an immediate re-check after a failure; decides the monitor's health, not counted in uptime
+	// Timings is where the check's time went (website and API checks); null for other monitors and for results from before it was measured.
+	Timings *checks.Timings `json:"timings"`
 	// Steps is set for multi-step API checks: what each step that ran did (name, status, time, and why it failed). Null for other monitors.
 	Steps json.RawMessage `json:"steps"`
 	// TraceID is the trace ID the check sent in its traceparent header, for finding the request in the site's own tracing. Null unless the monitor
@@ -177,7 +206,8 @@ func Results(ctx context.Context, db DB, orgID, monitorID uuid.UUID, r Range, li
 		return nil, 0, err
 	}
 	args = append(args, limit, offset)
-	rows, err := db.Query(ctx, fmt.Sprintf(`SELECT r.id, r.checked_at, r.success, r.http_status_code, r.response_time_ms, r.error_category, r.error_summary, r.in_maintenance, r.region, r.steps, r.trace_id, r.recheck
+	rows, err := db.Query(ctx, fmt.Sprintf(`SELECT r.id, r.checked_at, r.success, r.http_status_code, r.response_time_ms, r.error_category, r.error_summary, r.in_maintenance, r.region, r.steps, r.trace_id, r.recheck,
+		r.dns_ms, r.connect_ms, r.tls_ms, r.wait_ms, r.redirects
 		FROM check_results r JOIN monitors m ON m.id = r.monitor_id WHERE %s
 		ORDER BY r.checked_at DESC, r.id DESC LIMIT $%d OFFSET $%d`, where, len(args)-1, len(args)), args...)
 	if err != nil {
@@ -188,8 +218,13 @@ func Results(ctx context.Context, db DB, orgID, monitorID uuid.UUID, r Range, li
 	for rows.Next() {
 		var x Result
 		var code *int16
-		if err := rows.Scan(&x.ID, &x.CheckedAt, &x.Success, &code, &x.ResponseTimeMs, &x.ErrorCategory, &x.ErrorSummary, &x.InMaintenance, &x.Region, &x.Steps, &x.TraceID, &x.Recheck); err != nil {
+		var tm [5]*int
+		if err := rows.Scan(&x.ID, &x.CheckedAt, &x.Success, &code, &x.ResponseTimeMs, &x.ErrorCategory, &x.ErrorSummary, &x.InMaintenance, &x.Region, &x.Steps, &x.TraceID, &x.Recheck,
+			&tm[0], &tm[1], &tm[2], &tm[3], &tm[4]); err != nil {
 			return nil, 0, err
+		}
+		if tm[3] != nil {
+			x.Timings = &checks.Timings{DNSMs: deref(tm[0]), ConnectMs: deref(tm[1]), TLSMs: deref(tm[2]), WaitMs: *tm[3], Redirects: deref(tm[4])}
 		}
 		if code != nil {
 			c := int(*code)
@@ -316,4 +351,11 @@ func summarizeDomains(ctx context.Context, db DB, orgID uuid.UUID, now time.Time
 		s.Domains = append(s.Domains, d)
 	}
 	return rows.Err()
+}
+
+func deref(p *int) int {
+	if p == nil {
+		return 0
+	}
+	return *p
 }

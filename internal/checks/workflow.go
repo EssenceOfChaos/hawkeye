@@ -79,8 +79,10 @@ type StepOutcome struct {
 	Success        bool   `json:"success"`
 	StatusCode     *int   `json:"status_code"`
 	ResponseTimeMs *int   `json:"response_time_ms"`
-	ErrorCategory  string `json:"error_category,omitempty"`
-	ErrorSummary   string `json:"error_summary,omitempty"`
+	// Timings is where this step's time went. A run's own Result has none: a sum across steps would mix up different hosts.
+	Timings       *Timings `json:"timings,omitempty"`
+	ErrorCategory string   `json:"error_category,omitempty"`
+	ErrorSummary  string   `json:"error_summary,omitempty"`
 }
 
 // RunWorkflow runs w and returns the monitor's result: the failing step's (named in ErrorSummary), or the last step's when all passed, with
@@ -129,7 +131,7 @@ func (c *Checker) RunWorkflow(ctx context.Context, w Workflow) (Result, error) {
 		if i == 0 {
 			out.CertExpiresAt = res.CertExpiresAt // the first step's host is the one the workflow is about
 		}
-		step.StatusCode, step.ResponseTimeMs = res.StatusCode, res.ResponseTimeMs
+		step.StatusCode, step.ResponseTimeMs, step.Timings = res.StatusCode, res.ResponseTimeMs, res.Timings
 		if res.ResponseTimeMs != nil {
 			total, timed = total+*res.ResponseTimeMs, true
 		}

@@ -87,10 +87,14 @@ func (j *Job) Run(ctx context.Context) {
 
 // insertTotals adds up check_results into check_rollups for the rows the WHERE clause (on alias r) selects. The hours must have been deleted first.
 // Immediate re-checks are left out: uptime and response times count one result per interval.
-const insertTotals = `INSERT INTO check_rollups (monitor_id, hour, in_maintenance, checks, successes, ms_sum, ms_count, ms_max)
+const insertTotals = `INSERT INTO check_rollups (monitor_id, hour, in_maintenance, checks, successes, ms_sum, ms_count, ms_max,
+		dns_ms_sum, connect_ms_sum, tls_ms_sum, wait_ms_sum, phase_count)
 	SELECT r.monitor_id, date_trunc('hour', r.checked_at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC', r.in_maintenance, count(*), count(*) FILTER (WHERE r.success),
 		COALESCE(sum(r.response_time_ms) FILTER (WHERE r.success), 0), count(r.response_time_ms) FILTER (WHERE r.success),
-		max(r.response_time_ms) FILTER (WHERE r.success)
+		max(r.response_time_ms) FILTER (WHERE r.success),
+		COALESCE(sum(r.dns_ms) FILTER (WHERE r.success), 0), COALESCE(sum(r.connect_ms) FILTER (WHERE r.success), 0),
+		COALESCE(sum(r.tls_ms) FILTER (WHERE r.success), 0), COALESCE(sum(r.wait_ms) FILTER (WHERE r.success), 0),
+		count(*) FILTER (WHERE r.success AND r.wait_ms IS NOT NULL)
 	FROM check_results r WHERE NOT r.recheck AND `
 
 // Step does one transaction's work and reports whether more is waiting:

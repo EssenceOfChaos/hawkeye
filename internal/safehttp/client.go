@@ -142,11 +142,21 @@ func dialContext(ctx context.Context, cfg Config, network, addr string) (net.Con
 		return nil, fmt.Errorf("%w: port %s", ErrBlocked, portStr)
 	}
 
+	phases := phasesFrom(ctx)
+	if phases != nil {
+		phases.mu.Lock()
+		phases.connections++
+		phases.mu.Unlock()
+	}
 	var ips []netip.Addr
 	if ip, err := netip.ParseAddr(host); err == nil {
 		ips = []netip.Addr{ip}
 	} else {
+		start := time.Now()
 		ips, err = cfg.Resolver.LookupNetIP(ctx, "ip", host)
+		if phases != nil {
+			phases.add(&phases.dns, time.Since(start))
+		}
 		if err != nil {
 			return nil, err // *net.DNSError; classified as a DNS failure by the caller
 		}
@@ -162,6 +172,11 @@ func dialContext(ctx context.Context, cfg Config, network, addr string) (net.Con
 		}
 	}
 
+	// Connect time includes attempts on other addresses of the host that failed first: that is the time the request actually waited.
+	if phases != nil {
+		start := time.Now()
+		defer func() { phases.add(&phases.connect, time.Since(start)) }()
+	}
 	var lastErr error
 	for _, ip := range ips {
 		conn, err := cfg.Dial(ctx, network, net.JoinHostPort(ip.String(), portStr))

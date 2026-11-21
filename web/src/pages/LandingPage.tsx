@@ -44,7 +44,7 @@ const FEATURES = [
     icon: brand.icons.responseTime,
     title: 'Response-time tracking',
     lead: 'Spot slowdowns early.',
-    text: 'Track response times and review trends over time.',
+    text: 'Track response times over time, and see where the time goes: DNS, connecting, TLS or your server.',
   },
   {
     icon: brand.icons.incident,

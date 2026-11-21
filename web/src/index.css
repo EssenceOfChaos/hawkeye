@@ -416,6 +416,19 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .tip-row span { opacity: .75; }
 .tip-row.sub { font-size: .8rem; }
 .tip-key { display: inline-block; width: 14px; height: 2px; background: var(--chart-line); vertical-align: middle; margin-right: .4rem; border-radius: 1px; }
+/* "Where the time goes" (TimingBar): one tall segmented bar. Phase colors are four categorical slots in fixed order plus a neutral for the
+   remainder, validated together on the chart surface (#0b1f38: lightness band, chroma, CVD and normal-vision separation, 3:1 contrast). The
+   2px gap between blocks is the surface showing through; labels inside the blocks are white. */
+:root { --phase-dns: #3987e5; --phase-connect: #d95926; --phase-tls: #199e70; --phase-wait: #c98500; --phase-other: #7d8799; }
+.timing-bar { display: flex; gap: 2px; height: 28px; }
+.timing-part { min-width: 2px; border-radius: 4px; display: flex; align-items: center; padding-left: .4rem; overflow: hidden; color: #fff;
+  font-size: .8rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: default; }
+.timing-part:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.phase-dns { background: var(--phase-dns); } .phase-connect { background: var(--phase-connect); } .phase-tls { background: var(--phase-tls); }
+.phase-wait { background: var(--phase-wait); } .phase-other { background: var(--phase-other); }
+.timing-tip { margin: .4rem 0 .25rem; min-height: 1.3em; }
+.timing-legend { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: .25rem 1rem; font-size: .9rem; }
+.timing-legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .4rem; vertical-align: baseline; }
 .table-view { margin-top: .5rem; }
 td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 .plain-list { list-style: none; padding: 0; margin: 0; display: grid; gap: .5rem; }

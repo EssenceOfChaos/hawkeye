@@ -1,4 +1,5 @@
 import type { StepOutcome } from '../api'
+import { timingsLine } from '../format'
 
 /**
  * A run of a multi-step API check, drawn with daisyUI's steps: one numbered step per request, green with ✓ when it passed, red with ✕ where the run
@@ -25,6 +26,7 @@ export function WorkflowRun({ names, outcomes, label }: { names: string[]; outco
                 {state === 'skipped' && 'Not run'}
                 {o && [o.status_code != null && `HTTP ${o.status_code}`, o.response_time_ms != null && `${o.response_time_ms.toLocaleString()} ms`].filter(Boolean).join(' · ')}
               </span>
+              {o?.timings && <span className="hint">{timingsLine(o.timings)}</span>}
               {state === 'failed' && o?.error_summary && <span className="error">{o.error_summary}</span>}
             </span>
           </li>

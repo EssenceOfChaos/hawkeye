@@ -41,6 +41,7 @@ type Alert struct {
 	// Slow-response alerts (EventSlow, EventSlowRecovery): the threshold and the slowest response seen. StartedAt and ResolvedAt are the slowdown's.
 	SlowThresholdMs int
 	SlowPeakMs      int
+	SlowCause       string // what got slower, compared with the past week; empty when it can't be said
 }
 
 // IsHeartbeat reports whether the alert is about a heartbeat (cron job) monitor, which has no website to name.
@@ -293,8 +294,11 @@ func renderSlow(a Alert, name, url string) email.Message {
 	c.Heading = name + " is responding slowly"
 	c.Paragraphs = []string{
 		"The website is online, but its responses have stayed above your threshold of " + threshold + " for several checks in a row.",
-		"Slow responses are often an early sign of trouble: a busy server, a slow database or a problem with the hosting. HawkEye keeps checking and will tell you once when response times are back to normal.",
 	}
+	if a.SlowCause != "" {
+		c.Paragraphs = append(c.Paragraphs, a.SlowCause)
+	}
+	c.Paragraphs = append(c.Paragraphs, "Slow responses are often an early sign of trouble: a busy server, a slow database or a problem with the hosting. HawkEye keeps checking and will tell you once when response times are back to normal.")
 	c.Facts = append(c.Facts, email.Fact{Label: "Slowest response", Value: Milliseconds(a.SlowPeakMs)}, email.Fact{Label: "Confirmed at", Value: since})
 	return c.Message(a.From, a.To, subject)
 }

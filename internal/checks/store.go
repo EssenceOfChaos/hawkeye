@@ -39,7 +39,8 @@ type Incidents interface {
 	// approaches its expiry. It queues the warning emails.
 	CertificateExpiring(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, expiresAt time.Time, bucket int) error
 	// SlowStarted is called when successful checks have stayed above the monitor's response-time threshold for the required number of checks.
-	SlowStarted(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, thresholdMs, responseMs int, at time.Time) error
+	// timings is the confirming check's breakdown (nil when it has none), for explaining what got slower.
+	SlowStarted(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, thresholdMs, responseMs int, timings *Timings, at time.Time) error
 	// SlowEnded is called when they have then stayed at or under it for as long.
 	SlowEnded(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, at time.Time) error
 }
@@ -133,10 +134,16 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 		if len(r.Steps) > 0 {
 			steps = r.Steps
 		}
+		var tm [5]*int // dns, connect, tls, wait, redirects: NULL without timings
+		if t := r.Timings; t != nil {
+			tm = [5]*int{&t.DNSMs, &t.ConnectMs, &t.TLSMs, &t.WaitMs, &t.Redirects}
+		}
 		if _, err := tx.Exec(ctx, `INSERT INTO check_results
-			(monitor_id, checked_at, finished_at, success, http_status_code, response_time_ms, error_category, error_summary, in_maintenance, region, steps, trace_id, recheck)
-			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''), $9, $10, $11, NULLIF($12, ''), $13)`,
-			monitorID, r.CheckedAt, r.FinishedAt, r.Success, r.StatusCode, r.ResponseTimeMs, r.ErrorCategory, summary, maintenance, region, steps, r.TraceID, r.Recheck); err != nil {
+			(monitor_id, checked_at, finished_at, success, http_status_code, response_time_ms, error_category, error_summary, in_maintenance, region, steps, trace_id, recheck,
+				dns_ms, connect_ms, tls_ms, wait_ms, redirects)
+			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''), $9, $10, $11, NULLIF($12, ''), $13, $14, $15, $16, $17, $18)`,
+			monitorID, r.CheckedAt, r.FinishedAt, r.Success, r.StatusCode, r.ResponseTimeMs, r.ErrorCategory, summary, maintenance, region, steps, r.TraceID, r.Recheck,
+			tm[0], tm[1], tm[2], tm[3], tm[4]); err != nil {
 			return fmt.Errorf("insert result: %w", err)
 		}
 
@@ -190,7 +197,7 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 		if s.incidents != nil {
 			switch out.Speed {
 			case BecameSlow:
-				if err := s.incidents.SlowStarted(ctx, tx, monitorID, *speed.thresholdMs, *r.ResponseTimeMs, r.FinishedAt); err != nil {
+				if err := s.incidents.SlowStarted(ctx, tx, monitorID, *speed.thresholdMs, *r.ResponseTimeMs, r.Timings, r.FinishedAt); err != nil {
 					return err
 				}
 			case BackToNormal:

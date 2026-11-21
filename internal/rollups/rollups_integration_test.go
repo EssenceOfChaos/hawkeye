@@ -47,11 +47,15 @@ func newOrg(t *testing.T, pool *pgxpool.Pool, plan string) uuid.UUID {
 // about 5% during maintenance, from two regions.
 func results(t *testing.T, pool *pgxpool.Pool, monitor uuid.UUID, days, interval int) {
 	t.Helper()
+	// About 70% have a timing breakdown (older results and other monitor types have none).
 	if _, err := pool.Exec(t.Context(), `INSERT INTO check_results (monitor_id, checked_at, finished_at, success, http_status_code, response_time_ms,
-			error_category, in_maintenance, region)
+			error_category, in_maintenance, region, dns_ms, connect_ms, tls_ms, wait_ms, redirects)
 		SELECT $1, t, t, ok, CASE WHEN ok THEN 200 ELSE 503 END, CASE WHEN random() < 0.1 THEN NULL ELSE (random() * 900)::int END,
-			CASE WHEN ok THEN NULL ELSE 'http_status' END, random() < 0.05, CASE WHEN random() < 0.5 THEN 'primary' ELSE 'eu' END
-		FROM (SELECT now() - make_interval(days => $2) + make_interval(secs => g * $3 + floor(random() * $3 / 2)) AS t, random() > 0.1 AS ok
+			CASE WHEN ok THEN NULL ELSE 'http_status' END, random() < 0.05, CASE WHEN random() < 0.5 THEN 'primary' ELSE 'eu' END,
+			CASE WHEN timed THEN (random() * 40)::int END, CASE WHEN timed THEN (random() * 60)::int END, CASE WHEN timed THEN (random() * 90)::int END,
+			CASE WHEN timed THEN (random() * 700)::int END, CASE WHEN timed THEN (random() * 1.3)::int END
+		FROM (SELECT now() - make_interval(days => $2) + make_interval(secs => g * $3 + floor(random() * $3 / 2)) AS t, random() > 0.1 AS ok,
+				random() < 0.7 AS timed
 			FROM generate_series(0, $2 * 86400 / $3) g) s
 		WHERE t < now()`, monitor, days, interval); err != nil {
 		t.Fatal(err)

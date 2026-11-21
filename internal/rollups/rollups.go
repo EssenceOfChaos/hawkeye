@@ -72,20 +72,26 @@ func SpanFor(ctx context.Context, db DB, from, to time.Time) (a, b time.Time, er
 
 // Source is SQL for a relation over the results of the monitors whose ids the subquery `monitors` returns, checked in [from, to):
 //
-//	monitor_id, t, in_maintenance, checks, successes, ms_sum, ms_count, ms_max
+//	monitor_id, t, in_maintenance, checks, successes, ms_sum, ms_count, ms_max,
+//	dns_ms_sum, connect_ms_sum, tls_ms_sum, wait_ms_sum, phase_count
 //
 // Between a and b each row is one rollup (t is its hour); outside, each row is one result (checks = 1). Sum the counts, divide ms_sum by ms_count
-// for an average response time over successful checks, and take max(ms_max). from, to, a and b are SQL parameter references such as "$2", with
+// for an average response time over successful checks, and take max(ms_max). Divide each phase's sum by phase_count for the average timing
+// breakdown over the successful checks that have one. from, to, a and b are SQL parameter references such as "$2", with
 // a and b from Span. Use it as `FROM (<Source>) u`. Immediate re-checks are left out, as they are from the rollups: uptime and response times count
 // one result per interval.
 func Source(monitors, from, to, a, b string) string {
 	raw := func(lo, hi string) string {
 		return fmt.Sprintf(`SELECT monitor_id, checked_at AS t, in_maintenance, 1 AS checks, success::int AS successes,
 			CASE WHEN success AND response_time_ms IS NOT NULL THEN response_time_ms ELSE 0 END::bigint AS ms_sum,
-			(success AND response_time_ms IS NOT NULL)::int AS ms_count, CASE WHEN success THEN response_time_ms END AS ms_max
+			(success AND response_time_ms IS NOT NULL)::int AS ms_count, CASE WHEN success THEN response_time_ms END AS ms_max,
+			CASE WHEN success THEN COALESCE(dns_ms, 0) ELSE 0 END::bigint AS dns_ms_sum, CASE WHEN success THEN COALESCE(connect_ms, 0) ELSE 0 END::bigint AS connect_ms_sum,
+			CASE WHEN success THEN COALESCE(tls_ms, 0) ELSE 0 END::bigint AS tls_ms_sum, CASE WHEN success THEN COALESCE(wait_ms, 0) ELSE 0 END::bigint AS wait_ms_sum,
+			(success AND wait_ms IS NOT NULL)::int AS phase_count
 			FROM check_results WHERE monitor_id IN (%s) AND checked_at >= %s AND checked_at < %s AND NOT recheck`, monitors, lo, hi)
 	}
 	return raw(from, a) + "\n\t\tUNION ALL " + raw(b, to) + fmt.Sprintf(`
-		UNION ALL SELECT monitor_id, hour, in_maintenance, checks, successes, ms_sum, ms_count, ms_max
+		UNION ALL SELECT monitor_id, hour, in_maintenance, checks, successes, ms_sum, ms_count, ms_max,
+			dns_ms_sum, connect_ms_sum, tls_ms_sum, wait_ms_sum, phase_count
 			FROM check_rollups WHERE monitor_id IN (%s) AND hour >= %s AND hour < %s`, monitors, a, b)
 }

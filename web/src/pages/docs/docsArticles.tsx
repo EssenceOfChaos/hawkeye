@@ -67,6 +67,23 @@ export function GettingStarted() {
         HTTPS monitors also watch their site’s certificate and warn you 30, 14, 7 and 1 days before it expires. The <strong>Domains</strong> page warns
         you before a domain registration lapses.
       </p>
+      <h2 id="timings">Where the time goes</h2>
+      <p>
+        Every website and API check is timed in four parts, shown under the response-time chart on the monitor’s page as an average for the period,
+        and for each check in its history:
+      </p>
+      <ul>
+        <li><strong>DNS lookup</strong>: finding the server’s address. Slow here points to your DNS provider.</li>
+        <li><strong>Connect</strong>: opening the connection. Slow here points to the network or a server far from the visitor.</li>
+        <li><strong>TLS handshake</strong>: setting up HTTPS. Slow here points to the server’s certificate setup or an overloaded server.</li>
+        <li>
+          <strong>Server wait</strong> (time to first byte): from sending the request to the first byte of the answer. This is mostly your
+          application’s own work, such as rendering a page or querying a database.
+        </li>
+      </ul>
+      <p>
+        With redirects, each part is added up over every hop, and the number of redirects is shown. Multi-step API checks show the parts for each step.
+      </p>
     </>
   )
 }
@@ -378,7 +395,8 @@ export function Alerts() {
           See <a href="#recheck">re-check before alerting</a>.</li>
         <li><strong>Cron jobs</strong> that miss a ping or report a failure (<Link to="/docs/cron-job-monitoring">heartbeat monitors</Link>).</li>
         <li><strong>DNS records</strong> that disappear or stop matching the value you expect (<Link to="/docs/dns-monitoring">DNS monitors</Link>).</li>
-        <li><strong>Slow responses</strong>, if you turn this on for a monitor: when responses stay above your threshold for several checks in a row.</li>
+        <li><strong>Slow responses</strong>, if you turn this on for a monitor: when responses stay above your threshold for several checks in a row.
+          The alert says what got slower (the DNS lookup, connecting, the TLS handshake or the server’s wait) compared with the monitor’s past week.</li>
         <li><strong>Certificates</strong> 30, 14, 7 and 1 days before they expire, and <strong>domains</strong> before their registration lapses.</li>
       </ul>
 
