@@ -111,6 +111,7 @@ export function AppRoutes() {
       <Route path="/docs/alerts" element={<DocPage path="/docs/alerts" />} />
       <Route path="/docs/api" element={<DocPage path="/docs/api" />} />
       <Route path="/docs/claude" element={<DocPage path="/docs/claude" />} />
+      <Route path="/docs/codex" element={<DocPage path="/docs/codex" />} />
       <Route path="/about" element={<Lazy><AboutPage /></Lazy>} />
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
