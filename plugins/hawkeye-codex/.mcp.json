@@ -4,7 +4,7 @@
       "type": "http",
       "url": "https://hawkeye.observer/mcp",
       "oauth": {
-        "clientId": "REPLACE_WITH_CODEX_CLIENT_ID",
+        "clientId": "hkc_JHroAQe1onZjw5l9YPlHbx91wRW048plv-oCLeYyfLs",
         "callbackUrl": "http://127.0.0.1:47831/callback",
         "callbackPort": 47831
       }
