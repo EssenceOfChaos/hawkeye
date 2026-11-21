@@ -195,7 +195,7 @@ describe('LandingPage', () => {
     const features = screen.getByRole('heading', { name: 'Everything you need to keep watch.' })
     expect(truth.compareDocumentPosition(features) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const section = truth.closest('section')!
-    expect(within(section).getByText(/only after consecutive failed checks/)).toBeInTheDocument()
+    expect(within(section).getByText(/checked again 15 seconds later, and a site counts as offline only when that fails too/)).toBeInTheDocument()
     expect(within(section).getByText(/verifies its own connection/)).toBeInTheDocument()
     expect(screen.getByText('Outages confirmed before alerts')).toBeInTheDocument()
   })
@@ -215,11 +215,24 @@ describe('LandingPage', () => {
     expect(taglines).not.toMatch(/team|branded|priority|sms|csv|export/i)
   })
 
-  it('shows real product screens, labeled as sample data, before the problem statement', () => {
+  it('shows HawkEye in Claude and Codex, labeled as sample data, with links to set each up', () => {
+    renderLanding(() => json(200, { plans: [] }))
+    const section = screen.getByRole('heading', { name: 'Ask Claude or Codex how your sites are doing.' }).closest('section')!
+    expect(within(section).getByText('Codex')).toBeInTheDocument()
+    expect(within(section).getByText('Claude Code')).toBeInTheDocument()
+    expect(within(section).getByText('What’s the state of my HawkEye monitors?')).toBeInTheDocument()
+    expect(within(section).getByText('Why is my website running slow?')).toBeInTheDocument()
+    expect(within(section).getByText('Shown with sample data.')).toBeInTheDocument()
+    expect(within(section).getByRole('link', { name: 'Set up with Claude' })).toHaveAttribute('href', '/docs/claude')
+    expect(within(section).getByRole('link', { name: 'Set up with Codex' })).toHaveAttribute('href', '/docs/codex')
+    expect(screen.queryByRole('heading', { name: /clock out/ })).not.toBeInTheDocument()
+  })
+
+  it('shows real product screens, labeled as sample data, before the AI assistant section', () => {
     const { container } = renderLanding(() => json(200, { plans: [] }))
     const demo = screen.getByRole('heading', { name: 'See it in action.' })
-    const problem = screen.getByRole('heading', { name: /Your website doesn’t clock out/ })
-    expect(demo.compareDocumentPosition(problem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const agents = screen.getByRole('heading', { name: 'Ask Claude or Codex how your sites are doing.' })
+    expect(demo.compareDocumentPosition(agents) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.getByText(/shown with sample data/)).toBeInTheDocument()
     const shots = [...container.querySelectorAll('.shot img')]
     expect(shots).toHaveLength(3)
