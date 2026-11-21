@@ -204,6 +204,28 @@ two `hawkeye-demo-heartbeat` cron lines on the server, the Anthropic OAuth clien
 listed connectors; a reviewer who finds a broken account or a heartbeat that's down is a reason to delist. Tell Anthropic (through the portal)
 before changing the server URL, the OAuth endpoints, tool names or what a tool does.
 
+### Releasing a plugin change
+
+The Claude Code plugin (`plugins/hawkeye/`, listed through `.claude-plugin/marketplace.json`) lives in this repository, so the directory must not
+follow `main`: it scans every new commit on the branch it follows as a new plugin version, and its default publish setting waits for us to click
+Publish on each one. Following `main`, every app deploy showed "publish again" though the plugin had not changed. Since 2026-11-20 the directory
+follows the **`plugin-latest` tag** instead ("Branch or tag" in the portal), and a tag stays on its commit until it is moved, so app deploys never
+create plugin versions (https://claude.com/docs/plugins/submit.md).
+
+To release a change to the plugin:
+
+1. Raise `version` in `plugins/hawkeye/.claude-plugin/plugin.json` (installed copies use it to tell that an update exists) and merge.
+2. Move the tag to that commit on `main`:
+   ```bash
+   git fetch origin
+   git tag -fa plugin-latest origin/main -m "HawkEye plugin <version>"
+   git push -f origin plugin-latest
+   ```
+3. The directory scans the new commit. Publish it in the portal once it passes; the live listing stays on the previous version until then.
+
+Never move the tag for a commit whose plugin files you haven't checked: whatever the tag points at is what the directory publishes. A deploy of the
+app needs nothing here.
+
 Original checklist:
 
 - Update `/docs/claude` (`web/src/pages/docs/docsArticles.tsx`): replace "will be available once HawkEye is listed in Claude's connector directory"
