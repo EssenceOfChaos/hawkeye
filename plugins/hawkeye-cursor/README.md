@@ -17,8 +17,8 @@ Nothing is created and no file is changed before you approve. Your code stays on
 Create an API key with **Read and write** access at https://hawkeye.observer/api-keys. Read and write keys can add monitors on every plan, including
 Free.
 
-Install the HawkEye plugin from Cursor's plugin marketplace, then open **Plugins** in Cursor's dashboard, choose **Configure** on HawkEye and enter
-the key as its API key. Reload the window (**Developer: Reload Window**) and start a new chat.
+Install the HawkEye plugin from Cursor's plugin marketplace, then in Cursor open **Customize** > **Plugins** > **HawkEye** > **Configure** and enter
+the key as its API key. Start a new chat.
 
 To try it before it is in the marketplace, copy this folder to `~/.cursor/plugins/local/hawkeye` and reload the window.
 

@@ -18,8 +18,8 @@ Call `get_account_overview`.
 - If the HawkEye tools are missing or the call is refused as unauthenticated, stop and tell the person how to connect the agent you are running in:
   - **Claude Code:** create a key with **Read and write** access at https://hawkeye.observer/api-keys, then enter it when Claude Code asks for the
     plugin's API key (or run `claude plugin configure hawkeye` in a terminal to set or change it) and restart Claude Code.
-  - **Cursor:** create a key with **Read and write** access at https://hawkeye.observer/api-keys, enter it as the HawkEye plugin's API key in
-    Cursor's dashboard (**Plugins**, then **Configure** on HawkEye), and reload the window.
+  - **Cursor:** create a key with **Read and write** access at https://hawkeye.observer/api-keys, enter it as the API key in Cursor under
+    **Customize** > **Plugins** > **HawkEye** > **Configure**, and start a new chat.
   - **Codex:** run `codex mcp login hawkeye` in a terminal, sign in to HawkEye, choose the organization and **Read and make changes**, and start a
     new Codex session.
 
