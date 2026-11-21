@@ -40,7 +40,7 @@ bearer_token_env_var = "HAWKEYE_API_KEY"
 ## What's included
 
 - **MCP server:** HawkEye's tools: account overview, monitors, uptime, incidents, status pages, maintenance windows, monitor suggestions and
-  creating monitors. What Codex can change depends on the access you chose and your plan; see https://hawkeye.observer/docs/claude.
+  creating monitors. What Codex can change depends on the access you chose and your plan; see https://hawkeye.observer/docs/codex.
 - **Skill `set-up-monitoring`:** the setup described above.
 
 ## License

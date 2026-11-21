@@ -622,9 +622,9 @@ export function ClaudeDocs() {
       <Code>{`/plugin marketplace add EssenceOfChaos/hawkeye
 /plugin install hawkeye@hawkeye`}</Code>
       <p>
-        Then ask “set up monitoring for this project”. Your code stays on your machine; HawkEye receives only the monitors you approve. Other coding agents
-        that read skills can use the same <a href="https://github.com/EssenceOfChaos/hawkeye/tree/main/plugins/hawkeye">skill</a> with HawkEye’s MCP server
-        configured as above.
+        Then ask “set up monitoring for this project”. Your code stays on your machine; HawkEye receives only the monitors you approve. The same plugin is
+        available for <Link to="/docs/codex">Codex</Link>, and other coding agents that read skills can use the same{' '}
+        <a href="https://github.com/EssenceOfChaos/hawkeye/tree/main/plugins/hawkeye">skill</a> with HawkEye’s MCP server configured as above.
       </p>
 
       <h2 id="tools">What Claude can do</h2>
@@ -663,6 +663,61 @@ export function ClaudeDocs() {
         <li>Changes count toward the key’s limit of 30 a minute, shared with the API.</li>
         <li>Monitor names, incident summaries and updates are text people wrote or that came from your sites; HawkEye tells Claude to treat them as data, not instructions.</li>
       </ul>
+    </>
+  )
+}
+
+export function CodexDocs() {
+  return (
+    <>
+      <p>
+        HawkEye’s plugin for Codex, OpenAI’s coding agent, connects Codex to your HawkEye account and sets up monitoring from your repository. Ask “set up
+        monitoring for this project”, or ask about your monitoring as you work: “what’s down right now?” or “how was uptime for the shop this month?”
+      </p>
+
+      <h2 id="install">Install the plugin</h2>
+      <p>In a terminal with the Codex CLI installed, run:</p>
+      <Code>{`codex plugin marketplace add EssenceOfChaos/hawkeye
+codex plugin add hawkeye@hawkeye
+codex mcp login hawkeye`}</Code>
+      <p>
+        The last command opens HawkEye’s sign-in page in your browser. Sign in (with your two-factor code if you use one), choose the organization Codex may
+        use, and choose <strong>Read only</strong>, or <strong>Read and make changes</strong> to let Codex make changes too (on Free, only adding monitors).
+        Then start a new Codex session. <code>codex mcp list</code> shows whether you’re signed in.
+      </p>
+      <p>
+        Signing in uses port 47831 on your computer to hand the sign-in back to Codex, so it must be free while you sign in. There is no key to copy: you can
+        disconnect Codex at any time from <strong>Connected apps</strong> on HawkEye’s API keys page.
+      </p>
+
+      <h2 id="setup">Set up monitoring from your code</h2>
+      <p>
+        Ask Codex to “set up monitoring for this project”. It finds your production domain, your cron jobs and scheduled tasks (crontab, GitHub Actions
+        schedules, Kubernetes CronJobs, platform crons and in-app schedulers) and your health endpoints, asks HawkEye to suggest monitors for your live site,
+        and shows you one plan. Once you approve it, Codex creates the monitors, including a heartbeat for each job, and adds the ping to the end of each
+        job. Ping addresses are read from environment variables or CI secrets, never written into your code, and Codex tells you which to set.
+      </p>
+      <p>Nothing is created and no file is changed before you approve. Your code stays on your machine; HawkEye receives only the monitors you approve.</p>
+
+      <h2 id="api-key">Connect with an API key instead</h2>
+      <p>
+        To connect without signing in, for example on a server, create an <Link to="/docs/api">API key</Link> and add HawkEye’s MCP server to{' '}
+        <code>~/.codex/config.toml</code>, with the key in the <code>HAWKEYE_API_KEY</code> environment variable:
+      </p>
+      <Code>{`[mcp_servers.hawkeye]
+url = "https://hawkeye.observer/mcp"
+bearer_token_env_var = "HAWKEYE_API_KEY"`}</Code>
+
+      <h2 id="tools">What Codex can do</h2>
+      <p>
+        The same as Claude: read your monitors, uptime, incidents, status pages and maintenance windows, suggest monitors for a domain, add monitors, and
+        with the right plan and role pause monitors, set up multi-step API checks, post incident updates and schedule maintenance. See{' '}
+        <Link to="/docs/claude#tools">what an assistant can do</Link> for the details.
+      </p>
+      <p>
+        Codex acts as you, in the organization you chose, with your permissions, and no more. It can’t see or change your password, billing, team, alert
+        destinations or API keys, and every change it makes is in the organization’s security log.
+      </p>
     </>
   )
 }
