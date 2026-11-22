@@ -7,6 +7,7 @@ import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
 import { RequireTwoFactorCard } from '../components/TwoFactor'
+import { OrganizationName } from '../components/OrganizationName'
 
 const day = (iso: string) => new Date(iso).toLocaleDateString([], { dateStyle: 'medium' })
 
@@ -142,6 +143,7 @@ export function TeamPage() {
         </Alert>
       )}
       {notice && <Alert tone="success" role="status">{notice}</Alert>}
+      <OrganizationName />
       {members === null && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading…</p>}
 
       {members && (
