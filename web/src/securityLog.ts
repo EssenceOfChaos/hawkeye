@@ -34,6 +34,7 @@ export const categoryNames: Record<string, string> = {
   monitor: 'Monitors',
   status_page: 'Status pages',
   maintenance: 'Maintenance',
+  deploy: 'Deploys',
   incident_update: 'Incident updates',
   domain: 'Domains',
 }
@@ -42,7 +43,7 @@ const quoted = (s: string | null | undefined) => (s ? `“${s}”` : '')
 const name = (e: LogEvent) => quoted(e.target?.name) || '(name not recorded)'
 const plain = (e: LogEvent) => e.target?.name ?? 'someone'
 const host = (e: LogEvent) => (typeof e.details.hostname === 'string' ? e.details.hostname : 'its domain')
-const access = (scope: unknown) => (scope === 'write' ? 'read and write' : 'read only')
+const access = (scope: unknown) => (scope === 'write' ? 'read and write' : scope === 'deploy' ? 'deploys only' : 'read only')
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 function changedFields(e: LogEvent): string {
@@ -123,6 +124,9 @@ export const sentences: Record<string, (e: LogEvent) => string> = {
   'status_page.domain_disabled': (e) => `Stopped serving the status page ${name(e)} on ${host(e)}, whose DNS records stayed wrong for 7 days`,
   'maintenance.scheduled': (e) => `Scheduled the maintenance window ${name(e)}`,
   'maintenance.deleted': (e) => `Deleted the maintenance window ${name(e)}`,
+  'deploy.started': (e) => `${e.details.extended ? 'Extended' : 'Started'} a deploy${e.details.tag ? ` for ${quoted(String(e.details.tag))}` : ''}: alerts quiet for up to ${String(e.details.minutes ?? '')} minutes${e.details.note ? ` (${quoted(String(e.details.note))})` : ''}`,
+  'deploy.finished': (e) => `Finished a deploy${e.details.verified === true ? ': every monitor passed its check' : e.details.verified === false ? `: ${String(e.details.failed ?? 'some')} monitor${e.details.failed === 1 ? '' : 's'} failed the check` : ''}`,
+  'deploy.checked': (e) => e.details.passed ? 'Checked monitors after a deploy: every one passed' : `Checked monitors after a deploy: ${String(e.details.failed ?? 'some')} failed`,
   'incident_update.posted': (e) => `Posted a public incident update (${String(e.details.status ?? 'update')})${e.details.message ? `: ${quoted(String(e.details.message))}` : ''}`,
   'incident_update.deleted': () => 'Deleted a public incident update',
   'domain.added': (e) => `Added the domain ${plain(e)}`,

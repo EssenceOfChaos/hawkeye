@@ -60,10 +60,15 @@ const (
 	StatusPageDomainDisabled = "status_page.domain_disabled"
 	MaintenanceScheduled     = "maintenance.scheduled" // details: starts_at, ends_at, monitors
 	MaintenanceDeleted       = "maintenance.deleted"
-	IncidentUpdatePosted     = "incident_update.posted" // details: status
-	IncidentUpdateDeleted    = "incident_update.deleted"
-	DomainAdded              = "domain.added"
-	DomainRemoved            = "domain.removed"
+	// Deploys a pipeline reports (internal/deploys): started (details: tag or monitors, minutes, note, extended), finished (details: verified, failed)
+	// and a check on its own (details: passed, failed).
+	DeployStarted         = "deploy.started"
+	DeployFinished        = "deploy.finished"
+	DeployChecked         = "deploy.checked"
+	IncidentUpdatePosted  = "incident_update.posted" // details: status
+	IncidentUpdateDeleted = "incident_update.deleted"
+	DomainAdded           = "domain.added"
+	DomainRemoved         = "domain.removed"
 )
 
 // AccountActions and OrganizationActions list every action of each log.
@@ -75,7 +80,7 @@ var (
 		AlertDestinationAdded, AlertDestinationChanged, AlertDestinationRemoved, MonitorCreated, MonitorChanged, MonitorDeleted, MonitorPaused,
 		MonitorResumed, BadgeEnabled, BadgeDisabled, PingAddressRotated, StatusPageCreated, StatusPageChanged, StatusPageDeleted, StatusPageDomainSet,
 		StatusPageDomainRemoved, StatusPageDomainVerified, StatusPageDomainFailing, StatusPageDomainDisabled, MaintenanceScheduled,
-		MaintenanceDeleted, IncidentUpdatePosted, IncidentUpdateDeleted, DomainAdded, DomainRemoved}
+		MaintenanceDeleted, DeployStarted, DeployFinished, DeployChecked, IncidentUpdatePosted, IncidentUpdateDeleted, DomainAdded, DomainRemoved}
 )
 
 // The categories each log can be filtered by.

@@ -147,6 +147,11 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
   grants a plan except a successfully applied provider state.
 - **Brand assets:** `web/src/assets/brand/` holds the finished artwork (logo, icons, background art)
   (see `docs/branding.md`).
+- **Deploys (`internal/deploys`, migration `000053`, `docs/plan-deploy-maintenance.md`):** a deploy is a `maintenance_windows` row of
+  `kind = 'deploy'` starting now; `ended_at` ends it early (`maintenance_window_active` honors it), so alerts and uptime treat it exactly like
+  maintenance, while `in_announced_maintenance` keeps it off public status pages. The check after a deploy runs in the API process through
+  `internal/runcheck` (shared with the worker, so a monitor is checked the same way) and the same SSRF-safe checker, within the request's time limit,
+  and isn't recorded. Deploy keys (`api_tokens.scope = 'deploy'`) are limited to `deployRoutes` in `internal/httpapi/tokens.go`.
 - **Multi-region checks (`internal/regions`, migration `000015`):** a monitor lists the locations it runs in (`monitors.regions`, empty = primary only), capped by `plans.max_regions`. The scheduler queues one job per monitor *and* region (`UNIQUE (monitor_id, region)`; backpressure per region); a worker started with `WORKER_REGION` claims only its region's jobs and labels results (`check_results.region`). `Store.Record` keeps one streak per region (`monitor_region_state`) and decides the monitor's state in the same transaction: down while a majority of its effective regions are down (`regions.Quorum`), recovered when that majority is lost. A monitor with a single effective region takes the original code path unchanged. Results from a region the monitor no longer uses, and from maintenance windows, are recorded but change nothing. Remote workers need private access to PostgreSQL, and run with `WORKER_CHECKS_ONLY=true`, which leaves the scheduler, alert delivery, billing and scheduled emails to the primary (see "Regional worker hosts" in `docs/deployment.md`).
 
 ## Decisions and assumptions

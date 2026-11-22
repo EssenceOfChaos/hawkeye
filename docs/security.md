@@ -168,7 +168,9 @@ requests.
   when a key is created.
 - **Authority:** a key acts as one person in one organization, with that person's role read on every request; the row is deleted with the
   membership (foreign key), so leaving or removal ends a person's keys at once. `read` keys can't use unsafe methods; `write` keys also need a plan
-  with API writes, checked on every write, not only at creation.
+  with API writes, checked on every write, not only at creation. `deploy` keys (owner-created, meant to sit in a customer's CI) can only start and
+  finish deploys and run the check after one (`deployRoutes`): no reads, no other writes, no MCP. A leaked deploy key can quiet alerts for at most
+  2 hours at a time (rate-limited, in the security log) and trigger checks, which share a per-organization hourly budget; it can't reveal data.
 - **Reach:** keys work only on routes registered through `tokenGroup`. Account, password, billing changes, team and invitations, ownership
   transfer, alert recipients and key management are session-only, so a leaked key can't be turned into account takeover or silence alerts.
   `TestEveryRouteIsClassifiedForAPIKeys` fails when a route is added without being classified.

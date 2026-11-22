@@ -34,6 +34,8 @@ import (
 const (
 	ScopeRead  = "read"
 	ScopeWrite = "write"
+	// ScopeDeploy can only start and finish deploys (internal/deploys), so it is safe to store in a CI system. Only an owner may create one.
+	ScopeDeploy = "deploy"
 
 	KindKey   = "key"          // an API key a person made
 	KindOAuth = "oauth_access" // an access token issued to an OAuth client (internal/oauth)
@@ -102,6 +104,9 @@ func (p Principal) Actor() audit.Actor {
 // CanWrite reports whether the key's scope allows changing data. The plan is checked separately (plans.CanWriteViaAPI).
 func (p Principal) CanWrite() bool { return p.Scope == ScopeWrite }
 
+// DeployOnly reports whether the key may only start and finish deploys.
+func (p Principal) DeployOnly() bool { return p.Scope == ScopeDeploy }
+
 // Service creates, lists, revokes and authenticates keys.
 type Service struct {
 	pool       *pgxpool.Pool
@@ -136,8 +141,8 @@ func (in NewInput) validate(now time.Time) (name string, expires *time.Time, err
 	if n := utf8.RuneCountInString(name); n < 1 || n > 100 {
 		fields["name"] = "must be between 1 and 100 characters"
 	}
-	if in.Scope != ScopeRead && in.Scope != ScopeWrite {
-		fields["scope"] = `must be "read" or "write"`
+	if in.Scope != ScopeRead && in.Scope != ScopeWrite && in.Scope != ScopeDeploy {
+		fields["scope"] = `must be "read", "write" or "deploy"`
 	}
 	switch {
 	case in.NoExpiry && in.ExpiresAt != nil:
@@ -316,8 +321,11 @@ func describeExpiry(at *time.Time) string {
 }
 
 func scopeLabel(scope string) string {
-	if scope == ScopeWrite {
+	switch scope {
+	case ScopeWrite:
 		return "Read and write"
+	case ScopeDeploy:
+		return "Deploys only (start and finish deploys from CI)"
 	}
 	return "Read only"
 }

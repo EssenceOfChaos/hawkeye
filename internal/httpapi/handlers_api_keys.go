@@ -9,6 +9,7 @@ import (
 
 	"hawkeye/internal/apitokens"
 	"hawkeye/internal/audit"
+	"hawkeye/internal/organizations"
 )
 
 type apiKeyInput struct {
@@ -36,6 +37,10 @@ func (h *handlers) createAPIKey(c *echo.Context) error {
 	var in apiKeyInput
 	if err := bind(c, &in); err != nil {
 		return err
+	}
+	// A deploy key opens maintenance (alerts go quiet), which only the owner may do.
+	if in.Scope == apitokens.ScopeDeploy && c.Get(roleKey) != organizations.RoleOwner {
+		return &APIError{Status: http.StatusForbidden, Code: "FORBIDDEN", Message: "Only the organization's owner can create a deploy key."}
 	}
 	k, token, err := h.apiTokens.Create(c.Request().Context(), currentUser(c), currentOrg(c),
 		apitokens.NewInput{Name: in.Name, Scope: in.Scope, ExpiresAt: in.ExpiresAt, NoExpiry: in.NoExpiry})

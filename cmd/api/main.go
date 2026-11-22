@@ -26,6 +26,7 @@ import (
 	"hawkeye/internal/config"
 	"hawkeye/internal/contact"
 	"hawkeye/internal/database"
+	"hawkeye/internal/deploys"
 	"hawkeye/internal/discovery"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/email"
@@ -183,9 +184,11 @@ func run() error {
 		Branding:        branding.NewService(pool),
 		Contact:         contact.NewService(mailer, log, cfg.SupportAddress, cfg.EmailFromAddress, cfg.AppBaseURL),
 		Maintenance:     maintenance.NewService(pool, planSvc),
-		Domains:         domains.NewService(pool, planSvc),
-		Regions:         cfg.Regions(),
-		StatusPages:     statuspage.NewService(pool, planSvc),
+		// Checks a pipeline asks for after a deploy go through the same SSRF-safe client and strict policy as the worker's.
+		Deploys:     deploys.NewService(pool, planSvc, checks.NewChecker(safehttp.Config{}), box),
+		Domains:     domains.NewService(pool, planSvc),
+		Regions:     cfg.Regions(),
+		StatusPages: statuspage.NewService(pool, planSvc),
 		PageDomains: statuspagedomains.NewService(pool, planSvc,
 			&statuspagedomains.Verifier{Resolver: net.DefaultResolver, Target: cfg.DomainTarget()}, cfg.AppHost()),
 		Badges:     badges.NewService(pool),

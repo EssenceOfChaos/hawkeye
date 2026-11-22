@@ -500,6 +500,7 @@ func TestEveryRouteIsClassifiedForAPIKeys(t *testing.T) {
 		"GET /api/v1/maintenance-windows", "POST /api/v1/maintenance-windows", "DELETE /api/v1/maintenance-windows/:windowID",
 		"GET /api/v1/domains", "POST /api/v1/domains", "DELETE /api/v1/domains/:domainID",
 		"GET /api/v1/notification-settings/coverage",
+		"POST /api/v1/deploys", "POST /api/v1/deploys/check", "POST /api/v1/deploys/:deployID/finish",
 	)
 	// Public: no sign-in at all, so an API key changes nothing.
 	publicRoutes := setOf(

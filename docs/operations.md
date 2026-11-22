@@ -606,6 +606,10 @@ and the job is completed so the monitor's next scheduled check counts normally. 
 
 ## Tuning
 
+Deploys (`internal/deploys`): the check after a deploy runs inside the API request (at most 10 monitors, about 20 s), so it needs `REQUEST_TIMEOUT`
+of at least 30 s (the default). Limits are in code: 30 deploy starts an hour and 120 finishes or checks an hour per organization. A burst of
+`deploy-check:org` rate-limit refusals usually means a pipeline retrying in a tight loop; the security log (`deploy.*`) shows which key.
+
 `JOB_LEASE` must exceed the longest check: 30 s max timeout plus connection setup. Raising `FAILURE_THRESHOLD` reduces false alarms and delays detection by one interval per step
 (the immediate re-check covers only the second failure; any further ones wait for their intervals).
 

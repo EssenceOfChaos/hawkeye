@@ -63,7 +63,8 @@ Scripts and tools authenticate with an API key instead: `Authorization: Bearer h
 `/docs/api`; the design is in `docs/plan-api-mcp.md`.
 
 - **What a key is.** `hk_` followed by 256 random bits. Only its SHA-256 hash is stored, with the first 10 characters (`prefix`) for display. It is
-  returned once, by the request that creates it. A key belongs to **one organization and one person** and has a scope: `read` or `write`.
+  returned once, by the request that creates it. A key belongs to **one organization and one person** and has a scope: `read`, `write`, or
+  `deploy` (only the deploy routes, see *Deploys*; only an owner may create one).
 - **What it acts as.** The person, in the key's organization (`X-Organization-ID` may be left out; one naming another organization is refused), with
   the person's role **now**: owner-only routes still need the owner, and the role is read on every request. The key is deleted with the membership (a
   foreign key), so leaving or being removed takes a person's keys with them.
@@ -509,7 +510,28 @@ Planned periods during which a monitor's checks keep running and are recorded (`
 | `POST /maintenance-windows` | owner | `{name, starts_at, duration_minutes, repeat?, all_monitors?, monitor_ids?}` → 201. `starts_at` is an RFC 3339 instant (a start in the past begins now, but a one-off that has already ended is refused). `duration_minutes` 1–10080; for `repeat` `daily`/`weekly` it must be shorter than the period. Repeats are exact multiples of 24 h / 7 d after `starts_at` (UTC; they do not follow daylight saving). Either `all_monitors: true` (includes monitors added later) or a non-empty `monitor_ids` of your own monitors. 403 `MAINTENANCE_WINDOWS_LIMIT` (max 50) |
 | `DELETE /maintenance-windows/:id` | owner | 204 |
 
-To change a window, delete it and create a new one.
+To change a window, delete it and create a new one. Deploys (below) are windows too, but are listed and limited separately.
+
+## Deploys
+
+A customer's CI pipeline quiets alerts while it deploys, then asks for a check (`internal/deploys`, `docs/plan-deploy-maintenance.md`, public guide
+`/docs/deploys`). Open to **deploy keys** (scope `deploy`: these four routes only, refused everywhere else including MCP with `403 TOKEN_SCOPE`), to
+the owner's own `write` keys and to the owner's session. Members can't use them, and only the owner can create a deploy key. Bodies may be JSON or
+form-encoded (`curl -d tag=production`).
+
+| Method & path | Notes |
+|---|---|
+| `POST /deploys` | `{tag?, monitor_ids?, minutes?, note?}` → 201 `{deploy, extended: false}`, or 200 with `extended: true` when an open deploy for exactly the same monitors (the same tag, the same list, or every monitor) was extended to end `minutes` from now. No `tag` or `monitor_ids`: every monitor (including ones added later). `minutes` 1–120, default 15: the window ends by itself then. `note` up to 200 characters on one line. **Paid plans** (`maintenance_enabled`): 403 `PLAN_LIMIT_REACHED` otherwise. 30 starts an hour per organization (429 `RATE_LIMITED`). A tag that doesn't exist or has no monitors is a 400 on `tag` |
+| `POST /deploys/:id/finish` | `:id` or `latest` (the newest deploy started with this key, or by anyone for a session, in the last day). Ends the window now if it's still open, then (unless `?verify=false`) checks its monitors: 200 when all pass, **422** when one fails, both with `{message, passed, checks: [{monitor_id, name, passed, status_code, response_time_ms, error, attempts}], deploy}`. May be called again (a pipeline retrying) |
+| `POST /deploys/check` | `{tag?, monitor_ids?}`: the same check without a deploy window, on **every plan** |
+| `GET /deploys` | session only: the last 20 deploys `{deploys: [{id, tag, all_monitors, monitors, note, started_at, ends_at, active, verified, started_by_key, finished_at}]}` |
+
+The check runs each monitor once (heartbeats and paused monitors skipped, at most 10 monitors, otherwise 400), with a 12-second cap per monitor and
+about 20 seconds in all, and tries a failing one once more after 4 seconds. Its results are **not recorded**: two failures during a warm-up would
+otherwise confirm an outage and page someone; once the window has ended, the scheduled checks alert as usual. Callers wait longer by retrying (the
+guide's `curl --retry`, the GitHub Action's `wait-seconds`). Finishes and checks share 120 an hour per organization. A deploy window counts as
+maintenance for alerts and uptime, but public status pages don't show it as maintenance (`in_announced_maintenance`, migration `000053`). Finished
+deploys are removed after 30 days (retention); the security log records `deploy.started`, `deploy.finished` and `deploy.checked`.
 
 ### HawkEye's Telegram bot
 

@@ -83,7 +83,7 @@ describe('pricing cards stay in sync', () => {
       const cards = await cardsOn(ui, signedIn)
       expect(cards.Agency).toEqual(expect.arrayContaining([
         '200 monitors', 'Cron job and DNS monitoring', 'Checks from up to 3 locations', '5 team members', 'Require two-factor sign-in for your team', 'Domain expiry warnings for up to 100 domains',
-        'Maintenance windows', 'Monthly PDF uptime reports', 'Branded Reports with name and logo', 'API and Claude (MCP) access: read and make changes',
+        'Maintenance windows, and quiet alerts during deploys from CI', 'Monthly PDF uptime reports', 'Branded Reports with name and logo', 'API and Claude (MCP) access: read and make changes',
         '50 multi-step API checks of up to 10 steps', 'AI-drafted incident updates',
       ]))
       expect(cards.Free).not.toContain('AI-drafted incident updates')

@@ -23,6 +23,7 @@ import (
 	"hawkeye/internal/branding"
 	"hawkeye/internal/checks"
 	"hawkeye/internal/contact"
+	"hawkeye/internal/deploys"
 	"hawkeye/internal/discovery"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/heartbeats"
@@ -56,6 +57,7 @@ type handlers struct {
 	db              *pgxpool.Pool
 	notifications   *notifications.Service
 	maintenance     *maintenance.Service
+	deploys         *deploys.Service
 	domains         *domains.Service
 	statusPages     *statuspage.Service
 	pageDomains     *statuspagedomains.Service
@@ -176,6 +178,12 @@ func mapError(err error) error {
 	case errors.Is(err, statuspage.ErrSlugTaken):
 		return &APIError{Status: http.StatusConflict, Code: "SLUG_TAKEN", Message: "That status page address is already taken. Choose another.",
 			Details: map[string]any{"fields": map[string]string{"slug": "is already taken"}}}
+	case errors.Is(err, deploys.ErrNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND",
+			Message: "Deploy not found. Start one with POST /deploys first (\"latest\" means the newest deploy started with this key in the last day)."}
+	case errors.Is(err, deploys.ErrTooMany):
+		return &APIError{Status: http.StatusTooManyRequests, Code: "RATE_LIMITED",
+			Message: "At most 30 deploys can be started in an hour. Starting one again for the same monitors extends it instead."}
 	case errors.Is(err, maintenance.ErrNotFound):
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Maintenance window not found."}
 	case errors.Is(err, maintenance.ErrTooMany):

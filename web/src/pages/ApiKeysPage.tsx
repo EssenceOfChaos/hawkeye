@@ -40,6 +40,8 @@ function Expires({ k, now }: { k: ApiKey; now: number }) {
   )
 }
 
+const accessLabel = (scope: ApiKey['scope']) => (scope === 'write' ? 'Read and write' : scope === 'deploy' ? 'Deploys only' : 'Read only')
+
 /** API keys for the current organization: make one (shown once), see who made which, when each was last used and when it expires, and revoke. */
 export function ApiKeysPage() {
   const { user, organization } = useAuth()
@@ -54,7 +56,7 @@ export function ApiKeysPage() {
   const [fields, setFields] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [name, setName] = useState('')
-  const [scope, setScope] = useState<'read' | 'write'>('read')
+  const [scope, setScope] = useState<'read' | 'write' | 'deploy'>('read')
   const [expiry, setExpiry] = useState<Expiry>('90')
   const [custom, setCustom] = useState('')
   const [created, setCreated] = useState<{ key: ApiKey; token: string } | null>(null)
@@ -155,7 +157,7 @@ export function ApiKeysPage() {
               {keys.map((k) => (
                 <tr key={k.id}>
                   <td>{k.name}<div className="hint">Created {day(k.created_at)}</div></td>
-                  <td>{k.scope === 'write' ? 'Read and write' : 'Read only'}</td>
+                  <td>{accessLabel(k.scope)}</td>
                   <td><code>{k.prefix}…</code></td>
                   {isOwner && <td>{k.mine ? 'You' : k.owner_email}</td>}
                   <td>{k.last_used_at ? day(k.last_used_at) : <span className="hint">Not used yet</span>}</td>
@@ -187,6 +189,17 @@ export function ApiKeysPage() {
                 <label>
                   <input type="radio" name="scope" value="write" checked={scope === 'write'} onChange={() => setScope('write')} /> Read and write
                 </label>
+                {isOwner && (
+                  <label>
+                    <input type="radio" name="scope" value="deploy" checked={scope === 'deploy'} onChange={() => setScope('deploy')} /> Deploys only
+                  </label>
+                )}
+                {scope === 'deploy' && (
+                  <small className="hint">
+                    For your CI pipeline: it can only quiet alerts during a deploy and check your sites afterwards, so it’s safe to store as a CI
+                    secret. <Link to="/docs/deploys">How to use it</Link>
+                  </small>
+                )}
                 {!allChanges && usage && (
                   <small className="hint">
                     On your {usage.plan.name} plan a read and write key can add monitors, for example from a coding agent setting up your cron jobs.{' '}

@@ -7,6 +7,7 @@ import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
 import { Toggle } from '../components/Toggle'
+import { RecentDeploys } from '../components/RecentDeploys'
 
 const REPEAT_LABEL: Record<MaintenanceWindow['repeat'], string> = { none: 'One time', daily: 'Every day', weekly: 'Every week' }
 const DURATIONS = [
@@ -195,6 +196,8 @@ export function MaintenancePage() {
       ) : (
         <p className="hint">Only the organization owner can schedule maintenance windows.</p>
       )}
+
+      <RecentDeploys />
     </>
   )
 }

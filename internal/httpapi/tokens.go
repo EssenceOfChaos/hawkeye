@@ -40,6 +40,8 @@ var (
 		Message: "This token was issued to a connected app for HawkEye's MCP server and can't be used with the API. Create an API key instead."}
 	errTokenScope = &APIError{Status: http.StatusForbidden, Code: "TOKEN_SCOPE",
 		Message: "This API key is read-only. Create a key with write access to make changes."}
+	errDeployKey = &APIError{Status: http.StatusForbidden, Code: "TOKEN_SCOPE",
+		Message: "This is a deploy key: it can only start and finish deploys (POST /api/v1/deploys). Use a read or write key for anything else."}
 	errTokenOrganization = &APIError{Status: http.StatusForbidden, Code: "TOKEN_ORGANIZATION_MISMATCH",
 		Message: "This API key belongs to a different organization than the one in X-Organization-ID. Leave the header out, or use that organization's key."}
 )
@@ -72,6 +74,24 @@ var createRoutes = map[string]bool{
 	tokenRouteKey(http.MethodPost, "/api/v1/monitors/suggestions"): true,
 }
 
+// deployRoutes are the only routes a deploy key may use. They are writes, but they don't need the plan's API writes: starting a deploy checks the
+// plan's maintenance windows itself, and a check after a deploy is open on every plan.
+var deployRoutes = map[string]bool{
+	tokenRouteKey(http.MethodPost, "/api/v1/deploys"):                  true,
+	tokenRouteKey(http.MethodPost, "/api/v1/deploys/check"):            true,
+	tokenRouteKey(http.MethodPost, "/api/v1/deploys/:deployID/finish"): true,
+}
+
+// principalTokenID is the id of the key the request authenticated with, or nil for a session.
+func principalTokenID(c *echo.Context) *uuid.UUID {
+	p, ok := currentPrincipal(c)
+	if !ok {
+		return nil
+	}
+	id := p.TokenID
+	return &id
+}
+
 // opensToTokens reports whether the matched route accepts API keys.
 func (h *handlers) opensToTokens(c *echo.Context) bool {
 	return h.tokenRoutes[tokenRouteKey(c.Request().Method, c.Path())]
@@ -102,7 +122,16 @@ func (h *handlers) authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 			return errTokenAudience
 		}
 		ctx := c.Request().Context()
-		if write {
+		deployRoute := deployRoutes[tokenRouteKey(c.Request().Method, c.Path())]
+		// A deploy key lives in a CI system, so it can do nothing but report deploys: not even read.
+		if p.DeployOnly() && !deployRoute {
+			return errDeployKey
+		}
+		if deployRoute {
+			if !p.DeployOnly() && !p.CanWrite() {
+				return errTokenScope
+			}
+		} else if write {
 			if !p.CanWrite() {
 				return errTokenScope
 			}
