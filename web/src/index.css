@@ -431,6 +431,10 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .timing-legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .4rem; vertical-align: baseline; }
 .table-view { margin-top: .5rem; }
 td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
+/* The check history has up to six columns: a little less padding, and a smaller timing line, keep each row on one line at full width. Each
+   timing part is unbreakable (format.ts timingsLine), so a narrow screen wraps between parts. */
+.history-table th, .history-table td { padding-inline: .4rem; }
+.history-table .timings { font-size: .78rem; }
 .plain-list { list-style: none; padding: 0; margin: 0; display: grid; gap: .5rem; }
 .banner.inline.outage { background: transparent; border-color: var(--down); color: var(--down); font-weight: 600; }
 .banner.inline.outage a { color: inherit; }
