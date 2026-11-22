@@ -13,7 +13,7 @@ import { TimingBar } from '../components/TimingBar'
 import { StatusBadge } from '../components/StatusBadge'
 import { AvgResponseTile, StatTile, UptimeHero } from '../components/Uptime'
 import { WorkflowRun } from '../components/WorkflowRun'
-import { availableRanges, formatDateTime, formatDuration, formatMs, formatPeriod, RANGE_LABELS, shortInterval, reportMonths, reportPdfPath, timingsLine } from '../format'
+import { availableRanges, formatDateTime, formatDuration, formatMs, formatPeriod, RANGE_LABELS, shortInterval, reportMonths, reportPdfPath, formatShortDateTime, timingsLine } from '../format'
 import { useApi } from '../hooks'
 import { IncidentStatus } from './IncidentsPage'
 
@@ -246,7 +246,7 @@ export function MonitorDetailPage() {
             {results.data?.results.length === 0 && <p>No {hb ? 'pings' : 'checks'} in this period yet.</p>}
             {results.data && results.data.results.length > 0 && (
               <div className="table-wrap">
-                <table>
+                <table className="history-table">
                   <caption className="sr-only">Individual checks, newest first</caption>
                   <thead>
                     <tr><th>When</th>{several && <th>Location</th>}<th>Result</th>{!hb && <>{!dns && <th className="num">HTTP</th>}<th className="num">{dns ? 'Lookup' : 'Response'}</th></>}<th>Details</th></tr>
@@ -254,8 +254,8 @@ export function MonitorDetailPage() {
                   <tbody>
                     {results.data.results.map((r) => (
                       <tr key={r.id}>
-                        <td><time dateTime={r.checked_at}>{formatDateTime(r.checked_at)}</time></td>
-                        {several && <td>{(() => {
+                        <td className="nowrap"><time dateTime={r.checked_at} title={formatDateTime(r.checked_at)}>{formatShortDateTime(r.checked_at)}</time></td>
+                        {several && <td className="nowrap">{(() => {
                           const loc = locations.data?.regions.find((x) => x.region === r.region)
                           return <LocationName name={loc?.name ?? r.region} country={loc?.country} />
                         })()}</td>}
@@ -273,7 +273,7 @@ export function MonitorDetailPage() {
                         )}
                         <td>
                           {r.error_summary ?? ''}
-                          {r.timings && <div className="hint">{timingsLine(r.timings)}</div>}
+                          {r.timings && <div className="hint timings">{timingsLine(r.timings)}</div>}
                           {r.trace_id && <div className="hint">Trace ID <code className="trace-id">{r.trace_id}</code></div>}
                         </td>
                       </tr>

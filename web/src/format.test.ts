@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { availableRanges, formatMoney, formatMs, formatPeriod, formatUptime, reportMonths, reportPdfPath, shortInterval, statusUptime, timeAgo } from './format'
+import { availableRanges, formatMoney, formatShortDateTime, formatMs, formatPeriod, formatUptime, reportMonths, reportPdfPath, shortInterval, statusUptime, timeAgo } from './format'
 
 describe('format', () => {
   it('formats uptime without false precision or rounding up', () => {
@@ -97,5 +97,15 @@ describe('check intervals', () => {
     expect(shortInterval(30)).toBe('30 sec')
     expect(shortInterval(600)).toBe('10 min')
     expect(shortInterval(3600)).toBe('1 hour')
+  })
+})
+
+describe('formatShortDateTime', () => {
+  it('leaves out the year only when it is the current one', () => {
+    const now = new Date('2026-11-21T12:00:00')
+    const thisYear = formatShortDateTime('2026-11-21T19:13:37', now)
+    expect(thisYear).toMatch(/13:37/)
+    expect(thisYear).not.toMatch(/2026/)
+    expect(formatShortDateTime('2025-12-31T23:59:59', now)).toMatch(/2025/)
   })
 })

@@ -72,6 +72,15 @@ export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString()
 }
 
+/** A date and time short enough for a table column: "Nov 21, 7:13:37 PM", with the year only when it isn't the current one. */
+export function formatShortDateTime(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso)
+  return d.toLocaleString(undefined, {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit',
+    year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+  })
+}
+
 /** How long ago something happened, short enough for a table cell: "just now", "3 minutes ago", "2 hours ago", "4 days ago". */
 export function timeAgo(iso: string, now: number = Date.now()): string {
   const seconds = Math.floor((now - Date.parse(iso)) / 1000)
@@ -152,11 +161,15 @@ export function shortInterval(seconds: number): string {
   return seconds < 3600 ? `${Math.round(seconds / 60)} min` : formatPeriod(seconds)
 }
 
-/** One check's breakdown as a line of text, for the check history: "DNS 12 ms · connect 31 ms · TLS 48 ms · server wait 410 ms · 1 redirect". */
+/**
+ * One check's breakdown as a line of text, for the check history: "DNS 12 ms · connect 31 ms · TLS 48 ms · server 410 ms · 1 redirect". Inside each
+ * part the spaces don't break (U+00A0), so a narrow column wraps only between parts, never between a number and its "ms".
+ */
 export function timingsLine(t: Timings): string {
-  const bits = [`DNS ${t.dns_ms.toLocaleString()} ms`, `connect ${t.connect_ms.toLocaleString()} ms`]
-  if (t.tls_ms > 0) bits.push(`TLS ${t.tls_ms.toLocaleString()} ms`)
-  bits.push(`server wait ${t.wait_ms.toLocaleString()} ms`)
-  if (t.redirects > 0) bits.push(`${t.redirects} redirect${t.redirects === 1 ? '' : 's'}`)
+  const part = (label: string, ms: number) => `${label}\u00a0${ms.toLocaleString()}\u00a0ms`
+  const bits = [part('DNS', t.dns_ms), part('connect', t.connect_ms)]
+  if (t.tls_ms > 0) bits.push(part('TLS', t.tls_ms))
+  bits.push(part('server', t.wait_ms))
+  if (t.redirects > 0) bits.push(`${t.redirects}\u00a0redirect${t.redirects === 1 ? '' : 's'}`)
   return bits.join(' · ')
 }

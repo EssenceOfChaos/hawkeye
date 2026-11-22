@@ -42,8 +42,10 @@ describe('TimingBar', () => {
 
 describe('timingsLine', () => {
   it('describes one check', () => {
-    expect(timingsLine({ dns_ms: 12, connect_ms: 31, tls_ms: 48, wait_ms: 1410, redirects: 1 })).toBe(
-      'DNS 12 ms · connect 31 ms · TLS 48 ms · server wait 1,410 ms · 1 redirect')
-    expect(timingsLine({ dns_ms: 0, connect_ms: 1, tls_ms: 0, wait_ms: 5, redirects: 0 })).toBe('DNS 0 ms · connect 1 ms · server wait 5 ms')
+    // Non-breaking spaces inside each part: a line wraps only at the separators.
+    const plain = (s: string) => s.replaceAll('\u00a0', '_')
+    expect(plain(timingsLine({ dns_ms: 12, connect_ms: 31, tls_ms: 48, wait_ms: 1410, redirects: 1 }))).toBe(
+      'DNS_12_ms · connect_31_ms · TLS_48_ms · server_1,410_ms · 1_redirect')
+    expect(plain(timingsLine({ dns_ms: 0, connect_ms: 1, tls_ms: 0, wait_ms: 5, redirects: 0 }))).toBe('DNS_0_ms · connect_1_ms · server_5_ms')
   })
 })
