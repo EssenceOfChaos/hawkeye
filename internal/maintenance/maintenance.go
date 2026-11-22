@@ -113,7 +113,7 @@ func (s *Service) List(ctx context.Context, orgID uuid.UUID) ([]Window, error) {
 			maintenance_window_active(w, now()),
 			COALESCE(array_agg(wm.monitor_id ORDER BY wm.monitor_id) FILTER (WHERE wm.monitor_id IS NOT NULL), '{}')
 		FROM maintenance_windows w LEFT JOIN maintenance_window_monitors wm ON wm.window_id = w.id
-		WHERE w.organization_id = $1 GROUP BY w.id ORDER BY w.starts_at, w.id`, orgID)
+		WHERE w.organization_id = $1 AND w.kind = 'scheduled' GROUP BY w.id ORDER BY w.starts_at, w.id`, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,8 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in Input) (Window
 			return err
 		}
 		var n int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM maintenance_windows WHERE organization_id = $1`, orgID).Scan(&n); err != nil {
+		// Deploys (internal/deploys) are windows too, but come and go with a pipeline: they don't use up the scheduled windows' limit.
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM maintenance_windows WHERE organization_id = $1 AND kind = 'scheduled'`, orgID).Scan(&n); err != nil {
 			return err
 		}
 		if n >= MaxWindowsPerOrganization {

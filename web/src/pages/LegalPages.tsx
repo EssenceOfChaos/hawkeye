@@ -28,7 +28,7 @@ const SUPPORT = 'customer_support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 20, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 22, 2026</p>
       <p>
         HawkEye Observer (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -76,6 +76,7 @@ export function PrivacyPage() {
         <li>Incident and recovery records, alert settings, and records of the notifications we sent.</li>
         <li>For DNS monitors, the host name, record type and any expected value you enter, and whether each lookup succeeded and matched. We do not store the answers we receive.</li>
         <li>Maintenance windows you schedule: their names, times, repeat settings, and the monitors they cover. Checks made during a window are recorded and marked as such.</li>
+        <li>Deploys your CI pipeline reports: when they started and ended, the monitors they cover, any note you send with them (such as a commit or version), which API key reported them, and whether the check afterwards passed. We keep them for 30 days.</li>
         <li>For HTTPS monitors, the expiry date of the SSL certificate your website presents, and when we last read it. We do not store the certificate itself or any other detail from it.</li>
         <li>Domain names: the registered domain of each monitor’s web address or host name (for example example.com for https://www.example.com) and any domain you add yourself, the registration expiry date a public domain registry reports for it, and when we last looked it up.</li>
         <li>API keys you create: the name you give each key, its access (read only, or read and write), the first few characters of the key, a one-way fingerprint of the key (we never store the key itself), when it was created and last used, and when it expires.</li>

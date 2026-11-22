@@ -571,7 +571,7 @@ func (s *Service) build(ctx context.Context, slug string, now time.Time) (Public
 		}
 	}
 
-	rows, err := s.pool.Query(ctx, `SELECT m.id, COALESCE(pm.display_name, m.name), m.enabled, m.current_status, in_maintenance(m.organization_id, m.id, $2)
+	rows, err := s.pool.Query(ctx, `SELECT m.id, COALESCE(pm.display_name, m.name), m.enabled, m.current_status, in_announced_maintenance(m.organization_id, m.id, $2)
 		FROM status_page_monitors pm JOIN monitors m ON m.id = pm.monitor_id
 		WHERE pm.page_id = $1 AND m.deleted_at IS NULL ORDER BY pm.position`, pageID, now)
 	if err != nil {

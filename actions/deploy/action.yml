@@ -1,0 +1,51 @@
+name: HawkEye deploy
+description: Quiet HawkEye's alerts while you deploy, then check your sites and fail the job if one is down.
+author: HawkEye
+branding:
+  icon: activity
+  color: blue
+inputs:
+  key:
+    description: A HawkEye deploy key (create one under API keys, with "Deploys only" access). Store it as a secret.
+    required: true
+  step:
+    description: "start (before deploying), finish (after deploying: ends the quiet period and checks), or check (a check on its own, no quiet period)"
+    required: true
+  tag:
+    description: Only the monitors with this tag. Leave empty for every monitor (start and check).
+    required: false
+    default: ""
+  minutes:
+    description: When alerts come back on by themselves if finish never runs (1 to 120).
+    required: false
+    default: "15"
+  note:
+    description: Shown with the deploy in HawkEye. Defaults to the commit SHA.
+    required: false
+    default: ""
+  verify:
+    description: On finish, check the monitors (false only ends the quiet period).
+    required: false
+    default: "true"
+  wait-seconds:
+    description: On finish and check, how long to keep retrying a failing check (every 10 seconds), so a freshly deployed site can come up.
+    required: false
+    default: "60"
+  api-url:
+    description: HawkEye's address.
+    required: false
+    default: https://hawkeye.observer
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: '"$GITHUB_ACTION_PATH/hawkeye-deploy.sh"'
+      env:
+        HAWKEYE_KEY: ${{ inputs.key }}
+        HAWKEYE_STEP: ${{ inputs.step }}
+        HAWKEYE_TAG: ${{ inputs.tag }}
+        HAWKEYE_MINUTES: ${{ inputs.minutes }}
+        HAWKEYE_NOTE: ${{ inputs.note != '' && inputs.note || github.sha }}
+        HAWKEYE_VERIFY: ${{ inputs.verify }}
+        HAWKEYE_WAIT: ${{ inputs.wait-seconds }}
+        HAWKEYE_URL: ${{ inputs.api-url }}

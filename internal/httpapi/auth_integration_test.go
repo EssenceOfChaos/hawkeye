@@ -28,6 +28,7 @@ import (
 	"hawkeye/internal/branding"
 	"hawkeye/internal/checks"
 	"hawkeye/internal/contact"
+	"hawkeye/internal/deploys"
 	"hawkeye/internal/discovery"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/email"
@@ -145,6 +146,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 		AllowIP:   func(a netip.Addr) bool { return a == netip.MustParseAddr("127.0.0.1") || safehttp.IsPublicIP(a) },
 		AllowPort: func(int) bool { return true },
 	})
+	opts.Deploys = deploys.NewService(pool, planSvc, opts.WorkflowChecker, testutil.SecretBox())
 	opts.OAuthTokenPerMin = o.oauthPerM
 	opts.AdConversions = adconversions.NewRecorder(pool, o.adConv)
 	if !o.noAPIKeys {

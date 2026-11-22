@@ -57,8 +57,8 @@ func (c Config) withDefaults() Config {
 
 // Stats counts what one pass removed.
 type Stats struct {
-	CheckResults, Rollups, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits, SentEmails, AuditEvents int
-	Skipped                                                                                                                     bool // another instance holds the lock
+	CheckResults, Rollups, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits, SentEmails, AuditEvents, Deploys int
+	Skipped                                                                                                                              bool // another instance holds the lock
 }
 
 type Job struct {
@@ -238,6 +238,12 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 			SELECT id FROM billing_webhook_events WHERE status = 'failed' AND received_at < $1 LIMIT $2)`, j.now().Add(-180*24*time.Hour))
 	st.BillingEvents += n2
 	note(berr)
+	// Deploys (internal/deploys) are short maintenance windows a pipeline opens and closes; the security log keeps the record, so a finished one
+	// is only listed in the app for 30 days.
+	st.Deploys, err2 = j.batchesNoOrg(ctx, `DELETE FROM maintenance_windows WHERE id IN (
+			SELECT id FROM maintenance_windows WHERE kind = 'deploy'
+				AND COALESCE(ended_at, starts_at + make_interval(mins => duration_minutes)) < $1 LIMIT $2)`, j.now().Add(-30*24*time.Hour))
+	note(err2)
 	// The security log is kept for a year on every plan (internal/audit).
 	st.AuditEvents, err2 = j.batchesNoOrg(ctx, `DELETE FROM audit_events WHERE id IN (
 			SELECT id FROM audit_events WHERE occurred_at < $1 LIMIT $2)`, j.now().Add(-audit.Retention))
@@ -253,6 +259,7 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 	j.m.RetentionDeleted.WithLabelValues("billing_events").Add(float64(st.BillingEvents))
 	j.m.RetentionDeleted.WithLabelValues("rate_limits").Add(float64(st.RateLimits))
 	j.m.RetentionDeleted.WithLabelValues("audit_events").Add(float64(st.AuditEvents))
+	j.m.RetentionDeleted.WithLabelValues("deploys").Add(float64(st.Deploys))
 	return st, firstErr
 }
 

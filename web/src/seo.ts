@@ -91,6 +91,7 @@ export const PAGES: readonly PageMeta[] = [
   { path: '/docs/alerts', title: 'Alerts, Routing & Quiet Hours | HawkEye Docs', description: 'Send HawkEye alerts by email, Slack, Teams, Discord, Telegram, PagerDuty or webhook, route them by client, and set alert delays and quiet hours.', index: true },
   { path: '/docs/claude', title: 'Use HawkEye with Claude (MCP) | HawkEye Docs', description: 'Add HawkEye from Claude’s connector directory, or connect Claude Code with an API key: ask what is down, check uptime, pause monitors and post incident updates.', index: true },
   { path: '/docs/codex', title: 'Use HawkEye with Codex | HawkEye Docs', description: 'Install HawkEye’s Codex plugin to ask what is down and check uptime, and to set up website monitors and cron job heartbeats from your code.', index: true },
+  { path: '/docs/deploys', title: 'Deploys & CI: Quiet Alerts, Check Sites | HawkEye Docs', description: 'Two lines in your CI pipeline: quiet HawkEye’s alerts while you deploy, then check your sites and fail the pipeline if one is down. GitHub and GitLab.', index: true },
   { path: '/docs/api', title: 'API & API Keys | HawkEye Docs', description: 'Use the HawkEye API from scripts and tools: create a read-only or read and write API key, send requests, handle errors and keep keys safe.', index: true },
   {
     path: '/about',

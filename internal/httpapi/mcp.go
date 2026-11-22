@@ -57,6 +57,9 @@ func (h *handlers) mcpEndpoint(o Options) echo.HandlerFunc {
 		if err != nil {
 			return err
 		}
+		if p.DeployOnly() {
+			return errDeployKey
+		}
 		req := c.Request()
 		withCaller.ServeHTTP(c.Response(), req.WithContext(context.WithValue(req.Context(), principalCtxKey{}, p)))
 		return nil

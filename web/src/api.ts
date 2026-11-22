@@ -64,7 +64,7 @@ export interface Plan {
 export interface ApiKey {
   id: string
   name: string
-  scope: 'read' | 'write'
+  scope: 'read' | 'write' | 'deploy'
   /** The first characters of the token, so people can tell keys apart. */
   prefix: string
   owner_email: string
@@ -728,6 +728,23 @@ export interface DnsInput {
   alert_delay_minutes?: number
   quiet_hours?: QuietHours | null
   recheck?: RecheckSetting
+}
+
+/** A deploy a CI pipeline reported (POST /deploys): a short quiet period for some monitors, and the check that followed. */
+export interface Deploy {
+  id: string
+  tag: string | null
+  all_monitors: boolean
+  monitors: number
+  note: string | null
+  started_at: string
+  /** When alerts came back on (or will). */
+  ends_at: string
+  active: boolean
+  /** The last check after the deploy passed or failed; null if none ran. */
+  verified: boolean | null
+  started_by_key: string | null
+  finished_at: string | null
 }
 
 /** See Monitor.recheck. */

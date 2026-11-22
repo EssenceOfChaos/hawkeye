@@ -21,6 +21,7 @@ import (
 	"hawkeye/internal/branding"
 	"hawkeye/internal/checks"
 	"hawkeye/internal/contact"
+	"hawkeye/internal/deploys"
 	"hawkeye/internal/discovery"
 	"hawkeye/internal/domains"
 	"hawkeye/internal/errtrack"
@@ -64,6 +65,7 @@ type Options struct {
 	Notifications *notifications.Service
 	TelegramBot   *notifications.TelegramBot // HawkEye's own Telegram bot; nil turns its webhook off
 	Maintenance   *maintenance.Service
+	Deploys       *deploys.Service // nil turns the deploy endpoints off
 	Domains       *domains.Service
 	Regions       regions.Set
 	StatusPages   *statuspage.Service
@@ -203,7 +205,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, pageDomains: o.PageDomains, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, adConversions: o.AdConversions, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, discovery: o.Discovery, drafts: o.Drafts, log: o.Logger, secureCookies: o.SecureCookies,
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, deploys: o.Deploys, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, pageDomains: o.PageDomains, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, adConversions: o.AdConversions, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, discovery: o.Discovery, drafts: o.Drafts, log: o.Logger, secureCookies: o.SecureCookies,
 		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, workflowChecker: o.WorkflowChecker, tokenRoutes: map[string]bool{}, appBaseURL: o.AppBaseURL}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
@@ -483,6 +485,18 @@ func registerAPI(e *echo.Echo, o Options) {
 	api.PUT("/status-pages/:pageID/domain", h.putStatusPageDomain, requireOwner, limit("page-domain"))
 	api.POST("/status-pages/:pageID/domain/check", h.checkStatusPageDomain, requireOwner, limit("page-domain-check"))
 	api.DELETE("/status-pages/:pageID/domain", h.deleteStatusPageDomain, requireOwner)
+	if h.deploys != nil {
+		// Deploys (handlers_deploys.go): a CI pipeline's calls, with a deploy key or the owner's own key. Each finish or check sends requests to
+		// the customer's sites on demand, so they share an hourly budget per organization (a pipeline that retries every 10 s for a minute uses 6).
+		deployChecks := []echo.MiddlewareFunc{requireOwner}
+		if h.limits.l != nil {
+			deployChecks = append(deployChecks, h.limits.by("deploy-check:org", 120, time.Hour, func(c *echo.Context) string { return currentOrg(c).String() }))
+		}
+		api.POST("/deploys", h.startDeploy, requireOwner)
+		api.POST("/deploys/check", h.checkDeploy, deployChecks...)
+		api.POST("/deploys/:deployID/finish", h.finishDeploy, deployChecks...)
+		scoped.GET("/deploys", h.listDeploys)
+	}
 	api.GET("/maintenance-windows", h.listMaintenance)
 	api.POST("/maintenance-windows", h.createMaintenance, requireOwner)
 	api.DELETE("/maintenance-windows/:windowID", h.deleteMaintenance, requireOwner)

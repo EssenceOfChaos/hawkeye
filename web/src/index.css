@@ -510,9 +510,18 @@ td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 .docs h2 { font-size: 1.3rem; margin-top: 2rem; }
 .docs h3 { font-size: 1.05rem; margin-top: 1.25rem; }
 .doc-code { background: #08172b; border: 1px solid var(--line); border-radius: .5rem; padding: .75rem 1rem; overflow-x: auto; font-size: .85rem; }
+/* The copy button (CodeBlock) sits in the box's top-right corner, on the wrapper so it doesn't scroll away; the code leaves room for it. */
+.doc-code-wrap { position: relative; }
+.doc-code-wrap .doc-code { padding-right: 3rem; }
+.code-copy { position: absolute; top: .45rem; right: .45rem; display: inline-flex; align-items: center; gap: .3rem; padding: .3rem; border-radius: .4rem;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); cursor: pointer; font-size: .8rem; line-height: 1; opacity: .8; }
+.code-copy:hover, .code-copy:focus-visible { opacity: 1; background: var(--panel-hi); }
+.code-copy[aria-label="Copied"] { color: var(--up, #4ade80); opacity: 1; }
+.code-copy:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.code-copy svg { width: 1.05rem; height: 1.05rem; }
 .doc-table { border-collapse: collapse; }
 .doc-table th, .doc-table td { text-align: left; padding: .4rem .7rem; border-bottom: 1px solid var(--line); }
-@media (max-width: 48rem) { .docs-layout { grid-template-columns: 1fr; gap: 1rem; } .docs-nav { position: static; } }
+@media (max-width: 48rem) { .docs-layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; } .docs-nav { position: static; } } /* minmax: a long code line scrolls in its box instead of widening the page */
 .tool-list h2 { margin: 0 0 .25rem; font-size: 1.2rem; }
 
 /* Type roles: Sora for headlines and brand moments, Inter for reading and UI, JetBrains Mono for data (URLs, figures, timestamps). */

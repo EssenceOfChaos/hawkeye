@@ -1,9 +1,11 @@
 import { Link } from 'react-router'
+import { CodeBlock } from '../../components/CodeBlock'
 
 const PING = 'https://hawkeye.observer/ping/<your-token>'
 
+/** A code example with a copy button (CodeBlock). */
 export function Code({ children }: { children: string }) {
-  return <pre className="doc-code"><code>{children}</code></pre>
+  return <CodeBlock>{children}</CodeBlock>
 }
 
 export function GettingStarted() {
@@ -539,6 +541,7 @@ export function ApiDocs() {
       <ul>
         <li><strong>Read only</strong> keys can list and read everything below. They work on every plan, including Free.</li>
         <li><strong>Read and write</strong> keys can also make changes. On Free they can add monitors (within the plan’s limits) and nothing else; on Pro and Agency they can make every change the API offers. After a downgrade a key keeps reading and adding monitors, and stops making other changes.</li>
+        <li><strong>Deploys only</strong> keys (the owner can make them) can only quiet alerts during a deploy and check your sites afterwards, for a CI pipeline. See <Link to="/docs/deploys">Deploys and CI</Link>.</li>
       </ul>
       <p>
         A key belongs to you and to the organization you made it in. It can do what you can do there and no more: if you are a member rather than the owner,
@@ -549,7 +552,10 @@ export function ApiDocs() {
       <p>Put the key in the <code>Authorization</code> header. Requests and responses are JSON.</p>
       <Code>{`curl https://hawkeye.observer/api/v1/monitors \\
   -H "Authorization: Bearer $HAWKEYE_API_KEY"`}</Code>
-      <p>Pause a monitor before a deploy and resume it afterward (needs a read and write key):</p>
+      <p>
+        Pause a monitor and resume it later (needs a read and write key). For deploys, <Link to="/docs/deploys">Deploys and CI</Link> does this better:
+        it quiets alerts with a key safe to keep in CI, and checks the site afterwards.
+      </p>
       <Code>{`curl -X POST https://hawkeye.observer/api/v1/monitors/<monitor-id>/pause \\
   -H "Authorization: Bearer $HAWKEYE_API_KEY"
 
@@ -758,3 +764,98 @@ bearer_token_env_var = "HAWKEYE_API_KEY"`}</Code>
     </>
   )
 }
+
+export function DeploysDocs() {
+  return (
+    <>
+      <p>
+        When you deploy your website or API, it restarts, and HawkEye would see it fail for a moment and alert you about something you did on purpose.
+        Two lines in your CI pipeline fix that: one before the deploy quiets the alerts, one after it ends the quiet period and checks your sites right
+        away, so a broken deploy fails the pipeline (and can roll back) instead of reaching your customers.
+      </p>
+
+      <h2 id="key">1. Create a deploy key</h2>
+      <p>
+        Open <strong>API keys</strong> from the account menu and create a key with <strong>Deploys only</strong> access (only the organization’s owner
+        can). A deploy key can start and finish deploys and nothing else, not even read your monitors, so it’s safe to store as a CI secret. Save it as
+        a secret named <code>HAWKEYE_DEPLOY_KEY</code>.
+      </p>
+
+      <h2 id="curl">2. Add two lines to your pipeline</h2>
+      <p>Before deploying, quiet alerts for the monitors the deploy affects (here, the ones tagged <code>production</code>):</p>
+      <Code>{`curl -fsS -X POST https://hawkeye.observer/api/v1/deploys \\
+  -H "Authorization: Bearer $HAWKEYE_DEPLOY_KEY" \\
+  -d tag=production -d note="$GIT_COMMIT"`}</Code>
+      <p>
+        After deploying, end the quiet period and check those monitors. If one is failing, HawkEye answers with an error and says which monitor failed
+        and why, so the step fails. The retries give a freshly started site about a minute to come up:
+      </p>
+      <Code>{`curl -sS --fail-with-body --retry 5 --retry-delay 10 --retry-all-errors \\
+  -X POST https://hawkeye.observer/api/v1/deploys/latest/finish \\
+  -H "Authorization: Bearer $HAWKEYE_DEPLOY_KEY"`}</Code>
+      <p>
+        <code>latest</code> means the newest deploy started with the same key in the last day, so the two steps don’t need to pass anything between them.
+        Leave out <code>tag</code> to cover every monitor.
+      </p>
+
+      <h2 id="github">GitHub Actions</h2>
+      <p>HawkEye’s action wraps the same two calls and writes the result to the job summary:</p>
+      <Code>{`- uses: EssenceOfChaos/hawkeye/actions/deploy@deploy-action-v1
+  with:
+    key: \${{ secrets.HAWKEYE_DEPLOY_KEY }}
+    step: start
+    tag: production
+
+- run: ./deploy.sh
+
+- uses: EssenceOfChaos/hawkeye/actions/deploy@deploy-action-v1
+  with:
+    key: \${{ secrets.HAWKEYE_DEPLOY_KEY }}
+    step: finish`}</Code>
+
+      <h2 id="gitlab">GitLab CI</h2>
+      <p>Each <code>&gt;</code> block is one command, folded over several lines:</p>
+      <Code>{`deploy:
+  script:
+    - >
+      curl -fsS -X POST https://hawkeye.observer/api/v1/deploys
+      -H "Authorization: Bearer $HAWKEYE_DEPLOY_KEY"
+      -d tag=production -d note="$CI_COMMIT_SHORT_SHA"
+    - ./deploy.sh
+    - >
+      curl -sS --fail-with-body --retry 5 --retry-delay 10 --retry-all-errors
+      -X POST https://hawkeye.observer/api/v1/deploys/latest/finish
+      -H "Authorization: Bearer $HAWKEYE_DEPLOY_KEY"`}</Code>
+
+      <h2 id="options">Options</h2>
+      <ul>
+        <li><code>tag</code>: the monitors with this tag. Leave it out for every monitor.</li>
+        <li><code>minutes</code>: when alerts come back on by themselves if the pipeline never finishes (1 to 120, default 15).</li>
+        <li><code>note</code>: a commit, version or pipeline link, shown under <strong>Maintenance</strong> and in the security log.</li>
+        <li><code>?verify=false</code> on finish: just end the quiet period, without a check.</li>
+      </ul>
+
+      <h2 id="details">Good to know</h2>
+      <ul>
+        <li>
+          While a deploy is open, HawkEye keeps checking, but those monitors don’t open incidents or send alerts, and the time doesn’t count against
+          uptime. Your public status pages don’t show it as maintenance.
+        </li>
+        <li>
+          Starting a deploy again for the same monitors (a retried pipeline step) extends it rather than opening a second one. Alerts are always back on
+          after <code>minutes</code>, even if the pipeline crashed before finishing.
+        </li>
+        <li>
+          The check after a deploy covers up to 10 monitors (heartbeats and paused monitors are skipped) and allows about 20 seconds; a failing monitor is
+          tried once more. Its results aren’t added to the check history: once alerts are back on, the regular checks decide whether there’s an outage.
+        </li>
+        <li>
+          Quieting alerts is part of maintenance windows, on Pro and Agency. The check on its own works on every plan, including Free:{' '}
+          <code>POST /api/v1/deploys/check</code> with the same <code>tag</code>.
+        </li>
+        <li>Recent deploys are listed under <strong>Maintenance</strong> for 30 days, and every start and finish is in the security log.</li>
+      </ul>
+    </>
+  )
+}
+

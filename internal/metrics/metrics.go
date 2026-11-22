@@ -36,7 +36,7 @@ type Metrics struct {
 	StatusPageDomainChecks *prometheus.CounterVec // result=ok|problem|no_answer|error: re-checks of status pages' custom domains
 	LifecycleEmails        *prometheus.CounterVec // kind=no_monitor_*|weekly_summary, result=sent|refused|failed
 	MonthlyReportEmails    *prometheus.CounterVec // result=sent|refused|failed
-	RetentionDeleted       *prometheus.CounterVec // kind=check_results|check_rollups|incidents|monitors|sessions|tokens
+	RetentionDeleted       *prometheus.CounterVec // kind=check_results|check_rollups|incidents|monitors|sessions|tokens|deploys|…
 	RetentionRuns          *prometheus.CounterVec // result=ok|error|skipped
 	RetentionErrors        prometheus.Counter
 	RetentionLastSuccess   prometheus.Gauge
