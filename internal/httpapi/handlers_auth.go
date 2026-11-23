@@ -85,7 +85,7 @@ type handlers struct {
 	waitlist        *waitlist.Service  // coming-soon feature waitlists; nil turns them off
 	twoFactor       *twofactor.Service // two-factor sign-in; nil turns its settings off (sign-in still enforces it for accounts that have it)
 	audit           *audit.Recorder    // the security log; nil records nothing
-	workflowChecker *checks.Checker    // test runs of multi-step API checks; nil turns them off
+	workflowChecker *checks.Checker    // test runs of multi-step API checks and test requests; nil turns them off
 	tokenRoutes     map[string]bool    // "METHOD /path" of the routes open to API keys
 }
 

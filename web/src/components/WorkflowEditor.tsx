@@ -20,20 +20,13 @@ import { key, newStep, secretNameFor, stepsInput, type SecretDraft, type StepDra
 import { Field } from './Field'
 import { Toggle } from './Toggle'
 import { WorkflowRun } from './WorkflowRun'
+import { isNumberOperator, JSON_OPERATORS, needsValue } from '../jsonRules'
 
 /**
  * The editor for a multi-step API check: numbered step cards (the same numbers as the run display), each showing only its name, method and address
  * until "More options" is opened; a row per value to save for later steps; the workflow's secrets; and Run test, which tries the workflow as it is
  * on screen without saving it.
  */
-
-const OPERATORS: { value: JsonOperator; label: string }[] = [
-  { value: 'equals', label: 'equals' },
-  { value: 'not_equals', label: 'does not equal' },
-  { value: 'contains', label: 'contains' },
-  { value: 'exists', label: 'exists' },
-  { value: 'not_exists', label: 'does not exist' },
-]
 
 const FROM: { value: ExtractFrom; label: string; placeholder: string }[] = [
   { value: 'json_path', label: 'JSON path', placeholder: 'data.token' },
@@ -317,12 +310,13 @@ function StepCard({ step: s, index: i, count, errors, onChange, onMove, onRemove
                     <>
                       <input aria-label={`Step ${n}, check ${j + 1}: path`} placeholder="data.status" value={a.path ?? ''} onChange={(e) => setAssertion(j, { path: e.target.value })} />
                       <select aria-label={`Step ${n}, check ${j + 1}: operator`} value={a.operator ?? 'equals'} onChange={(e) => setAssertion(j, { operator: e.target.value as JsonOperator })}>
-                        {OPERATORS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        {JSON_OPERATORS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
                     </>
                   )}
-                  {(a.type !== 'json_path' || (a.operator !== 'exists' && a.operator !== 'not_exists')) && (
-                    <input aria-label={`Step ${n}, check ${j + 1}: value`} placeholder={a.type === 'json_path' ? 'active' : 'Welcome'} value={a.value ?? ''}
+                  {needsValue(a) && (
+                    <input aria-label={`Step ${n}, check ${j + 1}: value`} placeholder={a.type !== 'json_path' ? 'Welcome' : isNumberOperator(a.operator) ? '500' : 'active'}
+                      inputMode={a.type === 'json_path' && isNumberOperator(a.operator) ? 'decimal' : undefined} value={a.value ?? ''}
                       onChange={(e) => setAssertion(j, { value: e.target.value })} />
                   )}
                   <button type="button" className="linklike" aria-label={`Remove check ${j + 1} of step ${n}`}

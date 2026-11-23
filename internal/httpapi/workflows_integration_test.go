@@ -198,3 +198,69 @@ func TestTestWorkflowRunsWithoutSaving(t *testing.T) {
 		t.Fatalf("invalid draft: %d %v", r.Status, r.Body)
 	}
 }
+
+func TestTestRequestRunsWithoutSaving(t *testing.T) {
+	e := newEnv(t, 100000)
+	c, _ := e.register(t, "owner@example.com")
+	// .invalid never resolves (RFC 2606), so no response arrives: the checker's own tests cover the response that is shown.
+	draft := map[string]any{"url": "https://api.hawkeye.invalid/health", "assertions": []any{
+		map[string]any{"type": "json_path", "path": "queue_size", "operator": "less_than", "value": "500"}}}
+	// Our servers send the request on demand, so it needs a verified address, as test runs of multi-step checks do.
+	if r := c.call("POST", "/api/v1/monitors/test-request", draft); r.Status != 403 || errCode(r) != "EMAIL_NOT_VERIFIED" {
+		t.Fatalf("unverified: %d %v", r.Status, r.Body)
+	}
+	e.markVerified(t, "owner@example.com")
+	r := c.call("POST", "/api/v1/monitors/test-request", draft)
+	if r.Status != 200 {
+		t.Fatalf("test: %d %v", r.Status, r.Body)
+	}
+	res := r.Body["result"].(map[string]any)
+	if res["success"] != false || res["error_category"] != "dns" || r.Body["response"] != nil || len(r.Body["checks"].([]any)) != 0 {
+		t.Fatalf("result %v", r.Body)
+	}
+	if n := e.countRows(t, `SELECT count(*) FROM monitors`); n != 0 {
+		t.Fatalf("a test request saved %d monitors", n)
+	}
+
+	// It is validated like a saved monitor, field names included, and a number comparison needs a number.
+	bad := map[string]any{"url": "http://localhost/", "assertions": []any{
+		map[string]any{"type": "json_path", "path": "queue_size", "operator": "greater_than", "value": "lots"}}}
+	if r := c.call("POST", "/api/v1/monitors/test-request", bad); r.Status != 400 || fieldErrors(r)["url"] == nil || fieldErrors(r)["assertions[0].value"] == nil {
+		t.Fatalf("invalid draft: %d %v", r.Status, r.Body)
+	}
+
+	// Editing a saved monitor: leaving the secret out uses the stored one, as saving would. Without the monitor, the secret is required.
+	m := c.call("POST", "/api/v1/monitors", map[string]any{"name": "API", "url": "https://api.hawkeye.invalid/", "auth": map[string]any{"type": "bearer", "secret": "tok"}})
+	if m.Status != 201 {
+		t.Fatalf("create: %d %v", m.Status, m.Body)
+	}
+	id := m.Body["monitor"].(map[string]any)["id"]
+	keep := map[string]any{"url": "https://api.hawkeye.invalid/", "auth": map[string]any{"type": "bearer"}}
+	if r := c.call("POST", "/api/v1/monitors/test-request", keep); r.Status != 400 || fieldErrors(r)["auth.secret"] == nil {
+		t.Fatalf("no secret, no monitor: %d %v", r.Status, r.Body)
+	}
+	keep["monitor_id"] = id
+	if r := c.call("POST", "/api/v1/monitors/test-request", keep); r.Status != 200 {
+		t.Fatalf("stored secret: %d %v", r.Status, r.Body)
+	}
+	// Another organization's monitor is not found.
+	other, _ := e.register(t, "other@example.com")
+	e.markVerified(t, "other@example.com")
+	if r := other.call("POST", "/api/v1/monitors/test-request", keep); r.Status != 404 {
+		t.Fatalf("other org: %d %v", r.Status, r.Body)
+	}
+}
+
+func TestNumberComparisonsAreSaved(t *testing.T) {
+	e := newEnv(t, 100000)
+	c, _ := e.register(t, "owner@example.com")
+	r := c.call("POST", "/api/v1/monitors", map[string]any{"name": "Queue", "url": "https://api.example.com/health", "assertions": []any{
+		map[string]any{"type": "json_path", "path": "queue_size", "operator": "less_or_equal", "value": " 500 "}}})
+	if r.Status != 201 {
+		t.Fatalf("create: %d %v", r.Status, r.Body)
+	}
+	a := r.Body["monitor"].(map[string]any)["assertions"].([]any)[0].(map[string]any)
+	if a["operator"] != "less_or_equal" || a["value"] != "500" {
+		t.Fatalf("saved %v", a)
+	}
+}

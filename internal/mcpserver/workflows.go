@@ -43,7 +43,7 @@ type WorkflowStep struct {
 	AuthHeaderName string              `json:"auth_header_name,omitempty" jsonschema:"for header, such as X-API-Key"`
 	AuthValue      string              `json:"auth_value,omitempty" jsonschema:"the password, token or key, written only as a placeholder: {{token}} saved by an earlier step, or {{secret.name}}"`
 	ExpectedStatus int                 `json:"expected_status,omitempty" jsonschema:"the status code the step must return; absent: any status below 400"`
-	Checks         []checks.Assertion  `json:"checks,omitempty" jsonschema:"conditions on the response body: body_contains, body_not_contains, or json_path with an operator (equals, not_equals, contains, exists, not_exists)"`
+	Checks         []checks.Assertion  `json:"checks,omitempty" jsonschema:"conditions on the response body: body_contains, body_not_contains, or json_path with an operator (equals, not_equals, contains, exists, not_exists, or the number comparisons greater_than, greater_or_equal, less_than, less_or_equal, whose value must be a number)"`
 	Save           []checks.Extraction `json:"save,omitempty" jsonschema:"values to save for later steps: {name, from (json_path, header or cookie), path}"`
 	TimeoutSeconds int                 `json:"timeout_seconds,omitempty" jsonschema:"1 to 30; default 10"`
 }

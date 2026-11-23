@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"hawkeye/internal/safehttp"
 )
@@ -131,6 +132,46 @@ func NewChecker(cfg safehttp.Config) *Checker {
 func (c *Checker) Check(ctx context.Context, t Target) (Result, error) {
 	res, _, err := c.run(ctx, t, nil, false)
 	return res, err
+}
+
+// MaxPreviewBytes bounds the response body a test request shows. Larger bodies are still checked (up to MaxBodyBytes), just not shown.
+const MaxPreviewBytes = 256 << 10
+
+// Preview is what a test request shows of the response, so rules can be written from it. It goes back to the person who asked and is never
+// stored or logged.
+type Preview struct {
+	Body      string // the body as text, up to MaxPreviewBytes; empty when Binary or there was no response
+	Truncated bool   // the body was longer than what is shown
+	Binary    bool   // the body is not UTF-8 text, so it isn't shown
+	// Checks has one entry per assertion of the target, in order: "" when it holds, otherwise why not. Nil when no response arrived.
+	Checks []string
+}
+
+// TryRequest runs one check like Check and also returns the response for the person testing it, with every assertion's outcome (Check stops
+// at the first failure). Assertions are evaluated even when the status check fails, so a test of a broken endpoint still shows each rule.
+func (c *Checker) TryRequest(ctx context.Context, t Target) (Result, Preview, error) {
+	res, kept, err := c.run(ctx, t, nil, true)
+	if err != nil || kept == nil {
+		return res, Preview{}, err
+	}
+	p := Preview{Checks: EvaluateEach(t.Assertions, kept.body, kept.truncated)}
+	if shown := kept.body[:validPrefix(kept.body, MaxPreviewBytes)]; utf8.Valid(shown) {
+		p.Body, p.Truncated = string(shown), len(shown) < len(kept.body) || kept.truncated
+	} else {
+		p.Binary = true
+	}
+	return res, p, nil
+}
+
+// validPrefix is the length of b cut to at most n bytes without splitting a UTF-8 character.
+func validPrefix(b []byte, n int) int {
+	if len(b) <= n {
+		return len(b)
+	}
+	for n > 0 && !utf8.RuneStart(b[n]) {
+		n--
+	}
+	return n
 }
 
 // response is what a workflow step keeps of a response for extracting values: never stored, and gone when the run ends.

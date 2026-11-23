@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -19,7 +21,22 @@ const (
 	OpContains  = "contains"
 	OpExists    = "exists"
 	OpNotExists = "not_exists"
+
+	// Number comparisons: the value at the path must be a number (or a string holding one), compared with the rule's value.
+	OpGreaterThan    = "greater_than"
+	OpGreaterOrEqual = "greater_or_equal"
+	OpLessThan       = "less_than"
+	OpLessOrEqual    = "less_or_equal"
 )
+
+// NumberOperators are the JSON operators that compare numbers; their value must be a number.
+var NumberOperators = []string{OpGreaterThan, OpGreaterOrEqual, OpLessThan, OpLessOrEqual}
+
+// ParseNumber reads a rule's number, refusing NaN and infinities (which compare with nothing).
+func ParseNumber(s string) (float64, bool) {
+	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	return f, err == nil && !math.IsNaN(f) && !math.IsInf(f, 0)
+}
 
 // Authentication types. The secret is sent as the Basic password, the Bearer token, or the header value.
 const (
@@ -167,64 +184,144 @@ func contains(v any, want string) bool {
 	return false
 }
 
+// numberOf reads a JSON value as a number: a JSON number, or a string that holds one (some APIs send counts as "512").
+func numberOf(v any) (float64, bool) {
+	switch x := v.(type) {
+	case json.Number:
+		return ParseNumber(x.String())
+	case string:
+		return ParseNumber(x)
+	}
+	return 0, false
+}
+
+func compare(op string, got, want float64) bool {
+	switch op {
+	case OpGreaterThan:
+		return got > want
+	case OpGreaterOrEqual:
+		return got >= want
+	case OpLessThan:
+		return got < want
+	case OpLessOrEqual:
+		return got <= want
+	}
+	return false
+}
+
+// body is a response body as assertions see it, parsed as JSON once, when the first JSON assertion needs it.
+type body struct {
+	raw       []byte
+	truncated bool
+	parsed    bool
+	doc       any
+	parseErr  string
+}
+
+func (b *body) json() (any, string) {
+	if !b.parsed {
+		b.parsed = true
+		switch {
+		case b.truncated:
+			b.parseErr = "Response body is too large to check as JSON"
+		default:
+			dec := json.NewDecoder(bytes.NewReader(b.raw))
+			dec.UseNumber()
+			if err := dec.Decode(&b.doc); err != nil || dec.More() {
+				b.parseErr = "Response body is not valid JSON"
+			}
+		}
+	}
+	return b.doc, b.parseErr
+}
+
 // evaluate runs assertions in order and returns a summary for the first failure, or "" when all pass.
 // Summaries name the assertion, never response content, because they are stored and emailed.
-func evaluate(as []Assertion, body []byte, truncated bool) string {
-	var doc any
-	parsed, parseErr := false, ""
+func evaluate(as []Assertion, raw []byte, truncated bool) string {
+	b := &body{raw: raw, truncated: truncated}
 	for _, a := range as {
-		switch a.Type {
-		case AssertBodyContains:
-			if !bytes.Contains(body, []byte(a.Value)) {
-				return fmt.Sprintf("The page does not contain %q", a.Value)
-			}
-		case AssertBodyNotContains:
-			if bytes.Contains(body, []byte(a.Value)) {
-				return fmt.Sprintf("The page contains %q", a.Value)
-			}
-		case AssertJSONPath:
-			if !parsed {
-				parsed = true
-				switch {
-				case truncated:
-					parseErr = "Response body is too large to check as JSON"
-				default:
-					dec := json.NewDecoder(bytes.NewReader(body))
-					dec.UseNumber()
-					if err := dec.Decode(&doc); err != nil || dec.More() {
-						parseErr = "Response body is not valid JSON"
-					}
-				}
-			}
-			if parseErr != "" {
-				return parseErr
-			}
-			steps, err := parsePath(a.Path)
-			if err != nil {
-				return fmt.Sprintf("Invalid JSON path %q", a.Path)
-			}
-			v, found := lookup(doc, steps)
-			var ok bool
-			switch a.Operator {
-			case OpExists:
-				ok = found
-			case OpNotExists:
-				ok = !found
-			case OpEquals:
-				ok = found && matches(v, a.Value)
-			case OpNotEquals:
-				ok = found && !matches(v, a.Value)
-			case OpContains:
-				ok = found && contains(v, a.Value)
-			}
-			if !ok {
-				return jsonFailure(a, found)
-			}
-		default:
-			return fmt.Sprintf("Unknown assertion %q", a.Type)
+		if msg := evaluateOne(a, b); msg != "" {
+			return msg
 		}
 	}
 	return ""
+}
+
+// EvaluateEach runs every assertion, not only up to the first failure, and returns a summary per assertion ("" when it passes). Test requests
+// use it to show which rules hold.
+func EvaluateEach(as []Assertion, raw []byte, truncated bool) []string {
+	b := &body{raw: raw, truncated: truncated}
+	out := make([]string, len(as))
+	for i, a := range as {
+		out[i] = truncate(evaluateOne(a, b), maxSummaryLen)
+	}
+	return out
+}
+
+func evaluateOne(a Assertion, b *body) string {
+	switch a.Type {
+	case AssertBodyContains:
+		if !bytes.Contains(b.raw, []byte(a.Value)) {
+			return fmt.Sprintf("The page does not contain %q", a.Value)
+		}
+	case AssertBodyNotContains:
+		if bytes.Contains(b.raw, []byte(a.Value)) {
+			return fmt.Sprintf("The page contains %q", a.Value)
+		}
+	case AssertJSONPath:
+		doc, parseErr := b.json()
+		if parseErr != "" {
+			return parseErr
+		}
+		steps, err := parsePath(a.Path)
+		if err != nil {
+			return fmt.Sprintf("Invalid JSON path %q", a.Path)
+		}
+		v, found := lookup(doc, steps)
+		if slices.Contains(NumberOperators, a.Operator) {
+			return numberFailure(a, v, found)
+		}
+		var ok bool
+		switch a.Operator {
+		case OpExists:
+			ok = found
+		case OpNotExists:
+			ok = !found
+		case OpEquals:
+			ok = found && matches(v, a.Value)
+		case OpNotEquals:
+			ok = found && !matches(v, a.Value)
+		case OpContains:
+			ok = found && contains(v, a.Value)
+		}
+		if !ok {
+			return jsonFailure(a, found)
+		}
+	default:
+		return fmt.Sprintf("Unknown assertion %q", a.Type)
+	}
+	return ""
+}
+
+// numberFailure checks a number comparison and describes a failure, or returns "" when it holds. As elsewhere, the summary never includes the
+// value found, which is response content.
+func numberFailure(a Assertion, v any, found bool) string {
+	if !found {
+		return fmt.Sprintf("JSON path %s not found", a.Path)
+	}
+	want, ok := ParseNumber(a.Value)
+	if !ok {
+		return fmt.Sprintf("JSON check on %s has no number to compare with", a.Path)
+	}
+	got, ok := numberOf(v)
+	if !ok {
+		return fmt.Sprintf("JSON path %s is not a number", a.Path)
+	}
+	if compare(a.Operator, got, want) {
+		return ""
+	}
+	words := map[string]string{OpGreaterThan: "greater than", OpGreaterOrEqual: "at least", OpLessThan: "less than", OpLessOrEqual: "at most"}
+	return fmt.Sprintf("JSON path %s is not %s %s", a.Path, words[a.Operator], strings.TrimSpace(a.Value))
 }
 
 func jsonFailure(a Assertion, found bool) string {

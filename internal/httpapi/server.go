@@ -88,7 +88,8 @@ type Options struct {
 	OAuth         *oauth.Service         // OAuth for the MCP server (connecting Claude); nil turns it off
 	Waitlist      *waitlist.Service      // "Get notified" waitlists for coming-soon features; nil turns them off
 	Audit         *audit.Recorder        // the security log; nil records nothing and turns its pages off
-	// WorkflowChecker runs test runs of multi-step API checks (POST /monitors/test-workflow); nil turns that endpoint off.
+	// WorkflowChecker runs test runs of multi-step API checks (POST /monitors/test-workflow) and test requests from the monitor form
+	// (POST /monitors/test-request); nil turns both endpoints off.
 	WorkflowChecker *checks.Checker
 	AppBaseURL      string   // public address of the app (status page and ping addresses in MCP tool results)
 	Version         string   // reported by the MCP server
@@ -408,6 +409,8 @@ func registerAPI(e *echo.Echo, o Options) {
 		testLimits = append(testLimits, h.limits.by("test-workflow:org", 60, time.Hour, func(c *echo.Context) string { return currentOrg(c).String() }))
 	}
 	scoped.POST("/monitors/test-workflow", h.testWorkflow, testLimits...)
+	// A test request from the monitor form shares those budgets: it is the same kind of on-demand request.
+	scoped.POST("/monitors/test-request", h.testRequest, testLimits...)
 	// Setting up from a domain sends a dozen GETs to the named site from our servers: per-IP and per-organization budgets, on top of the per-host
 	// limit inside discovery. Open to API keys, so an assistant can propose monitors too.
 	setupLimits := []echo.MiddlewareFunc{limit("monitor-suggestions")}

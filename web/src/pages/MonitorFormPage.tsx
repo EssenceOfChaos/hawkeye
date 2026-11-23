@@ -23,6 +23,7 @@ import {
   type RequestHeader,
   type QuietHours,
   type RecheckSetting,
+  type RequestTest,
   type TagSummary,
   type WorkflowInput,
 } from '../api'
@@ -35,6 +36,8 @@ import { DurationField } from '../components/Heartbeat'
 import { Toggle } from '../components/Toggle'
 import { CurlImport } from '../components/CurlImport'
 import { WorkflowEditor } from '../components/WorkflowEditor'
+import { TestRequest, type SentTest } from '../components/TestRequest'
+import { isNumberOperator, JSON_OPERATORS, needsValue } from '../jsonRules'
 import { suggestName, type CurlRequest } from '../curl'
 import { draftsFrom, newStep, secretsInput, stepsInput, usesWriteMethod, type SecretDraft, type StepDraft } from '../workflowDrafts'
 
@@ -49,15 +52,6 @@ function limitMessage(e: ApiError): string {
   return next ? `${e.message} ${next.name} includes ${next.max_monitors} monitors.` : e.message
 }
 
-const OPERATORS: { value: JsonOperator; label: string }[] = [
-  { value: 'equals', label: 'equals' },
-  { value: 'not_equals', label: 'does not equal' },
-  { value: 'contains', label: 'contains' },
-  { value: 'exists', label: 'exists' },
-  { value: 'not_exists', label: 'does not exist' },
-]
-
-const needsValue = (a: Assertion) => a.type !== 'json_path' || (a.operator !== 'exists' && a.operator !== 'not_exists')
 
 /** A field error shown under a row of inputs that has no single label. */
 function RowError({ id, children }: { id: string; children?: string }) {
@@ -285,24 +279,9 @@ export function MonitorFormPage() {
     if (kind === 'heartbeat') return onSubmitHeartbeat()
     if (kind === 'dns') return onSubmitDns()
     if (kind === 'workflow') return onSubmitWorkflow()
-    // Text checks first, then JSON checks. Empty text rows are dropped rather than refused.
-    const checks: { assertion: Assertion; origin: Origin }[] = [
-      ...contains.map((v, row) => ({ v, row })).filter((x) => x.v.trim() !== '')
-        .map(({ v, row }) => ({ assertion: { type: 'body_contains' as const, value: v }, origin: { list: 'contains' as const, row } })),
-      ...notContains.map((v, row) => ({ v, row })).filter((x) => x.v.trim() !== '')
-        .map(({ v, row }) => ({ assertion: { type: 'body_not_contains' as const, value: v }, origin: { list: 'notContains' as const, row } })),
-      ...assertions.map((a, row) => ({ assertion: a, origin: { list: 'json' as const, row } })),
-    ]
-    setSent(checks.map((c) => c.origin))
     const payload: MonitorInput = {
       name,
-      url,
-      method,
-      expected_status_code: expected === '' ? null : Number(expected),
-      headers: headers.filter((h) => h.name.trim() !== '' || h.value !== ''),
-      body: bodyAllowed && body !== '' ? body : null,
-      auth: { type: authType },
-      assertions: assertionsAllowed ? checks.map((c) => c.assertion) : [],
+      ...requestFields(),
       slow_threshold_ms: slowOn ? Number(slowMs) : null,
       slow_checks: Number(slowChecks),
       trace_context: traceOn,
@@ -312,9 +291,6 @@ export function MonitorFormPage() {
       quiet_hours: quiet,
     }
     if (allRegions.length > 1) payload.regions = chosen
-    if (authType === 'basic') payload.auth!.username = authUsername
-    if (authType === 'header') payload.auth!.header_name = authHeaderName
-    if (authType !== 'none' && authSecret !== '') payload.auth!.secret = authSecret
     if (intervalSeconds() !== undefined) payload.check_interval_seconds = intervalSeconds()
     try {
       if (editing) await api('PATCH', `/monitors/${monitorID}`, payload)
@@ -324,6 +300,47 @@ export function MonitorFormPage() {
       setError(err instanceof ApiError ? err : new ApiError(0, 'NETWORK', 'Could not reach the server. Try again.'))
     } finally {
       setBusy(false)
+    }
+  }
+
+  /**
+   * The request and its checks as the form has them, shared by saving and by a test request. Text checks come first, then JSON checks; empty text
+   * rows are dropped rather than refused. Records where each check came from, so field errors land on the right row.
+   */
+  function requestFields() {
+    const checks: { assertion: Assertion; origin: Origin }[] = [
+      ...contains.map((v, row) => ({ v, row })).filter((x) => x.v.trim() !== '')
+        .map(({ v, row }) => ({ assertion: { type: 'body_contains' as const, value: v }, origin: { list: 'contains' as const, row } })),
+      ...notContains.map((v, row) => ({ v, row })).filter((x) => x.v.trim() !== '')
+        .map(({ v, row }) => ({ assertion: { type: 'body_not_contains' as const, value: v }, origin: { list: 'notContains' as const, row } })),
+      ...assertions.map((a, row) => ({ assertion: a, origin: { list: 'json' as const, row } })),
+    ]
+    setSent(checks.map((c) => c.origin))
+    const auth: MonitorInput['auth'] = { type: authType }
+    if (authType === 'basic') auth.username = authUsername
+    if (authType === 'header') auth.header_name = authHeaderName
+    if (authType !== 'none' && authSecret !== '') auth.secret = authSecret
+    return {
+      url,
+      method,
+      expected_status_code: expected === '' ? null : Number(expected),
+      headers: headers.filter((h) => h.name.trim() !== '' || h.value !== ''),
+      body: bodyAllowed && body !== '' ? body : null,
+      auth,
+      assertions: assertionsAllowed ? checks.map((c) => c.assertion) : [],
+    }
+  }
+
+  // Sends the form's request once without saving it. Field errors are shown on the form, like saving's; the response stays in TestRequest.
+  async function runTest(): Promise<SentTest> {
+    setError(null)
+    const fields = requestFields()
+    try {
+      const result = await api<RequestTest>('POST', '/monitors/test-request', { ...fields, monitor_id: editing ? monitorID : undefined })
+      return { result, rules: fields.assertions }
+    } catch (e) {
+      if (e instanceof ApiError && Object.keys(e.fields ?? {}).length > 0) setError(e)
+      throw e
     }
   }
 
@@ -617,7 +634,7 @@ export function MonitorFormPage() {
                         onChange={(e) => setAssertion(i, { path: e.target.value })} />
                       <select aria-label={`JSON check ${i + 1} operator`} value={a.operator ?? 'equals'}
                         onChange={(e) => setAssertion(i, { operator: e.target.value as JsonOperator })}>
-                        {OPERATORS.map((o) => (
+                        {JSON_OPERATORS.map((o) => (
                           <option key={o.value} value={o.value}>{o.label}</option>
                         ))}
                       </select>
@@ -626,8 +643,8 @@ export function MonitorFormPage() {
                     </div>
                     {needsValue(a) && (
                       <div className="kv-row">
-                        <input aria-label={`JSON check ${i + 1} value`} placeholder="ok"
-                          value={a.value ?? ''} aria-invalid={errorAt('json', i) ? true : undefined}
+                        <input aria-label={`JSON check ${i + 1} value`} placeholder={isNumberOperator(a.operator) ? '500' : 'ok'}
+                          inputMode={isNumberOperator(a.operator) ? 'decimal' : undefined} value={a.value ?? ''} aria-invalid={errorAt('json', i) ? true : undefined}
                           onChange={(e) => setAssertion(i, { value: e.target.value })} />
                       </div>
                     )}
@@ -644,11 +661,15 @@ export function MonitorFormPage() {
                 </div>
               )}
               <small className="hint">
-                For an API that answers in JSON: check a value at a path such as data.items[0].status. Every check (text and JSON) must pass for the monitor to
-                count as online; up to {MAX_CHECKS} in total.
+                For an API that answers in JSON: check a value at a path such as data.items[0].status, or compare a number, such as queue_size is at
+                most 500. Send a test request below to pick fields from the response. Every check (text and JSON) must pass for the monitor to count as
+                online; up to {MAX_CHECKS} in total.
               </small>
             </div>
           </fieldset>
+
+          <TestRequest run={runTest} full={totalChecks >= MAX_CHECKS}
+            onAddRule={(a) => setAssertions((as) => [...as, a])} />
 
           <fieldset className="group">
             <legend>Slow-response alert</legend>

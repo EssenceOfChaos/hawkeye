@@ -1000,3 +1000,24 @@ button.value-chip { font: .85rem/1.4 var(--font-mono); padding: .1rem .55rem; bo
 .flag { display: inline-block; width: 18px; height: 12px; border-radius: 2px; box-shadow: 0 0 0 1px #ffffff26; flex: none; }
 .location-picker > label { display: inline-flex; align-items: center; gap: .35rem; margin-right: 1.25rem; } /* each location reads as its own choice */
 .location-picker > small { display: block; margin-top: .35rem; }
+
+/* Test request (monitor form): the response, each check's result, and a JSON response whose fields can be clicked to make a check. */
+.test-request .test-outcome { display: grid; gap: .35rem; margin-top: .75rem; }
+.test-request .test-outcome p { margin: 0; }
+.test-verdict.up strong, .test-checks .up > span:first-child { color: var(--up); }
+.test-verdict.down strong, .test-checks .down > span:first-child { color: var(--down); }
+.test-checks { list-style: none; margin: .25rem 0; padding: 0; display: grid; gap: .2rem; font-size: .92rem; overflow-wrap: anywhere; }
+.test-body { margin: .25rem 0 0; max-height: 22rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: .85rem/1.5 var(--font-mono);
+  padding: .6rem .8rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--panel-2); }
+.json-tree { list-style: none; margin: .25rem 0 0; padding: .4rem 0; max-height: 26rem; overflow: auto; border: 1px solid var(--line); border-radius: .45rem;
+  background: var(--panel-2); font: .85rem/1.5 var(--font-mono); }
+.json-tree li { padding-right: .5rem; }
+button.json-row { display: block; width: 100%; text-align: left; font: inherit; color: var(--text); background: transparent; border: 0; border-radius: .3rem;
+  padding: .05rem .5rem; cursor: pointer; overflow-wrap: anywhere; }
+button.json-row:hover:not(:disabled), button.json-row[aria-pressed="true"] { background: var(--panel-hi); }
+button.json-row:disabled { cursor: default; opacity: .6; }
+.json-key { color: var(--gold-hi); }
+.json-string { color: #9ecbff; }
+.json-literal { color: #c3e88d; }
+.json-pick { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: .3rem 0 .4rem .5rem; font-family: var(--font-body); }
+.json-pick code { overflow-wrap: anywhere; }

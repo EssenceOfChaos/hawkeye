@@ -33,7 +33,7 @@ export function GettingStarted() {
         <li>
           <strong>A website or API.</strong> Enter its address. HawkEye requests it on a schedule (every 5 minutes on Free, every minute on Pro, as often as every 30 seconds on Agency)
           and opens an incident when the failure is confirmed: a failed check is checked again 15 seconds later, so a single blip never alerts anyone. You can also
-          check for words on the page, check JSON values, send headers or authentication, get warned about slow responses, and send a trace context header so each check shows up in your tracing tool. For an API, choose <strong>Paste a cURL command</strong>: paste one
+          check for words on the page, check JSON values (see <a href="#json-checks">Checking what an API returns</a>), send headers or authentication, get warned about slow responses, and send a trace context header so each check shows up in your tracing tool. For an API, choose <strong>Paste a cURL command</strong>: paste one
           from your API docs, a terminal or your browser’s developer tools (Copy as cURL), and HawkEye fills in the address, method, headers, body and
           authentication. It is read in your browser, and a token it finds goes into the encrypted authentication field rather than a plain header. Have an
           OpenAPI (3.x) or Swagger (2.0) file, or a Postman collection (v2.1)? Choose <strong>Import from OpenAPI or Postman</strong> on the{' '}
@@ -64,6 +64,17 @@ export function GettingStarted() {
         <li><strong>Uptime badges</strong> put a live uptime figure on a website or in a README. Turn one on from a monitor’s page.</li>
         <li><strong>Monthly PDF reports</strong> (Pro and Agency) summarize each site’s uptime for clients or managers.</li>
       </ul>
+      <h2 id="json-checks">Checking what an API returns</h2>
+      <p>
+        An API can answer 200 and still be unhealthy. Under <strong>Response checks</strong>, a JSON check reads a value at a path such as{' '}
+        <code>database.status</code> or <code>data.items[0].state</code> and checks that it equals, doesn’t equal or contains something, exists, or, for
+        numbers, is greater than, at least, less than or at most a number: <code>queue_size</code> is at most <code>500</code>, for example.
+      </p>
+      <p>
+        You don’t have to type paths. Choose <strong>Send test request</strong> and HawkEye sends the request once and shows the response. Click a field
+        to add a check for it, then change the value or comparison if you need to. The test shows whether each check passes. Nothing is saved until you
+        save the monitor, and the response is never stored.
+      </p>
       <h2 id="certificates">Certificates and domains</h2>
       <p>
         HTTPS monitors also watch their site’s certificate and warn you 30, 14, 7 and 1 days before it expires. The <strong>Domains</strong> page warns
