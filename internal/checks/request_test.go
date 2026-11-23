@@ -238,7 +238,9 @@ func TestTryRequestShowsTheResponseAndEveryCheck(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewChecker(loopbackCfg())
-	jp := func(path, op, v string) Assertion { return Assertion{Type: AssertJSONPath, Path: path, Operator: op, Value: v} }
+	jp := func(path, op, v string) Assertion {
+		return Assertion{Type: AssertJSONPath, Path: path, Operator: op, Value: v}
+	}
 	as := []Assertion{jp("status", OpEquals, "ok"), jp("queue", OpGreaterThan, "10"), jp("queue", OpLessThan, "10")}
 
 	res, p, err := c.TryRequest(t.Context(), Target{URL: srv.URL, Method: "GET", Timeout: 5 * time.Second, Assertions: as})
