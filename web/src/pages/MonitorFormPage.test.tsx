@@ -400,8 +400,24 @@ describe('MonitorFormPage: DNS monitors', () => {
     const post = vi.mocked(globalThis.fetch).mock.calls.find(([, init]) => init?.method === 'POST')!
     expect(JSON.parse(post[1]!.body as string)).toEqual({
       type: 'dns', name: 'Mail', url: 'example.com', dns_record_type: 'MX', dns_expected: 'mail.example.com', tag_ids: [], alert_delay_minutes: 0, quiet_hours: null,
-      recheck: 'auto',
+      recheck: 'auto', dns_change_alerts: true, dns_change_strict: false,
     })
+  })
+
+  it('alerts on changes by default, with the strict option only for addresses', async () => {
+    stub(() => json(201, { monitor: { id: 'd1' } }))
+    newDns()
+    await userEvent.type(screen.getByLabelText('Name'), 'Site')
+    await userEvent.type(screen.getByLabelText('Host name'), 'example.com')
+    expect(screen.getByRole('checkbox', { name: 'Alert me when this record changes' })).toBeChecked()
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Alert on any address change' })) // A records: offered
+    await userEvent.selectOptions(screen.getByLabelText('Record type'), 'NS')
+    expect(screen.queryByRole('checkbox', { name: 'Alert on any address change' })).not.toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Record type'), 'AAAA')
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    expect(await screen.findByRole('heading', { name: 'Monitor list' })).toBeInTheDocument()
+    const post = vi.mocked(globalThis.fetch).mock.calls.find(([, init]) => init?.method === 'POST')!
+    expect(JSON.parse(post[1]!.body as string)).toMatchObject({ dns_record_type: 'AAAA', dns_change_alerts: true, dns_change_strict: true })
   })
 
   it('sends no expected value when it is left empty, and clears it when the record type changes', async () => {

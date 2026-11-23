@@ -72,6 +72,7 @@ func (c *Checker) CheckDNS(ctx context.Context, t DNSTarget) (Result, error) {
 	}
 	elapsed := int(res.FinishedAt.Sub(res.CheckedAt) / time.Millisecond)
 	res.ResponseTimeMs = &elapsed
+	res.DNSAnswers = NormalizeDNSAnswers(answers)
 	if t.Expected != "" && !answerMatches(t.RecordType, t.Expected, answers) {
 		// Summaries name the customer's own expected value, never the answers: they are stored and emailed, like assertion failures.
 		res.ErrorCategory = CatAssertion

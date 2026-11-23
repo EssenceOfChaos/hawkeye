@@ -91,6 +91,10 @@ func pagerDutyKeys(a Alert) (dedup, action, severity string) {
 		return "hawkeye:test:" + a.TestID, "trigger", "info"
 	case EventRecovery:
 		return "hawkeye:incident:" + a.MonitorID + ":" + unix(a.StartedAt), "resolve", ""
+	case EventDNSChange:
+		return "hawkeye:dns-change:" + a.MonitorID + ":" + unix(a.StartedAt), "trigger", "warning"
+	case EventDNSChangeClosed:
+		return "hawkeye:dns-change:" + a.MonitorID + ":" + unix(a.StartedAt), "resolve", ""
 	case EventSlow:
 		return "hawkeye:slowdown:" + a.MonitorID + ":" + unix(a.StartedAt), "trigger", "warning"
 	case EventSlowRecovery:

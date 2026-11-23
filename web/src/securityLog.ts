@@ -111,6 +111,7 @@ export const sentences: Record<string, (e: LogEvent) => string> = {
   'monitor.badge_enabled': (e) => `Turned on the public uptime badge for ${name(e)}`,
   'monitor.badge_disabled': (e) => `Turned off the public uptime badge for ${name(e)}`,
   'monitor.ping_address_rotated': (e) => `Made a new ping address for ${name(e)} (the old one stopped working)`,
+  'monitor.dns_change_accepted': (e) => `Marked the DNS change of ${name(e)} as intended`,
   'status_page.created': (e) => `Created the status page ${name(e)}`,
   'status_page.changed': (e) =>
     e.details.logo === 'uploaded' ? `Uploaded a logo for the status page ${name(e)}`

@@ -42,6 +42,14 @@ type Alert struct {
 	SlowThresholdMs int
 	SlowPeakMs      int
 	SlowCause       string // what got slower, compared with the past week; empty when it can't be said
+
+	// DNS change alerts (EventDNSChange, EventDNSChangeClosed): the record type, its answers before and after, how the change closed (accepted or
+	// reverted; "open" for the first alert) and who accepted it. StartedAt is when it was detected, ResolvedAt when it closed.
+	DNSRecordType string
+	DNSBefore     []string
+	DNSAfter      []string
+	DNSStatus     string
+	DNSAcceptedBy string
 }
 
 // IsHeartbeat reports whether the alert is about a heartbeat (cron job) monitor, which has no website to name.
@@ -111,6 +119,9 @@ func Render(a Alert) email.Message {
 	}
 	if a.Event == EventSlow || a.Event == EventSlowRecovery {
 		return renderSlow(a, name, url)
+	}
+	if a.Event == EventDNSChange || a.Event == EventDNSChangeClosed {
+		return renderDNSChange(a, url)
 	}
 	if a.IsHeartbeat() {
 		return renderHeartbeat(a, name)
@@ -397,6 +408,55 @@ func renderDomain(a Alert) email.Message {
 			c.Paragraphs = append(c.Paragraphs, "HawkEye will remind you again as the date approaches.")
 		}
 		c.Facts = append(c.Facts, email.Fact{Label: "Time remaining", Value: left})
+	}
+	return c.Message(a.From, a.To, subject)
+}
+
+// answerList is a set of DNS answers as one line of text.
+func answerList(answers []string) string {
+	if len(answers) == 0 {
+		return "(none)"
+	}
+	out := make([]string, len(answers))
+	for i, a := range answers {
+		out[i] = clean(a)
+	}
+	return strings.Join(out, ", ")
+}
+
+// renderDNSChange is the DNS change alert and its follow-up (accepted, or changed back). A change is a warning, not an outage: the site may be
+// working perfectly, and the change may be intended.
+func renderDNSChange(a Alert, host string) email.Message {
+	record := a.DNSRecordType + " record of " + host
+	c := email.Content{
+		ButtonLabel: "Review the change", ButtonURL: a.AppBaseURL + "/monitors/" + a.MonitorID, AppBaseURL: a.AppBaseURL,
+		Note:  "Turn DNS change alerts off in the monitor's settings. Manage who receives alerts: " + a.AppBaseURL + "/notifications",
+		Facts: []email.Fact{{Label: "Record", Value: record}, {Label: "Before", Value: answerList(a.DNSBefore)}, {Label: "After", Value: answerList(a.DNSAfter)}},
+	}
+	if a.Event == EventDNSChangeClosed {
+		c.Tone = email.ToneSuccess
+		if a.DNSStatus == "accepted" {
+			who := "Someone on your team"
+			if a.DNSAcceptedBy != "" {
+				who = clean(a.DNSAcceptedBy)
+			}
+			subject := "HawkEye: the DNS change for " + host + " was accepted"
+			c.Preheader, c.Heading = who+" marked the change as intended.", "The DNS change for "+host+" was accepted"
+			c.Paragraphs = []string{who + " marked the change to the " + record + " as intended. Its new answers are now the ones HawkEye expects."}
+			return c.Message(a.From, a.To, subject)
+		}
+		subject := "HawkEye: the DNS record for " + host + " changed back"
+		c.Preheader, c.Heading = "The "+record+" is back to what it was.", "The DNS record for "+host+" changed back"
+		c.Paragraphs = []string{"The " + record + " is answering as it did before the change, so the change is closed."}
+		return c.Message(a.From, a.To, subject)
+	}
+	subject := "HawkEye alert: DNS record changed for " + host
+	c.Preheader = "The " + record + " changed. Check that it was intended."
+	c.Heading = "DNS record changed for " + host
+	c.Paragraphs = []string{
+		"The " + record + " has answered differently in several checks in a row. The website may well be working: this is about what changed.",
+		"If you or your team made this change, open the monitor and mark it as intended. If not, check your domain registrar and DNS provider " +
+			"accounts now: an unexpected change of name servers or mail servers is how domains are hijacked and email goes astray.",
 	}
 	return c.Message(a.From, a.To, subject)
 }

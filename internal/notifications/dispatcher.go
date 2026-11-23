@@ -138,24 +138,28 @@ func (d *Dispatcher) ProcessOne(ctx context.Context) (bool, error) {
 				next_attempt_at = now() + $1::interval
 			WHERE id = (SELECT id FROM notification_deliveries WHERE status = 'pending' AND next_attempt_at <= now()
 				ORDER BY next_attempt_at FOR UPDATE SKIP LOCKED LIMIT 1)
-			RETURNING id, incident_id, monitor_id, domain_id, slowdown_id, notification_setting_id, event_type, attempt_count, ssl_expires_at, ssl_bucket,
-				domain_expires_at, domain_bucket)
+			RETURNING id, incident_id, monitor_id, domain_id, slowdown_id, dns_change_id, notification_setting_id, event_type, attempt_count, ssl_expires_at,
+				ssl_bucket, domain_expires_at, domain_bucket)
 		SELECT p.id, s.id, s.channel, s.hawkeye_bot, COALESCE(s.signing_secret, ''), p.attempt_count, p.event_type, s.destination, s.enabled, s.verified_at IS NOT NULL,
-			COALESCE(i.started_at, sd.started_at, now()), COALESCE(i.resolved_at, sd.resolved_at), COALESCE(i.summary, ''), COALESCE(m.id::text, ''), COALESCE(m.name, ''), COALESCE(m.url, ''), COALESCE(m.kind, 'http'),
+			COALESCE(i.started_at, sd.started_at, dc.detected_at, now()), COALESCE(i.resolved_at, sd.resolved_at, dc.closed_at), COALESCE(i.summary, ''), COALESCE(m.id::text, ''), COALESCE(m.name, ''), COALESCE(m.url, ''), COALESCE(m.kind, 'http'),
 			COALESCE(p.ssl_expires_at, now()), COALESCE(p.ssl_bucket, 0),
 			COALESCE(dm.name, ''), COALESCE(p.domain_expires_at, now()), COALESCE(p.domain_bucket, 0),
-			COALESCE(sd.threshold_ms, 0), COALESCE(sd.peak_ms, 0), COALESCE(sd.cause, '')
+			COALESCE(sd.threshold_ms, 0), COALESCE(sd.peak_ms, 0), COALESCE(sd.cause, ''),
+			COALESCE(dc.record_type, ''), COALESCE(dc.before, '{}'), COALESCE(dc.after, '{}'), COALESCE(dc.status, ''), COALESCE(au.email, '')
 		FROM picked p
 		JOIN notification_settings s ON s.id = p.notification_setting_id
 		LEFT JOIN incidents i ON i.id = p.incident_id
 		LEFT JOIN slowdowns sd ON sd.id = p.slowdown_id
-		LEFT JOIN monitors m ON m.id = COALESCE(i.monitor_id, p.monitor_id, sd.monitor_id)
+		LEFT JOIN dns_changes dc ON dc.id = p.dns_change_id
+		LEFT JOIN users au ON au.id = dc.accepted_by
+		LEFT JOIN monitors m ON m.id = COALESCE(i.monitor_id, p.monitor_id, sd.monitor_id, dc.monitor_id)
 		LEFT JOIN domains dm ON dm.id = p.domain_id
 		WHERE COALESCE(m.id, dm.id) IS NOT NULL`, d.cfg.Lease).
 		Scan(&c.id, &c.settingID, &c.channel, &c.hawkeyeBot, &c.secret, &c.attempts, &c.alert.Event, &c.alert.To, &c.enabled, &c.verified,
 			&c.alert.StartedAt, &c.alert.ResolvedAt, &c.alert.Cause, &c.alert.MonitorID, &c.alert.MonitorName, &c.alert.MonitorURL, &c.alert.MonitorType,
 			&c.alert.SSLExpiresAt, &c.alert.SSLBucket, &c.alert.DomainName, &c.alert.DomainExpiresAt, &c.alert.DomainBucket,
-			&c.alert.SlowThresholdMs, &c.alert.SlowPeakMs, &c.alert.SlowCause)
+			&c.alert.SlowThresholdMs, &c.alert.SlowPeakMs, &c.alert.SlowCause,
+			&c.alert.DNSRecordType, &c.alert.DNSBefore, &c.alert.DNSAfter, &c.alert.DNSStatus, &c.alert.DNSAcceptedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}

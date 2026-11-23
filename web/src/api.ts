@@ -287,6 +287,27 @@ export interface DnsCheck {
   record_type: DnsRecordType
   /** What an answer must match; null means any answer will do. */
   expected: string | null
+  /** Alert when the record's answers change (on by default). */
+  change_alerts?: boolean
+  /** A/AAAA: alert on any change, not only on an address outside the 7-day pool. */
+  change_strict?: boolean
+  /** Set while a change is open: detected, not yet accepted or changed back. */
+  changed_since?: string | null
+}
+
+/** A change of a DNS monitor's record (GET /monitors/:id/dns-changes). */
+export interface DnsChange {
+  id: string
+  record_type: DnsRecordType
+  before: string[]
+  after: string[]
+  /** "mail.example.com → mx.other.net", or "1 answer added". */
+  summary: string
+  detected_at: string
+  status: 'open' | 'accepted' | 'reverted'
+  closed_at: string | null
+  /** Who marked it as intended. */
+  accepted_by: string | null
 }
 
 /** A heartbeat monitor's ping address and timing. */
@@ -722,6 +743,8 @@ export interface DnsInput {
   url: string
   dns_record_type: DnsRecordType
   dns_expected: string | null
+  dns_change_alerts?: boolean
+  dns_change_strict?: boolean
   check_interval_seconds?: number
   regions?: string[]
   tag_ids?: string[]

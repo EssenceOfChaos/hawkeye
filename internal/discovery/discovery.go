@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +55,10 @@ const (
 	KindHealth  = "health"
 	KindAPI     = "api"
 	KindMail    = "mail"
+	// DNS change monitors (docs/plan-dns-change-alerts.md): who runs the domain's DNS, and its email authentication records.
+	KindNameServers = "name_servers"
+	KindSPF         = "spf"
+	KindDMARC       = "dmarc"
 )
 
 // healthPaths are tried in this order of preference: a readiness check that verifies dependencies is the most useful from outside.
@@ -94,9 +99,16 @@ type MXResolver interface {
 	LookupMX(ctx context.Context, name string) ([]*net.MX, error)
 }
 
+// RecordResolver looks up the other records setup suggests watching. *net.Resolver satisfies it.
+type RecordResolver interface {
+	LookupNS(ctx context.Context, name string) ([]*net.NS, error)
+	LookupTXT(ctx context.Context, name string) ([]string, error)
+}
+
 type Service struct {
 	checker *checks.Checker
 	mx      MXResolver
+	records RecordResolver
 	guard   *toolguard.Guard[Report]
 	probe   func() string // the path of the request that tells a real endpoint from a site that answers every path
 }
@@ -106,15 +118,32 @@ func New(cfg safehttp.Config) *Service {
 	return &Service{
 		checker: checks.NewChecker(cfg),
 		mx:      net.DefaultResolver,
+		records: net.DefaultResolver,
 		guard:   toolguard.New[Report](toolguard.Options{Timeout: totalTimeout, Concurrency: 4}),
 		probe:   randomPath,
 	}
 }
 
 // WithMXResolver replaces the system resolver for mail records. Production leaves it alone; tests use it for fake answers.
+// When r doesn't also answer name server and TXT lookups (RecordResolver), those find nothing: a test that fakes mail records never reaches the real
+// resolver.
 func (s *Service) WithMXResolver(r MXResolver) *Service {
 	s.mx = r
+	if rr, ok := r.(RecordResolver); ok {
+		s.records = rr
+	} else {
+		s.records = noRecords{}
+	}
 	return s
+}
+
+type noRecords struct{}
+
+func (noRecords) LookupNS(context.Context, string) ([]*net.NS, error) {
+	return nil, &net.DNSError{Err: "no records", IsNotFound: true}
+}
+func (noRecords) LookupTXT(context.Context, string) ([]string, error) {
+	return nil, &net.DNSError{Err: "no records", IsNotFound: true}
 }
 
 func randomPath() string {
@@ -148,6 +177,7 @@ func (s *Service) run(ctx context.Context, t publichost.Target) (Report, error) 
 		site      []Suggestion
 		siteErr   error
 		api, mail *Suggestion
+		records   []Suggestion
 	)
 	wg.Go(func() { site, siteErr = s.site(ctx, t) })
 	if hasReg && "api."+reg != t.Host {
@@ -155,6 +185,7 @@ func (s *Service) run(ctx context.Context, t publichost.Target) (Report, error) 
 	}
 	if hasReg {
 		wg.Go(func() { mail = s.mail(ctx, reg) })
+		wg.Go(func() { records = s.dnsRecords(ctx, reg) })
 	}
 	wg.Wait()
 	if siteErr != nil {
@@ -169,6 +200,8 @@ func (s *Service) run(ctx context.Context, t publichost.Target) (Report, error) 
 			r.Suggestions = append(r.Suggestions, *x)
 		}
 	}
+	// Name servers first among these: who controls the domain's DNS matters most.
+	r.Suggestions = append(r.Suggestions, records...)
 	return r, nil
 }
 
@@ -322,4 +355,31 @@ func (s *Service) mail(ctx context.Context, domain string) *Suggestion {
 	return &Suggestion{Kind: KindMail, Recommended: true, Monitor: Proposal{Type: "dns", Name: domain + " mail (MX)", URL: domain, DNSRecordType: &mx},
 		Reason: fmt.Sprintf("Your domain receives email through %s. This alerts you if its mail (MX) records disappear, which stops email arriving without any sign on your website.",
 			strings.TrimSuffix(recs[0].Host, "."))}
+}
+
+// dnsRecords proposes DNS change monitors for the domain's name servers and, when it has them, its SPF and DMARC records. Change alerts are on
+// by default for DNS monitors, so these alert when someone moves the domain's DNS or edits how its email is authenticated. SPF and DMARC are not
+// preselected here; the API preselects them when the plan has room (handlers_setup.go).
+func (s *Service) dnsRecords(ctx context.Context, domain string) []Suggestion {
+	ctx, cancel := context.WithTimeout(ctx, mxTimeout)
+	defer cancel()
+	var out []Suggestion
+	dns := func(kind, name, host, recordType, reason string, recommended bool) Suggestion {
+		rt := recordType
+		return Suggestion{Kind: kind, Recommended: recommended, Reason: reason, Monitor: Proposal{Type: "dns", Name: name, URL: host, DNSRecordType: &rt}}
+	}
+	if ns, err := s.records.LookupNS(ctx, domain); err == nil && len(ns) > 0 {
+		out = append(out, dns(KindNameServers, domain+" name servers (NS)", domain, "NS",
+			fmt.Sprintf("Your domain's DNS is run by %s. This alerts you if its name servers change, which is how a domain is taken over.",
+				strings.TrimSuffix(ns[0].Host, ".")), true))
+	}
+	if txt, err := s.records.LookupTXT(ctx, domain); err == nil && slices.ContainsFunc(txt, func(t string) bool { return strings.HasPrefix(t, "v=spf1") }) {
+		out = append(out, dns(KindSPF, domain+" email sender policy (SPF)", domain, "TXT",
+			"Your domain lists which servers may send its email (SPF). This alerts you if that record changes, which can send your email to spam or let others send as you.", false))
+	}
+	if txt, err := s.records.LookupTXT(ctx, "_dmarc."+domain); err == nil && slices.ContainsFunc(txt, func(t string) bool { return strings.HasPrefix(t, "v=DMARC1") }) {
+		out = append(out, dns(KindDMARC, domain+" email policy (DMARC)", "_dmarc."+domain, "TXT",
+			"Your domain tells receivers what to do with email that fails its checks (DMARC). This alerts you if that policy changes.", false))
+	}
+	return out
 }

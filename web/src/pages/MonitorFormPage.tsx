@@ -92,6 +92,8 @@ export function MonitorFormPage() {
   const [host, setHost] = useState('') // DNS monitors: the host name to look up
   const [recordType, setRecordType] = useState<DnsRecordType>('A')
   const [dnsExpected, setDnsExpected] = useState('')
+  const [dnsChangeAlerts, setDnsChangeAlerts] = useState(true)
+  const [dnsChangeStrict, setDnsChangeStrict] = useState(false)
   const [loaded, setLoaded] = useState(!editing)
   const [name, setName] = useState('')
   const [url, setUrl] = useState('https://')
@@ -170,6 +172,8 @@ export function MonitorFormPage() {
           setHost(m.url)
           setRecordType(m.dns.record_type)
           setDnsExpected(m.dns.expected ?? '')
+          setDnsChangeAlerts(m.dns.change_alerts ?? true)
+          setDnsChangeStrict(Boolean(m.dns.change_strict))
         }
         setName(m.name)
         setUrl(m.url)
@@ -237,6 +241,7 @@ export function MonitorFormPage() {
   async function onSubmitDns() {
     const payload: DnsInput = {
       name, url: host, dns_record_type: recordType, dns_expected: dnsExpected.trim() === '' ? null : dnsExpected,
+      dns_change_alerts: dnsChangeAlerts, dns_change_strict: dnsChangeAlerts && (recordType === 'A' || recordType === 'AAAA') && dnsChangeStrict,
       tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet, recheck,
     }
     if (allRegions.length > 1) payload.regions = chosen
@@ -446,6 +451,26 @@ export function MonitorFormPage() {
           </div>
           <Field label={DNS_EXPECTED[recordType].label} value={dnsExpected} maxLength={255} placeholder={DNS_EXPECTED[recordType].placeholder}
             onChange={(e) => setDnsExpected(e.target.value)} error={f.dns_expected} hint={DNS_EXPECTED[recordType].hint} />
+          <fieldset className="group">
+            <legend>Change alerts</legend>
+            <div className="field">
+              <Toggle checked={dnsChangeAlerts} onToggle={setDnsChangeAlerts}>Alert me when this record changes</Toggle>
+              <small className="hint">
+                HawkEye remembers the record’s answer and tells you when it changes, even if it still matches the value above. A changed name server
+                or mail server is how domains get hijacked and email goes astray.
+              </small>
+            </div>
+            {dnsChangeAlerts && (recordType === 'A' || recordType === 'AAAA') && (
+              <div className="field">
+                <Toggle checked={dnsChangeStrict} onToggle={setDnsChangeStrict}>Alert on any address change</Toggle>
+                <small className="hint">
+                  Off: addresses your CDN or load balancer rotates through are fine, and only an address not seen in the last 7 days alerts. Turn it on
+                  for a site with one fixed address.
+                </small>
+              </div>
+            )}
+            {(f.dns_change_alerts ?? f.dns_change_strict) && <small className="error">{f.dns_change_alerts ?? f.dns_change_strict}</small>}
+          </fieldset>
           <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f}
             recheck={{ value: recheck, onChange: setRecheck, writes: writeMethod, fast: fast && canFast }} />
           {regionPicker}

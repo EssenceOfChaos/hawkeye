@@ -433,6 +433,8 @@ func registerAPI(e *echo.Echo, o Options) {
 		api.POST("/monitors/:monitorID/ping-token", h.rotatePingToken)
 	}
 	api.GET("/monitors/:monitorID/incidents", h.listMonitorIncidents)
+	api.GET("/monitors/:monitorID/dns-changes", h.listDNSChanges)
+	api.POST("/monitors/:monitorID/dns-changes/:changeID/accept", h.acceptDNSChange)
 	api.GET("/incidents", h.listIncidents)
 	api.GET("/incidents/:incidentID/updates", h.listIncidentUpdates)
 	api.POST("/incidents/:incidentID/updates", h.postIncidentUpdate, requireOwner, limit("incident-update"))

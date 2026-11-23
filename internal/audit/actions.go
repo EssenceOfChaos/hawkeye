@@ -48,6 +48,7 @@ const (
 	BadgeEnabled            = "monitor.badge_enabled"
 	BadgeDisabled           = "monitor.badge_disabled"
 	PingAddressRotated      = "monitor.ping_address_rotated"
+	DNSChangeAccepted       = "monitor.dns_change_accepted" // details: change_id
 	StatusPageCreated       = "status_page.created"
 	StatusPageChanged       = "status_page.changed"
 	StatusPageDeleted       = "status_page.deleted"
@@ -78,7 +79,7 @@ var (
 	OrganizationActions = []string{OrganizationRenamed, OwnershipTransferred, TwoFactorRequirement, AIDraftsSetting, SubscriptionCanceled, MemberInvited,
 		InvitationResent, InvitationRevoked, MemberJoined, MemberRemoved, MemberLeft, APIKeyCreated, APIKeyRevoked, AppConnected, AppDisconnected,
 		AlertDestinationAdded, AlertDestinationChanged, AlertDestinationRemoved, MonitorCreated, MonitorChanged, MonitorDeleted, MonitorPaused,
-		MonitorResumed, BadgeEnabled, BadgeDisabled, PingAddressRotated, StatusPageCreated, StatusPageChanged, StatusPageDeleted, StatusPageDomainSet,
+		MonitorResumed, BadgeEnabled, BadgeDisabled, PingAddressRotated, DNSChangeAccepted, StatusPageCreated, StatusPageChanged, StatusPageDeleted, StatusPageDomainSet,
 		StatusPageDomainRemoved, StatusPageDomainVerified, StatusPageDomainFailing, StatusPageDomainDisabled, MaintenanceScheduled,
 		MaintenanceDeleted, DeployStarted, DeployFinished, DeployChecked, IncidentUpdatePosted, IncidentUpdateDeleted, DomainAdded, DomainRemoved}
 )

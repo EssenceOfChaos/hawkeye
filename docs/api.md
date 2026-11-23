@@ -590,7 +590,21 @@ case-sensitive, for `TXT`. CNAME is not offered, because the resolver reports on
 PATCH accepts the same fields. Changing `dns_record_type` without sending `dns_expected` clears the expected value, which was written for another kind of
 record; either change resets the monitor's state, as a changed website target does. Both fields are a 400 on other monitor types. The website fields
 (`slow_threshold_ms`, `headers`, `body`, `auth`, `assertions`, `expected_status_code`) must be left out (400 otherwise). DNS monitors carry
-`dns: {record_type, expected}` (null for other monitors).
+`dns: {record_type, expected, change_alerts, change_strict, changed_since}` (null for other monitors).
+
+**Change alerts** (`docs/plan-dns-change-alerts.md`). `dns_change_alerts` (default true) and `dns_change_strict` (default false; A and AAAA only, a 400
+on `dns_change_strict` for other record types) are accepted on create and PATCH, and are a 400 on other monitor types. With change alerts on, each check
+location keeps the record's answers as a baseline (the first lookup sets it silently); a different set seen in 2 checks in a row at a location is a
+change there, and once most of the monitor's locations have one, a **DNS change** opens with one `dns_change` alert. For A and AAAA (not strict), an
+address seen at that location in the last 7 days isn't a change (CDN rotation). A change is not an outage: the monitor's status and uptime are
+unaffected, and `changed_since` is set while it's open. It closes as `reverted` when every location sees its old answers again, or as `accepted` when
+someone accepts it; either queues `dns_change_closed`. Changing the host or record type, the strict setting, or turning change alerts off drops the
+baselines and closes an open change without an alert. Lookups during maintenance don't count.
+
+| Method & path | Notes |
+|---|---|
+| `GET /monitors/:id/dns-changes` | any member or key: `{dns_changes: [{id, record_type, before, after, summary, detected_at, status, closed_at, accepted_by}], current}`, newest first (at most 50); `current` is the latest answers, null before the first lookup |
+| `POST /monitors/:id/dns-changes/:changeID/accept` | any member, or a write key: every location's latest answers become its baseline and the change closes as accepted (security log `monitor.dns_change_accepted`). 404 when it isn't open |
 
 **Results.** A missing record or a failed lookup is `error_category: "dns"`, a wrong answer is `assertion`, and an answer that is not a public address is
 `blocked`. `http_status_code` is null and `response_time_ms` is the lookup time. Summaries name the expected value and never the answers. Streaks, locations,
@@ -649,7 +663,7 @@ resolve carries only the key and `dedup_key`. Alert routing by tag, delays and q
 
 Every enabled, verified destination receives outage, recovery, certificate-expiry and domain-expiry alerts through the same durable queue as email (retries with backoff, at-least-once). A 2xx is success; 408, 429, 5xx and network errors are retried; any other 4xx (for example 404/410 for a revoked URL) fails the delivery permanently. Requests go through the SSRF-safe client, so private addresses are refused.
 
-Webhook requests are `POST` with `Content-Type: application/json` and these headers: `X-HawkEye-Event` (`outage`, `recovery`, `ssl_expiry`, `domain_expiry`, `slow`, `slow_recovery`, `test`), `X-HawkEye-Delivery` (stable across retries; use it to drop duplicates), `X-HawkEye-Timestamp` (Unix seconds) and `X-HawkEye-Signature` = `sha256=` + hex HMAC-SHA256 of `"<timestamp>.<raw body>"` keyed with the signing secret. Reject requests whose signature does not match or whose timestamp is old. Body:
+Webhook requests are `POST` with `Content-Type: application/json` and these headers: `X-HawkEye-Event` (`outage`, `recovery`, `ssl_expiry`, `domain_expiry`, `slow`, `slow_recovery`, `dns_change`, `dns_change_closed`, `test`), `X-HawkEye-Delivery` (stable across retries; use it to drop duplicates), `X-HawkEye-Timestamp` (Unix seconds) and `X-HawkEye-Signature` = `sha256=` + hex HMAC-SHA256 of `"<timestamp>.<raw body>"` keyed with the signing secret. Reject requests whose signature does not match or whose timestamp is old. Body:
 
 ```json
 {"event": "outage", "sent_at": "2026-10-12T15:00:00Z", "url": "https://app.example.com/incidents",
@@ -657,7 +671,9 @@ Webhook requests are `POST` with `Content-Type: application/json` and these head
  "incident": {"started_at": "…", "resolved_at": null, "cause": "Received HTTP 503"}}
 ```
 
-`ssl_expiry` carries `certificate: {expires_at, warning_days}` instead of `incident` (`warning_days` 30, 14, 7, 1, or 0 once expired); `domain_expiry` carries `domain: {name, expires_at, warning_days}` and no `monitor` (its `url` points at `/domains`); `slow` and `slow_recovery` carry `slowdown: {started_at, resolved_at, threshold_ms, peak_ms}` (`resolved_at` only on `slow_recovery`) instead of `incident`, and their `url` points at the monitor; `test` carries none of them. Chat destinations receive an equivalent, unsigned message in the app's own format: Slack incoming-webhook blocks; a Discord embed colored by severity, with mentions switched off (`allowed_mentions: {parse: []}`) so names such as `@everyone` never ping; a Teams Adaptive Card with an "Open in HawkEye" button; and a Telegram `sendMessage` in HTML mode with link previews off. Text from monitors (names, addresses, causes) is escaped for each app's markup so it cannot add links or formatting.
+`ssl_expiry` carries `certificate: {expires_at, warning_days}` instead of `incident` (`warning_days` 30, 14, 7, 1, or 0 once expired); `domain_expiry` carries `domain: {name, expires_at, warning_days}` and no `monitor` (its `url` points at `/domains`); `slow` and `slow_recovery` carry `slowdown: {started_at, resolved_at, threshold_ms, peak_ms}` (`resolved_at` only on `slow_recovery`) instead of `incident`, and their `url` points at the monitor; `dns_change` and `dns_change_closed` carry
+`dns_change: {record_type, before, after, status, detected_at, closed_at, accepted_by}` (PagerDuty gets a warning that the close resolves); `test`
+carries none of them. Chat destinations receive an equivalent, unsigned message in the app's own format: Slack incoming-webhook blocks; a Discord embed colored by severity, with mentions switched off (`allowed_mentions: {parse: []}`) so names such as `@everyone` never ping; a Teams Adaptive Card with an "Open in HawkEye" button; and a Telegram `sendMessage` in HTML mode with link previews off. Text from monitors (names, addresses, causes) is escaped for each app's markup so it cannot add links or formatting.
 
 ## Slow-response alerts
 

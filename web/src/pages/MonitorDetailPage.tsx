@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import type { CheckResult, Incident, Monitor, Plan, RangeInfo, RegionStatus, SeriesPoint, Uptime, Usage } from '../api'
+import { api, type CheckResult, type Incident, type Monitor, type Plan, type RangeInfo, type RegionStatus, type SeriesPoint, type Uptime, type Usage } from '../api'
 import { LocationName } from '../components/Flag'
 import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
@@ -16,6 +16,7 @@ import { WorkflowRun } from '../components/WorkflowRun'
 import { availableRanges, formatDateTime, formatDuration, formatMs, formatPeriod, RANGE_LABELS, shortInterval, reportMonths, reportPdfPath, formatShortDateTime, timingsLine } from '../format'
 import { useApi } from '../hooks'
 import { IncidentStatus } from './IncidentsPage'
+import { DnsChanges } from '../components/DnsChanges'
 
 const PAGE = 25
 
@@ -122,6 +123,7 @@ export function MonitorDetailPage() {
               {m.slow_cause && <> {m.slow_cause}</>}
             </Alert>
           )}
+          {dns && <DnsChanges monitor={m} onChanged={() => void api<{ monitor: Monitor }>('GET', `/monitors/${m.id}`).then((r) => setChanged(r.monitor))} />}
 
           {m.workflow?.secrets.some((s) => !s.set) && (
             <Alert tone="warning" role="status">

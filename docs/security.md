@@ -77,6 +77,11 @@ that cannot reach internal services. Block egress from the worker hosts/containe
 `169.254.0.0/16` and `fd00::/8`, the database and other internal services except what the worker itself needs
 (PostgreSQL on its port), and enforce IMDSv2 / disable instance metadata on worker hosts. Details in `docs/deployment.md` (Phase 8).
 
+**DNS change alerts** keep a DNS monitor's answers (`dns_baselines`, `dns_seen`, `dns_changes`): public records of the customer's own domain, capped at
+20 answers of 1,000 characters, and never a private address (A and AAAA answers that aren't public are refused before anything is stored, as today).
+They never reach `check_results` or an outage summary; they are deleted when change alerts are turned off or the monitor is deleted, and closed changes
+go with the plan's history.
+
 **Residual risks:** DNS answers are validated at dial time, so a hostname's content can still change between checks
 (that is inherent to monitoring a third-party site, not an SSRF); the checker trusts the system resolver and its
 TLS roots; a malicious site can make us send a GET/HEAD with our fixed `User-Agent` to any *public* address, which is the product's purpose.

@@ -326,3 +326,61 @@ func TestErrors(t *testing.T) {
 		t.Errorf("not a public name: %v", err)
 	}
 }
+
+// records answers MX, NS and TXT lookups from tables.
+type records struct {
+	mxTable
+	ns  map[string][]*net.NS
+	txt map[string][]string
+}
+
+func (r records) LookupNS(_ context.Context, name string) ([]*net.NS, error) {
+	if v, ok := r.ns[name]; ok {
+		return v, nil
+	}
+	return nil, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
+}
+
+func (r records) LookupTXT(_ context.Context, name string) ([]string, error) {
+	if v, ok := r.txt[name]; ok {
+		return v, nil
+	}
+	return nil, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
+}
+
+func TestSuggestsDNSChangeMonitorsForNameServersAndEmailRecords(t *testing.T) {
+	w := newWorld(t)
+	w.host("example.com", routes(map[string][2]string{"/": {"200", html}}), nil)
+	r, err := w.service(records{
+		mxTable: mxTable{"example.com": {{Host: "mail.example.com.", Pref: 1}}},
+		ns:      map[string][]*net.NS{"example.com": {{Host: "ns1.dnsprovider.net."}}},
+		txt: map[string][]string{
+			"example.com":        {"google-site-verification=abc", "v=spf1 include:_spf.example.com ~all"},
+			"_dmarc.example.com": {"v=DMARC1; p=reject"},
+		},
+	}).Suggest(context.Background(), "example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := kinds(r); got != "website=https://example.com/ mail=example.com name_servers=example.com spf=example.com dmarc=_dmarc.example.com" {
+		t.Fatal(got)
+	}
+	for _, s := range r.Suggestions {
+		switch s.Kind {
+		case KindNameServers:
+			if !s.Recommended || *s.Monitor.DNSRecordType != "NS" || !strings.Contains(s.Reason, "ns1.dnsprovider.net") {
+				t.Errorf("name servers: %+v", s)
+			}
+		case KindSPF, KindDMARC:
+			if s.Recommended || *s.Monitor.DNSRecordType != "TXT" {
+				t.Errorf("%s: %+v (preselected by the API on plans with room)", s.Kind, s)
+			}
+		}
+	}
+	// A domain without SPF or DMARC records gets no suggestion for them.
+	r, _ = w.service(records{ns: map[string][]*net.NS{"example.com": {{Host: "ns1.dnsprovider.net."}}}, txt: map[string][]string{"example.com": {"other"}}}).
+		Suggest(context.Background(), "example.com")
+	if got := kinds(r); got != "website=https://example.com/ name_servers=example.com" {
+		t.Fatal(got)
+	}
+}
