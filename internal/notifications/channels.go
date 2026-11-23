@@ -188,7 +188,7 @@ func Sign(secret string, ts int64, body []byte) string {
 
 // WebhookPayload is the JSON body sent to a webhook destination.
 type WebhookPayload struct {
-	Event   string         `json:"event"` // outage, recovery, ssl_expiry, domain_expiry, slow, slow_recovery or test
+	Event   string         `json:"event"` // outage, recovery, ssl_expiry, domain_expiry, slow, slow_recovery, dns_change, dns_change_closed or test
 	SentAt  time.Time      `json:"sent_at"`
 	Monitor *PayloadTarget `json:"monitor,omitempty"`
 	// Incident is set for outage and recovery events.
@@ -199,7 +199,9 @@ type WebhookPayload struct {
 	Domain *PayloadDomain `json:"domain,omitempty"`
 	// Slowdown is set for slow and slow_recovery events.
 	Slowdown *PayloadSlowdown `json:"slowdown,omitempty"`
-	URL      string           `json:"url"` // where to look in HawkEye
+	// DNSChange is set for dns_change and dns_change_closed events.
+	DNSChange *PayloadDNSChange `json:"dns_change,omitempty"`
+	URL       string            `json:"url"` // where to look in HawkEye
 }
 
 type PayloadTarget struct {
@@ -228,6 +230,16 @@ type PayloadSlowdown struct {
 	Cause       string     `json:"cause,omitempty"` // what got slower, compared with the past week
 }
 
+type PayloadDNSChange struct {
+	RecordType string     `json:"record_type"`
+	Before     []string   `json:"before"`
+	After      []string   `json:"after"`
+	Status     string     `json:"status"` // open, accepted or reverted
+	DetectedAt time.Time  `json:"detected_at"`
+	ClosedAt   *time.Time `json:"closed_at"`
+	AcceptedBy string     `json:"accepted_by,omitempty"`
+}
+
 type PayloadDomain struct {
 	Name      string    `json:"name"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -250,6 +262,14 @@ func buildWebhook(a Alert, now time.Time) WebhookPayload {
 	case EventSSLExpiry:
 		p.URL = a.AppBaseURL + "/monitors/" + a.MonitorID
 		p.Certificate = &PayloadCertificate{ExpiresAt: a.SSLExpiresAt.UTC(), Bucket: a.SSLBucket}
+	case EventDNSChange, EventDNSChangeClosed:
+		p.URL = a.AppBaseURL + "/monitors/" + a.MonitorID
+		p.DNSChange = &PayloadDNSChange{RecordType: a.DNSRecordType, Before: a.DNSBefore, After: a.DNSAfter, Status: a.DNSStatus,
+			DetectedAt: a.StartedAt.UTC(), AcceptedBy: a.DNSAcceptedBy}
+		if a.ResolvedAt != nil {
+			r := a.ResolvedAt.UTC()
+			p.DNSChange.ClosedAt = &r
+		}
 	case EventSlow, EventSlowRecovery:
 		p.URL = a.AppBaseURL + "/monitors/" + a.MonitorID
 		p.Slowdown = &PayloadSlowdown{StartedAt: a.StartedAt.UTC(), ThresholdMs: a.SlowThresholdMs, PeakMs: a.SlowPeakMs, Cause: a.SlowCause}
@@ -320,6 +340,22 @@ func chatContent(a Alert, now time.Time) chatMessage {
 				m.Lines = []string{"Failing for " + Duration(a.ResolvedAt.Sub(a.StartedAt))}
 			}
 		}
+	case EventDNSChange:
+		m.Title, m.Tone = "🔀 DNS record changed for "+clean(a.MonitorURL), toneWarning
+		m.Lines = []string{a.DNSRecordType + " record: " + answerList(a.DNSBefore) + " → " + answerList(a.DNSAfter),
+			"If this wasn’t intended, check your registrar and DNS provider accounts."}
+		m.Link = a.AppBaseURL + "/monitors/" + a.MonitorID
+	case EventDNSChangeClosed:
+		m.Title, m.Tone = "✅ DNS change for "+clean(a.MonitorURL)+" closed", toneGood
+		m.Lines = []string{"The " + a.DNSRecordType + " record changed back."}
+		if a.DNSStatus == "accepted" {
+			who := "Someone on your team"
+			if a.DNSAcceptedBy != "" {
+				who = clean(a.DNSAcceptedBy)
+			}
+			m.Lines = []string{who + " marked it as intended: " + answerList(a.DNSAfter)}
+		}
+		m.Link = a.AppBaseURL + "/monitors/" + a.MonitorID
 	case EventSlow:
 		m.Title, m.Tone = "🐢 "+name+" is responding slowly", toneWarning
 		m.Lines = []string{"Online, but over " + Milliseconds(a.SlowThresholdMs) + " for several checks in a row (slowest " + Milliseconds(a.SlowPeakMs) + ")"}

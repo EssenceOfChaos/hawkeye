@@ -9,6 +9,7 @@ import (
 
 	"hawkeye/internal/discovery"
 	"hawkeye/internal/monitors"
+	"hawkeye/internal/plans"
 )
 
 // suggestMonitors is "set up from your domain": it looks at a domain the organization names and proposes monitors for it, marking those the
@@ -46,6 +47,15 @@ func (h *handlers) suggestMonitors(c *echo.Context) error {
 	}
 	for i := range report.Suggestions {
 		report.Suggestions[i].AlreadyMonitored = covered[i]
+	}
+	// Email authentication records are worth watching on plans with room for them; on Free (5 monitors) only the name servers and mail are
+	// preselected, so the website monitors still fit.
+	if p, err := plans.EffectivePlan(ctx, h.pool, currentOrg(c)); err == nil && p.MaxMonitors > 5 {
+		for i, sg := range report.Suggestions {
+			if sg.Kind == discovery.KindSPF || sg.Kind == discovery.KindDMARC {
+				report.Suggestions[i].Recommended = true
+			}
+		}
 	}
 	h.log.InfoContext(ctx, "monitor suggestions", "count", len(report.Suggestions), "duration_ms", time.Since(start).Milliseconds())
 	return c.JSON(http.StatusOK, report)

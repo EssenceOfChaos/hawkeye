@@ -334,3 +334,53 @@ func TestAlertEmailPictures(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderDNSChangeAlerts(t *testing.T) {
+	start := time.Date(2026, 11, 22, 15, 14, 0, 0, time.UTC)
+	end := start.Add(40 * time.Minute)
+	base := Alert{MonitorID: "m1", MonitorName: "Mail", MonitorURL: "example.com", MonitorType: "dns", StartedAt: start, DNSRecordType: "MX",
+		DNSBefore: []string{"mail.example.com"}, DNSAfter: []string{"mx.other.net"}, DNSStatus: "open",
+		AppBaseURL: "https://app.example.com", To: "me@example.com", From: "alerts@example.com"}
+
+	base.Event = EventDNSChange
+	m := Render(base)
+	if m.Subject != "HawkEye alert: DNS record changed for example.com" {
+		t.Fatalf("%q", m.Subject)
+	}
+	for _, want := range []string{"MX record of example.com", "mail.example.com", "mx.other.net", "mark it as intended", "https://app.example.com/monitors/m1"} {
+		if !strings.Contains(m.Text, want) {
+			t.Errorf("change alert missing %q:\n%s", want, m.Text)
+		}
+	}
+	if strings.Contains(m.Text, "offline") {
+		t.Error("a DNS change is not an outage")
+	}
+	c := chatContent(base, end)
+	if c.Tone != toneWarning || !strings.Contains(c.Lines[0], "mail.example.com → mx.other.net") {
+		t.Fatalf("%+v", c)
+	}
+
+	accepted := base
+	accepted.Event, accepted.DNSStatus, accepted.DNSAcceptedBy, accepted.ResolvedAt = EventDNSChangeClosed, "accepted", "freddy@example.com", &end
+	if m := Render(accepted); m.Subject != "HawkEye: the DNS change for example.com was accepted" || !strings.Contains(m.Text, "freddy@example.com marked") {
+		t.Fatalf("%q\n%s", m.Subject, m.Text)
+	}
+	reverted := accepted
+	reverted.DNSStatus, reverted.DNSAcceptedBy = "reverted", ""
+	if m := Render(reverted); m.Subject != "HawkEye: the DNS record for example.com changed back" {
+		t.Fatalf("%q", m.Subject)
+	}
+	if c := chatContent(reverted, end); c.Tone != toneGood || !strings.Contains(c.Lines[0], "changed back") {
+		t.Fatalf("%+v", c)
+	}
+
+	p := buildWebhook(accepted, end)
+	if p.DNSChange == nil || p.DNSChange.Status != "accepted" || p.DNSChange.ClosedAt == nil || p.DNSChange.After[0] != "mx.other.net" {
+		t.Fatalf("%+v", p.DNSChange)
+	}
+	_, trig := pdBuild(t, base)
+	_, res := pdBuild(t, accepted)
+	if trig.Payload.Severity != "warning" || res.EventAction != "resolve" || res.DedupKey != trig.DedupKey {
+		t.Fatalf("PagerDuty: %+v %+v", trig, res)
+	}
+}

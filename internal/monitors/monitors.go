@@ -151,6 +151,11 @@ type Monitor struct {
 type DNSCheck struct {
 	RecordType string  `json:"record_type"`
 	Expected   *string `json:"expected"`
+	// ChangeAlerts: alert when the record's answers change (on by default). ChangeStrict (A/AAAA only): alert on any change, not only on an
+	// address outside the 7-day pool. ChangedSince is set while a change is open (detected, not yet accepted or changed back).
+	ChangeAlerts bool       `json:"change_alerts"`
+	ChangeStrict bool       `json:"change_strict"`
+	ChangedSince *time.Time `json:"changed_since"`
 }
 
 // Heartbeat is the state of a heartbeat monitor. The job pings /ping/<PingToken> each time it runs; DueBy is when HawkEye will call the job missed
@@ -256,6 +261,8 @@ type CreateInput struct {
 	GraceSeconds         *int               `json:"grace_seconds"`
 	DNSRecordType        *string            `json:"dns_record_type"`
 	DNSExpected          *string            `json:"dns_expected"`
+	DNSChangeAlerts      *bool              `json:"dns_change_alerts"` // DNS monitors: default true
+	DNSChangeStrict      *bool              `json:"dns_change_strict"` // A/AAAA DNS monitors: default false
 	Name                 string             `json:"name"`
 	URL                  string             `json:"url"`
 	Method               *string            `json:"method"`
@@ -305,6 +312,8 @@ type UpdateInput struct {
 	GraceSeconds         *int                 `json:"grace_seconds"`
 	DNSRecordType        *string              `json:"dns_record_type"`
 	DNSExpected          Nullable[string]     `json:"dns_expected"` // null or empty: any answer will do
+	DNSChangeAlerts      *bool                `json:"dns_change_alerts"`
+	DNSChangeStrict      *bool                `json:"dns_change_strict"`
 	// Multi-step API checks only. Steps replace all the steps (a step's credentials are kept by position when not sent again). Secrets set the
 	// listed values; null removes one; names left out are kept.
 	Steps   *[]StepInput       `json:"steps"`
@@ -414,7 +423,8 @@ const cols = `id, organization_id, name, url, method, expected_status_code, chec
 	slow_threshold_ms, slow_checks, (SELECT started_at FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'),
 	(SELECT cause FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'), badge_token, ` + tagsCol + `,
 	alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, COALESCE(ping_token, ''), COALESCE(heartbeat_grace_seconds, 0), last_ping_at, ping_deadline,
-	COALESCE(dns_record_type, ''), dns_expected, trace_context, recheck`
+	COALESCE(dns_record_type, ''), dns_expected, trace_context, recheck, dns_change_alerts, dns_change_strict,
+	(SELECT detected_at FROM dns_changes WHERE monitor_id = monitors.id AND status = 'open')`
 
 func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	var m Monitor
@@ -428,7 +438,7 @@ func scan(row pgx.Row, minInterval int) (Monitor, error) {
 		&m.ConsecutiveSuccesses, &m.CreatedAt, &m.UpdatedAt, &m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username,
 		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked, &m.InMaintenance, &m.Regions,
 		&m.SlowThresholdMs, &m.SlowChecks, &m.SlowSince, &m.SlowCause, &m.BadgeToken, &m.Tags, &m.AlertDelayMinutes, &quietStart, &quietEnd, &quietTZ,
-		&m.Type, &hb.PingToken, &hb.GraceSeconds, &hb.LastPingAt, &hb.DueBy, &dns.RecordType, &dns.Expected, &m.TraceContext, &m.Recheck)
+		&m.Type, &hb.PingToken, &hb.GraceSeconds, &hb.LastPingAt, &hb.DueBy, &dns.RecordType, &dns.Expected, &m.TraceContext, &m.Recheck, &dns.ChangeAlerts, &dns.ChangeStrict, &dns.ChangedSince)
 	if quietStart != nil && quietEnd != nil && quietTZ != nil {
 		m.QuietHours = &QuietHours{Start: formatClock(*quietStart), End: formatClock(*quietEnd), Timezone: *quietTZ}
 	}
@@ -455,6 +465,8 @@ type fields struct {
 	grace             int    // heartbeats: seconds allowed after the period before a ping counts as missed
 	dnsType           string // DNS monitors: the record to look up
 	dnsExpected       string // DNS monitors: what an answer must match; "": any answer will do
+	dnsChangeAlerts   bool   // DNS monitors: alert when the answers change
+	dnsChangeStrict   bool   // A/AAAA DNS monitors: on any change, not only an unseen address
 	name, url, method string
 	expected          *int
 	interval, timeout int
@@ -740,6 +752,9 @@ func (f *fields) validateDNS(bad map[string]string) {
 	} else {
 		bad["dns_record_type"] = "must be one of " + strings.Join(checks.RecordTypes, ", ")
 	}
+	if f.dnsChangeStrict && f.dnsType != checks.RecordA && f.dnsType != checks.RecordAAAA {
+		bad["dns_change_strict"] = "is only used by A and AAAA records: other records are always compared exactly"
+	}
 	f.validateTiming(bad)
 	if f.slowThreshold != nil {
 		bad["slow_threshold_ms"] = "is not used by DNS monitors"
@@ -868,7 +883,7 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 			return err
 		}
 		f := fields{kind: TypeHTTP, name: in.Name, url: in.URL, method: "GET", expected: in.ExpectedStatusCode,
-			interval: max(DefaultIntervalSeconds, minInterval), timeout: DefaultTimeoutSeconds}
+			interval: max(DefaultIntervalSeconds, minInterval), timeout: DefaultTimeoutSeconds, dnsChangeAlerts: true}
 		switch strings.TrimSpace(in.Type) {
 		case "", TypeHTTP:
 		case TypeHeartbeat:
@@ -884,6 +899,12 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 			if in.DNSExpected != nil {
 				f.dnsExpected = *in.DNSExpected
 			}
+			if in.DNSChangeAlerts != nil {
+				f.dnsChangeAlerts = *in.DNSChangeAlerts
+			}
+			if in.DNSChangeStrict != nil {
+				f.dnsChangeStrict = *in.DNSChangeStrict
+			}
 		case TypeWorkflow:
 			f.kind, f.steps, f.newSecrets, f.declared = TypeWorkflow, in.Steps, in.Secrets, in.SecretNames
 			if in.Cookies != nil {
@@ -897,6 +918,9 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		}
 		if f.kind != TypeWorkflow && (in.Steps != nil || in.Secrets != nil || in.Cookies != nil) {
 			return validation.New("steps", "is only used by multi-step API checks (type workflow)")
+		}
+		if f.kind != TypeDNS && (in.DNSChangeAlerts != nil || in.DNSChangeStrict != nil) {
+			return validation.New("dns_change_alerts", "is only used by DNS monitors")
 		}
 		if in.Method != nil {
 			f.method = *in.Method
@@ -973,12 +997,13 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		out, err = scan(tx.QueryRow(ctx, `INSERT INTO monitors
 			(id, organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
 			 request_headers, request_body, auth_type, auth_username, auth_header_name, auth_secret, assertions, regions, slow_threshold_ms, slow_checks,
-			 alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, ping_token, heartbeat_grace_seconds, dns_record_type, dns_expected, trace_context, recheck, next_check_at)
-			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,
+			 alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, ping_token, heartbeat_grace_seconds, dns_record_type, dns_expected, trace_context, recheck, dns_change_alerts, dns_change_strict, next_check_at)
+			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,
 				CASE WHEN $23 = 'heartbeat' THEN 'infinity'::timestamptz ELSE now() END) RETURNING `+cols,
 			orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout,
 			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, sealed, f.assertions, id, f.regions, f.slowThreshold, f.slowChecks,
-			f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, f.kind, pingToken, grace, dnsType, dnsExpected, f.traceContext, f.recheck), minInterval)
+			f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, f.kind, pingToken, grace, dnsType, dnsExpected, f.traceContext, f.recheck,
+			f.dnsChangeAlerts, f.dnsChangeStrict), minInterval)
 		if err != nil {
 			return err
 		}
@@ -1190,7 +1215,15 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			return validation.New("steps", "is only used by multi-step API checks (type workflow)")
 		}
 		var curExpected string
+		f.dnsChangeAlerts = true
 		if cur.DNS != nil {
+			f.dnsChangeAlerts, f.dnsChangeStrict = cur.DNS.ChangeAlerts, cur.DNS.ChangeStrict
+			if in.DNSChangeAlerts != nil {
+				f.dnsChangeAlerts = *in.DNSChangeAlerts
+			}
+			if in.DNSChangeStrict != nil {
+				f.dnsChangeStrict = *in.DNSChangeStrict
+			}
 			f.dnsType = cur.DNS.RecordType
 			if cur.DNS.Expected != nil {
 				curExpected = *cur.DNS.Expected
@@ -1208,7 +1241,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 					f.dnsExpected = *in.DNSExpected.Value
 				}
 			}
-		} else if in.DNSRecordType != nil || in.DNSExpected.Set {
+		} else if in.DNSRecordType != nil || in.DNSExpected.Set || in.DNSChangeAlerts != nil || in.DNSChangeStrict != nil {
 			return validation.New("dns_record_type", "is only used by DNS monitors")
 		}
 		if err := f.validate(); err != nil {
@@ -1272,7 +1305,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			auth_secret = CASE WHEN $12 = 'none' THEN NULL WHEN $15 THEN auth_secret ELSE NULLIF($16,'') END,
 			assertions=$17, regions=$19, slow_threshold_ms=$20, slow_checks=$21,
 			alert_delay_minutes=$22, quiet_start=$23, quiet_end=$24, quiet_timezone=$25, heartbeat_grace_seconds=$26,
-			dns_record_type=$28, dns_expected=$29, trace_context=$30, recheck=$31,
+			dns_record_type=$28, dns_expected=$29, trace_context=$30, recheck=$31, dns_change_alerts=$32, dns_change_strict=$33,
 			ping_deadline = CASE WHEN ping_deadline IS NOT NULL AND last_ping_at IS NOT NULL AND (check_interval_seconds <> $7 OR heartbeat_grace_seconds <> $26)
 				THEN last_ping_at + make_interval(secs => GREATEST($7::int, $27::int) + $26::int) ELSE ping_deadline END,
 			ssl_expires_at = CASE WHEN $18 THEN NULL ELSE ssl_expires_at END, ssl_checked_at = CASE WHEN $18 THEN NULL ELSE ssl_checked_at END,
@@ -1280,7 +1313,8 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			WHERE id = $1 AND organization_id = $2 RETURNING `+cols,
 			id, orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout, reset,
 			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.keepSecret, sealed, f.assertions, f.url != cur.URL, f.regions,
-			f.slowThreshold, f.slowChecks, f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, grace, minInterval, dnsType, dnsExpected, f.traceContext, f.recheck), minInterval)
+			f.slowThreshold, f.slowChecks, f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, grace, minInterval, dnsType, dnsExpected, f.traceContext, f.recheck,
+			f.dnsChangeAlerts, f.dnsChangeStrict), minInterval)
 		if err != nil {
 			return err
 		}
@@ -1294,6 +1328,16 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			}
 			out = one[0]
 		}
+		// A DNS monitor's change-alert baselines describe one host and record type compared one way: after any of that changes, or with change
+		// alerts turned off, they are dropped (the next lookup starts again, silently) and an open change is closed without an alert.
+		if cur.DNS != nil && (f.url != cur.URL || f.dnsType != cur.DNS.RecordType || !f.dnsChangeAlerts || f.dnsChangeStrict != cur.DNS.ChangeStrict) {
+			if err := resetDNSChanges(ctx, tx, id); err != nil {
+				return err
+			}
+			if out.DNS != nil {
+				out.DNS.ChangedSince = nil
+			}
+		}
 		// Streaks recorded by each region no longer describe the monitor after its request or its regions changed.
 		if reset || regionsChanged {
 			if _, err = tx.Exec(ctx, `DELETE FROM monitor_region_state WHERE monitor_id = $1`, id); err != nil {
@@ -1306,6 +1350,23 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		return nil
 	})
 	return out, err
+}
+
+// resetDNSChanges drops a DNS monitor's change-alert baselines and address pools, and closes its open change without an alert (its held
+// alerts are canceled too).
+func resetDNSChanges(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	for _, q := range []string{
+		`DELETE FROM dns_baselines WHERE monitor_id = $1`,
+		`DELETE FROM dns_seen WHERE monitor_id = $1`,
+		`UPDATE notification_deliveries SET status = 'skipped', suppressed = 'ended_while_held' WHERE status = 'pending' AND attempt_count = 0
+			AND dns_change_id IN (SELECT id FROM dns_changes WHERE monitor_id = $1 AND status = 'open')`,
+		`UPDATE dns_changes SET status = 'reverted', closed_at = GREATEST(detected_at, now()) WHERE monitor_id = $1 AND status = 'open'`,
+	} {
+		if _, err := tx.Exec(ctx, q, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // resetSpeed clears a monitor's slow-response streaks (its own and every location's) and quietly closes its open slowdown.

@@ -238,7 +238,10 @@ export function DnsMonitoring() {
         <li>On the <strong>Monitors</strong> page choose <strong>Monitor a DNS record</strong>.</li>
         <li>Enter a public host name, such as <code>example.com</code> or <code>_dmarc.example.com</code>.</li>
         <li>Choose the record type.</li>
-        <li>Optionally enter the value you expect. Without one, any answer counts as healthy, and you are alerted only if the record disappears.</li>
+        <li>
+          Optionally enter the value you expect. Without one, any answer counts as healthy, and you are alerted if the record disappears, or (with
+          change alerts, on by default) when it changes.
+        </li>
       </ol>
 
       <h2 id="records">What each record type checks</h2>
@@ -258,10 +261,31 @@ export function DnsMonitoring() {
 
       <h2 id="examples">Useful things to watch</h2>
       <ul>
-        <li><strong>Your website’s address</strong>: an A record, with the address of your server, to catch a change you did not make.</li>
+        <li><strong>Your website’s address</strong>: an A record, to catch a change you did not make. Change alerts notice it without you entering the address.</li>
         <li><strong>Your mail</strong>: an MX record, so a change that would stop your email arriving does not go unnoticed.</li>
         <li><strong>Your name servers</strong>: an NS record, the first thing to change when a domain moves or is taken over.</li>
         <li><strong>Email authentication</strong>: a TXT record on your domain for SPF, or on <code>_dmarc.example.com</code> for DMARC.</li>
+      </ul>
+
+      <h2 id="changes">Change alerts</h2>
+      <p>
+        HawkEye remembers each record’s answer and alerts you when it changes, without you typing in what it should be: a new mail server, a different
+        address for your website, name servers that aren’t yours, an SPF or DMARC record that was edited. It’s on for every DNS monitor, and you can turn
+        it off under <strong>Change alerts</strong> on the monitor’s edit page.
+      </p>
+      <ul>
+        <li>The first lookup sets what’s normal, silently. A change must show up in two checks in a row, and from most locations when a monitor is checked from several, before you’re alerted.</li>
+        <li>
+          Address records (A and AAAA) allow for rotation: CDNs and load balancers hand out addresses from a pool, so only an address not seen in the
+          last 7 days counts as a change. Turn on <strong>Alert on any address change</strong> for a site with one fixed address. Mail, name server and
+          TXT records are always compared exactly.
+        </li>
+        <li>
+          The alert shows the record before and after. If the change was yours, open the monitor and choose <strong>This change was intended</strong>: the
+          new answer becomes the normal one. If the record changes back first, the change closes by itself, with a follow-up alert.
+        </li>
+        <li>A change isn’t an outage: the monitor stays up and its uptime is unaffected. It goes to the same destinations as other alerts, and to PagerDuty as a warning.</li>
+        <li>Past changes, and who accepted each one, are listed on the monitor’s page.</li>
       </ul>
 
       <h2 id="alerts">How problems are confirmed</h2>
@@ -272,15 +296,16 @@ export function DnsMonitoring() {
         before its registration lapses, up to your plan’s domain limit.
       </p>
       <p>
-        Alerts name the value you expected. They never include the answer HawkEye received, so look the record up yourself or ask your DNS provider when
-        you investigate.
+        Outage alerts name the value you expected, not the answer HawkEye received. Change alerts show the answers before and after, which HawkEye keeps
+        for monitors with change alerts on.
       </p>
 
       <h2 id="limits">Good to know</h2>
       <ul>
         <li>
           <strong>Changes are not instant.</strong> HawkEye asks a DNS resolver, as your visitors’ devices do, so a change shows up once the
-          old record expires from caches (its TTL). Planned changes can show as failing until you update the expected value.
+          old record expires from caches (its TTL). Planned changes can show as failing until you update the expected value, and send a change alert you
+          can mark as intended.
         </li>
         <li>
           <strong>Addresses must be public.</strong> Names on private networks cannot be checked, and a name that resolves to a private address fails with

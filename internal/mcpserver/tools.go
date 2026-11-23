@@ -41,6 +41,8 @@ type MonitorDetail struct {
 	SSLStatus            string     `json:"ssl_status,omitempty" jsonschema:"valid, expiring (30 days or fewer) or expired"`
 	DNSRecordType        string     `json:"dns_record_type,omitempty"`
 	DNSExpected          *string    `json:"dns_expected,omitempty"`
+	DNSChangeAlerts      *bool      `json:"dns_change_alerts,omitempty" jsonschema:"dns only: alerts when the record's answers change"`
+	DNSChangedSince      *time.Time `json:"dns_changed_since,omitempty" jsonschema:"dns only: set while a change of the record is open (detected, not yet accepted in HawkEye or changed back)"`
 	HeartbeatPingURL     string     `json:"heartbeat_ping_url,omitempty" jsonschema:"the job requests this address each time it runs"`
 	HeartbeatGraceSec    int        `json:"heartbeat_grace_seconds,omitempty"`
 	HeartbeatLastPingAt  *time.Time `json:"heartbeat_last_ping_at,omitempty"`
@@ -102,6 +104,8 @@ func (s *tools) detail(m monitors.Monitor) MonitorDetail {
 	}
 	if m.DNS != nil {
 		d.DNSRecordType, d.DNSExpected = m.DNS.RecordType, m.DNS.Expected
+		on := m.DNS.ChangeAlerts
+		d.DNSChangeAlerts, d.DNSChangedSince = &on, m.DNS.ChangedSince
 	}
 	if m.Type != monitors.TypeHeartbeat {
 		d.Recheck = m.Recheck

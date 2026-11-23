@@ -8,7 +8,7 @@ import { Field } from '../components/Field'
 
 /** One monitor POST /monitors/suggestions proposes. `monitor` holds exactly the fields POST /monitors takes. */
 export interface MonitorSuggestion {
-  kind: 'website' | 'health' | 'api' | 'mail'
+  kind: 'website' | 'health' | 'api' | 'mail' | 'name_servers' | 'spf' | 'dmarc'
   reason: string
   /** Preselected. False when the monitor would probably report a working site as down. */
   recommended: boolean
@@ -28,6 +28,9 @@ const KIND_LABELS: Record<MonitorSuggestion['kind'], string> = {
   health: 'Health endpoint',
   api: 'API',
   mail: 'Email (MX records)',
+  name_servers: 'Name servers (NS records)',
+  spf: 'Email sender policy (SPF)',
+  dmarc: 'Email policy (DMARC)',
 }
 
 /** What the monitor checks, as a person reads it. */

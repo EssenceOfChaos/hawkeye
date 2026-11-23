@@ -1,10 +1,11 @@
 import type { Monitor } from '../api'
 
-type Kind = 'up' | 'slow' | 'down' | 'paused' | 'maintenance' | 'unknown'
+type Kind = 'up' | 'slow' | 'changed' | 'down' | 'paused' | 'maintenance' | 'unknown'
 
 const LOOK: Record<Kind, { text: string; tip: string; dot: string }> = {
   up: { text: 'Online', tip: 'Active · Online', dot: 'd-status-success' },
   slow: { text: 'Slow', tip: 'Active · Online, but responding slower than its alert threshold', dot: 'd-status-warning' },
+  changed: { text: 'Changed', tip: 'Active · The DNS record changed: review it on the monitor’s page', dot: 'd-status-warning' },
   down: { text: 'Offline', tip: 'Active · Offline', dot: 'd-status-error' },
   paused: { text: 'Paused', tip: 'Inactive · Paused', dot: 'd-status-warning' },
   maintenance: { text: 'Maintenance', tip: 'Active · In a maintenance window, no alerts', dot: 'd-status-info' },
@@ -30,13 +31,14 @@ const DNS: Partial<Record<Kind, { text: string; tip: string }>> = {
  */
 export function StatusBadge({ monitor }: {
   monitor: Pick<Monitor, 'enabled' | 'current_status'> & { in_maintenance?: boolean; slow_since?: string | null; type?: Monitor['type'] }
+    & { dns?: Monitor['dns'] }
 }) {
   const kind: Kind = !monitor.enabled
     ? 'paused'
     : monitor.in_maintenance
       ? 'maintenance'
       : monitor.current_status === 'up'
-        ? monitor.slow_since ? 'slow' : 'up'
+        ? monitor.slow_since ? 'slow' : monitor.dns?.changed_since ? 'changed' : 'up'
         : monitor.current_status === 'down' ? 'down' : 'unknown'
   const look = { ...LOOK[kind], ...(monitor.type === 'heartbeat' ? HEARTBEAT[kind] : monitor.type === 'dns' ? DNS[kind] : undefined) }
   return (

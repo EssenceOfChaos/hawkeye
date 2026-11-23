@@ -19,6 +19,9 @@ const (
 	// EventSlow: a monitor's responses have stayed above its slow-response threshold. EventSlowRecovery: they are back to normal.
 	EventSlow         = "slow"
 	EventSlowRecovery = "slow_recovery"
+	// EventDNSChange: a DNS record a monitor watches has changed. EventDNSChangeClosed: the change was accepted, or the record changed back.
+	EventDNSChange       = "dns_change"
+	EventDNSChangeClosed = "dns_change_closed"
 )
 
 // hold turns "when the alert may go out" into the value stored: NULL (send now, as an alert that was never held) unless it is really later than now.
@@ -91,6 +94,27 @@ func EnqueueSlowdown(ctx context.Context, tx pgx.Tx, orgID, monitorID, slowdownI
 		return 0, err
 	}
 	return int(tag.RowsAffected()), nil
+}
+
+// EnqueueDNSChange queues a DNS change alert (EventDNSChange or EventDNSChangeClosed). Like a recovery, "closed" skips a destination whose change
+// alert was held (quiet hours) and canceled because the change closed first. It is idempotent per change, recipient and event.
+func EnqueueDNSChange(ctx context.Context, tx pgx.Tx, orgID, monitorID, changeID uuid.UUID, event string, at time.Time) (int, error) {
+	tag, err := tx.Exec(ctx, routedRecipients+`
+		INSERT INTO notification_deliveries (dns_change_id, notification_setting_id, event_type, next_attempt_at)
+		SELECT $3, r.id, $4, COALESCE($5, now()) FROM recipients r
+		WHERE $4 <> 'dns_change_closed' OR NOT EXISTS (SELECT 1 FROM notification_deliveries o WHERE o.dns_change_id = $3 AND o.notification_setting_id = r.id
+			AND o.event_type = 'dns_change' AND o.suppressed = 'ended_while_held')
+		ON CONFLICT (dns_change_id, notification_setting_id, event_type) WHERE dns_change_id IS NOT NULL DO NOTHING`,
+		orgID, monitorID, changeID, event, hold(at))
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// CancelHeldDNSChange skips a change's alerts that are still held. Call it when the change closes, before EnqueueDNSChange(dns_change_closed).
+func CancelHeldDNSChange(ctx context.Context, tx pgx.Tx, changeID uuid.UUID) error {
+	return cancelHeld(ctx, tx, "dns_change_id", changeID, EventDNSChange)
 }
 
 // CancelHeldOutage skips an incident's outage alerts that are still held (see cancelHeld). Call it when the incident resolves, before Enqueue(recovery).

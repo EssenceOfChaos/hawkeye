@@ -43,6 +43,10 @@ type Incidents interface {
 	SlowStarted(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, thresholdMs, responseMs int, timings *Timings, at time.Time) error
 	// SlowEnded is called when they have then stayed at or under it for as long.
 	SlowEnded(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, at time.Time) error
+	// DNSChanged is called when most of a DNS monitor's locations have confirmed a change of its record (before and after, normalized).
+	DNSChanged(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, recordType string, before, after []string, at time.Time) error
+	// DNSChangeReverted is called when, with a change open, every location sees its old answers again.
+	DNSChangeReverted(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, at time.Time) error
 }
 
 // speedSettings is a monitor's slow-response configuration and state, read with the monitor row.
@@ -108,16 +112,18 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 		var speed speedSettings
 		var rf recheckFacts
 		var untilNext float64
+		var dns dnsSettings
 		// Heartbeats are pinged, not checked, so there is nothing to re-check. readOnly: the monitor's own method, and for a multi-step check every
 		// step's. A DNS monitor's method column is the GET default.
 		err := tx.QueryRow(ctx, `SELECT current_status, consecutive_failures, consecutive_successes, enabled, in_maintenance(organization_id, id, $2), organization_id, regions,
 				slow_threshold_ms, slow_checks, slow_streak, normal_streak, EXISTS (SELECT 1 FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'),
 				CASE WHEN kind = 'heartbeat' THEN 'off' ELSE recheck END, upper(method) NOT IN `+writeMethodsSQL+` AND NOT EXISTS (SELECT 1 FROM monitor_steps WHERE monitor_id = monitors.id AND upper(method) IN `+writeMethodsSQL+`),
-				COALESCE(EXTRACT(EPOCH FROM next_check_at - $2), 0)::float8
+				COALESCE(EXTRACT(EPOCH FROM next_check_at - $2), 0)::float8,
+				CASE WHEN kind = 'dns' THEN COALESCE(dns_record_type, '') ELSE '' END, dns_change_alerts, dns_change_strict
 			FROM monitors WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, monitorID, r.FinishedAt).
 			Scan(&out.Before.Status, &out.Before.Failures, &out.Before.Successes, &enabled, &maintenance, &orgID, &chosen,
 				&speed.thresholdMs, &speed.checks, &speed.state.SlowStreak, &speed.state.NormalStreak, &speed.state.Slow,
-				&rf.setting, &rf.readOnly, &untilNext)
+				&rf.setting, &rf.readOnly, &untilNext, &dns.recordType, &dns.on, &dns.strict)
 		if errors.Is(err, pgx.ErrNoRows) || err == nil && !enabled {
 			return ErrDiscarded
 		}
@@ -187,6 +193,13 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 		}
 		if err := s.recordCertificate(ctx, tx, monitorID, r); err != nil {
 			return err
+		}
+		// DNS change alerts follow the record's answers, outside maintenance like the streaks (a re-check is an extra look, not one more check in a
+		// row). The answers are only kept in the change-alert tables, never with the result.
+		if counts && !r.Recheck && dns.on && dns.recordType != "" && len(r.DNSAnswers) > 0 {
+			if err := s.recordDNS(ctx, tx, monitorID, region, effective, r.DNSAnswers, dns, r.FinishedAt); err != nil {
+				return err
+			}
 		}
 		// A re-check is an extra sample, not one more interval: it doesn't move the slow-response streaks.
 		if counts && !r.Recheck && speed.thresholdMs != nil && r.Success && r.ResponseTimeMs != nil {

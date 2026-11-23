@@ -61,7 +61,7 @@ export function PlanDetails({ plan, interval = 'month' }: { plan: Plan; interval
         {(plan.max_workflows ?? 0) > 0 && (
           <li>{plan.max_workflows === 1 ? 'One multi-step API check' : `${plan.max_workflows} multi-step API checks`} of up to {plan.max_workflow_steps} steps</li>
         )}
-        <li>Cron job and DNS monitoring</li>
+        <li>Cron job and DNS monitoring, with DNS change alerts</li>
         <li>SSL certificate expiry warnings</li>
         {plan.max_domains !== undefined && <li>Domain expiry warnings for up to {plan.max_domains} domains</li>}
         <li>Email, Slack, Teams, Discord, Telegram, PagerDuty and webhook alerts</li>

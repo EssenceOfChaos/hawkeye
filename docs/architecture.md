@@ -147,6 +147,12 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
   grants a plan except a successfully applied provider state.
 - **Brand assets:** `web/src/assets/brand/` holds the finished artwork (logo, icons, background art)
   (see `docs/branding.md`).
+- **DNS change alerts (migration `000054`, `docs/plan-dns-change-alerts.md`):** `checks.CheckDNS` returns the normalized answers on
+  `Result.DNSAnswers` (never stored with the result). `Store.RecordTx` folds them, in the result's transaction, into the location's
+  `dns_baselines` row and `dns_seen` pool (`checks.FoldDNS`, pure and unit-tested: baseline, 2-check confirmation, the A/AAAA 7-day pool) and,
+  once a quorum of the monitor's locations has a confirmed change, calls `Incidents.DNSChanged`; `DNSChangeReverted` when none has. `incidents`
+  stores the change (`dns_changes`, one open per monitor) and queues `dns_change` / `dns_change_closed` like slowdowns; accepting
+  (`incidents.AcceptDNSChange`) resets every location's baseline under the monitor's row lock.
 - **Deploys (`internal/deploys`, migration `000053`, `docs/plan-deploy-maintenance.md`):** a deploy is a `maintenance_windows` row of
   `kind = 'deploy'` starting now; `ended_at` ends it early (`maintenance_window_active` honors it), so alerts and uptime treat it exactly like
   maintenance, while `in_announced_maintenance` keeps it off public status pages. The check after a deploy runs in the API process through

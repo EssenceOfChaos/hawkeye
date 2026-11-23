@@ -200,6 +200,12 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 				WHERE m.organization_id = $1 AND sd.status = 'resolved' AND sd.resolved_at < $2 LIMIT $3)`, id, cutoff)
 		st.Slowdowns += n
 		note(err)
+		// Closed DNS changes (accepted or changed back) are history like resolved slowdowns; an open one is never deleted.
+		n, err = j.batches(ctx, `DELETE FROM dns_changes WHERE id IN (
+				SELECT c.id FROM dns_changes c JOIN monitors m ON m.id = c.monitor_id
+				WHERE m.organization_id = $1 AND c.status <> 'open' AND c.closed_at < $2 LIMIT $3)`, id, cutoff)
+		st.Slowdowns += n
+		note(err)
 	}
 
 	var err2 error

@@ -72,6 +72,8 @@ type Result struct {
 	CertExpiresAt *time.Time
 	// Region is where the check ran; the worker sets it. Empty means the primary region.
 	Region string
+	// DNSAnswers are a DNS lookup's answers (normalized), for change alerts only: never stored with the result or put in a summary.
+	DNSAnswers []string
 	// Timings is where the time went (website and API checks that opened a connection; nil otherwise). A failed check keeps the phases it
 	// got through, and the one it was stuck in counts up to the failure.
 	Timings *Timings

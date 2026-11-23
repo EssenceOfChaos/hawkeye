@@ -124,7 +124,7 @@ fieldset.group legend { font-weight: 600; padding: 0 .35rem; }
 .error { color: var(--down); }
 .hint { opacity: .75; font-size: .85rem; }
 .badge { white-space: nowrap; font-weight: 600; }
-.badge.up { color: var(--up); } .badge.down { color: var(--down); } .badge.slow { color: var(--warn); }
+.badge.up { color: var(--up); } .badge.down { color: var(--down); } .badge.slow, .badge.changed { color: var(--warn); }
 /* A status badge beside a page heading: the row centers each item with its margins, and the heading's 1rem bottom margin left the badge sitting low. */
 .row > h1 + .badge { margin-bottom: 12px; }
 /* The uptime badge's size choice and code, under the switch that turns the badge on. */
@@ -430,6 +430,10 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .timing-legend { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: .25rem 1rem; font-size: .9rem; }
 .timing-legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .4rem; vertical-align: baseline; }
 .table-view { margin-top: .5rem; }
+/* A DNS change's before and after (DnsChanges). */
+.dns-diff { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .2rem .75rem; margin: .5rem 0 .75rem; }
+.dns-diff dt { font-weight: 600; }
+.dns-diff dd { margin: 0; overflow-wrap: anywhere; }
 td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 /* The check history has up to six columns: a little less padding, and a smaller timing line, keep each row on one line at full width. Each
    timing part is unbreakable (format.ts timingsLine), so a narrow screen wraps between parts. */

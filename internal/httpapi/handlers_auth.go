@@ -178,6 +178,8 @@ func mapError(err error) error {
 	case errors.Is(err, statuspage.ErrSlugTaken):
 		return &APIError{Status: http.StatusConflict, Code: "SLUG_TAKEN", Message: "That status page address is already taken. Choose another.",
 			Details: map[string]any{"fields": map[string]string{"slug": "is already taken"}}}
+	case errors.Is(err, incidents.ErrDNSChangeNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "No open DNS change with that ID: it may already have been accepted or changed back."}
 	case errors.Is(err, deploys.ErrNotFound):
 		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND",
 			Message: "Deploy not found. Start one with POST /deploys first (\"latest\" means the newest deploy started with this key in the last day)."}
