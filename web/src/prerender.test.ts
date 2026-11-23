@@ -12,6 +12,21 @@ const shell = `<!doctype html>
 </html>`
 
 describe('renderPage', () => {
+  it('puts what HawkEye is, and links to the Privacy Policy and Terms, in a public page for readers without JavaScript', () => {
+    const html = renderPage(shell, PAGES.find((p) => p.path === '/')!)
+    const body = html.slice(html.indexOf('<div id="root">'))
+    expect(body).toContain('<h1>HawkEye — Website Uptime Monitoring &amp; Alerts</h1>')
+    expect(body).toContain('watches your websites, APIs, cron jobs and DNS records')
+    expect(body).toContain('<a href="/privacy">Privacy Policy</a>')
+    expect(body).toContain('<a href="/terms">Terms of Service</a>')
+    // Other public pages get their own heading, without the site name.
+    expect(renderPage(shell, PAGES.find((p) => p.path === '/privacy')!)).toContain('<h1>Privacy Policy</h1>')
+  })
+
+  it('leaves a page that is not for search results empty, so signed-in pages don’t flash text before the app starts', () => {
+    expect(renderPage(shell, PAGES.find((p) => p.path === '/monitoring')!)).toContain('<div id="root"></div>')
+  })
+
   const home = PAGES.find((p) => p.path === '/')!
   const hidden = PAGES.find((p) => p.path === '/monitoring')!
 

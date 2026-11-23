@@ -52,7 +52,38 @@ export function renderPage(shell: string, page: PageMeta): string {
     extra.push(`<meta name="robots" content="noindex" />`)
   }
   swap(/<\/head>/, `  ${extra.join('\n    ')}\n  </head>`, '</head>')
+  if (page.index) swap(/<div id="root"><\/div>/, `<div id="root">${pageBody(page)}</div>`, 'empty <div id="root">')
   return html
+}
+
+/** What HawkEye is, in one sentence: on every public page, for readers that don't run JavaScript. */
+export const SITE_PURPOSE =
+  'HawkEye watches your websites, APIs, cron jobs and DNS records from the outside and alerts you by email, chat apps, PagerDuty or webhook when ' +
+  'something breaks, with SSL certificate and domain expiry warnings and public status pages.'
+
+/** The links every public page's static content ends with: the main pages, and the Privacy Policy and Terms. */
+const LINKS: [string, string][] = [
+  ['/', 'Home'], ['/about', 'About'], ['/docs', 'Documentation'], ['/contact', 'Contact'], ['/register', 'Sign up free'], ['/login', 'Sign in'],
+  ['/privacy', 'Privacy Policy'], ['/terms', 'Terms of Service'],
+]
+
+/**
+ * The visible content of a public page before the app starts: its heading and description, what HawkEye is, and links to the main pages,
+ * the Privacy Policy and the Terms. Readers that don't run JavaScript (Google's app verification, search engines, link previews) see this
+ * instead of an empty page; the app replaces it as it starts (createRoot), so visitors see the app as before.
+ */
+export function pageBody(page: PageMeta): string {
+  const heading = page.path === '/' ? page.title : page.title.replace(/\s+\|\s+[^|]+$/, '')
+  const links = LINKS.map(([href, text]) => `<a href="${href}">${escapeText(text)}</a>`).join(' · ')
+  return [
+    '<main class="prerendered">',
+    `<h1>${escapeText(heading)}</h1>`,
+    `<p>${escapeText(page.description)}</p>`,
+    `<p>${escapeText(SITE_PURPOSE)}</p>`,
+    `<nav aria-label="${escapeAttr(SITE_NAME)}">${links}</nav>`,
+    `<p><small>© HawkEye Observer. <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a></small></p>`,
+    '</main>',
+  ].join('')
 }
 
 /** sitemap.xml: every indexable page with a fixed address. */
