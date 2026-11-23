@@ -508,7 +508,7 @@ func TestEveryRouteIsClassifiedForAPIKeys(t *testing.T) {
 		"POST /api/v1/auth/verify-email", "POST /api/v1/auth/logout", "GET /api/v1/plans", "GET /api/v1/public/status/:slug",
 		"GET /api/v1/public/status/:slug/logo", "GET /api/v1/public/domain-status", "GET /api/v1/public/domain-status/logo", "POST /api/v1/tools/ssl-check", "POST /api/v1/tools/site-check", "GET /api/v1/contact/categories",
 		"POST /api/v1/contact", "POST /api/v1/waitlist", "POST /api/v1/waitlist/confirm", "POST /api/v1/waitlist/leave", "POST /api/v1/notification-settings/confirm", "POST /api/v1/lifecycle/unsubscribe", "POST /api/v1/invitations/preview",
-		"POST /api/v1/webhooks/stripe",
+		"POST /api/v1/webhooks/stripe", "GET /api/v1/auth/social/providers", "POST /api/v1/auth/social/:provider/start", "GET /api/v1/auth/social/:provider/callback",
 	)
 
 	e := newEnv(t, 100000)

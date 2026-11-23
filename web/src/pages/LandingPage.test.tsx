@@ -144,7 +144,7 @@ describe('LandingPage', () => {
     )
     const footer = screen.getByRole('contentinfo')
     expect(await within(footer).findByRole('link', { name: 'Sign up' })).toBeInTheDocument()
-    expect(within(footer).getByRole('link', { name: 'Log in' })).toBeInTheDocument()
+    expect(within(footer).getByRole('link', { name: 'Sign in' })).toBeInTheDocument()
   })
 
   it('footer hides sign up and log in for a signed-in user', async () => {
@@ -153,7 +153,7 @@ describe('LandingPage', () => {
     const footer = screen.getByRole('contentinfo')
     expect(await within(footer).findByRole('link', { name: 'Dashboard' })).toBeInTheDocument()
     expect(within(footer).queryByRole('link', { name: 'Sign up' })).not.toBeInTheDocument()
-    expect(within(footer).queryByRole('link', { name: 'Log in' })).not.toBeInTheDocument()
+    expect(within(footer).queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument()
   })
 
   it('advertises what the product really does: website and API checks and SSL certificate warnings, on every plan', async () => {

@@ -63,3 +63,20 @@ func TestTokensAreRandomAndHashed(t *testing.T) {
 		t.Fatal("token generation broken")
 	}
 }
+
+func TestSafeNext(t *testing.T) {
+	for in, want := range map[string]string{
+		"/monitors":            "/monitors",
+		"/monitors?x=1#y":      "/monitors?x=1",
+		"":                     "",
+		"monitors":             "",
+		"//evil.example/x":     "",
+		"https://evil.example": "",
+		"/\\evil.example":      "",
+		"/a\r\nb":              "",
+	} {
+		if got := SafeNext(in); got != want {
+			t.Errorf("%q: %q, want %q", in, got, want)
+		}
+	}
+}

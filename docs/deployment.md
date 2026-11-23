@@ -20,6 +20,7 @@ internet ─443/80─▶ web (Caddy: TLS, HSTS, CSP, static SPA, proxies /api /h
 ```
 
 - The API also makes outbound connections for the free SSL and website checkers (`/tools`); those go through the same public-address-only policy as monitor checks but are not covered by `deploy/egress-filter.sh` (`docs/security-review.md`, item 12). `DISABLE_FREE_TOOLS=true` turns them off.
+- Sign in with Google and GitHub is offered for each provider whose `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` or `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` are set. Register the callbacks `https://<SITE_ADDRESS>/api/v1/auth/social/google/callback` and `.../github/callback` (exact match, no wildcards). `DISABLE_SOCIAL_SIGN_IN=true` hides both; email and password keep working.
 - `DISABLE_API_KEYS=true` turns API keys off (requests made with a key answer 503); browser sessions are unaffected. See `docs/operations.md#api-key-abuse`.
 - Only `web` publishes ports. The metrics ports, Prometheus, Alertmanager and PostgreSQL are never published.
 - `docker-compose.monitoring.yml` adds Prometheus and Alertmanager for **our own** alerts; `scripts/deploy.sh` includes it. Leave it out of the Compose command to run without it.

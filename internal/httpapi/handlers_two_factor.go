@@ -112,7 +112,7 @@ func (h *handlers) twoFactorSetup(c *echo.Context) error {
 	}
 	u := currentUser(c)
 	ctx := c.Request().Context()
-	if err := h.auth.VerifyPassword(ctx, u.ID, in.Password); err != nil {
+	if err := h.auth.Reauthenticate(ctx, u.ID, sessionToken(c), in.Password); err != nil {
 		return mapError(err)
 	}
 	setup, err := h.twoFactor.BeginSetup(ctx, u.ID, u.Email)
@@ -154,7 +154,7 @@ func (h *handlers) twoFactorDisable(c *echo.Context) error {
 	}
 	u := currentUser(c)
 	ctx := c.Request().Context()
-	if err := h.auth.VerifyPassword(ctx, u.ID, in.Password); err != nil {
+	if err := h.auth.Reauthenticate(ctx, u.ID, sessionToken(c), in.Password); err != nil {
 		return mapError(err)
 	}
 	if err := h.twoFactor.Disable(ctx, u.ID, u.Email, in.Code); err != nil {

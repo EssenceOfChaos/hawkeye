@@ -57,6 +57,8 @@ type Export struct {
 	SignupAttribution *attribution.Attribution `json:"signup_attribution"`
 	// AdConversions are the sign-up, checkout and purchase events our server reported (or will report) to OpenAI Ads, kept 30 days (internal/adconversions).
 	AdConversions []adconversions.Exported `json:"ad_conversions"`
+	// SignInMethods are the Google and GitHub accounts connected for signing in (provider, the address they gave, when connected and last used).
+	SignInMethods []auth.IdentityInfo `json:"sign_in_methods"`
 }
 
 type ExportUser struct {
@@ -210,6 +212,9 @@ func (s *Service) Export(ctx context.Context, userID uuid.UUID) (Export, error) 
 		return out, err
 	}
 	if out.AdConversions, err = adconversions.ForUser(ctx, s.pool, userID); err != nil {
+		return out, err
+	}
+	if _, out.SignInMethods, err = s.auth.SignInMethods(ctx, userID); err != nil {
 		return out, err
 	}
 	rows, err := s.pool.Query(ctx, `SELECT o.id, o.name, m.role, o.created_at,
@@ -395,7 +400,8 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 
 // ---- deletion
 
-// Delete permanently removes the account after re-authentication and typed confirmation.
+// Delete permanently removes the account after re-authentication (auth.Reauthenticate: the password, or for an account without one, a recent
+// confirmation through Google or GitHub in sessionToken's session) and typed confirmation.
 //
 //   - Organizations where the user is the only member are deleted with everything in them (monitors, results, incidents, alert recipients, subscription record).
 //   - If the user owns an organization that has other members, deletion is refused (ErrSharedOrganization): that would delete other people's data.
@@ -403,11 +409,11 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 //   - Each deleted organization's payment-provider customer is deleted FIRST. Deleting a Stripe customer also cancels its subscriptions immediately
 //     (no refund), so a paying customer cannot be left billed with no account. If that call fails, nothing is deleted locally and the user may retry.
 //   - Stored webhook payloads mentioning those customers are removed. Stripe itself retains invoices/transactions it must keep by law.
-func (s *Service) Delete(ctx context.Context, user auth.User, password, confirmEmail string) error {
+func (s *Service) Delete(ctx context.Context, user auth.User, sessionToken, password, confirmEmail string) error {
 	if !strings.EqualFold(strings.TrimSpace(confirmEmail), user.Email) {
 		return validation.New("confirm_email", "must match your account email address")
 	}
-	if err := s.auth.VerifyPassword(ctx, user.ID, password); err != nil {
+	if err := s.auth.Reauthenticate(ctx, user.ID, sessionToken, password); err != nil {
 		return err
 	}
 

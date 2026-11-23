@@ -5,6 +5,8 @@ import { useAuth } from '../auth'
 import { Alert } from './Alert'
 import { CopyField } from './BadgeCard'
 import { Field } from './Field'
+import { PasswordOrConfirm } from './SignInMethods'
+import { needsConfirmation, reauthReady, type Reauth } from '../socialSignIn'
 
 const day = (iso: string) => new Date(iso).toLocaleDateString([], { dateStyle: 'medium' })
 
@@ -42,11 +44,17 @@ function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void 
 }
 
 /** Two-factor sign-in on the account page: set it up with an authenticator app, make new recovery codes, or turn it off. */
-export function TwoFactorCard() {
+export function TwoFactorCard({ reauth = { hasPassword: true, connected: [], confirmed: null, expire: () => undefined }, resume }: {
+  /** How to confirm it's you: the password, or for an account without one, a confirmation through Google or GitHub. */
+  reauth?: Reauth
+  /** Back from confirming with Google or GitHub (?for=): reopen that step. */
+  resume?: string | null
+}) {
   const { refresh } = useAuth()
   const [status, setStatus] = useState<TwoFactorStatus | null>(null)
   const [unavailable, setUnavailable] = useState(false)
-  const [step, setStep] = useState<'idle' | 'password' | 'scan' | 'codes' | 'regenerate' | 'disable'>('idle')
+  const [step, setStep] = useState<'idle' | 'password' | 'scan' | 'codes' | 'regenerate' | 'disable'>(
+    resume === 'two-factor-setup' ? 'password' : resume === 'two-factor-off' ? 'disable' : 'idle')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
   const [setup, setSetup] = useState<{ secret: string; otpauth_uri: string; qr_code: string } | null>(null)
@@ -81,6 +89,7 @@ export function TwoFactorCard() {
     try {
       await fn()
     } catch (e) {
+      if (needsConfirmation(e)) reauth.expire()
       setError(msg(e))
     } finally {
       setBusy(false)
@@ -143,16 +152,15 @@ export function TwoFactorCard() {
       {status && !status.enabled && step !== 'codes' && (
         <>
           <p>
-            Add a second step to signing in: after your password, HawkEye asks for a code from an authenticator app on your phone (such as 1Password, Google
+            Add a second step to signing in: after your password (or Google or GitHub), HawkEye asks for a code from an authenticator app on your phone (such as 1Password, Google
             Authenticator, Microsoft Authenticator or Authy). Someone who learns your password still can’t get in.
           </p>
           {step === 'idle' && <button type="button" onClick={() => setStep('password')}>Set up two-factor sign-in</button>}
           {step === 'password' && (
             <form onSubmit={begin}>
-              <Field label="Your password" type="password" autoComplete="current-password" required value={password}
-                onChange={(e) => setPassword(e.target.value)} hint="To make sure it’s you." />
+              <PasswordOrConfirm reauth={reauth} purpose="two-factor-setup" password={password} onPassword={setPassword} hint="To make sure it’s you." />
               <div className="row">
-                <button type="submit" disabled={busy}>Continue</button>
+                <button type="submit" disabled={busy || !reauthReady(reauth, password)}>Continue</button>
                 <button type="button" className="linklike" onClick={reset}>Cancel</button>
               </div>
             </form>
@@ -201,11 +209,11 @@ export function TwoFactorCard() {
           )}
           {step === 'disable' && (
             <form onSubmit={disable}>
-              <p>Signing in will need only your password again.</p>
-              <Field label="Your password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+              <p>Signing in will no longer ask for a code.</p>
+              <PasswordOrConfirm reauth={reauth} purpose="two-factor-off" password={password} onPassword={setPassword} />
               {codeField}
               <div className="row">
-                <button type="submit" className="danger" disabled={busy}>Turn off two-factor sign-in</button>
+                <button type="submit" className="danger" disabled={busy || !reauthReady(reauth, password)}>Turn off two-factor sign-in</button>
                 <button type="button" className="linklike" onClick={reset}>Cancel</button>
               </div>
             </form>

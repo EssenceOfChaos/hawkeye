@@ -18,7 +18,7 @@ export function ToolsIndexPage() {
       <header className="legal-header">
         <Link to="/" aria-label="HawkEye home"><img src={brand.logoWhite} alt="HawkEye" width={160} height={32} /></Link>
         <span className="spacer" />
-        {signedIn ? <Link to="/dashboard">Dashboard</Link> : <Link to="/login">Log in</Link>}
+        {signedIn ? <Link to="/dashboard">Dashboard</Link> : <Link to="/login">Sign in</Link>}
       </header>
       <main>
         <h1>Free website monitoring tools</h1>

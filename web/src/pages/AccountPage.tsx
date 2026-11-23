@@ -1,5 +1,5 @@
-import { useEffect, useState, type SubmitEvent } from 'react'
-import { useNavigate } from 'react-router'
+import { useCallback, useEffect, useState, type SubmitEvent } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 import { api, ApiError } from '../api'
 import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
@@ -10,6 +10,8 @@ import { Appear } from '../components/Appear'
 import { Toggle } from '../components/Toggle'
 import { TwoFactorCard } from '../components/TwoFactor'
 import { SecurityLog } from '../components/SecurityLog'
+import { PasswordOrConfirm, SignInMethodsCard, type SignInMethodsInfo } from '../components/SignInMethods'
+import { needsConfirmation, PROVIDER_NAMES, readSocialReturn, reauthReady, socialError, type Provider, type Reauth } from '../socialSignIn'
 
 function msg(e: unknown): string {
   return e instanceof ApiError ? e.message : 'That did not work. Try again.'
@@ -105,7 +107,7 @@ function ExportData() {
   )
 }
 
-function DeleteAccount({ email }: { email: string }) {
+function DeleteAccount({ email, reauth }: { email: string; reauth: Reauth }) {
   const { refresh } = useAuth()
   const navigate = useNavigate()
   const [password, setPassword] = useState('')
@@ -124,6 +126,7 @@ function DeleteAccount({ email }: { email: string }) {
       await refresh()
       navigate('/', { replace: true })
     } catch (err) {
+      if (needsConfirmation(err)) reauth.expire()
       setError(msg(err))
       setBusy(false)
     }
@@ -137,10 +140,10 @@ function DeleteAccount({ email }: { email: string }) {
         plan, the subscription is <strong>canceled immediately and is not refunded</strong>. This cannot be undone — consider exporting your data first.
       </p>
       <form onSubmit={submit}>
-        <Field label="Your password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+        <PasswordOrConfirm reauth={reauth} purpose="delete" password={password} onPassword={setPassword} />
         <Field label={`Type ${email} to confirm`} value={typed} autoComplete="off" required onChange={(e) => setTyped(e.target.value)} />
         {error && <Alert>{error}</Alert>}
-        <button type="submit" className="danger" disabled={busy || !matches || password === ''}>Delete my account</button>
+        <button type="submit" className="danger" disabled={busy || !matches || !reauthReady(reauth, password)}>Delete my account</button>
       </form>
     </section>
   )
@@ -196,10 +199,55 @@ function EmailPreferencesCard() {
   )
 }
 
+/**
+ * What Google or GitHub's redirect back to this page says (read once, then taken out of the address bar): a provider connected or why not
+ * (?connected=, ?social_error=), and a confirmation for a sensitive action (#confirmed=google, with ?for= naming the step that asked).
+ */
+function useSocialReturn() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [r] = useState(() => {
+    const q = new URLSearchParams(location.search)
+    const connected = q.get('connected') as Provider | null
+    const err = socialError(q.get('social_error'))
+    let notice: { tone: 'ok' | 'error'; text: string } | null = null
+    if (err) notice = { tone: 'error', text: err }
+    else if (connected && connected in PROVIDER_NAMES) notice = { tone: 'ok', text: `${PROVIDER_NAMES[connected]} is connected. You can use it to sign in.` }
+    return { notice, confirmed: readSocialReturn(location.hash).confirmed ?? null, purpose: q.get('for'), focus: notice ? 'sign-in-methods' : q.get('for') }
+  })
+  useEffect(() => {
+    if (location.search || (location.hash && location.hash !== '#sign-in-methods')) navigate(location.pathname, { replace: true })
+    const id = r.focus === 'delete' ? 'del-h' : r.focus?.startsWith('two-factor') ? 'two-factor' : r.focus ? 'sign-in-methods' : null
+    if (id) document.getElementById(id)?.scrollIntoView?.()
+  }, [location.hash, location.pathname, location.search, navigate, r.focus])
+  return r
+}
+
 export function AccountPage() {
   const { user } = useAuth()
   const [resent, setResent] = useState(false)
+  const back = useSocialReturn()
+  const [methods, setMethods] = useState<SignInMethodsInfo | null>(null)
+  const [confirmed, setConfirmed] = useState<Provider | null>(back.confirmed)
+  const loadMethods = useCallback(async () => {
+    try {
+      setMethods(await api<SignInMethodsInfo>('GET', '/account/sign-in-methods'))
+    } catch {
+      // Without the list, the page works as before: a password is asked for where needed.
+    }
+  }, [])
+  useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- loadMethods() sets state only after its request returns, never synchronously
+    void loadMethods()
+  }, [loadMethods])
   if (!user) return null
+
+  const reauth: Reauth = {
+    hasPassword: methods?.has_password ?? true,
+    connected: methods?.identities.map((i) => i.provider) ?? [],
+    confirmed,
+    expire: () => setConfirmed(null),
+  }
 
   return (
     <>
@@ -223,9 +271,12 @@ export function AccountPage() {
         )}
       </section>
 
+      {methods && (methods.providers.length > 0 || methods.identities.length > 0) && (
+        <SignInMethodsCard info={methods} reauth={reauth} notice={back.notice} onChanged={loadMethods} />
+      )}
       <EmailPreferencesCard />
-      <ChangePassword />
-      <TwoFactorCard />
+      {reauth.hasPassword && <ChangePassword />}
+      <TwoFactorCard reauth={reauth} resume={back.purpose} />
       <section className="card" aria-labelledby="activity-h">
         <h2 id="activity-h">Recent activity</h2>
         <p className="hint">
@@ -235,7 +286,7 @@ export function AccountPage() {
         <SecurityLog path="/account/security-log" pageSize={10} caption="Recent activity on your account" />
       </section>
       <ExportData />
-      <DeleteAccount email={user.email} />
+      <DeleteAccount email={user.email} reauth={reauth} />
     </>
   )
 }

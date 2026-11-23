@@ -1,4 +1,4 @@
-import { useEffect, useState, type SubmitEvent } from 'react'
+import { useCallback, useEffect, useState, type SubmitEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { api, ApiError } from '../api'
 import { afterLoginPath } from '../navigation'
@@ -7,6 +7,20 @@ import { useAuth } from '../auth'
 import { BrandMark } from '../components/Brand'
 import { Field } from '../components/Field'
 import { Toggle } from '../components/Toggle'
+import { LastUsedBadge, SocialButtons } from '../components/SocialButtons'
+import { lastUsed, readSocialReturn, rememberSignIn, socialError } from '../socialSignIn'
+
+/** "Continue with Google / GitHub", then "or" and the email form, which works as before. The "or" shows only when a button does. */
+function SocialChoice({ next }: { next: string }) {
+  const [shown, setShown] = useState(false)
+  const onShown = useCallback((v: boolean) => setShown(v), [])
+  return (
+    <>
+      <SocialButtons next={next} onShown={onShown} />
+      {shown && <div className="d-divider auth-divider">or</div>}
+    </>
+  )
+}
 
 /**
  * Reads the one-time `?token=` from the URL and immediately removes it from the address bar (history entry replaced), so it does not linger in
@@ -49,13 +63,25 @@ export function LoginPage() {
   const { login, completeTwoFactor } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [params] = useSearchParams()
   const { error, busy, run } = useSubmit()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  // Set after a correct password for an account with two-factor sign-in: the second step asks for a code.
-  const [challenge, setChallenge] = useState<string | null>(null)
+  // After Google or GitHub, an account with two-factor sign-in comes back here with the code step in the fragment (#challenge=...&via=google).
+  const [social] = useState(() => readSocialReturn(location.hash))
+  // Set after a correct password (or Google or GitHub) for an account with two-factor sign-in: the second step asks for a code.
+  const [challenge, setChallenge] = useState<string | null>(social.challenge ?? null)
+  const [via, setVia] = useState(social.via)
   const [code, setCode] = useState('')
   const [useRecovery, setUseRecovery] = useState(false)
+  const [last] = useState(lastUsed)
+  const providerError = socialError(params.get('error'))
+  const next = social.next ?? afterLoginPath(location.state)
+
+  useEffect(() => {
+    // The challenge is read; take it out of the address bar and history.
+    if (location.hash) navigate(location.pathname + location.search, { replace: true, state: location.state })
+  }, [location.hash, location.pathname, location.search, location.state, navigate])
 
   function onSubmit(e: SubmitEvent) {
     e.preventDefault()
@@ -63,9 +89,11 @@ export function LoginPage() {
       const r = await login(email, password)
       if (r.challenge) {
         setChallenge(r.challenge)
+        setVia(undefined)
         return
       }
-      navigate(afterLoginPath(location.state))
+      rememberSignIn('password')
+      navigate(next)
     })
   }
 
@@ -74,11 +102,13 @@ export function LoginPage() {
     void run(async () => {
       try {
         const r = await completeTwoFactor(challenge!, code)
-        navigate(r.usedRecoveryCode ? '/account#two-factor' : afterLoginPath(location.state))
+        rememberSignIn(via ?? 'password')
+        navigate(r.usedRecoveryCode ? '/account#two-factor' : next)
       } catch (err) {
         // A timed-out or used-up step starts over from the password.
         if (err instanceof ApiError && err.code === 'SIGN_IN_EXPIRED') {
           setChallenge(null)
+          setVia(undefined)
           setCode('')
         }
         throw err
@@ -114,12 +144,17 @@ export function LoginPage() {
   return (
     <section className="card narrow">
       <BrandMark linkHome />
-      <h1>Log in</h1>
+      <h1>Sign in</h1>
+      {providerError && <Alert>{providerError}</Alert>}
+      <SocialChoice next={next} />
       <form onSubmit={onSubmit}>
         <Field label="Email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         <Field label="Password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         <FormError error={error} />
-        <button type="submit" disabled={busy}>Log in</button>
+        <div className="row">
+          <button type="submit" disabled={busy}>Sign in</button>
+          {last === 'password' && <LastUsedBadge />}
+        </div>
       </form>
       <p><Link to="/forgot-password">Forgot your password?</Link></p>
       <p>No account? <Link to="/register">Sign up free</Link></p>
@@ -130,6 +165,7 @@ export function LoginPage() {
 export function RegisterPage() {
   const { register } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const { error, busy, run } = useSubmit()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -138,6 +174,7 @@ export function RegisterPage() {
     e.preventDefault()
     void run(async () => {
       await register(email, password)
+      rememberSignIn('password')
       navigate('/dashboard')
     })
   }
@@ -147,6 +184,7 @@ export function RegisterPage() {
       <h1>Start with a clearer view</h1>
       <p>Create your free HawkEye account and bring your website monitoring into one place. Monitor up to 5 websites free; no credit card needed.</p>
       <p className="hint">By creating an account you agree to the <Link to="/terms">Terms</Link> and the <Link to="/privacy">Privacy policy</Link>.</p>
+      <SocialChoice next={afterLoginPath(location.state)} />
       <form onSubmit={onSubmit}>
         <Field label="Email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} error={error?.fields.email} />
         <Field label="Password" type="password" autoComplete="new-password" required minLength={10} maxLength={128}
@@ -154,7 +192,7 @@ export function RegisterPage() {
         <FormError error={error} />
         <button type="submit" disabled={busy}>Create free account</button>
       </form>
-      <p>Already registered? <Link to="/login">Log in</Link></p>
+      <p>Already registered? <Link to="/login" state={location.state}>Sign in</Link></p>
     </section>
   )
 }
@@ -184,7 +222,7 @@ export function ForgotPasswordPage() {
           <button type="submit" disabled={busy}>Send reset link</button>
         </form>
       )}
-      <p><Link to="/login">Back to log in</Link></p>
+      <p><Link to="/login">Back to sign in</Link></p>
     </section>
   )
 }
@@ -207,7 +245,7 @@ export function ResetPasswordPage() {
       <BrandMark linkHome />
       <h1>Choose a new password</h1>
       {done ? (
-        <p role="status">Password updated. <Link to="/login">Log in</Link></p>
+        <p role="status">Password updated. <Link to="/login">Sign in</Link></p>
       ) : (
         <form onSubmit={onSubmit}>
           <Field label="New password" type="password" autoComplete="new-password" required minLength={10} maxLength={128}
@@ -244,7 +282,7 @@ export function VerifyEmailPage() {
       <h1>Email verification</h1>
       {state === 'working' && <p role="status">Verifying…</p>}
       {state === 'ok' && <p role="status">Your email address is verified. <Link to="/monitors">Continue</Link></p>}
-      {state === 'failed' && <Alert>This link is invalid or has expired. Log in and request a new one.</Alert>}
+      {state === 'failed' && <Alert>This link is invalid or has expired. Sign in and request a new one.</Alert>}
     </section>
   )
 }
@@ -323,7 +361,7 @@ export function UnsubscribePage() {
 
 /**
  * Opened from the link in an invitation email. It says which team the invitation is for before anything happens, then joins it once the visitor is
- * signed in with the invited address. A visitor who is not signed in is sent to log in or create an account and brought back here; the link's token
+ * signed in with the invited address. A visitor who is not signed in is sent to sign in or create an account and brought back here; the link's token
  * rides along in the router's history state (never the address bar, where it would linger), and is read from the address again on the way back.
  */
 export function AcceptInvitePage() {
@@ -386,16 +424,16 @@ export function AcceptInvitePage() {
           {error && <Alert>{typeof error === 'string' ? error : error.message}</Alert>}
           {status === 'anonymous' ? (
             <>
-              <p>Log in, or create a free account, using <strong>{invite.email}</strong> to accept.</p>
+              <p>Sign in, or create a free account, using <strong>{invite.email}</strong> to accept.</p>
               <p className="row">
-                <Link className="button primary" to="/login" state={back}>Log in</Link>
+                <Link className="button primary" to="/login" state={back}>Sign in</Link>
                 <Link className="button" to="/register" state={back}>Create account</Link>
               </p>
             </>
           ) : wrongAccount ? (
             <>
               <Alert tone="warning">You are signed in as {user.email}, but this invitation is for {invite.email}.</Alert>
-              <button type="button" onClick={() => void logout()}>Log out and use {invite.email}</button>
+              <button type="button" onClick={() => void logout()}>Sign out and use {invite.email}</button>
             </>
           ) : (
             <>

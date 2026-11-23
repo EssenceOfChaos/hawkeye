@@ -148,7 +148,7 @@ describe('the account menu', () => {
     expect(tip).toHaveClass('d-tooltip-bottom')
   })
 
-  it('opens to the account pages and Log out, naming who is signed in', async () => {
+  it('opens to the account pages and Sign out, naming who is signed in', async () => {
     mount()
     const button = await accountButton()
     expect(button).toHaveAttribute('aria-expanded', 'false')
@@ -161,7 +161,7 @@ describe('the account menu', () => {
     expect(panel.getByRole('link', { name: 'Team' })).toHaveAttribute('href', '/team')
     expect(panel.queryByRole('link', { name: 'Reports' })).not.toBeInTheDocument() // a product page, in the main links
     expect(panel.getByRole('link', { name: 'Billing' })).toHaveAttribute('href', '/billing')
-    expect(panel.getByRole('button', { name: 'Log out' })).toBeInTheDocument()
+    expect(panel.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
     // The address is in the menu now, so the tooltip would only repeat it on top of the menu.
     expect(button.closest('.d-tooltip')).toHaveAttribute('data-tip', '')
   })
@@ -198,8 +198,8 @@ describe('the account menu', () => {
     await userEvent.tab() // Security log (owners)
     expect(screen.getByRole('link', { name: 'Security log' })).toHaveFocus()
     await userEvent.tab() // Billing
-    await userEvent.tab() // Log out
-    expect(screen.getByRole('button', { name: 'Log out' })).toHaveFocus()
+    await userEvent.tab() // Sign out
+    expect(screen.getByRole('button', { name: 'Sign out' })).toHaveFocus()
     await userEvent.tab() // out of the menu
     expect(screen.queryByRole('link', { name: 'Billing' })).not.toBeInTheDocument()
   })
@@ -207,7 +207,7 @@ describe('the account menu', () => {
   it('logs out from the menu', async () => {
     const { calls } = mount()
     await userEvent.click(await accountButton())
-    await userEvent.click(screen.getByRole('button', { name: 'Log out' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     await vi.waitFor(() => expect(calls.some((c) => c.m === 'POST' && c.url.endsWith('/auth/logout'))).toBe(true))
   })
 })

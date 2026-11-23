@@ -1,10 +1,14 @@
 # Plan: Sign in with Google and GitHub
 
-Status: **plan**, not built (2026-11-23). Not on Roadmap 2; about 1 build week, taken before #7 (reports sent straight to clients), which is
+Status: **built** on branch `feat/social-sign-in` (2026-11-23), not yet released; needs the Google and GitHub clients set up (below). Not on Roadmap 2; about 1 build week, taken before #7 (reports sent straight to clients), which is
 waiting on the consent-wording decision anyway.
 
 People will be able to create an account and sign in with **Google** or **GitHub** as well as with an email address and password. When they come
 back signed out, the button they used last carries a **"Last used"** badge, so they don't have to remember how they signed up.
+
+**It is an addition, not a replacement.** The email and password form stays on both pages, works exactly as it does today, and stays the
+default for anyone who prefers it. One account can use any mix: a password, Google, GitHub, or all three. Someone who signed up with Google can
+set a password later, and someone with a password can connect Google later.
 
 Why customers care: one click instead of choosing and remembering a password. HawkEye's audience lives in GitHub (developers) and Google
 (small businesses and agencies). It also removes a step on the way to monitoring APIs: Google and GitHub vouch for the email address, so the
@@ -64,7 +68,7 @@ and the code lives in its own package (`internal/socialauth`).
    redirects to the provider.
 3. The provider sends the person back to `GET /api/v1/auth/social/{provider}/callback?code&state`. The API checks `state` against the cookie
    (and deletes the cookie), swaps the code for tokens with the PKCE verifier, and reads the identity:
-   - **Google:** the OpenID Connect ID token, checked against Google's published keys (issuer, audience, expiry, `nonce`). It gives `sub`,
+   - **Google:** the OpenID Connect ID token, received straight from Google's token endpoint over TLS (which Google's guide says may be trusted without a signature check), with its issuer, audience, expiry and `nonce` checked. It gives `sub`,
      `email` and `email_verified`.
    - **GitHub:** `GET /user` gives the numeric `id` (the stable identity, never the login name, which can be renamed), and `GET /user/emails`
      gives the **primary, verified** address.
@@ -132,7 +136,7 @@ Data export includes the identities (provider, email, dates); account deletion r
   the Terms need no change. A note goes in `docs/legal-placeholders.md` for counsel. Google's API Services User Data Policy needs the privacy
   policy link on the consent screen.
 - **Google:** an OAuth client (Web application) in Google Cloud, with the redirect URI
-  `https://app.hawkeye.observer/api/v1/auth/social/google/callback`. The `openid email` scopes need no app review. Showing HawkEye's name
+  `https://hawkeye.observer/api/v1/auth/social/google/callback`. The `openid email` scopes need no app review. Showing HawkEye's name
   and logo on Google's screen needs **brand verification** (domain verified in Search Console, home page and privacy policy links), which takes
   a few days, so start it early.
 - **GitHub:** an OAuth App (not a GitHub App) under the HawkEye organization, with the matching callback URL.
@@ -140,7 +144,7 @@ Data export includes the identities (provider, email, dates); account deletion r
 
 ## Tests
 
-- Unit: the ID-token checks (issuer, audience, expiry, nonce, signature), GitHub's primary-verified-email rule, the `next` path rule, and the
+- Unit: the ID-token checks (issuer, audience, expiry, nonce), GitHub's primary-verified-email rule, the `next` path rule, and the
   link-or-create decision table.
 - Integration, with fake Google and GitHub servers (`httptest`): sign-up, sign-in, automatic linking, refusing an unverified email, a disabled
   account, two-factor after a social sign-in, an organization's requirement, connect and disconnect (not the last method), confirming a session

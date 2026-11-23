@@ -201,7 +201,7 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .landing-logo { height: auto; }
 @media (max-width: 480px) { .landing-logo { width: 150px; } .landing-header { gap: .6rem; } }
 .landing-header a { white-space: nowrap; }
-/* The smallest phones (320px): a smaller logo and button so "Log in" and "Sign up free" both fit on one line. */
+/* The smallest phones (320px): a smaller logo and button so "Sign in" and "Sign up free" both fit on one line. */
 @media (max-width: 22.5rem) { .landing-logo { width: 120px; } .landing-header { gap: .5rem; } .landing-header .button { padding: .45rem .7rem; font-size: .9rem; } }
 .hero { display: grid; grid-template-columns: 1fr 1fr; grid-template-areas: 'title title' 'text art'; column-gap: 2rem; row-gap: 1rem; align-items: center; padding-top: 2rem; padding-bottom: 3rem; }
 .hero-title { grid-area: title; }
@@ -1026,3 +1026,20 @@ button.json-row:disabled { cursor: default; opacity: .6; }
 .step-response { border: 1px solid var(--line); border-radius: .45rem; padding: .4rem .75rem; }
 .step-response summary { cursor: pointer; font-weight: 600; }
 .step-response[open] summary { margin-bottom: .4rem; }
+
+/* Sign in with Google and GitHub. Google's button follows its dark-theme branding (fill #131314, border #8E918F, text #E3E3E3, the logo unchanged);
+   GitHub's is black with its white mark, as daisyUI's login buttons. They override the app's gold submit style on purpose. */
+.social-buttons { display: grid; gap: .6rem; margin: 1rem 0 .25rem; }
+button.social-btn { display: inline-flex; align-items: center; justify-content: center; gap: .65rem; width: 100%; min-height: 2.75rem; font-weight: 600; }
+.row button.social-btn { width: auto; }
+button.social-btn-google { background: #131314; border: 1px solid #8e918f; color: #e3e3e3; }
+button.social-btn-github { background: #000; border: 1px solid #3d3d3d; color: #fff; }
+button.social-btn-google:hover:not(:disabled) { background: #1f1f20; border-color: #8e918f; }
+button.social-btn-github:hover:not(:disabled) { background: #161616; border-color: #5a5a5a; }
+.social-btn svg { flex: none; }
+.last-used { margin-left: .25rem; font-weight: 600; }
+.auth-divider { margin: 1rem 0; color: var(--muted); font-size: .85rem; }
+.sign-in-methods { list-style: none; margin: .75rem 0 1rem; padding: 0; display: grid; gap: .5rem; }
+.sign-in-methods li { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .9rem; padding: .55rem .75rem; border: 1px solid var(--line); border-radius: .45rem; }
+.sim-name { display: inline-flex; align-items: center; gap: .45rem; font-weight: 600; min-width: 11rem; }
+.sign-in-methods .hint { flex: 1 1 12rem; overflow-wrap: anywhere; }

@@ -58,11 +58,12 @@ import (
 )
 
 type env struct {
-	srv  *httptest.Server
-	pool *pgxpool.Pool
-	mail *email.Memory
-	fake *billing.FakeProvider // set when billing is enabled
-	app  *echo.Echo
+	srv    *httptest.Server
+	pool   *pgxpool.Pool
+	mail   *email.Memory
+	fake   *billing.FakeProvider // set when billing is enabled
+	app    *echo.Echo
+	social *fakeSocial // fake Google and GitHub sign-in
 }
 
 type envOpts struct {
@@ -86,6 +87,7 @@ type envOpts struct {
 	clock     func() time.Time           // two-factor codes and grace periods (nil: the real clock)
 	dns       statuspagedomains.Resolver // custom domain lookups (nil: every name is unknown)
 	adConv    bool                       // record OpenAI Ads conversions (as with OPENAI_ADS_API_KEY set)
+	social    *fakeSocial                // fake Google and GitHub for social sign-in (nil: newEnvOpts makes one)
 }
 
 func newEnv(t *testing.T, rateLimit int) *env { return newEnvOpts(t, rateLimit, envOpts{}) }
@@ -148,6 +150,9 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 	})
 	opts.Deploys = deploys.NewService(pool, planSvc, opts.WorkflowChecker, testutil.SecretBox())
 	opts.OAuthTokenPerMin = o.oauthPerM
+	if o.social != nil {
+		opts.SocialProviders = o.social.providers()
+	}
 	opts.AdConversions = adconversions.NewRecorder(pool, o.adConv)
 	if !o.noAPIKeys {
 		opts.OAuth = oauth.NewService(pool, planSvc, tf, mail, log, "http://app.test")
@@ -160,10 +165,13 @@ func newEnvOpts(t *testing.T, rateLimit int, o envOpts) *env {
 	t.Helper()
 	pool := testutil.NewPool(t)
 	mail := &email.Memory{}
+	if o.social == nil {
+		o.social = newFakeSocial(t)
+	}
 	app := buildApp(t, pool, mail, rateLimit, o)
 	srv := httptest.NewServer(app)
 	t.Cleanup(srv.Close)
-	e := &env{srv: srv, pool: pool, mail: mail, app: app}
+	e := &env{srv: srv, pool: pool, mail: mail, app: app, social: o.social}
 	if f, ok := o.provider.(*billing.FakeProvider); ok {
 		e.fake = f
 	}

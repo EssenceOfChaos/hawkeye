@@ -79,7 +79,7 @@ export function AboutPage() {
       <header className="landing-header">
         <Link to="/" aria-label="HawkEye home"><img className="landing-logo" src={brand.logoWhite} alt="HawkEye" width={220} height={43} /></Link>
         <span className="spacer" />
-        {!signedIn && <Link to="/login">Log in</Link>}
+        {!signedIn && <Link to="/login">Sign in</Link>}
         <Link className="button primary" to={ctaTo}>{signedIn ? 'Open dashboard' : 'Sign up free'}</Link>
       </header>
 
