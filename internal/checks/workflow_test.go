@@ -296,3 +296,75 @@ func TestValidateExtraction(t *testing.T) {
 		t.Fatalf("placeholders %q", got)
 	}
 }
+
+func tryWF(t *testing.T, w Workflow) (Result, []*Preview) {
+	t.Helper()
+	if w.Secrets == nil {
+		w.Secrets = map[string]string{"password": password}
+	}
+	res, previews, err := NewChecker(loopbackCfg()).TryWorkflow(t.Context(), w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res, previews
+}
+
+func TestTryWorkflowShowsEachResponseWithSavedValuesHidden(t *testing.T) {
+	a := newAPI(t)
+	res, previews := tryWF(t, Workflow{Steps: []Step{a.login(), a.account()}})
+	if !res.Success || len(previews) != 2 {
+		t.Fatalf("%+v %v", res, previews)
+	}
+	// The token is saved by the step whose body shows it, so it is hidden there too, and the JSON keeps its order and stays valid.
+	if got := previews[0].Body; got != `{"data":{"token":"[hidden]","expires":3600,"roles":["admin"]}}` {
+		t.Fatalf("login body %s", got)
+	}
+	if previews[1].Body != `{"plan":"pro","id":42}` || len(previews[1].Checks) != 1 || previews[1].Checks[0] != "" {
+		t.Fatalf("account %+v", previews[1])
+	}
+	// The scheduled run is the same, with no previews.
+	if r := runWF(t, Workflow{Steps: []Step{a.login(), a.account()}}); !r.Success || len(r.Steps) != 2 {
+		t.Fatalf("%+v", r)
+	}
+}
+
+func TestTryWorkflowStopsWhereTheRunStops(t *testing.T) {
+	a := newAPI(t)
+	login := a.login()
+	res, previews := tryWF(t, Workflow{Steps: []Step{login, a.step("Fail", "GET", "/fail/x"), a.account()}})
+	if res.Success || len(res.Steps) != 2 || len(previews) != 2 {
+		t.Fatalf("%+v %d previews", res, len(previews))
+	}
+	// A failing step's text body is shown, with the token it mentions hidden.
+	if strings.Contains(previews[1].Body, token) || !strings.Contains(previews[1].Body, "server error mentioning [hidden]") {
+		t.Fatalf("failing step %q", previews[1].Body)
+	}
+	// A step that got no response has no preview.
+	dead := Step{Name: "Nowhere", Target: Target{URL: "http://127.0.0.1:1/", Method: "GET", Timeout: time.Second}}
+	_, previews = tryWF(t, Workflow{Steps: []Step{dead}})
+	if len(previews) != 1 || previews[0] != nil {
+		t.Fatalf("%v", previews)
+	}
+}
+
+func TestCleanJSON(t *testing.T) {
+	r := newRedactor(map[string]string{"key": "s3cr3t-value", "pin": "908172"})
+	cases := []struct{ in, want string }{
+		{`{"b":1,"a":"x s3cr3t-value y","pin":908172,"list":[true,null,"s3cr3t-value"]}`,
+			`{"b":1,"a":"x [hidden] y","pin":"[hidden]","list":[true,null,"[hidden]"]}`},
+		{`[ 1 , 2 ]`, `[1,2]`},
+		{`"s3cr3t-value"`, `"[hidden]"`},
+		{`{"html":"<b>&</b>"}`, `{"html":"<b>&</b>"}`},
+	}
+	for _, c := range cases {
+		got, ok := r.cleanJSON([]byte(c.in))
+		if !ok || string(got) != c.want || !json.Valid(got) {
+			t.Errorf("%s: %s %v", c.in, got, ok)
+		}
+	}
+	for _, bad := range []string{``, `{"a":`, `{} {}`, `not json`} {
+		if _, ok := r.cleanJSON([]byte(bad)); ok {
+			t.Errorf("%q should not be JSON", bad)
+		}
+	}
+}

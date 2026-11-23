@@ -656,7 +656,12 @@ Each result's `steps` (in `GET /monitors/{id}/results`) lists the steps that ran
 error_summary}`. Secrets and saved values are replaced with `[hidden]` in everything stored or alerted on; response content is never stored.
 
 `POST /monitors/test-workflow` runs an unsaved workflow once and returns `{"result": {success, status_code, response_time_ms, error_category,
-error_summary, steps}}`, storing nothing. The body is `{steps, secrets, cookies}`, validated as above against the plan's step limit; secrets must be sent
+error_summary, steps}, "responses": [...]}`, storing nothing. `responses` has one entry per step that ran: null when the step got no response,
+otherwise `{body, truncated, binary, checks: [{passed, message}]}` with the first 64 KB of the body and every check of the step evaluated. Every
+secret and saved value (with the values known at the end of the run, so a token a step returns and saves is hidden in that step's own body) is
+replaced with `[hidden]`; a JSON body is redacted value by value, so it stays valid JSON with its keys in order, and a number equal to a hidden
+value becomes the string `"[hidden]"`. The answer is `Cache-Control: no-store`; the app shows it once to build checks and saved values by clicking
+fields. MCP's `test_workflow` returns outcomes only, never response bodies. The body is `{steps, secrets, cookies}`, validated as above against the plan's step limit; secrets must be sent
 in full (stored ones are never read). It is session-only, needs a verified address, and is limited per IP and to 60 runs an hour per
 organization (shared with *Test request* above). A run longer than 25 seconds is stopped (`422 TEST_TOO_SLOW`). API keys can create, read, change and delete workflows like other monitors;
 MCP's `get_monitor` lists their step names (`workflow_steps`), and `create_workflow` and `test_workflow` create and try them with secret names only

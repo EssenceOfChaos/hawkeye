@@ -189,6 +189,10 @@ func TestTestWorkflowRunsWithoutSaving(t *testing.T) {
 		res["error_summary"] != "Step 1 (Sign in): DNS lookup failed" {
 		t.Fatalf("result %v", res)
 	}
+	// One entry per step that ran; null when the step got no response. The engine's tests cover bodies and their redaction.
+	if resp := r.Body["responses"].([]any); len(resp) != 1 || resp[0] != nil {
+		t.Fatalf("responses %v", r.Body["responses"])
+	}
 	if n := e.countRows(t, `SELECT count(*) FROM monitors`); n != 0 {
 		t.Fatalf("a test run saved %d monitors", n)
 	}

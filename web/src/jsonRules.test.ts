@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { childPath, describeRule, flattenJson, rulesFor } from './jsonRules'
+import { childPath, describeRule, flattenJson, rulesFor, valueNameFor } from './jsonRules'
 
 describe('jsonRules', () => {
   it('builds paths the way checks read them', () => {
@@ -38,5 +38,20 @@ describe('jsonRules', () => {
     const [obj] = flattenJson({ db: {} }).rows
     expect(rulesFor(obj)).toEqual([{ type: 'json_path', path: 'db', operator: 'exists' }])
     expect(rulesFor({ path: null, depth: 0, label: 'x', kind: 'string', value: 'y' })).toEqual([])
+  })
+
+  it('offers only "exists" for a value a test run hid', () => {
+    const [tok] = flattenJson({ token: '[hidden]' }).rows
+    expect(rulesFor(tok).map(describeRule)).toEqual(['token exists'])
+  })
+
+  it('suggests names for saved values that the server accepts', () => {
+    expect(valueNameFor('data.token', [])).toBe('token')
+    expect(valueNameFor('items[0].id', [])).toBe('id')
+    expect(valueNameFor('[2]', [])).toBe('value')
+    expect(valueNameFor('data.access-token', [])).toBe('access_token')
+    expect(valueNameFor('meta.2fa', [])).toBe('value_2fa')
+    expect(valueNameFor('data.token', ['token', 'token_2'])).toBe('token_3')
+    expect(valueNameFor(`a.${'x'.repeat(60)}`, []).length).toBeLessThanOrEqual(40)
   })
 })

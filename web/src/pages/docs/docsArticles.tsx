@@ -539,6 +539,11 @@ export function ApiWorkflows() {
         itself, such as a value that no earlier step saves, the result says the test needs fixing, so a broken test reads differently from a broken API.
         Slow-response alerts use the time of all the steps together.
       </p>
+      <p>
+        Under the test results, open a step’s response to build the check from it. Click a field to add a check to that step, such as{' '}
+        <code>status</code> equals <code>paid</code> or <code>count</code> is at least <code>1</code>, or to save its value for later steps, such as{' '}
+        <code>data.token</code> saved as <code>token</code>. Secrets and saved values show as [hidden], and the responses aren’t kept.
+      </p>
 
       <h2 id="safety">Secrets and safety</h2>
       <ul>

@@ -15,7 +15,8 @@ import (
 // testWorkflowTimeout bounds a test run, inside the API's own request timeout. Scheduled runs get the full checks.WorkflowTimeout.
 const testWorkflowTimeout = 25 * time.Second
 
-// testWorkflow runs an unsaved multi-step API check once and reports each step, so it can be built and fixed before it is saved. Nothing is
+// testWorkflow runs an unsaved multi-step API check once and reports each step, with its response (secrets and saved values hidden), so it can
+// be built and fixed before it is saved, and checks and saved values picked from the responses. Nothing is
 // stored. It makes our servers send requests on demand, so it needs a verified address and has its own per-IP and per-organization limits.
 func (h *handlers) testWorkflow(c *echo.Context) error {
 	if h.workflowChecker == nil {
@@ -36,7 +37,7 @@ func (h *handlers) testWorkflow(c *echo.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(c.Request().Context(), testWorkflowTimeout)
 	defer cancel()
-	res, err := h.workflowChecker.RunWorkflow(ctx, wf)
+	res, previews, err := h.workflowChecker.TryWorkflow(ctx, wf)
 	if errors.Is(err, context.DeadlineExceeded) {
 		return &APIError{Status: http.StatusUnprocessableEntity, Code: "TEST_TOO_SLOW",
 			Message: "The test took longer than 25 seconds, so it was stopped. Scheduled checks allow 60 seconds; save it to see how it does."}
@@ -44,7 +45,24 @@ func (h *handlers) testWorkflow(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"result": workflowResult(res)})
+	// Each step's response, with secrets and saved values hidden, so checks and saved values can be picked from it. Never stored or logged.
+	responses := make([]any, len(previews))
+	for i, p := range previews {
+		if p != nil {
+			responses[i] = previewJSON(*p)
+		}
+	}
+	c.Response().Header().Set("Cache-Control", "no-store")
+	return c.JSON(http.StatusOK, map[string]any{"result": workflowResult(res), "responses": responses})
+}
+
+// previewJSON is a response as a test shows it: {body, truncated, binary, checks: [{passed, message}]}.
+func previewJSON(p checks.Preview) map[string]any {
+	list := make([]map[string]any, len(p.Checks))
+	for i, msg := range p.Checks {
+		list[i] = map[string]any{"passed": msg == "", "message": nullIfEmpty(msg)}
+	}
+	return map[string]any{"body": p.Body, "truncated": p.Truncated, "binary": p.Binary, "checks": list}
 }
 
 // workflowResult is a run as the API shows it: the outcome, and what each step that ran did.

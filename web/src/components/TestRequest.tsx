@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { ApiError, type Assertion, type RequestTest } from '../api'
 import { timingsLine } from '../format'
-import { describeRule, flattenJson, rulesFor, type JsonRow } from '../jsonRules'
+import { describeRule, rulesFor, type JsonRow } from '../jsonRules'
+import { ResponseBody } from './ResponseBody'
 import { Alert } from './Alert'
 
 /** What a test sent, kept with its result so the list still matches if the form changes afterward. */
@@ -98,78 +99,19 @@ function Outcome({ sent, picked, onPick, onAdd, full }: {
           ))}
         </ul>
       )}
-      {response && <Body response={response} picked={picked} onPick={onPick} onAdd={onAdd} full={full} />}
+      {response && (
+        <ResponseBody response={response} picked={picked} onPick={onPick} hint="Click a field to check it."
+          actions={(row) => (
+            <>
+              {rulesFor(row).map((a, j) => (
+                <button key={j} type="button" className="value-chip" disabled={full} onClick={() => onAdd(a)}>
+                  {describeRule(a).slice((row.path ?? '').length + 1)}
+                </button>
+              ))}
+              {full && <small className="hint">This monitor has as many checks as it can have. Remove one to add another.</small>}
+            </>
+          )} />
+      )}
     </div>
   )
-}
-
-function Body({ response, picked, onPick, onAdd, full }: {
-  response: NonNullable<RequestTest['response']>
-  picked: JsonRow | null
-  onPick: (r: JsonRow | null) => void
-  onAdd: (a: Assertion) => void
-  full: boolean
-}) {
-  const doc = useMemo(() => {
-    if (response.binary || response.truncated || response.body.trim() === '') return undefined
-    try {
-      const v: unknown = JSON.parse(response.body)
-      return v !== null && typeof v === 'object' ? v : undefined
-    } catch {
-      return undefined
-    }
-  }, [response])
-  const flat = useMemo(() => (doc === undefined ? null : flattenJson(doc)), [doc])
-
-  if (response.binary) return <p className="hint">The response isn’t text, so it isn’t shown.</p>
-  if (response.body === '') return <p className="hint">The response has no body.</p>
-  if (!flat || flat.rows.length === 0) {
-    return (
-      <>
-        <pre className="test-body" aria-label="Response body">{response.body}</pre>
-        {response.truncated && <p className="hint">Only the start of the response is shown. Checks still read up to 1 MB of it.</p>}
-      </>
-    )
-  }
-  return (
-    <>
-      <p className="hint">Click a field to check it.</p>
-      <ul className="json-tree" aria-label="Response fields">
-        {flat.rows.map((row, i) => (
-          <li key={i} style={{ paddingLeft: `${row.depth * 1.1}rem` }}>
-            <button type="button" className="json-row" aria-pressed={picked === row} disabled={row.path === null}
-              title={row.path === null ? 'This key has a dot or bracket in it, so a check can’t reach it.' : row.path}
-              onClick={() => onPick(picked === row ? null : row)}>
-              <span className="json-key">{row.label}</span>: <JsonValue row={row} />
-            </button>
-            {picked === row && (
-              <div className="json-pick">
-                <code>{row.path}</code>
-                {rulesFor(row).map((a, j) => (
-                  <button key={j} type="button" className="value-chip" disabled={full} onClick={() => onAdd(a)}>
-                    {describeRule(a).slice((row.path ?? '').length + 1)}
-                  </button>
-                ))}
-                {full && <small className="hint">This monitor has as many checks as it can have. Remove one to add another.</small>}
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
-      {flat.more && <p className="hint">Only the first {flat.rows.length.toLocaleString()} fields are shown.</p>}
-    </>
-  )
-}
-
-function JsonValue({ row }: { row: JsonRow }) {
-  switch (row.kind) {
-    case 'object':
-      return <span className="hint">{`{${row.size} field${row.size === 1 ? '' : 's'}}`}</span>
-    case 'array':
-      return <span className="hint">{`[${row.size} item${row.size === 1 ? '' : 's'}]`}</span>
-    case 'string':
-      return <span className="json-string">{JSON.stringify(row.value)}</span>
-    default:
-      return <span className="json-literal">{String(row.value)}</span>
-  }
 }

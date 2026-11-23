@@ -95,6 +95,9 @@ export function rulesFor(row: JsonRow): Assertion[] {
   const path = row.path
   const rule = (operator: JsonOperator, value?: string): Assertion =>
     value === undefined ? { type: 'json_path', path, operator } : { type: 'json_path', path, operator, value }
+  // A multi-step test run hides secrets and saved values. Checking for "[hidden]" would never pass, and checking for the real value would put a
+  // secret in the check, so a hidden field can only be checked to exist.
+  if (isHidden(row)) return [rule('exists')]
   switch (row.kind) {
     case 'string':
       return [rule('equals', row.value as string), rule('exists')]
@@ -108,4 +111,24 @@ export function rulesFor(row: JsonRow): Assertion[] {
     default:
       return [rule('exists')]
   }
+}
+
+/** The text a multi-step test run puts in place of a secret or saved value. */
+export const HIDDEN = '[hidden]'
+
+/** Whether a field's value was hidden by a test run (all of it, or a part of a string). */
+export const isHidden = (row: JsonRow) => typeof row.value === 'string' && row.value.includes(HIDDEN)
+
+/**
+ * A name for saving a field's value in a multi-step check, from its key (`data.token` → `token`, `items[0].id` → `id`), as the server accepts
+ * names (a letter or _, then letters, digits or _, up to 40) and unlike any name in `taken`.
+ */
+export function valueNameFor(path: string, taken: string[]): string {
+  const key = path.split('.').map((k) => k.replace(/\[\d+\]/g, '')).filter(Boolean).at(-1) ?? ''
+  let base = key.replace(/[^A-Za-z0-9_]/g, '_')
+  if (!/^[A-Za-z_]/.test(base)) base = `value${base ? `_${base}` : ''}`
+  base = base.slice(0, 36)
+  let name = base
+  for (let n = 2; taken.includes(name); n++) name = `${base}_${n}`
+  return name
 }

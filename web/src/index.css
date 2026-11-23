@@ -1021,3 +1021,8 @@ button.json-row:disabled { cursor: default; opacity: .6; }
 .json-literal { color: #c3e88d; }
 .json-pick { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: .3rem 0 .4rem .5rem; font-family: var(--font-body); }
 .json-pick code { overflow-wrap: anywhere; }
+/* Multi-step test runs: each step's response, opened one at a time. */
+.step-responses { display: grid; gap: .5rem; margin-top: .75rem; }
+.step-response { border: 1px solid var(--line); border-radius: .45rem; padding: .4rem .75rem; }
+.step-response summary { cursor: pointer; font-weight: 600; }
+.step-response[open] summary { margin-bottom: .4rem; }

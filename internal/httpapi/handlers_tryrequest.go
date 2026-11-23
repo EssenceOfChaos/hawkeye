@@ -39,12 +39,10 @@ func (h *handlers) testRequest(c *echo.Context) error {
 		"content_type": nullIfEmpty(res.ContentType), "final_url": nullIfEmpty(res.FinalURL), "timings": res.Timings,
 	}, "response": nil, "checks": []any{}}
 	if res.StatusCode != nil {
-		out["response"] = map[string]any{"body": p.Body, "truncated": p.Truncated, "binary": p.Binary}
-		checks := make([]map[string]any, len(p.Checks))
-		for i, msg := range p.Checks {
-			checks[i] = map[string]any{"passed": msg == "", "message": nullIfEmpty(msg)}
-		}
-		out["checks"] = checks
+		pj := previewJSON(p)
+		out["checks"] = pj["checks"]
+		delete(pj, "checks")
+		out["response"] = pj
 	}
 	// The body may hold anything the site returns: keep it out of shared caches and the browser's disk cache.
 	c.Response().Header().Set("Cache-Control", "no-store")

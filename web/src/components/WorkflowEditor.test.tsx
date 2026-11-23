@@ -86,6 +86,47 @@ describe('the multi-step API check editor', { timeout: 20_000 }, () => {
     expect(posts[0].body.secrets).toEqual({ password: 'hunter22' })
   })
 
+  it('adds checks and saved values from a step\'s response, to the step that sent it', async () => {
+    const posts = setup((url) => url.endsWith('/test-workflow')
+      ? json(200, {
+        result: { success: true, status_code: 200, response_time_ms: 90, error_category: null, error_summary: null,
+          steps: [{ name: 'Sign in', success: true, status_code: 200, response_time_ms: 60 }, { name: 'Orders', success: true, status_code: 200, response_time_ms: 30 }] },
+        responses: [
+          { body: '{"data":{"token":"[hidden]","expires":3600}}', truncated: false, binary: false, checks: [] },
+          { body: '{"orders":[{"id":"ord_1","status":"paid"}],"count":1}', truncated: false, binary: false, checks: [] },
+        ],
+      })
+      : json(201, { monitor: { id: 'm1' } }))
+    await buildTwoSteps()
+    await userEvent.click(screen.getByRole('button', { name: 'Run test' }))
+
+    // A hidden value can only be checked to exist, and it is already saved.
+    await userEvent.click(await screen.findByText('Step 1 response: Sign in'))
+    const login = screen.getByRole('list', { name: 'Step 1 response fields' })
+    await userEvent.click(within(login).getByRole('button', { name: /token/ }))
+    expect(screen.getAllByRole('button', { name: 'exists' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /^equals/ })).not.toBeInTheDocument()
+    expect(screen.getByText('Saved as {{token}}')).toBeInTheDocument()
+
+    // Additions go to the step that sent the response, even after the steps are moved.
+    await userEvent.click(screen.getByRole('button', { name: 'Move Orders up' }))
+    await userEvent.click(screen.getByText('Step 2 response: Orders'))
+    const orders = screen.getByRole('list', { name: 'Step 2 response fields' })
+    await userEvent.click(within(orders).getByRole('button', { name: /status/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'equals "paid"' }))
+    expect(screen.getByText('Added to step 1: orders[0].status equals "paid".')).toHaveAttribute('role', 'status')
+    await userEvent.click(within(orders).getByRole('button', { name: /^\s*id/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save as {{id}}' }))
+    expect(screen.getByText('Step 1 saves orders[0].id as {{id}}. Later steps can use it.')).toHaveAttribute('role', 'status')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add monitor' }))
+    await screen.findByRole('heading', { name: 'Monitor page' })
+    const body = posts.at(-1)!.body as { steps: { assertions: unknown[]; extractions: unknown[] }[] }
+    expect(body.steps[0].assertions).toEqual([{ type: 'json_path', path: 'orders[0].status', operator: 'equals', value: 'paid' }])
+    expect(body.steps[0].extractions).toEqual([{ name: 'id', from: 'json_path', path: 'orders[0].id' }])
+    expect(body.steps[1].assertions).toEqual([])
+  })
+
   it('saves the steps, secrets and cookies setting', async () => {
     const posts = setup(() => json(201, { monitor: { id: 'm1' } }))
     await buildTwoSteps()

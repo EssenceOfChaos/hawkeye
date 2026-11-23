@@ -12,6 +12,7 @@ import {
   type JsonOperator,
   type RequestHeader,
   type WorkflowRun as Run,
+  type WorkflowTest,
 } from '../api'
 import { Alert } from './Alert'
 import { CurlImport } from './CurlImport'
@@ -21,6 +22,7 @@ import { Field } from './Field'
 import { Toggle } from './Toggle'
 import { WorkflowRun } from './WorkflowRun'
 import { isNumberOperator, JSON_OPERATORS, needsValue } from '../jsonRules'
+import { StepResponses } from './StepResponses'
 
 /**
  * The editor for a multi-step API check: numbered step cards (the same numbers as the run display), each showing only its name, method and address
@@ -63,6 +65,10 @@ interface EditorProps {
 export function WorkflowEditor({ steps, onSteps, secrets, onSecrets, cookies, onCookies, maxSteps, errors: f }: EditorProps) {
   const [run, setRun] = useState<Run | null>(null)
   const [ranNames, setRanNames] = useState<string[]>([])
+  // The tested steps' keys and responses, so a field picked from a response goes to the right step even after steps are moved.
+  const [ranKeys, setRanKeys] = useState<number[]>([])
+  const [responses, setResponses] = useState<WorkflowTest['responses']>([])
+  const [ranRules, setRanRules] = useState<Assertion[][]>([])
   const [testError, setTestError] = useState<ApiError | null>(null)
   const [testing, setTesting] = useState(false)
 
@@ -98,8 +104,11 @@ export function WorkflowEditor({ steps, onSteps, secrets, onSecrets, cookies, on
     setRun(null)
     try {
       const plain = Object.fromEntries(liveSecrets.filter((s) => s.value !== '').map((s) => [s.name.trim(), s.value]))
-      const r = await api<{ result: Run }>('POST', '/monitors/test-workflow', { steps: stepsInput(steps), secrets: plain, cookies })
+      const r = await api<WorkflowTest>('POST', '/monitors/test-workflow', { steps: stepsInput(steps), secrets: plain, cookies })
       setRanNames(steps.map((s) => s.name))
+      setRanKeys(steps.map((s) => s.key))
+      setRanRules(steps.map((s) => s.assertions))
+      setResponses(r.responses ?? [])
       setRun(r.result)
     } catch (e) {
       setTestError(e instanceof ApiError ? e : new ApiError(0, 'NETWORK', 'Could not reach the server. Try again.'))
@@ -139,7 +148,10 @@ export function WorkflowEditor({ steps, onSteps, secrets, onSecrets, cookies, on
 
       <fieldset className="group" aria-labelledby="test-h">
         <legend id="test-h">Try it</legend>
-        <p className="hint">Runs the steps once, as they are on screen, without saving. Nothing about the responses is kept.</p>
+        <p className="hint">
+          Runs the steps once, as they are on screen, without saving. Open a step’s response to add a check or save a value by clicking a field. Secrets
+          and saved values show as [hidden], and nothing about the responses is kept.
+        </p>
         {missingForTest.length > 0 && (
           <p className="hint">Saved secrets are never shown, so type {missingForTest.join(', ')} again to use {missingForTest.length === 1 ? 'it' : 'them'} in a test.</p>
         )}
@@ -158,6 +170,7 @@ export function WorkflowEditor({ steps, onSteps, secrets, onSecrets, cookies, on
             <WorkflowRun names={ranNames} outcomes={run.steps} label="Test run" />
           </div>
         )}
+        {run && <StepResponses responses={responses} names={ranNames} stepKeys={ranKeys} rules={ranRules} steps={steps} onSteps={onSteps} />}
       </fieldset>
     </>
   )
