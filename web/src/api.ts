@@ -156,7 +156,17 @@ export interface MonitorAuthInput {
   secret?: string
 }
 
-export type JsonOperator = 'equals' | 'not_equals' | 'contains' | 'exists' | 'not_exists'
+export type JsonOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'exists'
+  | 'not_exists'
+  // Number comparisons: the value must be a number.
+  | 'greater_than'
+  | 'greater_or_equal'
+  | 'less_than'
+  | 'less_or_equal'
 
 export interface Assertion {
   type: 'body_contains' | 'body_not_contains' | 'json_path'
@@ -280,6 +290,24 @@ export interface WorkflowRun {
   error_category: string | null
   error_summary: string | null
   steps: StepOutcome[]
+}
+
+/** A test request of an unsaved website or API monitor (POST /monitors/test-request). The response is shown once and never stored. */
+export interface RequestTest {
+  result: {
+    success: boolean
+    status_code: number | null
+    response_time_ms: number | null
+    error_category: string | null
+    error_summary: string | null
+    content_type: string | null
+    final_url: string | null
+    timings: Timings | null
+  }
+  /** Null when no response arrived (the address didn't resolve, the connection failed, ...). */
+  response: { body: string; truncated: boolean; binary: boolean } | null
+  /** One per check sent, in order. Empty when no response arrived. */
+  checks: { passed: boolean; message: string | null }[]
 }
 
 /** What a DNS monitor looks up. */

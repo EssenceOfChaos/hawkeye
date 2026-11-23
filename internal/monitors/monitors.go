@@ -657,8 +657,13 @@ func (f *fields) validateRequest(bad map[string]string) {
 			case checks.OpExists, checks.OpNotExists:
 				as.Value = ""
 			case checks.OpEquals, checks.OpNotEquals, checks.OpContains:
+			case checks.OpGreaterThan, checks.OpGreaterOrEqual, checks.OpLessThan, checks.OpLessOrEqual:
+				if _, ok := checks.ParseNumber(as.Value); !ok {
+					bad[key("value")] = "must be a number, such as 500 or 0.5"
+				}
+				as.Value = strings.TrimSpace(as.Value)
 			default:
-				bad[key("operator")] = "must be equals, not_equals, contains, exists or not_exists"
+				bad[key("operator")] = "must be equals, not_equals, contains, exists, not_exists, greater_than, greater_or_equal, less_than or less_or_equal"
 			}
 		default:
 			bad[key("type")] = "must be body_contains, body_not_contains or json_path"

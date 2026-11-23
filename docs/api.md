@@ -222,14 +222,28 @@ interval raised to the plan minimum, so a downgrade takes effect without rewriti
 - `assertions`: up to 10, all of which must pass after the status check. `{type: "body_contains" | "body_not_contains", value}`
   searches the first 1 MiB of the body. `{type: "json_path", path, operator, value?}` parses the body as JSON (failing above 1 MiB);
   `path` looks like `data.items[0].status` (a leading `$.` is optional); `operator` is `equals`, `not_equals`, `contains` (substring
-  of a string, or an element of an array), `exists` or `not_exists`. Strings compare as text, numbers numerically, and other values
-  by their JSON form (`true`, `null`). Not allowed with `HEAD`. A failed assertion is recorded with `error_category: "assertion"`.
+  of a string, or an element of an array), `exists`, `not_exists`, or a number comparison: `greater_than`, `greater_or_equal`, `less_than`
+  or `less_or_equal` (`{path: "queue_size", operator: "less_or_equal", value: "500"}`). Strings compare as text, numbers numerically, and other values
+  by their JSON form (`true`, `null`). A number comparison's `value` must be a number (`500`, `0.25`, `-3`, `1e6`; a 400 on `assertions[i].value`
+  otherwise); the value at the path must be a JSON number or a string holding one (`"512"`), and anything else fails as "is not a number". Not allowed
+  with `HEAD`. A failed assertion is recorded with `error_category: "assertion"`; its summary names the rule, never the value found.
 
 **State-changing methods.** `POST`, `PUT`, `PATCH` and `DELETE` repeat a request that changes things on the target, so they need a **verified email address**
 (otherwise 403 `EMAIL_NOT_VERIFIED`, when creating a monitor or switching an existing one to such a method) and a **check interval of at least 5 minutes**
 (`check_interval_seconds` below 300 is a 400 on that field; the default for such a monitor is raised to 300 s). Read-only methods (`GET`, `HEAD`, `OPTIONS`) keep the plan's speed.
 
 Validation errors for list items name the item, for example `headers[0].name` or `assertions[2].path`.
+
+**Test request.** `POST /monitors/test-request` sends an unsaved website or API monitor's request once and returns the response, so checks can be
+written from it (the monitor form's *Send test request*, where clicking a field of a JSON response adds a check). The body is the request part of a
+monitor: `{url, method?, expected_status_code?, timeout_seconds?, headers?, body?, auth?, assertions?, monitor_id?}`, validated as on create, with the
+same field names. `monitor_id` (one of the organization's website or API monitors) lets an omitted `auth.secret` use that monitor's stored credential,
+as saving the form would; nothing else is read from it. The answer is
+`{"result": {success, status_code, response_time_ms, error_category, error_summary, content_type, final_url, timings}, "response": {body, truncated,
+binary} | null, "checks": [{passed, message}]}`: `response` is null when no response arrived; `body` is the first 256 KB of the response as text (empty
+and `binary: true` when it isn't UTF-8); `checks` has one entry per assertion, in order, all evaluated (a scheduled check stops at the first failure),
+and is filled even when the status check failed. Nothing is stored or logged, and the answer is `Cache-Control: no-store`. It is session-only, needs a
+verified address, shares the test runs' limits (per IP, and 60 an hour per organization) and stops after 25 seconds.
 
 **URL rules.** `http`/`https` only, no credentials, ports 80/443 only, no `localhost`/`.local`/`.internal`/single-label hosts,
 no literal private/loopback/link-local/metadata IPs. This is early feedback only; the real SSRF defense (DNS resolution and
@@ -643,8 +657,8 @@ error_summary}`. Secrets and saved values are replaced with `[hidden]` in everyt
 
 `POST /monitors/test-workflow` runs an unsaved workflow once and returns `{"result": {success, status_code, response_time_ms, error_category,
 error_summary, steps}}`, storing nothing. The body is `{steps, secrets, cookies}`, validated as above against the plan's step limit; secrets must be sent
-in full (stored ones are never read). It is session-only, needs a verified address for steps that write, and is limited per IP and to 60 runs an hour per
-organization. A run longer than 25 seconds is stopped (`422 TEST_TOO_SLOW`). API keys can create, read, change and delete workflows like other monitors;
+in full (stored ones are never read). It is session-only, needs a verified address, and is limited per IP and to 60 runs an hour per
+organization (shared with *Test request* above). A run longer than 25 seconds is stopped (`422 TEST_TOO_SLOW`). API keys can create, read, change and delete workflows like other monitors;
 MCP's `get_monitor` lists their step names (`workflow_steps`), and `create_workflow` and `test_workflow` create and try them with secret names only
 (see *MCP server*).
 

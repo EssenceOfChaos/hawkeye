@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+	"unicode/utf8"
 )
 
 func TestRequestHeadersBodyAndMethod(t *testing.T) {
@@ -92,7 +94,7 @@ func TestCredentialsAreNotForwardedToAnotherHost(t *testing.T) {
 }
 
 func TestAssertions(t *testing.T) {
-	body := `{"status":"ok","version":2,"healthy":true,"checks":[{"name":"db","up":true}],"tags":["a","b"],"none":null}`
+	body := `{"status":"ok","version":2,"queue":512,"load":0.6,"count":"42","healthy":true,"checks":[{"name":"db","up":true}],"tags":["a","b"],"none":null}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/html" {
 			w.Write([]byte("<html>Welcome back</html>"))
@@ -135,6 +137,18 @@ func TestAssertions(t *testing.T) {
 		{"not json", "/html", []Assertion{jp("status", OpExists, "")}, false, "not valid JSON"},
 		{"first failure wins", "/", []Assertion{jp("status", OpEquals, "ok"), {Type: AssertBodyContains, Value: "zzz"}, jp("x", OpExists, "")}, false, `does not contain "zzz"`},
 		{"status checked first", "/err", []Assertion{jp("status", OpEquals, "ok")}, false, "Received HTTP 500"},
+		{"greater than", "/", []Assertion{jp("queue", OpGreaterThan, "500")}, true, ""},
+		{"greater than fails", "/", []Assertion{jp("queue", OpGreaterThan, "512")}, false, "JSON path queue is not greater than 512"},
+		{"at least", "/", []Assertion{jp("queue", OpGreaterOrEqual, "512")}, true, ""},
+		{"less than", "/", []Assertion{jp("load", OpLessThan, "0.75")}, true, ""},
+		{"less than fails", "/", []Assertion{jp("load", OpLessThan, "0.5")}, false, "JSON path load is not less than 0.5"},
+		{"at most", "/", []Assertion{jp("queue", OpLessOrEqual, "512")}, true, ""},
+		{"at most fails", "/", []Assertion{jp("queue", OpLessOrEqual, "511.9")}, false, "is not at most 511.9"},
+		{"negative and exponent", "/", []Assertion{jp("version", OpGreaterThan, "-1e3")}, true, ""},
+		{"numeric string", "/", []Assertion{jp("count", OpGreaterThan, "40")}, true, ""},
+		{"not a number", "/", []Assertion{jp("status", OpLessThan, "5")}, false, "JSON path status is not a number"},
+		{"bool is not a number", "/", []Assertion{jp("healthy", OpGreaterThan, "0")}, false, "is not a number"},
+		{"number missing", "/", []Assertion{jp("nope", OpGreaterThan, "0")}, false, "JSON path nope not found"},
 	}
 	for _, c := range cases {
 		r := check(t, loopbackCfg(), Target{URL: srv.URL + c.path, Assertions: c.as})
@@ -183,5 +197,77 @@ func TestValidatePath(t *testing.T) {
 		if ValidatePath(p) == nil {
 			t.Errorf("%q should be invalid", p)
 		}
+	}
+}
+
+func TestNumberSummariesNeverShowTheValueFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte(`{"secret_count":987654}`)) }))
+	defer srv.Close()
+	r := check(t, loopbackCfg(), Target{URL: srv.URL, Assertions: []Assertion{{Type: AssertJSONPath, Path: "secret_count", Operator: OpLessThan, Value: "10"}}})
+	if r.Success || strings.Contains(r.ErrorSummary, "987654") {
+		t.Fatalf("%+v", r)
+	}
+}
+
+func TestParseNumber(t *testing.T) {
+	for _, s := range []string{"0", "500", " 12 ", "-3", "0.25", "1e6"} {
+		if _, ok := ParseNumber(s); !ok {
+			t.Errorf("%q should be a number", s)
+		}
+	}
+	for _, s := range []string{"", "abc", "NaN", "Inf", "-Infinity", "12px"} {
+		if _, ok := ParseNumber(s); ok {
+			t.Errorf("%q should not be a number", s)
+		}
+	}
+}
+
+func TestTryRequestShowsTheResponseAndEveryCheck(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/binary":
+			w.Write([]byte{0xff, 0xfe, 0x00, 0x01})
+		case "/big":
+			w.Write([]byte(strings.Repeat("é", MaxPreviewBytes))) // twice the preview limit in bytes
+		case "/down":
+			w.WriteHeader(503)
+			w.Write([]byte(`{"status":"down"}`))
+		default:
+			w.Write([]byte(`{"status":"ok","queue":7}`))
+		}
+	}))
+	defer srv.Close()
+	c := NewChecker(loopbackCfg())
+	jp := func(path, op, v string) Assertion {
+		return Assertion{Type: AssertJSONPath, Path: path, Operator: op, Value: v}
+	}
+	as := []Assertion{jp("status", OpEquals, "ok"), jp("queue", OpGreaterThan, "10"), jp("queue", OpLessThan, "10")}
+
+	res, p, err := c.TryRequest(t.Context(), Target{URL: srv.URL, Method: "GET", Timeout: 5 * time.Second, Assertions: as})
+	if err != nil || res.Success || p.Body != `{"status":"ok","queue":7}` || p.Truncated || p.Binary {
+		t.Fatalf("%+v %+v %v", res, p, err)
+	}
+	// Every check is reported, not only the first failure.
+	if len(p.Checks) != 3 || p.Checks[0] != "" || !strings.Contains(p.Checks[1], "not greater than 10") || p.Checks[2] != "" {
+		t.Fatalf("checks %q", p.Checks)
+	}
+	// The scheduled check's outcome is the same as Check's.
+	if res.ErrorCategory != CatAssertion || !strings.Contains(res.ErrorSummary, "not greater than 10") {
+		t.Fatalf("%+v", res)
+	}
+
+	// A failing status still shows the body and each rule.
+	res, p, _ = c.TryRequest(t.Context(), Target{URL: srv.URL + "/down", Method: "GET", Timeout: 5 * time.Second, Assertions: as[:1]})
+	if res.Success || res.ErrorCategory != CatHTTPStatus || p.Body != `{"status":"down"}` || len(p.Checks) != 1 || p.Checks[0] == "" {
+		t.Fatalf("%+v %+v", res, p)
+	}
+
+	_, p, _ = c.TryRequest(t.Context(), Target{URL: srv.URL + "/binary", Method: "GET", Timeout: 5 * time.Second})
+	if !p.Binary || p.Body != "" {
+		t.Fatalf("binary: %+v", p)
+	}
+	_, p, _ = c.TryRequest(t.Context(), Target{URL: srv.URL + "/big", Method: "GET", Timeout: 5 * time.Second})
+	if !p.Truncated || len(p.Body) > MaxPreviewBytes || !utf8.ValidString(p.Body) {
+		t.Fatalf("big: truncated=%v len=%d", p.Truncated, len(p.Body))
 	}
 }

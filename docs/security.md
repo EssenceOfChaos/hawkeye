@@ -122,6 +122,12 @@ See `docs/security-review.md` for the review and residual risks.
   third-party endpoint unasked; when it does run, it is at most one extra request per failure streak.
 - **Pasted cURL commands** are read in the browser and never sent to HawkEye; the text box is cleared once read. A credential in the command (`Authorization`, `-u`, credentials in the address, or the first header named like a key or token) is moved into the encrypted credentials field, or in a workflow step into a new secret, so pasting is safer by default than typing a token into a header. Further key-like headers stay plain, with a note saying so. Analytics record counts and the auth type only (`import_curl`), never addresses, headers or bodies.
 - **Imported OpenAPI files and Postman collections** are read in the browser and never uploaded; a token a collection holds is filled in for the person to keep or change, and saved like one typed in; only the checks the person adds are sent, through `POST /monitors` with its usual validation. The reader refuses files over 5 MB, caps YAML aliases at 100 (so an alias bomb is refused instead of expanded), follows only references inside the file (never a URL), survives reference loops, and runs in a Web Worker that is stopped after 20 seconds. Credentials typed for the import are stored encrypted on each check like any other. Writes are never preselected. Analytics record counts and the spec format (`import_openapi_read`, `import_openapi`), never paths, addresses or file content.
+- **Test requests** (`POST /monitors/test-request`, the form's *Send test request*) are the one place HawkEye shows a response body, so checks can be
+  picked from it. The request goes through the same SSRF-safe client and URL validation as a scheduled check; the body (first 256 KB, text only) goes
+  back in that one response to the person who asked, marked `Cache-Control: no-store`, and is never stored, logged or sent to analytics. In the browser
+  it lives only in the form's state. A stored credential is used only for the organization's own monitor named by `monitor_id`, and is never returned.
+  It is session-only, needs a verified address, shares the per-IP and 60-an-hour-per-organization limits of workflow test runs, and stops after 25
+  seconds. Failure summaries of JSON checks (number comparisons included) name the rule, never the value found, since they are stored and emailed.
 - **Key handling:** one key, no rotation tooling. Rotating or losing it makes stored credentials unreadable and users must re-enter them (`docs/operations.md`).
 
 ## Multi-step API checks (workflows)
@@ -141,7 +147,7 @@ requests.
   4 characters or more is replaced with `[hidden]`, including in step names and the final address (`TestSecretsAndExtractedValuesNeverReachTheResult`;
   checked to fail with redaction switched off). Only step names, status codes, times and failure reasons are stored, never response content.
 - **Abuse.** Up to 10 steps and 60 seconds a run; steps that write need a verified address and run at most every 5 minutes. `POST
-  /monitors/test-workflow` (requests on demand) is session-only, needs a verified address for writes, and has a per-IP limit and 60 runs an hour per
+  /monitors/test-workflow` (requests on demand) is session-only, needs a verified address, and has a per-IP limit and 60 runs an hour per
   organization, and stops after 25 seconds.
 - **Deletion.** Deleting the monitor deletes its steps and secrets at once, not when the row is purged 30 days later.
 - **Over MCP** (`create_workflow`, `test_workflow`; `internal/mcpserver/workflows.go`). An assistant never handles a secret value: it names the secrets,
