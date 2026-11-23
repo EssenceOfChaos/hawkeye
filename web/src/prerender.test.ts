@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { PAGES, STATIC_PAGES } from './seo'
 import { pageFile, renderPage, renderSitemap } from '../build/render.ts'
@@ -21,6 +22,13 @@ describe('renderPage', () => {
     expect(body).toContain('<a href="/terms">Terms of Service</a>')
     // Other public pages get their own heading, without the site name.
     expect(renderPage(shell, PAGES.find((p) => p.path === '/privacy')!)).toContain('<h1>Privacy Policy</h1>')
+  })
+
+  it('keeps the static content invisible at first, so visitors never see it switch to the app', () => {
+    const css = readFileSync(new URL('./index.css', import.meta.url), 'utf8')
+    const rule = css.match(/\.prerendered \{[^}]*\}/)?.[0] ?? ''
+    expect(rule).toContain('opacity: 0')
+    expect(rule).toMatch(/animation: prerendered-reveal [^;]* 1\.5s forwards/)
   })
 
   it('leaves a page that is not for search results empty, so signed-in pages don’t flash text before the app starts', () => {

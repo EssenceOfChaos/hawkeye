@@ -1027,6 +1027,10 @@ button.json-row:disabled { cursor: default; opacity: .6; }
 .step-response summary { cursor: pointer; font-weight: 600; }
 .step-response[open] summary { margin-bottom: .4rem; }
 
-/* A public page's static content (build/render.ts), shown only until the app starts or where JavaScript doesn't run. */
-.prerendered { max-width: 46rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.6; }
+/* A public page's static content (build/render.ts), for readers that don't run JavaScript. It stays invisible for 1.5 s and the app replaces
+   it as it starts, so visitors never see it switch to the real page; only when the app hasn't started by then (no JavaScript, a very slow
+   connection) does it fade in. The text is in the HTML all along, which is what those readers use. */
+.prerendered { max-width: 46rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.6; opacity: 0; animation: prerendered-reveal .3s ease 1.5s forwards; }
+@keyframes prerendered-reveal { to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .prerendered { animation-duration: 0s; } }
 .prerendered nav { margin: 1.25rem 0; overflow-wrap: anywhere; }
