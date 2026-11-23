@@ -38,7 +38,7 @@ describe('routing', () => {
   it('sends anonymous visitors to the login page', async () => {
     vi.stubGlobal('fetch', vi.fn(() => jsonResponse(401, { error: { code: 'UNAUTHENTICATED', message: 'Authentication required.' } })))
     renderAt('/monitors')
-    expect(await screen.findByRole('heading', { name: 'Log in' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
   })
 
   it('brings a visitor back to the page they were sent from once they sign in (the emailed "add your first website" link)', async () => {
@@ -60,7 +60,7 @@ describe('routing', () => {
     renderAt('/monitors/new')
     await userEvent.type(await screen.findByLabelText('Email'), 'a@example.com')
     await userEvent.type(screen.getByLabelText('Password'), 'a-long-password')
-    await userEvent.click(screen.getByRole('button', { name: 'Log in' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
     expect(await screen.findByRole('heading', { name: /Add a (website|monitor)/i })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /dashboard/i })).not.toBeInTheDocument()
   })

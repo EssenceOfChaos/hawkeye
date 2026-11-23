@@ -39,6 +39,7 @@ import (
 	"hawkeye/internal/ratelimit"
 	"hawkeye/internal/regions"
 	"hawkeye/internal/sitecheck"
+	"hawkeye/internal/socialauth"
 	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
 	"hawkeye/internal/statuspagedomains"
@@ -91,6 +92,8 @@ type Options struct {
 	// WorkflowChecker runs test runs of multi-step API checks (POST /monitors/test-workflow) and test requests from the monitor form
 	// (POST /monitors/test-request); nil turns both endpoints off.
 	WorkflowChecker *checks.Checker
+	// SocialProviders are the sign-in providers offered (google, github), by name; empty offers none. Email and password work either way.
+	SocialProviders map[string]socialauth.Provider
 	AppBaseURL      string   // public address of the app (status page and ping addresses in MCP tool results)
 	Version         string   // reported by the MCP server
 	MCPOrigins      []string // browser origins allowed to call /mcp; nil means DefaultMCPOrigins
@@ -207,7 +210,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
 	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, deploys: o.Deploys, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, pageDomains: o.PageDomains, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, adConversions: o.AdConversions, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, discovery: o.Discovery, drafts: o.Drafts, log: o.Logger, secureCookies: o.SecureCookies,
-		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, workflowChecker: o.WorkflowChecker, tokenRoutes: map[string]bool{}, appBaseURL: o.AppBaseURL}
+		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, workflowChecker: o.WorkflowChecker, social: o.SocialProviders, tokenRoutes: map[string]bool{}, appBaseURL: o.AppBaseURL}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
@@ -285,6 +288,11 @@ func registerAPI(e *echo.Echo, o Options) {
 	a.POST("/logout", h.logout)
 	a.POST("/change-password", h.changePassword, h.requireAuth, limit("change-password"))
 	a.GET("/me", h.me, h.requireAuth)
+	// Sign in with Google and GitHub. start answers with the provider's address (a POST, so the CSRF check applies); the provider sends the browser
+	// back to callback, which signs in and redirects into the app.
+	a.GET("/social/providers", h.socialProviders)
+	a.POST("/social/:provider/start", h.socialStart, limit("social-start"))
+	a.GET("/social/:provider/callback", h.socialCallback, limit("social-callback"))
 	a.POST("/resend-verification", h.resendVerification, h.requireAuth, limit("resend"))
 
 	v1.GET("/plans", h.listPlans)
@@ -381,6 +389,9 @@ func registerAPI(e *echo.Echo, o Options) {
 	acct := v1.Group("/account", h.requireAuth)
 	acct.GET("/export", h.exportData, limit("account-export"))
 	acct.POST("/delete", h.deleteAccount, limit("account-delete"))
+	acct.GET("/sign-in-methods", h.signInMethods)
+	acct.DELETE("/sign-in-methods/:provider", h.disconnectSignInMethod, limit("sign-in-methods"))
+	acct.POST("/password", h.setPassword, limit("change-password"))
 	acct.GET("/two-factor", h.twoFactorStatus)
 	acct.POST("/two-factor/setup", h.twoFactorSetup, limit("two-factor"))
 	acct.POST("/two-factor/enable", h.twoFactorEnable, limit("two-factor"))

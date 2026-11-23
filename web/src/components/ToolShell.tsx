@@ -23,7 +23,7 @@ export function ToolShell({ tool, title, intro, cta, children }: {
         <Link to="/" aria-label="HawkEye home"><img src={brand.logoWhite} alt="HawkEye" width={160} height={32} /></Link>
         <span className="spacer" />
         <Link to="/tools">Free tools</Link>
-        {signedIn ? <Link to="/dashboard">Dashboard</Link> : <Link to="/login">Log in</Link>}
+        {signedIn ? <Link to="/dashboard">Dashboard</Link> : <Link to="/login">Sign in</Link>}
       </header>
       <main>
         <h1>{title}</h1>

@@ -12,7 +12,8 @@ cmd/api        REST API process (Echo)
 cmd/migrate    applies embedded SQL migrations
 cmd/oauthclient registers OAuth clients for the MCP server (Claude's connector)
 cmd/loadtest   measures what the engine and history queries cost at a given check interval, on a scratch database (docs/plan-sub-minute-checks.md)
-internal/auth          register/login/sessions/password reset/email verification (Argon2id, hashed tokens)
+internal/auth          register/login/sessions/password reset/email verification (Argon2id, hashed tokens); social.go: sign-in with Google and GitHub (linking, confirming, sign-in methods)
+internal/socialauth    the Google and GitHub OAuth clients (PKCE): the address to send the browser to, and the code turned into an identity
 internal/organizations tenant access; every query scoped by membership; removing members and leaving
 internal/invitations   team invitations: an emailed, single-address link that adds a member (seats are held by pending invitations)
 internal/oauth         OAuth 2.1 for the MCP server: registered clients (cmd/oauthclient), consent, codes with PKCE, rotating refresh tokens, revocation; access tokens are API tokens of their own kind

@@ -8,11 +8,13 @@ import "strings"
 // Account log: things that happen to a person's account.
 const (
 	SignedUp                 = "account.signed_up"
-	SignedIn                 = "account.signed_in"      // details: method (password, authenticator, recovery_code)
+	SignedIn                 = "account.signed_in"      // details: method (password, google, github, authenticator, recovery_code), via (google, github: before the code)
 	SignInFailed             = "account.sign_in_failed" // details: reason (password, code)
 	SignedOut                = "account.signed_out"
-	PasswordChanged          = "account.password_changed" // details: other_sessions_ended
-	PasswordReset            = "account.password_reset"   // details: api_keys_revoked
+	PasswordChanged          = "account.password_changed"            // details: other_sessions_ended, first_password (set on an account that had none)
+	IdentityConnected        = "account.sign_in_method_connected"    // details: provider (google, github), unverified_account_reset
+	IdentityDisconnected     = "account.sign_in_method_disconnected" // details: provider
+	PasswordReset            = "account.password_reset"              // details: api_keys_revoked
 	EmailVerified            = "account.email_verified"
 	TwoFactorEnabled         = "account.two_factor_enabled"
 	TwoFactorDisabled        = "account.two_factor_disabled"
@@ -75,7 +77,7 @@ const (
 // AccountActions and OrganizationActions list every action of each log.
 var (
 	AccountActions = []string{SignedUp, SignedIn, SignInFailed, SignedOut, PasswordChanged, PasswordReset, EmailVerified, TwoFactorEnabled,
-		TwoFactorDisabled, RecoveryCodesRegenerated, DataExported}
+		TwoFactorDisabled, RecoveryCodesRegenerated, DataExported, IdentityConnected, IdentityDisconnected}
 	OrganizationActions = []string{OrganizationRenamed, OwnershipTransferred, TwoFactorRequirement, AIDraftsSetting, SubscriptionCanceled, MemberInvited,
 		InvitationResent, InvitationRevoked, MemberJoined, MemberRemoved, MemberLeft, APIKeyCreated, APIKeyRevoked, AppConnected, AppDisconnected,
 		AlertDestinationAdded, AlertDestinationChanged, AlertDestinationRemoved, MonitorCreated, MonitorChanged, MonitorDeleted, MonitorPaused,

@@ -22,6 +22,14 @@ func (h *handlers) setSessionCookie(c *echo.Context, token string) {
 	})
 }
 
+// sessionToken is the browser's session token ("" without one).
+func sessionToken(c *echo.Context) string {
+	if cookie, err := c.Cookie(sessionCookie); err == nil {
+		return cookie.Value
+	}
+	return ""
+}
+
 func (h *handlers) clearSessionCookie(c *echo.Context) {
 	c.SetCookie(&http.Cookie{
 		Name: sessionCookie, Value: "", Path: "/", MaxAge: -1,

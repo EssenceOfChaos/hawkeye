@@ -3,6 +3,7 @@ import { api, ApiError, ORGANIZATION_LOST_EVENT, setApiOrganization, type Organi
 import { analyticsEnabled, trackEvent, trackRegistration } from './analytics'
 import { attributionForSignup, forgetArrival } from './attribution'
 import { AuthContext, type AuthState } from './auth'
+import { finishSocialReturn } from './socialSignIn'
 
 const STORED_ORGANIZATION = 'hawkeye_organization'
 
@@ -68,6 +69,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    // Back from Google or GitHub: remember the method for "Last used" and count a new account, before anything else reads the address.
+    finishSocialReturn()
     // oxlint-disable-next-line react/set-state-in-effect -- refresh() sets state only after its request returns, never synchronously
     void refresh()
   }, [refresh])

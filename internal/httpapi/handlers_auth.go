@@ -39,6 +39,7 @@ import (
 	"hawkeye/internal/plans"
 	"hawkeye/internal/regions"
 	"hawkeye/internal/sitecheck"
+	"hawkeye/internal/socialauth"
 	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
 	"hawkeye/internal/statuspagedomains"
@@ -80,13 +81,14 @@ type handlers struct {
 	limits          limiterDeps
 	emailPerHour    int
 	secureCookies   bool
-	apiTokens       *apitokens.Service // nil turns API keys off (DISABLE_API_KEYS)
-	oauth           *oauth.Service     // OAuth for the MCP server; nil turns connecting apps off
-	waitlist        *waitlist.Service  // coming-soon feature waitlists; nil turns them off
-	twoFactor       *twofactor.Service // two-factor sign-in; nil turns its settings off (sign-in still enforces it for accounts that have it)
-	audit           *audit.Recorder    // the security log; nil records nothing
-	workflowChecker *checks.Checker    // test runs of multi-step API checks and test requests; nil turns them off
-	tokenRoutes     map[string]bool    // "METHOD /path" of the routes open to API keys
+	apiTokens       *apitokens.Service             // nil turns API keys off (DISABLE_API_KEYS)
+	oauth           *oauth.Service                 // OAuth for the MCP server; nil turns connecting apps off
+	waitlist        *waitlist.Service              // coming-soon feature waitlists; nil turns them off
+	twoFactor       *twofactor.Service             // two-factor sign-in; nil turns its settings off (sign-in still enforces it for accounts that have it)
+	audit           *audit.Recorder                // the security log; nil records nothing
+	workflowChecker *checks.Checker                // test runs of multi-step API checks and test requests; nil turns them off
+	social          map[string]socialauth.Provider // sign-in providers by name (google, github); empty offers none
+	tokenRoutes     map[string]bool                // "METHOD /path" of the routes open to API keys
 }
 
 type credentials struct {
@@ -140,6 +142,16 @@ func mapError(err error) error {
 			Message: fmt.Sprintf("An organization can have up to %d API keys. Revoke one you no longer use to create another.", apitokens.MaxLiveKeys)}
 	case errors.Is(err, auth.ErrWrongPassword):
 		return &APIError{Status: http.StatusForbidden, Code: "WRONG_PASSWORD", Message: "That password is not correct."}
+	case errors.Is(err, auth.ErrNoPassword):
+		return &APIError{Status: http.StatusConflict, Code: "NO_PASSWORD", Message: "Your account doesn't have a password yet. Set one under Sign-in methods."}
+	case errors.Is(err, auth.ErrConfirmationNeeded):
+		return &APIError{Status: http.StatusForbidden, Code: "CONFIRMATION_REQUIRED", Message: "Confirm it's you with Google or GitHub first, then try again."}
+	case errors.Is(err, auth.ErrLastSignInMethod):
+		return &APIError{Status: http.StatusConflict, Code: "LAST_SIGN_IN_METHOD", Message: "This is your only way to sign in. Set a password or connect another account first."}
+	case errors.Is(err, auth.ErrIdentityNotFound):
+		return &APIError{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "That sign-in method isn't connected."}
+	case errors.Is(err, auth.ErrPasswordAlreadySet):
+		return &APIError{Status: http.StatusConflict, Code: "PASSWORD_SET", Message: "Your account already has a password. Change it under Password."}
 	case errors.Is(err, account.ErrSharedOrganization):
 		return &APIError{Status: http.StatusConflict, Code: "OWNS_SHARED_ORGANIZATION",
 			Message: "You own an organization that has other members. Transfer ownership to one of them on the Team page (or remove them), so their data is not deleted with your account."}

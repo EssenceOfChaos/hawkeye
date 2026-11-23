@@ -112,7 +112,7 @@ export const PAGES: readonly PageMeta[] = [
 
   // Public, but not meant for search results.
   { path: '/monitoring', title: 'HawkEye: Know Before Your Customers Do', description: 'Know when your website goes down before your customers do. HawkEye’s free plan is a real plan, not a trial.', index: false },
-  { path: '/login', title: 'Log in | HawkEye', description: 'Log in to your HawkEye account.', index: false },
+  { path: '/login', title: 'Sign in | HawkEye', description: 'Sign in to your HawkEye account.', index: false },
   { path: '/register', title: 'Create your free account | HawkEye', description: 'Create a free HawkEye account and start monitoring your websites and APIs.', index: false },
   { path: '/forgot-password', title: 'Reset your password | HawkEye', description: 'Request a link to reset your HawkEye password.', index: false },
   { path: '/reset-password', title: 'Choose a new password | HawkEye', description: 'Choose a new password for your HawkEye account.', index: false },

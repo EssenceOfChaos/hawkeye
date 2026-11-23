@@ -57,6 +57,39 @@ it up; their account, `/auth/me`, `/account/*`, leaving and their other organiza
 organization, `require_two_factor`, `two_factor_grace_ends_at` and `two_factor_blocked`. Ownership can't be transferred to a member who would be
 shut out (`409 NEW_OWNER_NEEDS_TWO_FACTOR`).
 
+### Sign in with Google and GitHub
+
+Next to email and password, which work as before (`internal/socialauth`, `internal/auth/social.go`, migration `000055`,
+`docs/plan-social-sign-in.md`). One account can use any mix: a password, Google, GitHub. A provider is offered only when its client ID and secret are
+set (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`); `DISABLE_SOCIAL_SIGN_IN=true` offers none.
+
+| Method & path | Auth | Notes |
+|---|---|---|
+| `GET /auth/social/providers` | – | `{providers: ["github", "google"]}`: the ones offered |
+| `POST /auth/social/:provider/start` | – (session for connect and confirm) | `{intent: "signin"|"connect"|"confirm", next?, attribution?}` → `{url}` to send the browser to. Sets the `hawkeye_social_state` cookie (10 min, path `/api/v1/auth/social`) |
+| `GET /auth/social/:provider/callback` | state cookie | Where the provider returns; always answers `303` into the app (below) |
+| `GET /account/sign-in-methods` | session | `{has_password, identities: [{provider, email, connected_at, last_used_at}], providers}` |
+| `DELETE /account/sign-in-methods/:provider` | session | 204; `409 LAST_SIGN_IN_METHOD` for the only way to sign in. Emails the person |
+| `POST /account/password` | session | `{password}`: a first password for an account without one, after a confirmation (`403 CONFIRMATION_REQUIRED` without, `409 PASSWORD_SET` when one exists) |
+
+**The flow.** `start` stores the state (hashed), a PKCE verifier and (Google) a nonce, single use, for 10 minutes. The callback must carry the state that
+is also in the browser's cookie. Google's ID token comes straight from its token endpoint over TLS; its issuer, audience, expiry and nonce are
+checked. GitHub's identity is the numeric account ID and the **primary, verified** address from `/user/emails`. Provider tokens are used once and
+dropped. An identity is matched by provider and ID, never by email. A new identity needs an address the provider vouches for: it connects to the
+account with that address (which is emailed), or creates a verified account **without a password**. Connecting to an account whose address was never
+verified first removes that account's password, two-factor, sessions, API keys and connected apps, so whoever registered it first loses access.
+
+**Where the callback sends the browser:** `next` (a path inside the app; anything else becomes `/dashboard`) with `#signed-in=<provider>` (and
+`&signed-up=<event id>` for a new account); for an account with two-factor on, `/login#challenge=…&via=<provider>&next=…`, finished with
+`POST /auth/login/two-factor` as after a password; for confirm, `next#confirmed=<provider>`; for connect, `/account?connected=<provider>`. Errors go to
+`/login?error=<code>` (or `/account?social_error=<code>`): `canceled`, `expired`, `email_not_verified`, `disabled`, `identity_in_use`,
+`provider_connected`, `wrong_account`, `failed`.
+
+**Confirming it's you without a password.** The routes that ask for the password (`/account/two-factor/setup`, `/account/two-factor/disable`,
+`/account/delete`) accept instead, for an account without one, a session confirmed through a connected provider in the last 10 minutes (intent
+`confirm`; Google is asked to show its sign-in screen again). Without it they answer `403 CONFIRMATION_REQUIRED`. `POST /auth/change-password` answers
+`409 NO_PASSWORD` for such an account. `POST /auth/login` treats an account without a password like a wrong password.
+
 ### API keys
 
 Scripts and tools authenticate with an API key instead: `Authorization: Bearer hk_…` (`internal/apitokens`, migration `000033`). The public guide is

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -49,6 +50,7 @@ import (
 	"hawkeye/internal/ratelimit"
 	"hawkeye/internal/safehttp"
 	"hawkeye/internal/sitecheck"
+	"hawkeye/internal/socialauth"
 	"hawkeye/internal/sslcheck"
 	"hawkeye/internal/statuspage"
 	"hawkeye/internal/statuspagedomains"
@@ -158,6 +160,7 @@ func run() error {
 	} else {
 		log.Warn("API keys are turned off (DISABLE_API_KEYS): requests made with a key answer 503")
 	}
+	socialProviders := newSocialProviders(cfg, log)
 	e := httpapi.New(httpapi.Options{
 		Logger: log, DB: pool, RequestTimeout: cfg.RequestTimeout, BodyLimit: cfg.BodyLimit,
 		Auth: authSvc, Orgs: organizations.NewService(pool), Plans: planSvc, Monitors: monitorSvc, Pool: pool, PgPool: pool,
@@ -177,6 +180,7 @@ func run() error {
 		Audit:     auditLog,
 		// Test runs of multi-step API checks, through the same SSRF-safe client (and strict policy) as the worker's checks.
 		WorkflowChecker: checks.NewChecker(safehttp.Config{}),
+		SocialProviders: socialProviders,
 		AppBaseURL:      cfg.AppBaseURL,
 		Version:         cfg.AppVersion,
 		Invitations:     invitations.NewService(pool, planSvc, mailer, log, cfg.AppBaseURL),
@@ -298,4 +302,29 @@ func newDrafts(key string, log *slog.Logger) *incidentdraft.Service {
 		return nil
 	}
 	return incidentdraft.New(key)
+}
+
+// newSocialProviders sets up sign-in with Google and GitHub: each provider whose client ID and secret are set, unless DISABLE_SOCIAL_SIGN_IN.
+// The callback is on the app's own address, which proxies /api to this server.
+func newSocialProviders(cfg config.Config, log *slog.Logger) map[string]socialauth.Provider {
+	if !cfg.SocialSignInEnabled {
+		log.Warn("sign in with Google and GitHub is turned off (DISABLE_SOCIAL_SIGN_IN): email and password still work")
+		return nil
+	}
+	out := map[string]socialauth.Provider{}
+	callback := func(p string) string {
+		return strings.TrimSuffix(cfg.AppBaseURL, "/") + "/api/v1/auth/social/" + p + "/callback"
+	}
+	if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" {
+		out[socialauth.Google] = socialauth.NewGoogle(socialauth.Config{ClientID: cfg.GoogleClientID, ClientSecret: cfg.GoogleClientSecret,
+			RedirectURL: callback(socialauth.Google)})
+	}
+	if cfg.GitHubClientID != "" && cfg.GitHubClientSecret != "" {
+		out[socialauth.GitHub] = socialauth.NewGitHub(socialauth.Config{ClientID: cfg.GitHubClientID, ClientSecret: cfg.GitHubClientSecret,
+			RedirectURL: callback(socialauth.GitHub)})
+	}
+	if len(out) == 0 {
+		log.Info("sign in with Google and GitHub is not set up: set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET and GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET to offer it")
+	}
+	return out
 }

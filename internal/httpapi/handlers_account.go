@@ -67,7 +67,7 @@ func (h *handlers) deleteAccount(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.account.Delete(ctx, u, in.Password, in.ConfirmEmail); err != nil {
+	if err := h.account.Delete(ctx, u, sessionToken(c), in.Password, in.ConfirmEmail); err != nil {
 		return h.accountError(c, err)
 	}
 	for _, o := range orgs {

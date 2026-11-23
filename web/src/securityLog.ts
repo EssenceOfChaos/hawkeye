@@ -54,14 +54,25 @@ function changedFields(e: LogEvent): string {
   return ''
 }
 
+const providerName = (p: string) => (p === 'github' ? 'GitHub' : p === 'google' ? 'Google' : p)
+
 /** One sentence per action, about what was done (who did it is shown next to it). */
 export const sentences: Record<string, (e: LogEvent) => string> = {
-  'account.signed_up': () => 'Created the account',
-  'account.signed_in': (e) =>
-    e.details.method === 'recovery_code' ? 'Signed in with a recovery code' : e.details.method === 'authenticator' ? 'Signed in with an authenticator code' : 'Signed in',
+  'account.signed_up': (e) => (e.details.method ? `Created the account with ${providerName(String(e.details.method))}` : 'Created the account'),
+  'account.signed_in': (e) => {
+    const via = e.details.via ? `${providerName(String(e.details.via))} and ` : ''
+    if (e.details.method === 'recovery_code') return `Signed in with ${via}a recovery code`
+    if (e.details.method === 'authenticator') return `Signed in with ${via}an authenticator code`
+    if (e.details.method === 'google' || e.details.method === 'github') return `Signed in with ${providerName(e.details.method)}`
+    return 'Signed in'
+  },
   'account.sign_in_failed': (e) => (e.details.reason === 'code' ? 'Failed sign-in: wrong two-factor code' : 'Failed sign-in: wrong password'),
   'account.signed_out': () => 'Signed out',
+  'account.sign_in_method_connected': (e) =>
+    `Connected ${providerName(String(e.details.provider))} for signing in${e.details.unverified_account_reset ? ' (and removed the password and sessions set up before the address was confirmed)' : ''}`,
+  'account.sign_in_method_disconnected': (e) => `Disconnected ${providerName(String(e.details.provider))} from signing in`,
   'account.password_changed': (e) => {
+    if (e.details.first_password) return 'Set a password'
     const n = Number(e.details.other_sessions_ended ?? 0)
     return n > 0 ? `Changed the password and signed out ${plural(n, 'other session')}` : 'Changed the password'
   },

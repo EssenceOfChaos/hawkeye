@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"hawkeye/internal/attribution"
@@ -29,6 +28,8 @@ var (
 	ErrUnauthenticated    = errors.New("not authenticated")
 	// ErrChallengeInvalid: the step between password and code expired, was used up by wrong codes, or never existed. Sign in again.
 	ErrChallengeInvalid = errors.New("sign-in timed out")
+	// ErrNoPassword: the account signs in with Google or GitHub only, so a password can't confirm it's them; ConfirmIdentity is used instead.
+	ErrNoPassword = errors.New("this account has no password")
 )
 
 // SecondFactorRequired is returned by Login for an account with two-factor sign-in: the password was right, and Challenge must be sent back with a
@@ -133,30 +134,7 @@ func (s *Service) Register(ctx context.Context, emailAddr, password string, attr
 
 	var user User
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		user, err = scanUser(tx.QueryRow(ctx,
-			`INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING `+userCols, addr, hash))
-		if err != nil {
-			return err
-		}
-		var orgID uuid.UUID
-		name := strings.SplitN(addr, "@", 2)[0] + "'s organization"
-		if err := tx.QueryRow(ctx, `INSERT INTO organizations (name) VALUES ($1) RETURNING id`, name).Scan(&orgID); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'owner')`, orgID, user.ID); err != nil {
-			return err
-		}
-		// The owner receives alerts at their own address; it becomes active once the address is verified.
-		if _, err := tx.Exec(ctx, `INSERT INTO notification_settings (organization_id, user_id, channel, destination)
-			VALUES ($1, $2, 'email', $3)`, orgID, user.ID, user.Email); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `INSERT INTO subscriptions (organization_id, plan_id, status)
-			SELECT $1, id, 'active' FROM plans WHERE code = 'free'`, orgID); err != nil {
-			return err
-		}
-		if err := attribution.Save(ctx, tx, user.ID, attr); err != nil {
+		if user, err = createAccount(ctx, tx, addr, &hash, false, attr); err != nil {
 			return err
 		}
 		_, err := tx.Exec(ctx,
@@ -165,8 +143,7 @@ func (s *Service) Register(ctx context.Context, emailAddr, password string, attr
 		return err
 	})
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "users_email_key" {
+		if isEmailTaken(err) {
 			return User{}, "", ErrEmailTaken
 		}
 		return User{}, "", fmt.Errorf("register: %w", err)
@@ -181,13 +158,47 @@ func (s *Service) Register(ctx context.Context, emailAddr, password string, attr
 	return user, session, nil
 }
 
+// createAccount inserts a user with a personal organization (owner membership) on the free plan, alert emails to their own address and how they
+// found HawkEye. hash is nil for an account created with Google or GitHub, which has no password; verified marks the address as already proven.
+func createAccount(ctx context.Context, tx pgx.Tx, addr string, hash *string, verified bool, attr *attribution.Attribution) (User, error) {
+	user, err := scanUser(tx.QueryRow(ctx, `INSERT INTO users (email, password_hash, email_verified_at)
+		VALUES ($1, $2, CASE WHEN $3 THEN now() END) RETURNING `+userCols, addr, hash, verified))
+	if err != nil {
+		return User{}, err
+	}
+	var orgID uuid.UUID
+	name := strings.SplitN(addr, "@", 2)[0] + "'s organization"
+	if err := tx.QueryRow(ctx, `INSERT INTO organizations (name) VALUES ($1) RETURNING id`, name).Scan(&orgID); err != nil {
+		return User{}, err
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'owner')`, orgID, user.ID); err != nil {
+		return User{}, err
+	}
+	// The owner receives alerts at their own address; it becomes active once the address is verified (at once, when it already is).
+	if _, err := tx.Exec(ctx, `INSERT INTO notification_settings (organization_id, user_id, channel, destination, verified_at)
+		VALUES ($1, $2, 'email', $3, CASE WHEN $4 THEN now() END)`, orgID, user.ID, user.Email, verified); err != nil {
+		return User{}, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO subscriptions (organization_id, plan_id, status)
+		SELECT $1, id, 'active' FROM plans WHERE code = 'free'`, orgID); err != nil {
+		return User{}, err
+	}
+	if err := attribution.Save(ctx, tx, user.ID, attr); err != nil {
+		return User{}, err
+	}
+	return user, nil
+}
+
+func isEmailTaken(err error) bool { return isUniqueViolation(err, "users_email_key") }
+
 // Login verifies credentials and starts a session. Unknown, disabled and wrong-password
 // cases are indistinguishable to the caller.
 func (s *Service) Login(ctx context.Context, emailAddr, password string) (User, string, error) {
 	addr := strings.ToLower(strings.TrimSpace(emailAddr))
 	var (
 		u        User
-		hash     string
+		hash     *string // nil: the account signs in with Google or GitHub only
 		disabled *time.Time
 		totpOn   *time.Time
 	)
@@ -200,9 +211,15 @@ func (s *Service) Login(ctx context.Context, emailAddr, password string) (User, 
 	if err != nil {
 		return User{}, "", fmt.Errorf("login lookup: %w", err)
 	}
-	ok, verr := Verify(password, hash)
-	if verr != nil {
-		s.log.ErrorContext(ctx, "stored password hash unreadable", "user_id", u.ID)
+	ok := false
+	if hash == nil {
+		// No password: answer exactly like a wrong one, so the reply doesn't say how the account signs in.
+		_, _ = Verify(password, s.dummyHash)
+	} else {
+		var verr error
+		if ok, verr = Verify(password, *hash); verr != nil {
+			s.log.ErrorContext(ctx, "stored password hash unreadable", "user_id", u.ID)
+		}
 	}
 	if !ok || disabled != nil {
 		if !ok {
@@ -212,15 +229,7 @@ func (s *Service) Login(ctx context.Context, emailAddr, password string) (User, 
 		return User{}, "", ErrInvalidCredentials
 	}
 	if totpOn != nil {
-		raw, hash, err := newToken()
-		if err != nil {
-			return User{}, "", err
-		}
-		if _, err := s.pool.Exec(ctx, `INSERT INTO login_challenges (token_hash, user_id, expires_at) VALUES ($1, $2, now() + $3::interval)`,
-			hash, u.ID, challengeTTL); err != nil {
-			return User{}, "", fmt.Errorf("create login challenge: %w", err)
-		}
-		return u, "", &SecondFactorRequired{Challenge: raw}
+		return u, "", s.challenge(ctx, u.ID, "password")
 	}
 	session, err := s.createSession(ctx, u.ID)
 	if err != nil {
@@ -239,11 +248,12 @@ func (s *Service) CompleteSignIn(ctx context.Context, challenge, code string) (u
 	}
 	hash := HashToken(challenge)
 	badCode := false
+	firstFactor := "password"
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		var attempts int
-		err := tx.QueryRow(ctx, `SELECT c.attempts, `+prefixed("u", userCols)+` FROM login_challenges c JOIN users u ON u.id = c.user_id
+		err := tx.QueryRow(ctx, `SELECT c.attempts, c.first_factor, `+prefixed("u", userCols)+` FROM login_challenges c JOIN users u ON u.id = c.user_id
 			WHERE c.token_hash = $1 AND c.expires_at > now() AND u.disabled_at IS NULL FOR UPDATE OF c`, hash).
-			Scan(&attempts, &u.ID, &u.Email, &u.EmailVerifiedAt, &u.CreatedAt)
+			Scan(&attempts, &firstFactor, &u.ID, &u.Email, &u.EmailVerifiedAt, &u.CreatedAt)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrChallengeInvalid
 		}
@@ -287,8 +297,26 @@ func (s *Service) CompleteSignIn(ctx context.Context, challenge, code string) (u
 	if usedRecovery {
 		method = "recovery_code"
 	}
-	s.record(ctx, audit.SignedIn, audit.User(u.ID, u.Email), u.ID, map[string]any{"method": method})
+	details := map[string]any{"method": method}
+	if firstFactor != "password" {
+		details["via"] = firstFactor // google or github, then the code
+	}
+	s.record(ctx, audit.SignedIn, audit.User(u.ID, u.Email), u.ID, details)
 	return u, session, 0, usedRecovery, nil
+}
+
+// challenge starts the second step of a sign-in for an account with two-factor on: firstFactor (password, google or github) has been passed.
+// It returns *SecondFactorRequired, or an error if the step couldn't be stored.
+func (s *Service) challenge(ctx context.Context, userID uuid.UUID, firstFactor string) error {
+	raw, hash, err := newToken()
+	if err != nil {
+		return err
+	}
+	if _, err := s.pool.Exec(ctx, `INSERT INTO login_challenges (token_hash, user_id, expires_at, first_factor) VALUES ($1, $2, now() + $3::interval, $4)`,
+		hash, userID, challengeTTL, firstFactor); err != nil {
+		return fmt.Errorf("create login challenge: %w", err)
+	}
+	return &SecondFactorRequired{Challenge: raw}
 }
 
 func prefixed(alias, cols string) string {
@@ -513,7 +541,7 @@ func consumeToken(ctx context.Context, tx pgx.Tx, table, raw string) (uuid.UUID,
 
 // VerifyPassword checks a user's current password (used to re-authenticate sensitive actions such as account deletion).
 func (s *Service) VerifyPassword(ctx context.Context, userID uuid.UUID, password string) error {
-	var hash string
+	var hash *string
 	err := s.pool.QueryRow(ctx, `SELECT password_hash FROM users WHERE id = $1 AND disabled_at IS NULL`, userID).Scan(&hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrUnauthenticated
@@ -521,7 +549,10 @@ func (s *Service) VerifyPassword(ctx context.Context, userID uuid.UUID, password
 	if err != nil {
 		return err
 	}
-	ok, verr := Verify(password, hash)
+	if hash == nil {
+		return ErrNoPassword
+	}
+	ok, verr := Verify(password, *hash)
 	if verr != nil || !ok {
 		return ErrWrongPassword
 	}

@@ -54,7 +54,7 @@ export function SiteFooter({ onHome = false }: { onHome?: boolean }) {
           ) : (
             <>
               <Link className="d-link d-link-hover" to="/register">Sign up</Link>
-              <Link className="d-link d-link-hover" to="/login">Log in</Link>
+              <Link className="d-link d-link-hover" to="/login">Sign in</Link>
             </>
           )}
         </nav>

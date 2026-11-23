@@ -65,7 +65,7 @@ describe('AcceptInvitePage', () => {
     expect(screen.getAllByText('bob@example.com').length).toBeGreaterThan(0)
     expect(screen.getByTestId('where')).not.toHaveTextContent('INVITE-1')
     expect(calls.find((c) => c.url.endsWith('/invitations/preview'))?.body).toEqual({ token: 'INVITE-1' })
-    expect(screen.getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login')
+    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login')
     expect(screen.getByRole('link', { name: 'Create account' })).toHaveAttribute('href', '/register')
     // Nothing has been accepted by merely opening the link.
     expect(calls.some((c) => c.url.endsWith('/invitations/accept'))).toBe(false)
@@ -100,8 +100,8 @@ describe('AcceptInvitePage', () => {
     mount({ signedInAs: { email: 'someone-else@example.com' } })
     expect(await screen.findByText(/signed in as someone-else@example.com, but this invitation is for bob@example.com/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Accept invitation' })).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Log out and use bob@example.com' }))
-    expect(await screen.findByRole('link', { name: 'Log in' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out and use bob@example.com' }))
+    expect(await screen.findByRole('link', { name: 'Sign in' })).toBeInTheDocument()
   })
 
   it('shows the server’s message when the address is not verified yet', async () => {
@@ -118,7 +118,7 @@ describe('AcceptInvitePage', () => {
   it('says so when the link is no good', async () => {
     mount({ preview: json(400, { error: { code: 'INVALID_TOKEN', message: 'This invitation is invalid or has expired.' } }) })
     expect(await screen.findByRole('alert')).toHaveTextContent(/not valid, or it has expired/)
-    expect(screen.queryByRole('link', { name: 'Log in' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument()
   })
 
   it('says so when there is no token at all', async () => {

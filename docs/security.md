@@ -161,6 +161,28 @@ requests.
   text an assistant reads can't make HawkEye send changing requests on demand; it shares the app's hourly test budget. Residual: an assistant can still
   put a literal key in a header value or body; the tool descriptions say not to, and the security log records who created the workflow and how.
 
+## Sign in with Google and GitHub
+
+An addition to email and password (`internal/socialauth`, `internal/auth/social.go`; `docs/api.md#sign-in-with-google-and-github`).
+
+- **Flow:** authorization code with PKCE (S256). The state is 256 random bits, stored hashed, single use, 10 minutes, and must match the
+  `hawkeye_social_state` cookie (HttpOnly, SameSite=Lax), so a callback link sent to someone else can't sign them in to the sender's account (login
+  CSRF). Google's nonce is checked in the ID token, which is read straight from Google's token endpoint over TLS (issuer, audience, expiry checked).
+  `next` must be a relative path inside the app (no open redirect). Provider errors are never shown or logged as-is.
+- **Least data:** scopes `openid email` and `user:email`. Kept: provider, account ID, the address it gave, dates. Provider tokens are dropped after
+  sign-in. The two-factor challenge rides in the URL fragment, which isn't sent to servers or in a Referer.
+- **Matching:** by provider and account ID, never by email (GitHub's numeric ID, not the renamable login). Email is used only to connect a new
+  identity, and only an address the provider vouches for (Google's `email_verified`; GitHub's primary, verified address).
+- **Account pre-hijacking:** connecting to an account whose address was never verified first removes its password, two-factor, sessions, recovery
+  codes, API keys and connected apps (`wipeUnverified`), and the log records it. Someone who registers a victim's address in advance therefore loses
+  access the moment the real owner signs in with Google or GitHub.
+- **Two-factor is never skipped:** after Google or GitHub, an account with it on gets the same challenge as after a password, and an organization's
+  requirement applies as before.
+- **Sensitive actions without a password** (two-factor setup or removal, account deletion, a first password) need a confirmation through a
+  connected provider in the same session within 10 minutes (`sessions.confirmed_at`). The last way to sign in can't be removed.
+- **Notice:** connecting or disconnecting a provider emails the account's address and is in the security log.
+- **Kill switch:** `DISABLE_SOCIAL_SIGN_IN=true`. Accounts with only a provider then get in with "Forgot password" (it also verifies the address).
+
 ## Two-factor sign-in
 
 - **Optional for each person; an owner may require it for their organization** (off by default). TOTP (RFC 6238: SHA-1, 30 s, 6 digits, one step
