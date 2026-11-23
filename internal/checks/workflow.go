@@ -6,13 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Multi-step API checks ("workflows", docs/plan-synthetic-api.md). A workflow runs its steps in order, each an ordinary check (same SSRF-safe
@@ -88,6 +91,22 @@ type StepOutcome struct {
 // RunWorkflow runs w and returns the monitor's result: the failing step's (named in ErrorSummary), or the last step's when all passed, with
 // ResponseTimeMs the total of the steps' times, and Steps listing the steps that ran, in order. As with Check, the error is non-nil only when ctx was canceled; every failure of the service or the workflow is a Result.
 func (c *Checker) RunWorkflow(ctx context.Context, w Workflow) (Result, error) {
+	res, _, err := c.runWorkflow(ctx, w, false)
+	return res, err
+}
+
+// MaxStepPreviewBytes bounds the response body a test run shows per step (a run has up to MaxWorkflowSteps of them).
+const MaxStepPreviewBytes = 64 << 10
+
+// TryWorkflow runs w like RunWorkflow and also returns, for each step that got a response, what a person testing it sees: the body (up to
+// MaxStepPreviewBytes) and every check's outcome. Every secret and saved value is replaced with "[hidden]" in them, with the values known at the
+// end of the run, so a token a step returns and saves is hidden in that step's own body too. Steps without a response have a nil entry; steps
+// that did not run have none. For the app's test runs only: assistants (MCP) get outcomes only.
+func (c *Checker) TryWorkflow(ctx context.Context, w Workflow) (Result, []*Preview, error) {
+	return c.runWorkflow(ctx, w, true)
+}
+
+func (c *Checker) runWorkflow(ctx context.Context, w Workflow, preview bool) (Result, []*Preview, error) {
 	start := c.now()
 	deadline := start.Add(WorkflowTimeout)
 	out := Result{CheckedAt: start, Steps: []StepOutcome{}}
@@ -98,8 +117,26 @@ func (c *Checker) RunWorkflow(ctx context.Context, w Workflow) (Result, error) {
 		jar, _ = cookiejar.New(nil) // a nil option list never fails
 	}
 	total, timed := 0, false // timed: some step got a response, so the run has a time (even 0 ms)
+	// What each step's response looked like, for a test run's previews: redacted once the run is over, when every saved value is known.
+	type seen struct {
+		resp       *response
+		assertions []Assertion
+	}
+	var bodies []*seen
+	previews := func() []*Preview {
+		if !preview {
+			return nil
+		}
+		out := make([]*Preview, len(bodies))
+		for i, b := range bodies {
+			if b != nil {
+				out[i] = red.preview(b.resp, b.assertions)
+			}
+		}
+		return out
+	}
 
-	fail := func(i int, st Step, step StepOutcome, category, summary string) (Result, error) {
+	fail := func(i int, st Step, step StepOutcome, category, summary string) (Result, []*Preview, error) {
 		step.Success, step.ErrorCategory, step.ErrorSummary = false, category, red.clean(summary)
 		out.Steps = append(out.Steps, step)
 		out.Success, out.ErrorCategory = false, category
@@ -110,7 +147,7 @@ func (c *Checker) RunWorkflow(ctx context.Context, w Workflow) (Result, error) {
 			t := total
 			out.ResponseTimeMs = &t
 		}
-		return out, nil
+		return out, previews(), nil
 	}
 
 	for i, st := range w.Steps {
@@ -124,9 +161,16 @@ func (c *Checker) RunWorkflow(ctx context.Context, w Workflow) (Result, error) {
 			return fail(i, st, step, CatTimeout, fmt.Sprintf("The run took longer than %d seconds", int(WorkflowTimeout/time.Second)))
 		}
 		t.Timeout = min(t.Timeout, left)
-		res, resp, err := c.run(ctx, t, jar, len(st.Extractions) > 0)
+		res, resp, err := c.run(ctx, t, jar, preview || len(st.Extractions) > 0)
 		if err != nil {
-			return Result{}, err // shutting down
+			return Result{}, nil, err // shutting down
+		}
+		if preview {
+			var b *seen
+			if resp != nil {
+				b = &seen{resp: resp, assertions: t.Assertions}
+			}
+			bodies = append(bodies, b)
 		}
 		if i == 0 {
 			out.CertExpiresAt = res.CertExpiresAt // the first step's host is the one the workflow is about
@@ -154,7 +198,7 @@ func (c *Checker) RunWorkflow(ctx context.Context, w Workflow) (Result, error) {
 	out.Success = true
 	out.ResponseTimeMs = &total
 	out.FinishedAt = c.now()
-	return out, nil
+	return out, previews(), nil
 }
 
 // resolve fills the placeholders in t's address, header values, body and authentication.
@@ -312,6 +356,92 @@ func (r *redactor) clean(s string) string {
 		s = strings.ReplaceAll(s, v, hidden)
 	}
 	return s
+}
+
+// preview is a step's response as a test run shows it: every check's outcome on the real body, then the body cut to MaxStepPreviewBytes with
+// every secret and saved value hidden. A JSON body is redacted value by value, so it stays valid JSON with its keys in order: a string holding a
+// value has it replaced, and a number equal to one becomes the string "[hidden]". Other text is redacted as text.
+func (r *redactor) preview(resp *response, assertions []Assertion) *Preview {
+	p := &Preview{Checks: EvaluateEach(assertions, resp.body, resp.truncated)}
+	for i, msg := range p.Checks {
+		p.Checks[i] = r.clean(msg)
+	}
+	body := resp.body
+	if !utf8.Valid(body) {
+		p.Binary = true
+		return p
+	}
+	if redacted, ok := r.cleanJSON(body); ok && !resp.truncated {
+		body = redacted
+	} else {
+		body = []byte(r.clean(string(body)))
+	}
+	shown := body[:validPrefix(body, MaxStepPreviewBytes)]
+	p.Body, p.Truncated = string(shown), len(shown) < len(body) || resp.truncated
+	return p
+}
+
+// cleanJSON rewrites a JSON document with every secret and saved value hidden, keeping its keys in order. ok is false when b isn't one JSON value.
+func (r *redactor) cleanJSON(b []byte) ([]byte, bool) {
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	var out bytes.Buffer
+	// Per open container: whether it is an object, and how many tokens it has had (in an object, even counts are keys).
+	type level struct {
+		object bool
+		n      int
+	}
+	var stack []level
+	enc := json.NewEncoder(&out)
+	enc.SetEscapeHTML(false) // shown as it came, <b> and & included
+	str := func(s string) {
+		_ = enc.Encode(r.clean(s))  // a string always encodes
+		out.Truncate(out.Len() - 1) // Encode ends with a newline
+	}
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, false
+		}
+		if d, ok := tok.(json.Delim); ok && (d == '}' || d == ']') {
+			stack = stack[:len(stack)-1]
+			out.WriteRune(rune(d))
+			continue
+		}
+		if n := len(stack); n > 0 {
+			top := &stack[n-1]
+			switch {
+			case top.object && top.n%2 == 1:
+				out.WriteByte(':')
+			case top.n > 0:
+				out.WriteByte(',')
+			}
+			top.n++
+		} else if out.Len() > 0 {
+			return nil, false // a second top-level value
+		}
+		switch v := tok.(type) {
+		case json.Delim:
+			stack = append(stack, level{object: v == '{'})
+			out.WriteRune(rune(v))
+		case string:
+			str(v)
+		case json.Number:
+			if r.clean(v.String()) != v.String() {
+				str(hidden)
+			} else {
+				out.WriteString(v.String())
+			}
+		case bool:
+			out.WriteString(strconv.FormatBool(v))
+		case nil:
+			out.WriteString("null")
+		}
+	}
+	return out.Bytes(), out.Len() > 0 && len(stack) == 0
 }
 
 // ValidateExtraction checks one extraction's settings (the API uses it before saving).

@@ -146,6 +146,11 @@ requests.
 - **Redaction.** Before a run's summary is stored, alerted on or returned, every secret and every saved value (and their URL- and JSON-escaped forms) of
   4 characters or more is replaced with `[hidden]`, including in step names and the final address (`TestSecretsAndExtractedValuesNeverReachTheResult`;
   checked to fail with redaction switched off). Only step names, status codes, times and failure reasons are stored, never response content.
+- **Responses in test runs.** The app's Run test (`POST /monitors/test-workflow`) returns each step's response (first 64 KB), so checks and saved
+  values can be picked from it. The same redactor runs over every body once the run ends, when every saved value is known, so a token is hidden in
+  the response that issued it; JSON bodies are redacted value by value (`checks.redactor.cleanJSON`) so a hidden value can't break the document.
+  Returned once with `Cache-Control: no-store`, never stored or logged, and kept only in the editor's state. A value a step returns before any step
+  saves it is shown as it came, to the person who sent the request. Assistants never see bodies: MCP's `test_workflow` returns outcomes only.
 - **Abuse.** Up to 10 steps and 60 seconds a run; steps that write need a verified address and run at most every 5 minutes. `POST
   /monitors/test-workflow` (requests on demand) is session-only, needs a verified address, and has a per-IP limit and 60 runs an hour per
   organization, and stops after 25 seconds.

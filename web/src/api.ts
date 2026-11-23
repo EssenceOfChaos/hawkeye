@@ -282,6 +282,21 @@ export interface StepOutcome {
   error_summary?: string
 }
 
+/** A step's response in a test run: secrets and saved values replaced with "[hidden]". Shown once, never stored. */
+export interface StepResponse {
+  body: string
+  truncated: boolean
+  binary: boolean
+  /** One per check of the step, in order. */
+  checks: { passed: boolean; message: string | null }[]
+}
+
+/** What POST /monitors/test-workflow answers: the run, and each step's response (null for a step that got none; steps that didn't run have none). */
+export interface WorkflowTest {
+  result: WorkflowRun
+  responses: (StepResponse | null)[]
+}
+
 /** A test run of an unsaved workflow (POST /monitors/test-workflow). */
 export interface WorkflowRun {
   success: boolean
