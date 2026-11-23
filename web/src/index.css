@@ -1026,3 +1026,7 @@ button.json-row:disabled { cursor: default; opacity: .6; }
 .step-response { border: 1px solid var(--line); border-radius: .45rem; padding: .4rem .75rem; }
 .step-response summary { cursor: pointer; font-weight: 600; }
 .step-response[open] summary { margin-bottom: .4rem; }
+
+/* A public page's static content (build/render.ts), shown only until the app starts or where JavaScript doesn't run. */
+.prerendered { max-width: 46rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.6; }
+.prerendered nav { margin: 1.25rem 0; overflow-wrap: anywhere; }
