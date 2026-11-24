@@ -1,4 +1,4 @@
-// Package socialauth signs people in with Google and GitHub (OAuth 2.0 authorization code flow with PKCE): it builds the address to send the
+// Package socialauth signs people in with Google, GitHub and X (OAuth 2.0 authorization code flow with PKCE): it builds the address to send the
 // browser to, and turns the code that comes back into the account's identity. Which HawkEye account that identity belongs to, and what to do
 // with it, is internal/auth's job (docs/plan-social-sign-in.md).
 //
@@ -24,6 +24,7 @@ import (
 const (
 	Google = "google"
 	GitHub = "github"
+	X      = "x"
 )
 
 // Identity is who the provider says signed in. Subject is the provider's stable account ID (never a name or login, which can change). Email is

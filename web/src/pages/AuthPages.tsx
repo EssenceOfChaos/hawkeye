@@ -67,9 +67,9 @@ export function LoginPage() {
   const { error, busy, run } = useSubmit()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  // After Google or GitHub, an account with two-factor sign-in comes back here with the code step in the fragment (#challenge=...&via=google).
+  // After a provider, an account with two-factor sign-in comes back here with the code step in the fragment (#challenge=...&via=google).
   const [social] = useState(() => readSocialReturn(location.hash))
-  // Set after a correct password (or Google or GitHub) for an account with two-factor sign-in: the second step asks for a code.
+  // Set after a correct password (or a provider) for an account with two-factor sign-in: the second step asks for a code.
   const [challenge, setChallenge] = useState<string | null>(social.challenge ?? null)
   const [via, setVia] = useState(social.via)
   const [code, setCode] = useState('')

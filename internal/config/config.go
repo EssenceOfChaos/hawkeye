@@ -59,12 +59,14 @@ type Config struct {
 	// APIKeysEnabled lets API keys authenticate (the default). DISABLE_API_KEYS=true makes every request with a key answer 503 while browser sessions
 	// keep working: the switch to reach for if keys are being abused.
 	APIKeysEnabled bool
-	// Sign in with Google and GitHub (docs/plan-social-sign-in.md). A provider is offered only when both its client ID and secret are set;
-	// DISABLE_SOCIAL_SIGN_IN=true turns both off (email and password keep working).
+	// Sign in with Google, GitHub and X (docs/plan-social-sign-in.md). A provider is offered only when both its client ID and secret are set;
+	// DISABLE_SOCIAL_SIGN_IN=true turns them all off (email and password keep working).
 	GoogleClientID      string
 	GoogleClientSecret  string
 	GitHubClientID      string
 	GitHubClientSecret  string
+	XClientID           string
+	XClientSecret       string
 	SocialSignInEnabled bool
 
 	EmailProvider    string
@@ -370,6 +372,8 @@ func load(get func(string) string) (Config, error) {
 		GoogleClientSecret:  str("GOOGLE_CLIENT_SECRET", ""),
 		GitHubClientID:      str("GITHUB_CLIENT_ID", ""),
 		GitHubClientSecret:  str("GITHUB_CLIENT_SECRET", ""),
+		XClientID:           str("X_CLIENT_ID", ""),
+		XClientSecret:       str("X_CLIENT_SECRET", ""),
 		SocialSignInEnabled: !boolean("DISABLE_SOCIAL_SIGN_IN"),
 
 		CheckRegions:         str("CHECK_REGIONS", ""),

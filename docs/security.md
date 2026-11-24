@@ -161,22 +161,23 @@ requests.
   text an assistant reads can't make HawkEye send changing requests on demand; it shares the app's hourly test budget. Residual: an assistant can still
   put a literal key in a header value or body; the tool descriptions say not to, and the security log records who created the workflow and how.
 
-## Sign in with Google and GitHub
+## Sign in with Google, GitHub and X
 
-An addition to email and password (`internal/socialauth`, `internal/auth/social.go`; `docs/api.md#sign-in-with-google-and-github`).
+An addition to email and password (`internal/socialauth`, `internal/auth/social.go`; `docs/api.md#sign-in-with-google-github-and-x`).
 
 - **Flow:** authorization code with PKCE (S256). The state is 256 random bits, stored hashed, single use, 10 minutes, and must match the
   `hawkeye_social_state` cookie (HttpOnly, SameSite=Lax), so a callback link sent to someone else can't sign them in to the sender's account (login
   CSRF). Google's nonce is checked in the ID token, which is read straight from Google's token endpoint over TLS (issuer, audience, expiry checked).
   `next` must be a relative path inside the app (no open redirect). Provider errors are never shown or logged as-is.
-- **Least data:** scopes `openid email` and `user:email`. Kept: provider, account ID, the address it gave, dates. Provider tokens are dropped after
+- **Least data:** scopes `openid email`, `user:email`, and X's `users.read tweet.read users.email` (X requires `tweet.read` to read the
+  signed-in account; HawkEye never reads posts). Kept: provider, account ID, the address it gave, dates. Provider tokens are dropped after
   sign-in. The two-factor challenge rides in the URL fragment, which isn't sent to servers or in a Referer.
-- **Matching:** by provider and account ID, never by email (GitHub's numeric ID, not the renamable login). Email is used only to connect a new
-  identity, and only an address the provider vouches for (Google's `email_verified`; GitHub's primary, verified address).
+- **Matching:** by provider and account ID, never by email (GitHub's numeric ID, not the renamable login; X's ID, not the @username). Email is used only to connect a new
+  identity, and only an address the provider vouches for (Google's `email_verified`; GitHub's primary, verified address; X's `confirmed_email`).
 - **Account pre-hijacking:** connecting to an account whose address was never verified first removes its password, two-factor, sessions, recovery
   codes, API keys and connected apps (`wipeUnverified`), and the log records it. Someone who registers a victim's address in advance therefore loses
-  access the moment the real owner signs in with Google or GitHub.
-- **Two-factor is never skipped:** after Google or GitHub, an account with it on gets the same challenge as after a password, and an organization's
+  access the moment the real owner signs in with a provider.
+- **Two-factor is never skipped:** after a provider, an account with it on gets the same challenge as after a password, and an organization's
   requirement applies as before.
 - **Sensitive actions without a password** (two-factor setup or removal, account deletion, a first password) need a confirmation through a
   connected provider in the same session within 10 minutes (`sessions.confirmed_at`). The last way to sign in can't be removed.

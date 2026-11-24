@@ -452,8 +452,11 @@ func (s *Service) SetPassword(ctx context.Context, u User, sessionToken, passwor
 }
 
 func providerName(p string) string {
-	if p == socialauth.GitHub {
+	switch p {
+	case socialauth.GitHub:
 		return "GitHub"
+	case socialauth.X:
+		return "X"
 	}
 	return "Google"
 }

@@ -17,9 +17,9 @@ export function GettingStarted() {
       </p>
       <h2 id="account">1. Create your account</h2>
       <p>
-        <Link to="/register">Sign up free</Link> with your email address, or choose <strong>Continue with Google</strong> or{' '}
-        <strong>Continue with GitHub</strong>. The Free plan needs no card. With an email address, verify it when the message arrives; Google and GitHub
-        have already verified theirs. You can use any of the three to sign in later, and add or remove them under <strong>Account</strong> →{' '}
+        <Link to="/register">Sign up free</Link> with your email address, or choose <strong>Continue with Google</strong>,{' '}
+        <strong>Continue with GitHub</strong> or <strong>Continue with X</strong>. The Free plan needs no card. With an email address, verify it when the
+        message arrives; Google, GitHub and X have already verified theirs. You can use any of them to sign in later, and add or remove them under <strong>Account</strong> →{' '}
         <strong>Sign-in methods</strong>.
       </p>
       <h2 id="monitor">2. Add a monitor</h2>

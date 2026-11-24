@@ -16,7 +16,7 @@ import (
 	"hawkeye/internal/twofactor"
 )
 
-// fakeSocial is Google's token endpoint and GitHub's token endpoint and API, answering for the codes a test hands out.
+// fakeSocial is Google's token endpoint, and GitHub's and X's token endpoints and APIs, answering for the codes a test hands out.
 type fakeSocial struct {
 	srv   *httptest.Server
 	mu    sync.Mutex
@@ -75,6 +75,32 @@ func newFakeSocial(t *testing.T) *fakeSocial {
 			{"email": p[1], "primary": true, "verified": p[2] == "true"},
 		})
 	})
+	mux.HandleFunc("POST /x/token", func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		id, secret, _ := r.BasicAuth() // X wants the client's credentials in the header, never the form
+		if id != "x-client" || secret != "x-secret" || r.PostForm.Get("client_secret") != "" || r.PostForm.Get("grant_type") != "authorization_code" {
+			http.Error(w, `{"error":"unauthorized_client"}`, http.StatusUnauthorized)
+			return
+		}
+		a, ok := take(r.PostForm.Get("code"))
+		if !ok || r.PostForm.Get("code_verifier") == "" {
+			http.Error(w, `{"error":"invalid_request"}`, http.StatusBadRequest)
+			return
+		}
+		email := ""
+		if a.verified { // X sends confirmed_email only for a confirmed address
+			email = a.email
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "x-" + a.sub + "|" + email, "token_type": "bearer"})
+	})
+	mux.HandleFunc("GET /x/api/2/users/me", func(w http.ResponseWriter, r *http.Request) {
+		p := strings.SplitN(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer x-"), "|", 2)
+		data := map[string]any{"id": p[0], "name": "Someone", "username": "someone"}
+		if p[1] != "" && r.URL.Query().Get("user.fields") == "confirmed_email" {
+			data["confirmed_email"] = p[1]
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
+	})
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
 	return f
@@ -86,6 +112,8 @@ func (f *fakeSocial) providers() map[string]socialauth.Provider {
 			AuthEndpoint: "https://accounts.example/auth", TokenEndpoint: f.srv.URL + "/google/token"}),
 		socialauth.GitHub: socialauth.NewGitHub(socialauth.Config{ClientID: "gh-client", ClientSecret: "gh-secret", RedirectURL: "http://app.test/cb",
 			AuthEndpoint: "https://github.example/authorize", TokenEndpoint: f.srv.URL + "/github/token", APIBase: f.srv.URL + "/github/api"}),
+		socialauth.X: socialauth.NewX(socialauth.Config{ClientID: "x-client", ClientSecret: "x-secret", RedirectURL: "http://app.test/cb",
+			AuthEndpoint: "https://x.example/i/oauth2/authorize", TokenEndpoint: f.srv.URL + "/x/token", APIBase: f.srv.URL + "/x/api"}),
 	}
 }
 
@@ -157,7 +185,7 @@ func (c *client) me(t *testing.T) string {
 
 func TestSocialSignUpAndSignIn(t *testing.T) {
 	e := newEnv(t, 100000)
-	if r := e.newClient(t).call("GET", "/api/v1/auth/social/providers", nil); fmt.Sprint(r.Body["providers"]) != "[github google]" {
+	if r := e.newClient(t).call("GET", "/api/v1/auth/social/providers", nil); fmt.Sprint(r.Body["providers"]) != "[github google x]" {
 		t.Fatalf("providers %v", r.Body)
 	}
 
@@ -278,6 +306,44 @@ func TestSocialSignInStillAsksForTheTwoFactorCode(t *testing.T) {
 	}
 	if n := e.countRows(t, `SELECT count(*) FROM audit_events WHERE action = 'account.signed_in' AND details->>'via' = 'google'`); n != 1 {
 		t.Fatalf("log entries %d", n)
+	}
+}
+
+func TestSignInWithX(t *testing.T) {
+	e, clk := newTwoFactorEnv(t)
+
+	// A new X account with a confirmed address creates a HawkEye account, matched afterwards by X's ID.
+	c := e.newClient(t)
+	loc := c.social(t, e.social, "x", "signin", "", fakeAccount{sub: "1500", email: "Poster@Example.com", verified: true})
+	if fragment(loc).Get("signed-in") != "x" || fragment(loc).Get("signed-up") == "" || c.me(t) != "poster@example.com" {
+		t.Fatalf("sign-up: %s", loc)
+	}
+	if n := e.countRows(t, `SELECT count(*) FROM user_identities WHERE provider = 'x' AND subject = '1500'`); n != 1 {
+		t.Fatalf("identities %d", n)
+	}
+
+	// An X account without a confirmed address (one made with a phone number) is refused, and nothing is created.
+	loc = e.newClient(t).social(t, e.social, "x", "signin", "", fakeAccount{sub: "1501", email: "phone@example.com", verified: false})
+	if loc.Path != "/login" || loc.Query().Get("error") != "email_not_verified" {
+		t.Fatalf("no address: %s", loc)
+	}
+
+	// Connecting X to an account with two-factor on: the account owner is told, and signing in with X still asks for the code.
+	owner, _ := e.register(t, "secure@example.com")
+	e.markVerified(t, "secure@example.com")
+	secret, _ := enableTwoFactor(t, owner, clk)
+	owner.social(t, e.social, "x", "connect", "", fakeAccount{sub: "1502", email: "secure@example.com", verified: true})
+	if !e.mailedTo(t, "secure@example.com", "X was connected") {
+		t.Fatal("no connected email")
+	}
+	b := e.newClient(t)
+	loc = b.social(t, e.social, "x", "signin", "", fakeAccount{sub: "1502", email: "secure@example.com", verified: true})
+	if f := fragment(loc); f.Get("challenge") == "" || f.Get("via") != "x" || b.me(t) != "" {
+		t.Fatalf("two-factor: %s", loc)
+	}
+	code, _ := twofactor.Code(secret, clk.now())
+	if r := b.call("POST", "/api/v1/auth/login/two-factor", map[string]any{"challenge": fragment(loc).Get("challenge"), "code": code}); r.Status != 200 || b.me(t) != "secure@example.com" {
+		t.Fatalf("code: %d %v", r.Status, r.Body)
 	}
 }
 

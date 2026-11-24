@@ -121,6 +121,53 @@ func TestGitHubUsesOnlyThePrimaryVerifiedAddress(t *testing.T) {
 	}
 }
 
+func TestXSendsTheClientInTheHeaderAndUsesTheConfirmedAddress(t *testing.T) {
+	var me string
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /token", func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		id, secret, ok := r.BasicAuth()
+		if !ok || id != "c" || secret != "s" || r.PostForm.Get("code") == "bad" || r.PostForm.Get("code_verifier") != "v" {
+			http.Error(w, `{"error":"invalid_request"}`, http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write([]byte(`{"token_type":"bearer","access_token":"tok","scope":"users.read tweet.read users.email"}`))
+	})
+	mux.HandleFunc("GET /api/2/users/me", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer tok" || r.URL.Query().Get("user.fields") != "confirmed_email" {
+			http.Error(w, "no", 401)
+			return
+		}
+		_, _ = w.Write([]byte(me))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	x := NewX(Config{ClientID: "c", ClientSecret: "s", TokenEndpoint: srv.URL + "/token", APIBase: srv.URL + "/api"})
+
+	me = `{"data":{"id":"2244994945","username":"someone","confirmed_email":"Me@Example.com"}}`
+	id, err := x.Exchange(t.Context(), "code", "v", "")
+	if err != nil || id != (Identity{Provider: X, Subject: "2244994945", Email: "me@example.com", EmailVerified: true}) {
+		t.Fatalf("%+v %v", id, err)
+	}
+	// No confirmed address: no address at all, so nothing is vouched for.
+	me = `{"data":{"id":"2244994945","username":"someone"}}`
+	if id, err := x.Exchange(t.Context(), "code", "v", ""); err != nil || id.EmailVerified || id.Email != "" {
+		t.Fatalf("%+v %v", id, err)
+	}
+	me = `{"errors":[{"title":"Unauthorized"}]}`
+	if _, err := x.Exchange(t.Context(), "code", "v", ""); !errors.Is(err, ErrExchange) {
+		t.Fatalf("no account: %v", err)
+	}
+	if _, err := x.Exchange(t.Context(), "bad", "v", ""); !errors.Is(err, ErrExchange) {
+		t.Fatalf("bad code: %v", err)
+	}
+	u, _ := url.Parse(x.AuthURL("st", "ch", "no", true))
+	if q := u.Query(); u.Host != "x.com" || u.Path != "/i/oauth2/authorize" || q.Get("response_type") != "code" ||
+		q.Get("scope") != "users.read tweet.read users.email" || q.Get("code_challenge_method") != "S256" || strings.Contains(u.RawQuery, "nonce") {
+		t.Fatalf("%s", u)
+	}
+}
+
 func TestPKCE(t *testing.T) {
 	v, c := NewPKCE()
 	if len(v) < 43 || c == "" || c == v {

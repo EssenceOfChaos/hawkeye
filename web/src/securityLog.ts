@@ -54,7 +54,8 @@ function changedFields(e: LogEvent): string {
   return ''
 }
 
-const providerName = (p: string) => (p === 'github' ? 'GitHub' : p === 'google' ? 'Google' : p)
+const PROVIDERS: Record<string, string> = { google: 'Google', github: 'GitHub', x: 'X' }
+const providerName = (p: string) => PROVIDERS[p] ?? p
 
 /** One sentence per action, about what was done (who did it is shown next to it). */
 export const sentences: Record<string, (e: LogEvent) => string> = {
@@ -63,7 +64,7 @@ export const sentences: Record<string, (e: LogEvent) => string> = {
     const via = e.details.via ? `${providerName(String(e.details.via))} and ` : ''
     if (e.details.method === 'recovery_code') return `Signed in with ${via}a recovery code`
     if (e.details.method === 'authenticator') return `Signed in with ${via}an authenticator code`
-    if (e.details.method === 'google' || e.details.method === 'github') return `Signed in with ${providerName(e.details.method)}`
+    if (typeof e.details.method === 'string' && e.details.method in PROVIDERS) return `Signed in with ${providerName(e.details.method)}`
     return 'Signed in'
   },
   'account.sign_in_failed': (e) => (e.details.reason === 'code' ? 'Failed sign-in: wrong two-factor code' : 'Failed sign-in: wrong password'),

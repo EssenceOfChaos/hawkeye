@@ -1,13 +1,13 @@
-# Plan: Sign in with Google and GitHub
+# Plan: Sign in with Google, GitHub and X
 
-Status: **built** on branch `feat/social-sign-in` (2026-11-23), not yet released; needs the Google and GitHub clients set up (below). Not on Roadmap 2; about 1 build week, taken before #7 (reports sent straight to clients), which is
+Status: **built** on branch `feat/social-sign-in` (2026-11-23), not yet released; needs the Google, GitHub and X clients set up (below). X was added on 2026-11-24 (migration `000056`). Not on Roadmap 2; about 1 build week, taken before #7 (reports sent straight to clients), which is
 waiting on the consent-wording decision anyway.
 
-People will be able to create an account and sign in with **Google** or **GitHub** as well as with an email address and password. When they come
+People will be able to create an account and sign in with **Google**, **GitHub** or **X** as well as with an email address and password. When they come
 back signed out, the button they used last carries a **"Last used"** badge, so they don't have to remember how they signed up.
 
 **It is an addition, not a replacement.** The email and password form stays on both pages, works exactly as it does today, and stays the
-default for anyone who prefers it. One account can use any mix: a password, Google, GitHub, or all three. Someone who signed up with Google can
+default for anyone who prefers it. One account can use any mix: a password, Google, GitHub, X, or all of them. Someone who signed up with Google can
 set a password later, and someone with a password can connect Google later.
 
 Why customers care: one click instead of choosing and remembering a password. HawkEye's audience lives in GitHub (developers) and Google
@@ -53,10 +53,11 @@ and the code lives in its own package (`internal/socialauth`).
 6. **People stay in control:** a **Sign-in methods** section in account settings lists the password and each connected provider, with
    **Connect**, **Disconnect** and **Set a password**. The last remaining way in can't be removed. Nothing changes for anyone who never
    uses it.
-7. **"Last used" is per browser and holds only the method** (`google`, `github` or `password`, never the email), in `localStorage`. It is a
+7. **"Last used" is per browser and holds only the method** (`google`, `github`, `x` or `password`, never the email), in `localStorage`. It is a
    functional preference, so it doesn't follow the analytics opt-out. Password sign-ins set it too, or the badge would mislead someone who
    switches back. Signing out keeps it (that is the point); clearing site data removes it.
-8. **Google and GitHub only, for now.** Microsoft and Apple can follow the same code if customers ask.
+8. **Google, GitHub and X, for now.** Microsoft and Apple can follow the same code if customers ask. X needs a confirmed email on the X
+   account (`confirmed_email`, scope `users.email`); one made with a phone number only gets the "no verified email" message.
 
 ## The design
 
@@ -140,6 +141,9 @@ Data export includes the identities (provider, email, dates); account deletion r
   and logo on Google's screen needs **brand verification** (domain verified in Search Console, home page and privacy policy links), which takes
   a few days, so start it early.
 - **GitHub:** an OAuth App (not a GitHub App) under the HawkEye organization, with the matching callback URL.
+- **X:** in X's developer console, user authentication with app permissions **Read**, type **Web app** (a confidential client),
+  callback `https://hawkeye.observer/api/v1/auth/social/x/callback`, website, terms and privacy links, and **Request email from users** on.
+  Use the OAuth 2.0 client ID and secret (`X_CLIENT_ID`, `X_CLIENT_SECRET`), not the API key and secret.
 - Separate clients for local development, pointing at `localhost`.
 
 ## Tests
@@ -159,7 +163,7 @@ Data export includes the identities (provider, email, dates); account deletion r
 3. Web: the buttons, "Last used", the error messages and the wording sweep.
 4. Sign-in methods in account settings, the emails and security log entries.
 5. Docs (`docs/api.md`, `docs/security.md`, `docs/architecture.md`, the Getting Started guide, `llms.txt`, README), the Privacy Policy update
-   once approved, and the landing FAQ ("Can I sign in with Google or GitHub?").
+   once approved, and the landing FAQ ("Can I sign in with Google, GitHub or X?").
 
 ## Decisions that are yours
 
