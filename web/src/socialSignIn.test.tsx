@@ -42,7 +42,7 @@ function mount(path: string, o: Opts = {}) {
         ? json(200, { user: { id: 'u', email: 'me@example.com', email_verified_at: '2026-01-01T00:00:00Z' }, organizations: [{ id: 'o', name: 'Org', role: 'owner' }] })
         : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } })
     }
-    if (url.includes('/auth/social/providers')) return json(200, { providers: o.providers ?? ['github', 'google'] })
+    if (url.includes('/auth/social/providers')) return json(200, { providers: o.providers ?? ['github', 'google', 'x'] })
     if (url.includes('/account/sign-in-methods') && init?.method !== 'DELETE') return json(200, o.methods)
     if (url.includes('/account/two-factor')) return json(200, { two_factor: { enabled: false, recovery_codes_left: 0 } })
     if (url.includes('/account/email-preferences')) return json(200, { email_preferences: { weekly_summary: true, onboarding: true } })
@@ -73,11 +73,11 @@ function mount(path: string, o: Opts = {}) {
   return posts
 }
 
-describe('sign in with Google and GitHub', () => {
-  it('offers both providers next to the email form, and starts at the provider', async () => {
+describe('sign in with Google, GitHub and X', () => {
+  it('offers every provider next to the email form, in order, and starts at the provider', async () => {
     const posts = mount('/login')
     const google = await screen.findByRole('button', { name: 'Continue with Google' })
-    expect(screen.getByRole('button', { name: 'Continue with GitHub' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^Continue with/ }).map((b) => b.textContent)).toEqual(['Continue with Google', 'Continue with GitHub', 'Continue with X'])
     expect(screen.getByText('or')).toBeInTheDocument()
     // The email form is still there and works as before.
     expect(screen.getByLabelText('Email')).toBeInTheDocument()
@@ -97,9 +97,10 @@ describe('sign in with Google and GitHub', () => {
   })
 
   it('marks the way this browser signed in last', async () => {
-    rememberSignIn('github')
+    rememberSignIn('x')
     mount('/login')
-    expect(await screen.findByRole('button', { name: 'Continue with GitHub Last used' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Continue with X Last used' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continue with GitHub' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument()
   })
 
@@ -137,6 +138,7 @@ describe('sign in with Google and GitHub', () => {
   it('reads what the redirect back says', () => {
     expect(readSocialReturn('#signed-in=github&signed-up=ev1')).toMatchObject({ signedIn: 'github', signedUpEventId: 'ev1' })
     expect(readSocialReturn('#confirmed=google').confirmed).toBe('google')
+    expect(readSocialReturn('#signed-in=x&via=x').via).toBe('x')
     expect(readSocialReturn('#signed-in=twitter').signedIn).toBeUndefined()
   })
 })

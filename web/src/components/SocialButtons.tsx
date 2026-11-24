@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ComponentType } from 'react'
 import { ApiError } from '../api'
 import { availableProviders, lastUsed, PROVIDER_NAMES, startSocial, type Provider } from '../socialSignIn'
 import { Alert } from './Alert'
@@ -24,7 +24,21 @@ export function GitHubLogo() {
   )
 }
 
-export const ProviderLogo = ({ provider }: { provider: Provider }) => (provider === 'google' ? <GoogleLogo /> : <GitHubLogo />)
+/** X's logo, in one color as its brand guidelines ask. */
+export function XLogo() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  )
+}
+
+const LOGOS: Record<Provider, ComponentType> = { google: GoogleLogo, github: GitHubLogo, x: XLogo }
+
+export const ProviderLogo = ({ provider }: { provider: Provider }) => {
+  const Logo = LOGOS[provider]
+  return <Logo />
+}
 
 /** The "Last used" badge, on the way this browser signed in last time. */
 export function LastUsedBadge() {
@@ -32,7 +46,7 @@ export function LastUsedBadge() {
 }
 
 /**
- * "Continue with Google" and "Continue with GitHub", for the sign-in and sign-up pages. "Continue" fits both: a new address gets an account, a known
+ * "Continue with Google", "Continue with GitHub" and "Continue with X", for the sign-in and sign-up pages. "Continue" fits both: a new address gets an account, a known
  * one signs in. Nothing shows until the server says which providers it offers, and nothing at all when it offers none. `onShown` says whether any
  * button is shown, so the page can draw the "or" between them and the email form.
  */

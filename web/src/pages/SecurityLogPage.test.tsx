@@ -91,6 +91,9 @@ describe('SecurityLogPage', () => {
 describe('security log sentences', () => {
   it('reads well for the trickier events', () => {
     expect(sentence(ev({ action: 'account.signed_in', details: { method: 'recovery_code' } }))).toBe('Signed in with a recovery code')
+    expect(sentence(ev({ action: 'account.signed_in', details: { method: 'x' } }))).toBe('Signed in with X')
+    expect(sentence(ev({ action: 'account.signed_in', details: { method: 'authenticator', via: 'x' } }))).toBe('Signed in with X and an authenticator code')
+    expect(sentence(ev({ action: 'account.sign_in_method_connected', details: { provider: 'x' } }))).toBe('Connected X for signing in')
     expect(sentence(ev({ action: 'monitor.changed', details: { fields: ['check_interval_seconds', 'name'] } }))).toBe('Changed the monitor “Shop” (check interval seconds, name)')
     expect(sentence(ev({ action: 'account.password_changed', details: { other_sessions_ended: 2 } }))).toBe('Changed the password and signed out 2 other sessions')
     expect(sentence(ev({ action: 'monitor.deleted', target: { type: 'monitor', id: 'm', name: null } }))).toBe('Deleted the monitor (name not recorded)')

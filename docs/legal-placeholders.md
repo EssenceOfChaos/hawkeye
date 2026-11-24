@@ -97,3 +97,7 @@ Sub-processors to list: hosting provider, database provider, SMTP provider, Stri
 > table (2E): `hawkeye_social_state` (a 10-minute cookie during sign-in, strictly necessary) and `hawkeye_last_sign_in` (local storage remembering
 > only the method last used on that browser, for the "Last used" badge; functional, never the email). Open question for counsel: whether the
 > "Last used" item needs consent in the EU/UK as a functional preference, or is covered as strictly necessary to the sign-in experience.
+>
+> **X added (2026-11-24; confirm with counsel):** X is a third provider on the same terms, named in 2A, 2E and 4A. One difference: X grants
+> sign-in only with access that also covers reading the person's posts (`tweet.read`). HawkEye reads only the account ID and confirmed email and
+> drops the access at once; 2A now says so in plain words. X's Developer Agreement applies to the app.

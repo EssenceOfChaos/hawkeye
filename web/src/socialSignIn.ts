@@ -3,17 +3,17 @@ import { analyticsEnabled, trackEvent, trackRegistration } from './analytics'
 import { attributionForSignup, forgetArrival } from './attribution'
 
 /**
- * Sign in with Google and GitHub (docs/plan-social-sign-in.md), next to email and password. The server does the work: `start` answers with the
+ * Sign in with Google, GitHub and X (docs/plan-social-sign-in.md), next to email and password. The server does the work: `start` answers with the
  * provider's address, and the provider sends the browser back to the API, which redirects into the app with what happened in the fragment.
  */
 
-export type Provider = 'google' | 'github'
+export type Provider = 'google' | 'github' | 'x'
 export type SignInMethod = Provider | 'password'
 
-export const PROVIDER_NAMES: Record<Provider, string> = { google: 'Google', github: 'GitHub' }
+export const PROVIDER_NAMES: Record<Provider, string> = { google: 'Google', github: 'GitHub', x: 'X' }
 
 /** The order the buttons appear in. */
-export const PROVIDER_ORDER: Provider[] = ['google', 'github']
+export const PROVIDER_ORDER: Provider[] = ['google', 'github', 'x']
 
 /** The providers this server offers (none until their client IDs are set up). */
 export async function availableProviders(): Promise<Provider[]> {
@@ -37,6 +37,8 @@ export async function startSocial(provider: Provider, intent: 'signin' | 'connec
   window.location.assign(r.url)
 }
 
+const isProvider = (v: string | null): v is Provider => v !== null && (PROVIDER_ORDER as string[]).includes(v)
+
 const LAST_USED_KEY = 'hawkeye_last_sign_in'
 
 /**
@@ -46,7 +48,7 @@ const LAST_USED_KEY = 'hawkeye_last_sign_in'
 export function lastUsed(): SignInMethod | null {
   try {
     const v = localStorage.getItem(LAST_USED_KEY)
-    return v === 'google' || v === 'github' || v === 'password' ? v : null
+    return v === 'password' || isProvider(v) ? v : null
   } catch {
     return null
   }
@@ -71,7 +73,7 @@ export interface SocialReturn {
   next?: string
 }
 
-const asProvider = (v: string | null): Provider | undefined => (v === 'google' || v === 'github' ? v : undefined)
+const asProvider = (v: string | null): Provider | undefined => (isProvider(v) ? v : undefined)
 
 export function readSocialReturn(hash: string): SocialReturn {
   const q = new URLSearchParams(hash.replace(/^#/, ''))
@@ -105,9 +107,9 @@ export function finishSocialReturn() {
 export const SOCIAL_ERRORS: Record<string, string> = {
   canceled: 'Sign-in was canceled. Choose a way to sign in to try again.',
   expired: 'That sign-in took too long or was started in another browser. Please try again.',
-  email_not_verified: 'Your Google or GitHub account doesn’t have a verified email address. Verify one there, or sign in with email and password.',
+  email_not_verified: 'Your Google, GitHub or X account doesn’t have a verified email address. Verify one there, or sign in with email and password.',
   disabled: 'This account has been disabled. Contact support if you think that’s a mistake.',
-  identity_in_use: 'That Google or GitHub account is already connected to a different HawkEye account.',
+  identity_in_use: 'That Google, GitHub or X account is already connected to a different HawkEye account.',
   provider_connected: 'Your account already has a different account from this provider connected. Disconnect it first.',
   wrong_account: 'That isn’t the account connected to your HawkEye account. Use the one listed under Sign-in methods.',
   failed: 'We couldn’t sign you in that way. Please try again, or sign in with email and password.',
@@ -117,7 +119,7 @@ export const socialError = (code: string | null) => (code ? (SOCIAL_ERRORS[code]
 
 /**
  * What the account page knows for confirming it's you before a sensitive action: with a password, the password; without one, a recent
- * confirmation through a connected provider (`confirmed`, set when Google or GitHub sent the browser back here).
+ * confirmation through a connected provider (`confirmed`, set when the provider sent the browser back here).
  */
 export interface Reauth {
   hasPassword: boolean
@@ -128,7 +130,7 @@ export interface Reauth {
   expire: () => void
 }
 
-/** True when an error means the confirmation through Google or GitHub is missing or has run out. */
+/** True when an error means the confirmation through a provider is missing or has run out. */
 export const needsConfirmation = (e: unknown) => e instanceof ApiError && e.code === 'CONFIRMATION_REQUIRED'
 
 /** Whether the password field, or the confirmation through a provider, has what the action needs. */

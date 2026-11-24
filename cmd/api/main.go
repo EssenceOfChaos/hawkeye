@@ -304,11 +304,11 @@ func newDrafts(key string, log *slog.Logger) *incidentdraft.Service {
 	return incidentdraft.New(key)
 }
 
-// newSocialProviders sets up sign-in with Google and GitHub: each provider whose client ID and secret are set, unless DISABLE_SOCIAL_SIGN_IN.
+// newSocialProviders sets up sign-in with Google, GitHub and X: each provider whose client ID and secret are set, unless DISABLE_SOCIAL_SIGN_IN.
 // The callback is on the app's own address, which proxies /api to this server.
 func newSocialProviders(cfg config.Config, log *slog.Logger) map[string]socialauth.Provider {
 	if !cfg.SocialSignInEnabled {
-		log.Warn("sign in with Google and GitHub is turned off (DISABLE_SOCIAL_SIGN_IN): email and password still work")
+		log.Warn("sign in with Google, GitHub and X is turned off (DISABLE_SOCIAL_SIGN_IN): email and password still work")
 		return nil
 	}
 	out := map[string]socialauth.Provider{}
@@ -323,8 +323,11 @@ func newSocialProviders(cfg config.Config, log *slog.Logger) map[string]socialau
 		out[socialauth.GitHub] = socialauth.NewGitHub(socialauth.Config{ClientID: cfg.GitHubClientID, ClientSecret: cfg.GitHubClientSecret,
 			RedirectURL: callback(socialauth.GitHub)})
 	}
+	if cfg.XClientID != "" && cfg.XClientSecret != "" {
+		out[socialauth.X] = socialauth.NewX(socialauth.Config{ClientID: cfg.XClientID, ClientSecret: cfg.XClientSecret, RedirectURL: callback(socialauth.X)})
+	}
 	if len(out) == 0 {
-		log.Info("sign in with Google and GitHub is not set up: set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET and GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET to offer it")
+		log.Info("sign in with Google, GitHub and X is not set up: set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET, GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET or X_CLIENT_ID/X_CLIENT_SECRET to offer it")
 	}
 	return out
 }

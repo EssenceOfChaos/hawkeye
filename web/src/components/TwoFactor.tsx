@@ -45,9 +45,9 @@ function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void 
 
 /** Two-factor sign-in on the account page: set it up with an authenticator app, make new recovery codes, or turn it off. */
 export function TwoFactorCard({ reauth = { hasPassword: true, connected: [], confirmed: null, expire: () => undefined }, resume }: {
-  /** How to confirm it's you: the password, or for an account without one, a confirmation through Google or GitHub. */
+  /** How to confirm it's you: the password, or for an account without one, a confirmation through Google, GitHub or X. */
   reauth?: Reauth
-  /** Back from confirming with Google or GitHub (?for=): reopen that step. */
+  /** Back from confirming with Google, GitHub or X (?for=): reopen that step. */
   resume?: string | null
 }) {
   const { refresh } = useAuth()
@@ -152,7 +152,7 @@ export function TwoFactorCard({ reauth = { hasPassword: true, connected: [], con
       {status && !status.enabled && step !== 'codes' && (
         <>
           <p>
-            Add a second step to signing in: after your password (or Google or GitHub), HawkEye asks for a code from an authenticator app on your phone (such as 1Password, Google
+            Add a second step to signing in: after your password (or Google, GitHub or X), HawkEye asks for a code from an authenticator app on your phone (such as 1Password, Google
             Authenticator, Microsoft Authenticator or Authy). Someone who learns your password still can’t get in.
           </p>
           {step === 'idle' && <button type="button" onClick={() => setStep('password')}>Set up two-factor sign-in</button>}

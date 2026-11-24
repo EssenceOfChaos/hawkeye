@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    // Back from Google or GitHub: remember the method for "Last used" and count a new account, before anything else reads the address.
+    // Back from Google, GitHub or X: remember the method for "Last used" and count a new account, before anything else reads the address.
     finishSocialReturn()
     // oxlint-disable-next-line react/set-state-in-effect -- refresh() sets state only after its request returns, never synchronously
     void refresh()

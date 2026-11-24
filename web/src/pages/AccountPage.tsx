@@ -200,7 +200,7 @@ function EmailPreferencesCard() {
 }
 
 /**
- * What Google or GitHub's redirect back to this page says (read once, then taken out of the address bar): a provider connected or why not
+ * What the provider's redirect back to this page says (read once, then taken out of the address bar): a provider connected or why not
  * (?connected=, ?social_error=), and a confirmation for a sensitive action (#confirmed=google, with ?for= naming the step that asked).
  */
 function useSocialReturn() {

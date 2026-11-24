@@ -15,7 +15,7 @@ export interface SignInMethodsInfo {
 
 
 /**
- * "Your password", or for an account without one, "Confirm with Google/GitHub": the provider sends the browser back to
+ * "Your password", or for an account without one, "Confirm with Google/GitHub/X": the provider sends the browser back to
  * /account?for=<purpose>, so the page reopens the step that asked. Reports whether the action can go ahead.
  */
 export function PasswordOrConfirm({ reauth, purpose, password, onPassword, hint }: {
@@ -95,7 +95,7 @@ export function SignInMethodsCard({ info, reauth, notice, onChanged }: {
   return (
     <section className="card narrow-left" id="sign-in-methods" aria-labelledby="sim-h">
       <h2 id="sim-h">Sign-in methods</h2>
-      <p className="hint">Use any of these to sign in. Email and password keep working alongside Google and GitHub.</p>
+      <p className="hint">Use any of these to sign in. Email and password keep working alongside the others.</p>
       {notice && (notice.tone === 'ok' ? <Alert tone="success" role="status">{notice.text}</Alert> : <Alert>{notice.text}</Alert>)}
       {error && <Alert>{error}</Alert>}
       {done && <p role="status" className="hint">{done}</p>}
@@ -129,7 +129,7 @@ export function SignInMethodsCard({ info, reauth, notice, onChanged }: {
   )
 }
 
-/** For an account created with Google or GitHub: add a password, after confirming it's you through the provider. */
+/** For an account created with Google, GitHub or X: add a password, after confirming it's you through the provider. */
 function SetPassword({ reauth, onDone }: { reauth: Reauth; onDone: () => Promise<void> }) {
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')

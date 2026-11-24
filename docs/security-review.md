@@ -88,7 +88,7 @@ more only: a shorter secret could appear in a summary that quotes it.
     API keys page lists connected apps, and every new connection is emailed). Clients are registered by hand: a leaked client secret lets someone
     exchange codes they also intercepted, which PKCE prevents, so the secret alone is not enough. There is no dynamic client registration yet, so
     only clients we register (Claude) can connect.
-22. **Sign in with Google and GitHub trusts the provider for the address** (`docs/security.md#sign-in-with-google-and-github`). A compromised Google
-    or GitHub account can sign in to the HawkEye account it is connected to (or whose verified address it holds) unless that account has two-factor
+22. **Sign in with Google, GitHub and X trusts the provider for the address** (`docs/security.md#sign-in-with-google-github-and-x`). A compromised
+    Google, GitHub or X account can sign in to the HawkEye account it is connected to (or whose verified address it holds) unless that account has two-factor
     on, the same exposure as a compromised mailbox through password reset. Mitigations: two-factor still applies, connecting emails the person and is
     logged, and accounts whose address was never verified are wiped of earlier credentials when connected.

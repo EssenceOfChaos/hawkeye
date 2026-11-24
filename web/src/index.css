@@ -1027,8 +1027,8 @@ button.json-row:disabled { cursor: default; opacity: .6; }
 .step-response summary { cursor: pointer; font-weight: 600; }
 .step-response[open] summary { margin-bottom: .4rem; }
 
-/* Sign in with Google and GitHub. Google's button follows its dark-theme branding (fill #131314, border #8E918F, text #E3E3E3, the logo unchanged);
-   GitHub's is black with its white mark, as daisyUI's login buttons. They override the app's gold submit style on purpose. */
+/* Sign in with Google, GitHub and X. Google's button follows its dark-theme branding (fill #131314, border #8E918F, text #E3E3E3, the logo unchanged);
+   GitHub's and X's are black with their white marks, as daisyUI's login buttons. They override the app's gold submit style on purpose. */
 .social-buttons { display: grid; gap: .85rem; margin: 1.1rem 0 .25rem; } /* room for a corner badge above each button */
 button.social-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: .65rem; width: 100%; min-height: 2.75rem; font-weight: 600; }
 /* On a provider button, "Last used" sits on the top-right corner, over the border, so the label stays centered. */
@@ -1039,6 +1039,8 @@ button.social-btn-google { background: #131314; border: 1px solid #8e918f; color
 button.social-btn-github { background: #000; border: 1px solid #3d3d3d; color: #fff; }
 button.social-btn-google:hover:not(:disabled) { background: #1f1f20; border-color: #8e918f; }
 button.social-btn-github:hover:not(:disabled) { background: #161616; border-color: #5a5a5a; }
+button.social-btn-x { background: #000; border: 1px solid #3d3d3d; color: #fff; }
+button.social-btn-x:hover:not(:disabled) { background: #161616; border-color: #5a5a5a; }
 .social-btn svg { flex: none; }
 .last-used { margin-left: .25rem; font-weight: 600; }
 .auth-divider { margin: 1rem 0; color: var(--muted); font-size: .85rem; }
