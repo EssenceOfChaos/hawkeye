@@ -11,6 +11,7 @@ import { CertBadge } from '../components/Certificate'
 import { StatusBadge } from '../components/StatusBadge'
 import { TagList } from '../components/Tags'
 import { BulkAlertTiming, type AlertTimingChange } from '../components/AlertTiming'
+import { useConfirm } from '../components/useConfirm'
 import { formatPeriod, shortInterval } from '../format'
 
 const PAGE_SIZE = 25
@@ -110,6 +111,7 @@ export function BulkBar({ count, tags, minMinutes, onRun, onClear }: {
 function TagManager({ tags, onChanged }: { tags: TagSummary[]; onChanged: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [name, setName] = useState('')
+  const { confirm, dialog } = useConfirm()
 
   async function run(fn: () => Promise<unknown>) {
     try {
@@ -147,8 +149,9 @@ function TagManager({ tags, onChanged }: { tags: TagSummary[]; onChanged: () => 
             )}
             <span className="spacer" />
             <button type="button" className="danger" aria-label={`Delete tag ${t.name}`}
-              onClick={() => {
-                if (window.confirm(`Delete the tag "${t.name}"? Its monitors are kept.`)) void run(() => api('DELETE', `/tags/${t.id}`))
+              onClick={async () => {
+                const ok = await confirm({ title: `Delete the tag “${t.name}”?`, message: 'Its monitors are kept, without this tag.', confirmLabel: 'Delete tag', danger: true })
+                if (ok) void run(() => api('DELETE', `/tags/${t.id}`))
               }}>
               Delete
             </button>
@@ -165,6 +168,7 @@ function TagManager({ tags, onChanged }: { tags: TagSummary[]; onChanged: () => 
         <input aria-label="New tag name" placeholder="New tag" maxLength={MAX_TAG_NAME} value={name} onChange={(e) => setName(e.target.value)} />
         <button type="submit" disabled={name.trim() === ''}>Create tag</button>
       </form>
+      {dialog}
     </details>
   )
 }
@@ -187,6 +191,7 @@ export function MonitorsPage() {
   const [status, setStatus] = useState<MonitorStatus | ''>('')
   const [tag, setTag] = useState('')
   const [selected, setSelected] = useState<string[]>([])
+  const { confirm, dialog } = useConfirm()
 
   // A new filter starts from the first page with nothing selected; these updates are batched, so the list loads once.
   const restart = () => {
@@ -246,15 +251,22 @@ export function MonitorsPage() {
     }
   }
 
-  function remove(m: Monitor) {
-    if (window.confirm(`Delete "${m.name}"? Its monitoring stops and this cannot be undone.`)) {
-      void act(() => api('DELETE', `/monitors/${m.id}`))
-    }
+  async function remove(m: Monitor) {
+    const ok = await confirm({ title: `Delete “${m.name}”?`, message: 'Its monitoring stops and this cannot be undone.', confirmLabel: 'Delete monitor', danger: true })
+    if (ok) void act(() => api('DELETE', `/monitors/${m.id}`))
   }
 
   async function bulk(action: BulkAction, extra: BulkExtra = {}) {
     const n = selected.length
-    if (action === 'delete' && !window.confirm(`Delete ${plural(n)}? Their monitoring stops and this cannot be undone.`)) return
+    if (action === 'delete') {
+      const ok = await confirm({
+        title: `Delete ${plural(n)}?`,
+        message: n === 1 ? 'Its monitoring stops and this cannot be undone.' : 'Their monitoring stops and this cannot be undone.',
+        confirmLabel: n === 1 ? 'Delete monitor' : `Delete ${n} monitors`,
+        danger: true,
+      })
+      if (!ok) return
+    }
     setNotice(null)
     try {
       await api('POST', '/monitors/bulk', { monitor_ids: selected, action, ...extra })
@@ -395,7 +407,7 @@ export function MonitorsPage() {
                       {m.enabled ? 'Pause' : 'Resume'}
                     </button>
                     <Link className="button" to={`/monitors/${m.id}/edit`}>Edit</Link>
-                    <button className="danger" onClick={() => remove(m)} aria-label={`Delete ${m.name}`}>Delete</button>
+                    <button className="danger" onClick={() => void remove(m)} aria-label={`Delete ${m.name}`}>Delete</button>
                   </td>
                 </tr>
               ))}
@@ -411,6 +423,7 @@ export function MonitorsPage() {
         </nav>
       )}
       {monitors !== null && (monitors.length > 0 || tags.length > 0) && <TagManager tags={tags} onChanged={() => void load()} />}
+      {dialog}
     </>
   )
 }
