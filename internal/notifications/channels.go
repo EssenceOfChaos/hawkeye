@@ -188,7 +188,8 @@ func Sign(secret string, ts int64, body []byte) string {
 
 // WebhookPayload is the JSON body sent to a webhook destination.
 type WebhookPayload struct {
-	Event   string         `json:"event"` // outage, recovery, ssl_expiry, domain_expiry, slow, slow_recovery, dns_change, dns_change_closed or test
+	// outage, recovery, ssl_expiry, domain_expiry, slow, slow_recovery, dns_change, dns_change_closed, flapping, flapping_ended or test
+	Event   string         `json:"event"`
 	SentAt  time.Time      `json:"sent_at"`
 	Monitor *PayloadTarget `json:"monitor,omitempty"`
 	// Incident is set for outage and recovery events.
@@ -201,7 +202,17 @@ type WebhookPayload struct {
 	Slowdown *PayloadSlowdown `json:"slowdown,omitempty"`
 	// DNSChange is set for dns_change and dns_change_closed events.
 	DNSChange *PayloadDNSChange `json:"dns_change,omitempty"`
-	URL       string            `json:"url"` // where to look in HawkEye
+	// Flapping is set for flapping and flapping_ended events, and for the outage and recovery of an incident that began while the monitor was
+	// flapping (it is alerted once the monitor stays down).
+	Flapping *PayloadFlapping `json:"flapping,omitempty"`
+	URL      string           `json:"url"` // where to look in HawkEye
+}
+
+type PayloadFlapping struct {
+	StartedAt time.Time  `json:"started_at"`
+	EndedAt   *time.Time `json:"ended_at"`
+	Outages   int        `json:"outages"`
+	Status    string     `json:"status"` // open, settled, stayed_down, or ended (flap suppression turned off, or the monitor paused)
 }
 
 type PayloadTarget struct {
@@ -258,7 +269,16 @@ func buildWebhook(a Alert, now time.Time) WebhookPayload {
 		return p
 	}
 	p.Monitor = &PayloadTarget{ID: a.MonitorID, Name: a.MonitorName, Type: a.monitorType(), URL: a.MonitorURL}
+	if a.FlappingSince != nil {
+		p.Flapping = &PayloadFlapping{StartedAt: a.FlappingSince.UTC(), Outages: a.FlapOutages, Status: a.FlapStatus}
+	}
 	switch a.Event {
+	case EventFlapping, EventFlappingEnded:
+		p.URL = a.AppBaseURL + "/monitors/" + a.MonitorID
+		if a.ResolvedAt != nil {
+			r := a.ResolvedAt.UTC()
+			p.Flapping.EndedAt = &r
+		}
 	case EventSSLExpiry:
 		p.URL = a.AppBaseURL + "/monitors/" + a.MonitorID
 		p.Certificate = &PayloadCertificate{ExpiresAt: a.SSLExpiresAt.UTC(), Bucket: a.SSLBucket}
@@ -317,8 +337,14 @@ func chatContent(a Alert, now time.Time) chatMessage {
 		m.Link = a.AppBaseURL + "/domains"
 		return m
 	}
+	if len(a.Group) > 0 {
+		return groupChat(a)
+	}
 	name := clean(a.MonitorName)
 	m := chatMessage{Target: clean(a.MonitorURL), Link: a.AppBaseURL + "/incidents"}
+	if a.Event == EventFlapping || a.Event == EventFlappingEnded {
+		return flapChat(a, m)
+	}
 	switch a.Event {
 	case EventTest:
 		m = chatMessage{Title: "✅ HawkEye test alert", Lines: []string{"This destination is set up. You will get alerts here when a monitor goes offline or recovers."},
@@ -388,6 +414,9 @@ func chatContent(a Alert, now time.Time) chatMessage {
 		m.Lines = []string{"Detected " + a.StartedAt.UTC().Format("2006-01-02 15:04 UTC")}
 		if a.Cause != "" {
 			m.Lines = append(m.Lines, clean(a.Cause))
+		}
+		if note := flapChatNote(a); note != "" {
+			m.Lines = append(m.Lines, note)
 		}
 	}
 	return m

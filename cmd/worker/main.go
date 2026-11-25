@@ -191,12 +191,17 @@ func run() error {
 			return err
 		}
 		dispatcher := notifications.NewDispatcher(pool, mailer,
-			notifications.DispatcherConfig{MaxAttempts: cfg.NotifyMaxAttempts, AppBaseURL: cfg.AppBaseURL, From: cfg.EmailFromAddress}, m, log).WithReporter(reporter).WithSecrets(box)
+			notifications.DispatcherConfig{MaxAttempts: cfg.NotifyMaxAttempts, AppBaseURL: cfg.AppBaseURL, From: cfg.EmailFromAddress,
+				GroupWindow: groupWindow(cfg.AlertGroupWindow)}, m, log).WithReporter(reporter).WithSecrets(box)
 		if cfg.TelegramBotToken != "" {
 			// Only sends: the API process registers the webhook and handles the bot's updates.
 			dispatcher.WithTelegramBot(notifications.NewTelegramBot(cfg.TelegramBotToken, cfg.TelegramWebhookSecret, "", nil))
 		}
 		spawn(func() { dispatcher.Run(ctx) })
+		// Flapping monitors: says when one settles, and alerts an outage of one that stays down (internal/incidents/flap.go). It queues alerts, so it
+		// runs beside the dispatcher; several instances share the work safely.
+		flaps := incidents.NewFlapJob(pool, 30*time.Second, log).WithReporter(reporter)
+		spawn(func() { flaps.Run(ctx) })
 		// Emails before and when API keys expire (account mail, from the alert address).
 		expiryJob := apitokens.NewExpiryJob(pool, mailer, log, cfg.AppBaseURL, 15*time.Minute)
 		spawn(func() { expiryJob.Run(ctx) })
@@ -302,4 +307,12 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+// groupWindow maps ALERT_GROUP_WINDOW onto the dispatcher's setting, where 0 means the default and a negative value turns grouping off.
+func groupWindow(d time.Duration) time.Duration {
+	if d == 0 {
+		return -1
+	}
+	return d
 }

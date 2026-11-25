@@ -86,6 +86,18 @@ func pagerDutyEvent(key string, a Alert, m chatMessage) map[string]any {
 // pagerDutyKeys decides how an alert maps onto PagerDuty: the dedup key that ties a trigger to its resolve, the action and the severity.
 func pagerDutyKeys(a Alert) (dedup, action, severity string) {
 	unix := func(t interface{ Unix() int64 }) string { return strconv.FormatInt(t.Unix(), 10) }
+	// A flapping monitor's alerts share one key: the "flapping" alert opens it, and it is resolved when the monitor settles, or, if it stayed down,
+	// when that outage recovers (its outage alert updates the open alert).
+	if a.FlapEpisodeID != "" {
+		switch a.Event {
+		case EventFlapping:
+			return "hawkeye:flapping:" + a.FlapEpisodeID, "trigger", "error"
+		case EventOutage:
+			return "hawkeye:flapping:" + a.FlapEpisodeID, "trigger", "critical"
+		case EventFlappingEnded, EventRecovery:
+			return "hawkeye:flapping:" + a.FlapEpisodeID, "resolve", ""
+		}
+	}
 	switch a.Event {
 	case EventTest:
 		return "hawkeye:test:" + a.TestID, "trigger", "info"

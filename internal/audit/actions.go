@@ -28,6 +28,7 @@ const (
 	OwnershipTransferred    = "organization.ownership_transferred"
 	TwoFactorRequirement    = "organization.two_factor_requirement_changed" // details: required
 	AIDraftsSetting         = "organization.ai_drafts_changed"              // details: enabled
+	AlertGroupingSetting    = "organization.alert_grouping_changed"         // details: enabled
 	SubscriptionCanceled    = "billing.subscription_canceled"
 	MemberInvited           = "member.invited"
 	InvitationResent        = "member.invitation_resent"
@@ -78,7 +79,7 @@ const (
 var (
 	AccountActions = []string{SignedUp, SignedIn, SignInFailed, SignedOut, PasswordChanged, PasswordReset, EmailVerified, TwoFactorEnabled,
 		TwoFactorDisabled, RecoveryCodesRegenerated, DataExported, IdentityConnected, IdentityDisconnected}
-	OrganizationActions = []string{OrganizationRenamed, OwnershipTransferred, TwoFactorRequirement, AIDraftsSetting, SubscriptionCanceled, MemberInvited,
+	OrganizationActions = []string{OrganizationRenamed, OwnershipTransferred, TwoFactorRequirement, AIDraftsSetting, AlertGroupingSetting, SubscriptionCanceled, MemberInvited,
 		InvitationResent, InvitationRevoked, MemberJoined, MemberRemoved, MemberLeft, APIKeyCreated, APIKeyRevoked, AppConnected, AppDisconnected,
 		AlertDestinationAdded, AlertDestinationChanged, AlertDestinationRemoved, MonitorCreated, MonitorChanged, MonitorDeleted, MonitorPaused,
 		MonitorResumed, BadgeEnabled, BadgeDisabled, PingAddressRotated, DNSChangeAccepted, StatusPageCreated, StatusPageChanged, StatusPageDeleted, StatusPageDomainSet,

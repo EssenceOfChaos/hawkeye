@@ -29,6 +29,7 @@ type Metrics struct {
 	JobsDropped     prometheus.Counter // jobs discarded after exhausting attempts
 
 	NotificationsTotal   *prometheus.CounterVec // event=outage|recovery, result=sent|retry|failed|skipped
+	NotificationGroups   *prometheus.CounterVec // event: messages that combined several alerts to one destination (grouping)
 	NotificationsPending prometheus.Gauge
 	NotificationsOldest  prometheus.Gauge
 
@@ -84,6 +85,8 @@ func newOn(r *prometheus.Registry) *Metrics {
 		OldestQueuedAge: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_queue_oldest_job_age_seconds", Help: "Age of the oldest job waiting to run."}),
 		JobsReclaimed:   prometheus.NewCounter(prometheus.CounterOpts{Name: "hawkeye_jobs_reclaimed_total", Help: "Jobs claimed again after a lease expired or a retry."}),
 		JobsDropped:     prometheus.NewCounter(prometheus.CounterOpts{Name: "hawkeye_jobs_dropped_total", Help: "Jobs dropped after exhausting their attempts."}),
+		NotificationGroups: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_notification_groups_total",
+			Help: "Alert messages that combined several alerts of one kind to one destination."}, []string{"event"}),
 		NotificationsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "hawkeye_notification_deliveries_total",
 			Help: "Alert delivery attempts by event and result."}, []string{"event", "result"}),
 		NotificationsPending: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_notification_pending", Help: "Alert deliveries waiting to be sent."}),
@@ -114,7 +117,7 @@ func newOn(r *prometheus.Registry) *Metrics {
 		LastPollUnix: prometheus.NewGauge(prometheus.GaugeOpts{Name: "hawkeye_worker_last_poll_timestamp_seconds", Help: "Unix time of the last queue poll."}),
 	}
 	for _, c := range []prometheus.Collector{m.ChecksTotal, m.CheckDuration, m.Rechecks, m.Scheduled, m.Skipped, m.Missed, m.Backpressure,
-		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.CanaryUp, m.NotificationsTotal, m.NotificationsPending, m.NotificationsOldest, m.DomainLookups, m.StatusPageDomainChecks, m.LifecycleEmails, m.MonthlyReportEmails, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.RollupLag, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed, m.BillingPriceMismatch, m.AdConversions} {
+		m.SchedulerLag, m.QueueDepth, m.OldestQueuedAge, m.JobsReclaimed, m.JobsDropped, m.WorkerErrors, m.LastPollUnix, m.CanaryUp, m.NotificationsTotal, m.NotificationGroups, m.NotificationsPending, m.NotificationsOldest, m.DomainLookups, m.StatusPageDomainChecks, m.LifecycleEmails, m.MonthlyReportEmails, m.RetentionDeleted, m.RetentionRuns, m.RetentionErrors, m.RetentionLastSuccess, m.RetentionDuration, m.RollupLag, m.BillingEvents, m.BillingRisk, m.BillingPending, m.BillingOldest, m.BillingFailed, m.BillingPriceMismatch, m.AdConversions} {
 		f(c)
 	}
 	for _, result := range []string{"sent", "rejected", "retry", "failed", "expired"} { // exported from the start, so the alert rule's series exists

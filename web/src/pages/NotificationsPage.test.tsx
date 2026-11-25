@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
-import { NotificationsPage } from './NotificationsPage'
+import { AlertGroupingSetting, NotificationsPage } from './NotificationsPage'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -25,7 +25,8 @@ function setup(opts: { role?: 'owner' | 'member'; emailVerified?: boolean; items
       if (url.includes('/auth/me')) return json(200, { user, organizations: [{ id: 'o', name: 'Org', role: opts.role ?? 'owner' }] })
       if (url.endsWith('/notification-settings') && init?.method === 'POST') return opts.onPost?.() ?? json(201, { notification_setting: mk('new', 'x@example.com', { verified: false }) })
       if (url.endsWith('/notification-settings/telegram-link')) return json(201, { telegram_link: telegramLink })
-      if (url.includes('/notification-settings')) return json(200, { notification_settings: opts.items, max: 10, telegram_bot: opts.telegramBot ?? '' })
+      if (url.endsWith('/notification-settings/grouping')) return json(200, { alert_grouping: JSON.parse(String(init?.body)).enabled })
+      if (url.includes('/notification-settings')) return json(200, { notification_settings: opts.items, max: 10, telegram_bot: opts.telegramBot ?? '', alert_grouping: true })
       return json(404, {})
     }),
   )
@@ -308,5 +309,22 @@ describe('alert routing', () => {
     stub([routed({})], { uncovered_monitors: [{ id: 'm1', name: 'Our blog' }, { id: 'm2', name: 'Shop' }], fallback_available: false })
     const alert = await screen.findByText(/Nobody would be alerted/)
     expect(alert.closest('[role="alert"]') ?? alert.parentElement).toHaveTextContent(/these monitors go offline: Our blog, Shop/)
+  })
+
+  it('groups alerts that arrive together by default, and lets the owner turn it off', async () => {
+    const calls = setup({ items: [mk('1', 'me@example.com', { user_id: 'u' })] })
+    const toggle = (await screen.findByLabelText('Group alerts that arrive together')) as HTMLInputElement
+    expect(toggle.checked).toBe(true)
+    expect(screen.getByText(/The first alert goes out at once/)).toBeInTheDocument()
+    await userEvent.click(toggle)
+    await waitFor(() => expect(toggle.checked).toBe(false))
+    expect(calls).toContain('PUT /api/v1/notification-settings/grouping')
+    expect(screen.getByText(/Every alert is sent as its own message/)).toBeInTheDocument()
+  })
+
+  it('tells members whether alerts are grouped, without a switch', () => {
+    render(<AlertGroupingSetting on isOwner={false} onChange={() => {}} />)
+    expect(screen.getByText(/Alerts that arrive together are grouped into one message/)).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
 })

@@ -56,8 +56,13 @@ func (h *handlers) listSettings(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	grouping, err := h.notifications.Grouping(c.Request().Context(), currentOrg(c))
+	if err != nil {
+		return err
+	}
 	// telegram_bot is the @name of HawkEye's bot when chats can be connected through it, otherwise "" (then only "use your own bot" is offered).
-	return c.JSON(http.StatusOK, map[string]any{"notification_settings": list, "max": notifications.MaxSettingsPerOrganization,
+	// alert_grouping: alerts that arrive together are sent to each destination as one message (the owner can turn it off).
+	return c.JSON(http.StatusOK, map[string]any{"notification_settings": list, "max": notifications.MaxSettingsPerOrganization, "alert_grouping": grouping,
 		"telegram_bot": h.notifications.TelegramBotName()})
 }
 
@@ -198,6 +203,24 @@ func (h *handlers) setRouting(c *echo.Context) error {
 	}
 	h.recordOrg(c, audit.AlertDestinationChanged, settingTarget(s), map[string]any{"monitor_scope": s.MonitorScope, "tags": len(s.TagIDs)})
 	return c.JSON(http.StatusOK, map[string]any{"notification_setting": s})
+}
+
+// setGrouping turns grouping of alerts that arrive together on or off for the organization (owner only).
+func (h *handlers) setGrouping(c *echo.Context) error {
+	var in struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := bind(c, &in); err != nil {
+		return err
+	}
+	if in.Enabled == nil {
+		return mapError(validation.New("enabled", "is required"))
+	}
+	if err := h.notifications.SetGrouping(c.Request().Context(), currentOrg(c), *in.Enabled); err != nil {
+		return err
+	}
+	h.recordOrg(c, audit.AlertGroupingSetting, target{}, map[string]any{"enabled": *in.Enabled})
+	return c.JSON(http.StatusOK, map[string]any{"alert_grouping": *in.Enabled})
 }
 
 // alertCoverage lists monitors that no destination is routed to, and whether the fallback (team members' own email addresses) can reach anyone.

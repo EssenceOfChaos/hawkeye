@@ -124,7 +124,7 @@ fieldset.group legend { font-weight: 600; padding: 0 .35rem; }
 .error { color: var(--down); }
 .hint { opacity: .75; font-size: .85rem; }
 .badge { white-space: nowrap; font-weight: 600; }
-.badge.up { color: var(--up); } .badge.down { color: var(--down); } .badge.slow, .badge.changed { color: var(--warn); }
+.badge.up { color: var(--up); } .badge.down { color: var(--down); } .badge.slow, .badge.changed, .badge.flapping { color: var(--warn); }
 /* A status badge beside a page heading: the row centers each item with its margins, and the heading's 1rem bottom margin left the badge sitting low. */
 .row > h1 + .badge { margin-bottom: 12px; }
 /* The uptime badge's size choice and code, under the switch that turns the badge on. */

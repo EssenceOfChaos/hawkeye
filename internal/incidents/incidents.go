@@ -39,11 +39,15 @@ func (Engine) Opened(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, failur
 	if err != nil {
 		return err
 	}
-	// The alert waits for the monitor's alert delay (counted from the first failed check) and for the end of its quiet hours.
 	timing, err := notifications.MonitorTiming(ctx, tx, monitorID)
 	if err != nil {
 		return err
 	}
+	// A flapping monitor gets one "flapping" alert instead of an alert for every outage (flap.go).
+	if flapping, err := flapOutage(ctx, tx, orgID, monitorID, id, timing); flapping || err != nil {
+		return err
+	}
+	// The alert waits for the monitor's alert delay (counted from the first failed check) and for the end of its quiet hours.
 	_, err = notifications.Enqueue(ctx, tx, orgID, monitorID, id, notifications.EventOutage, timing.OutageAt(time.Now(), startedAt))
 	return err
 }
@@ -67,18 +71,22 @@ func (Engine) CertificateExpiring(ctx context.Context, tx pgx.Tx, monitorID uuid
 // first check.
 func (Engine) Resolved(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, successes int) error {
 	var id, orgID uuid.UUID
+	var paused bool
 	err := tx.QueryRow(ctx, `UPDATE incidents i SET status = 'resolved',
 			resolved_at = GREATEST(i.started_at, COALESCE(
 				(SELECT min(checked_at) FROM (SELECT checked_at FROM check_results WHERE monitor_id = $1
 					ORDER BY checked_at DESC LIMIT $2) s), now()))
 		FROM monitors m
 		WHERE i.monitor_id = $1 AND i.status = 'open' AND m.id = i.monitor_id
-		RETURNING i.id, m.organization_id`, monitorID, successes).Scan(&id, &orgID)
+		RETURNING i.id, m.organization_id, i.alerts_paused`, monitorID, successes).Scan(&id, &orgID, &paused)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return err
+	}
+	if paused {
+		return nil // an outage of a flapping monitor: nobody was told it went down, so nobody is told it's back (the episode's alerts cover it)
 	}
 	if err := notifications.CancelHeldOutage(ctx, tx, id); err != nil {
 		return err
@@ -158,4 +166,8 @@ type Incident struct {
 	Summary         *string    `json:"summary"`
 	DurationSeconds int64      `json:"duration_seconds"` // so far, while the incident is open
 	UpdateCount     int        `json:"update_count"`     // notes posted on it (updates.go)
+	// Flapping: the monitor was flapping when this outage began. AlertsPaused: so its own outage and recovery alerts were not sent (the
+	// "flapping" alert covered it); false again if the monitor then stayed down and the outage was alerted.
+	Flapping     bool `json:"flapping"`
+	AlertsPaused bool `json:"alerts_paused"`
 }

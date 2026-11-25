@@ -22,6 +22,10 @@ const (
 	// EventDNSChange: a DNS record a monitor watches has changed. EventDNSChangeClosed: the change was accepted, or the record changed back.
 	EventDNSChange       = "dns_change"
 	EventDNSChangeClosed = "dns_change_closed"
+	// EventFlapping: a monitor keeps going down and coming back, so its outage and recovery alerts are paused. EventFlappingEnded: it settled, or
+	// flap suppression was turned off (internal/incidents/flap.go).
+	EventFlapping      = "flapping"
+	EventFlappingEnded = "flapping_ended"
 )
 
 // hold turns "when the alert may go out" into the value stored: NULL (send now, as an alert that was never held) unless it is really later than now.
@@ -106,6 +110,27 @@ func EnqueueDNSChange(ctx context.Context, tx pgx.Tx, orgID, monitorID, changeID
 			AND o.event_type = 'dns_change' AND o.suppressed = 'ended_while_held')
 		ON CONFLICT (dns_change_id, notification_setting_id, event_type) WHERE dns_change_id IS NOT NULL DO NOTHING`,
 		orgID, monitorID, changeID, event, hold(at))
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// EnqueueFlap queues a flapping alert (EventFlapping or EventFlappingEnded) for a flap episode. "Ended" skips a destination whose flapping alert
+// was held (quiet hours) and canceled because the episode ended first. It is idempotent per episode, recipient and event.
+func EnqueueFlap(ctx context.Context, tx pgx.Tx, orgID, monitorID, episodeID uuid.UUID, event string, at time.Time) (int, error) {
+	if event == EventFlappingEnded {
+		if err := cancelHeld(ctx, tx, "flap_episode_id", episodeID, EventFlapping); err != nil {
+			return 0, err
+		}
+	}
+	tag, err := tx.Exec(ctx, routedRecipients+`
+		INSERT INTO notification_deliveries (flap_episode_id, notification_setting_id, event_type, next_attempt_at)
+		SELECT $3, r.id, $4, COALESCE($5, now()) FROM recipients r
+		WHERE $4 <> 'flapping_ended' OR NOT EXISTS (SELECT 1 FROM notification_deliveries o WHERE o.flap_episode_id = $3 AND o.notification_setting_id = r.id
+			AND o.event_type = 'flapping' AND o.suppressed = 'ended_while_held')
+		ON CONFLICT (flap_episode_id, notification_setting_id, event_type) WHERE flap_episode_id IS NOT NULL DO NOTHING`,
+		orgID, monitorID, episodeID, event, hold(at))
 	if err != nil {
 		return 0, err
 	}

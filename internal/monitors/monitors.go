@@ -136,6 +136,10 @@ type Monitor struct {
 	// quiet hours (nil: none).
 	AlertDelayMinutes int         `json:"alert_delay_minutes"`
 	QuietHours        *QuietHours `json:"quiet_hours"`
+	// FlapSuppression: when the monitor keeps going down and coming back (3 outages within an hour), send one "flapping" alert instead of an
+	// alert for every outage and recovery, and alert as usual once it stays down (on by default). FlappingSince is set while it is flapping.
+	FlapSuppression bool       `json:"flap_suppression"`
+	FlappingSince   *time.Time `json:"flapping_since"`
 	// Heartbeat is set for heartbeat monitors only. For them check_interval_seconds is the expected time between pings, and URL and the request
 	// fields are unused.
 	Heartbeat *Heartbeat `json:"heartbeat"`
@@ -281,6 +285,7 @@ type CreateInput struct {
 	TagIDs               []uuid.UUID        `json:"tag_ids"`
 	AlertDelayMinutes    *int               `json:"alert_delay_minutes"`
 	QuietHours           *QuietHours        `json:"quiet_hours"`
+	FlapSuppression      *bool              `json:"flap_suppression"` // default true
 	// Multi-step API checks (type workflow) only: the steps, the secrets they use (name -> value), and whether cookies carry from step to step.
 	Steps   []StepInput        `json:"steps"`
 	Secrets map[string]*string `json:"secrets"`
@@ -309,6 +314,7 @@ type UpdateInput struct {
 	TagIDs               *[]uuid.UUID         `json:"tag_ids"` // replaces the monitor's tags
 	AlertDelayMinutes    *int                 `json:"alert_delay_minutes"`
 	QuietHours           Nullable[QuietHours] `json:"quiet_hours"` // null turns quiet hours off
+	FlapSuppression      *bool                `json:"flap_suppression"`
 	GraceSeconds         *int                 `json:"grace_seconds"`
 	DNSRecordType        *string              `json:"dns_record_type"`
 	DNSExpected          Nullable[string]     `json:"dns_expected"` // null or empty: any answer will do
@@ -424,7 +430,8 @@ const cols = `id, organization_id, name, url, method, expected_status_code, chec
 	(SELECT cause FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'), badge_token, ` + tagsCol + `,
 	alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, COALESCE(ping_token, ''), COALESCE(heartbeat_grace_seconds, 0), last_ping_at, ping_deadline,
 	COALESCE(dns_record_type, ''), dns_expected, trace_context, recheck, dns_change_alerts, dns_change_strict,
-	(SELECT detected_at FROM dns_changes WHERE monitor_id = monitors.id AND status = 'open')`
+	(SELECT detected_at FROM dns_changes WHERE monitor_id = monitors.id AND status = 'open'),
+	flap_suppression, (SELECT started_at FROM flap_episodes WHERE monitor_id = monitors.id AND status = 'open')`
 
 func scan(row pgx.Row, minInterval int) (Monitor, error) {
 	var m Monitor
@@ -438,7 +445,8 @@ func scan(row pgx.Row, minInterval int) (Monitor, error) {
 		&m.ConsecutiveSuccesses, &m.CreatedAt, &m.UpdatedAt, &m.Headers, &m.Body, &m.Auth.Type, &m.Auth.Username,
 		&m.Auth.HeaderName, &m.Auth.SecretSet, &m.Assertions, &sslExpires, &sslChecked, &m.InMaintenance, &m.Regions,
 		&m.SlowThresholdMs, &m.SlowChecks, &m.SlowSince, &m.SlowCause, &m.BadgeToken, &m.Tags, &m.AlertDelayMinutes, &quietStart, &quietEnd, &quietTZ,
-		&m.Type, &hb.PingToken, &hb.GraceSeconds, &hb.LastPingAt, &hb.DueBy, &dns.RecordType, &dns.Expected, &m.TraceContext, &m.Recheck, &dns.ChangeAlerts, &dns.ChangeStrict, &dns.ChangedSince)
+		&m.Type, &hb.PingToken, &hb.GraceSeconds, &hb.LastPingAt, &hb.DueBy, &dns.RecordType, &dns.Expected, &m.TraceContext, &m.Recheck, &dns.ChangeAlerts, &dns.ChangeStrict, &dns.ChangedSince,
+		&m.FlapSuppression, &m.FlappingSince)
 	if quietStart != nil && quietEnd != nil && quietTZ != nil {
 		m.QuietHours = &QuietHours{Start: formatClock(*quietStart), End: formatClock(*quietEnd), Timezone: *quietTZ}
 	}
@@ -481,6 +489,7 @@ type fields struct {
 	slowChecks        int
 	traceContext      bool   // website and API monitors: send a traceparent header
 	recheck           string // checks.RecheckAuto, RecheckAlways or RecheckOff
+	flapSuppression   bool   // one "flapping" alert instead of one per outage
 	alertDelay        int
 	quiet             *QuietHours // nil: no quiet hours
 	quietStart        *int        // stored form of quiet, set by validate
@@ -888,7 +897,10 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 			return err
 		}
 		f := fields{kind: TypeHTTP, name: in.Name, url: in.URL, method: "GET", expected: in.ExpectedStatusCode,
-			interval: max(DefaultIntervalSeconds, minInterval), timeout: DefaultTimeoutSeconds, dnsChangeAlerts: true}
+			interval: max(DefaultIntervalSeconds, minInterval), timeout: DefaultTimeoutSeconds, dnsChangeAlerts: true, flapSuppression: true}
+		if in.FlapSuppression != nil {
+			f.flapSuppression = *in.FlapSuppression
+		}
 		switch strings.TrimSpace(in.Type) {
 		case "", TypeHTTP:
 		case TypeHeartbeat:
@@ -1002,13 +1014,13 @@ func (s *Service) Create(ctx context.Context, orgID uuid.UUID, in CreateInput) (
 		out, err = scan(tx.QueryRow(ctx, `INSERT INTO monitors
 			(id, organization_id, name, url, method, expected_status_code, check_interval_seconds, timeout_seconds,
 			 request_headers, request_body, auth_type, auth_username, auth_header_name, auth_secret, assertions, regions, slow_threshold_ms, slow_checks,
-			 alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, ping_token, heartbeat_grace_seconds, dns_record_type, dns_expected, trace_context, recheck, dns_change_alerts, dns_change_strict, next_check_at)
-			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,
+			 alert_delay_minutes, quiet_start, quiet_end, quiet_timezone, kind, ping_token, heartbeat_grace_seconds, dns_record_type, dns_expected, trace_context, recheck, dns_change_alerts, dns_change_strict, flap_suppression, next_check_at)
+			VALUES ($15,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11,''),NULLIF($12,''),NULLIF($13,''),$14,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,
 				CASE WHEN $23 = 'heartbeat' THEN 'infinity'::timestamptz ELSE now() END) RETURNING `+cols,
 			orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout,
 			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, sealed, f.assertions, id, f.regions, f.slowThreshold, f.slowChecks,
 			f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, f.kind, pingToken, grace, dnsType, dnsExpected, f.traceContext, f.recheck,
-			f.dnsChangeAlerts, f.dnsChangeStrict), minInterval)
+			f.dnsChangeAlerts, f.dnsChangeStrict, f.flapSuppression), minInterval)
 		if err != nil {
 			return err
 		}
@@ -1135,7 +1147,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		f := fields{kind: cur.Type, name: cur.Name, url: cur.URL, method: cur.Method, expected: cur.ExpectedStatusCode,
 			interval: cur.CheckIntervalSeconds, timeout: cur.TimeoutSeconds, headers: slices.Clone(cur.Headers),
 			body: cur.Body, assertions: slices.Clone(cur.Assertions), regions: slices.Clone(cur.Regions),
-			slowThreshold: cur.SlowThresholdMs, slowChecks: cur.SlowChecks, alertDelay: cur.AlertDelayMinutes, quiet: cur.QuietHours, traceContext: cur.TraceContext, recheck: cur.Recheck,
+			slowThreshold: cur.SlowThresholdMs, slowChecks: cur.SlowChecks, alertDelay: cur.AlertDelayMinutes, quiet: cur.QuietHours, traceContext: cur.TraceContext, recheck: cur.Recheck, flapSuppression: cur.FlapSuppression,
 			auth: checks.Auth{Type: cur.Auth.Type, Username: cur.Auth.Username, HeaderName: cur.Auth.HeaderName}}
 		f.setAuth(in.Auth, cur.Auth.Type, cur.Auth.SecretSet)
 		if in.Headers != nil {
@@ -1146,6 +1158,9 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 		}
 		if in.Recheck != nil {
 			f.recheck = *in.Recheck
+		}
+		if in.FlapSuppression != nil {
+			f.flapSuppression = *in.FlapSuppression
 		}
 		if in.Body.Set {
 			f.body = in.Body.Value
@@ -1310,7 +1325,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			auth_secret = CASE WHEN $12 = 'none' THEN NULL WHEN $15 THEN auth_secret ELSE NULLIF($16,'') END,
 			assertions=$17, regions=$19, slow_threshold_ms=$20, slow_checks=$21,
 			alert_delay_minutes=$22, quiet_start=$23, quiet_end=$24, quiet_timezone=$25, heartbeat_grace_seconds=$26,
-			dns_record_type=$28, dns_expected=$29, trace_context=$30, recheck=$31, dns_change_alerts=$32, dns_change_strict=$33,
+			dns_record_type=$28, dns_expected=$29, trace_context=$30, recheck=$31, dns_change_alerts=$32, dns_change_strict=$33, flap_suppression=$34,
 			ping_deadline = CASE WHEN ping_deadline IS NOT NULL AND last_ping_at IS NOT NULL AND (check_interval_seconds <> $7 OR heartbeat_grace_seconds <> $26)
 				THEN last_ping_at + make_interval(secs => GREATEST($7::int, $27::int) + $26::int) ELSE ping_deadline END,
 			ssl_expires_at = CASE WHEN $18 THEN NULL ELSE ssl_expires_at END, ssl_checked_at = CASE WHEN $18 THEN NULL ELSE ssl_checked_at END,
@@ -1319,7 +1334,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			id, orgID, f.name, f.url, f.method, f.expected, f.interval, f.timeout, reset,
 			f.headers, f.body, f.auth.Type, f.auth.Username, f.auth.HeaderName, f.keepSecret, sealed, f.assertions, f.url != cur.URL, f.regions,
 			f.slowThreshold, f.slowChecks, f.alertDelay, f.quietStart, f.quietEnd, f.quietTZ, grace, minInterval, dnsType, dnsExpected, f.traceContext, f.recheck,
-			f.dnsChangeAlerts, f.dnsChangeStrict), minInterval)
+			f.dnsChangeAlerts, f.dnsChangeStrict, f.flapSuppression), minInterval)
 		if err != nil {
 			return err
 		}

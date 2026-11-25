@@ -520,3 +520,16 @@ func routingKey(target string) string {
 	}
 	return u.Query().Get("routing_key")
 }
+
+// Grouping reports whether the organization's alerts that arrive together are sent as one message (on by default; see the dispatcher).
+func (s *Service) Grouping(ctx context.Context, orgID uuid.UUID) (bool, error) {
+	var on bool
+	err := s.pool.QueryRow(ctx, `SELECT alert_grouping FROM organizations WHERE id = $1`, orgID).Scan(&on)
+	return on, err
+}
+
+// SetGrouping turns grouping on or off for the organization. Alerts already held to be grouped are still sent together.
+func (s *Service) SetGrouping(ctx context.Context, orgID uuid.UUID, on bool) error {
+	_, err := s.pool.Exec(ctx, `UPDATE organizations SET alert_grouping = $2 WHERE id = $1`, orgID, on)
+	return err
+}

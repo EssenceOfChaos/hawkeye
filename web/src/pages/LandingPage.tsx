@@ -127,9 +127,9 @@ const STEPS = [
 
 const FAQ = [
   { q: 'How does website monitoring work?', a: 'You add a website URL, or enter your domain and let HawkEye suggest monitors for your home page, health endpoint, API and email records, then pick the ones you want. HawkEye periodically sends an HTTP request, records the result, and evaluates whether repeated failures indicate a potential outage.' },
-  { q: 'Can I sign in with Google, GitHub or X?', a: 'Yes. Choose Continue with Google, GitHub or X to create an account or sign in, or use your email address and a password as before. One account can use any of them, and the sign-in page marks the one you used last. If you turned on two-factor sign-in, HawkEye still asks for your code.' },
   { q: 'Do I need a credit card?', a: 'No. The free plan does not ask for one. A payment method is only needed if you choose a paid plan.' },
   { q: 'What happens when my website goes offline?', a: 'When repeated failures meet the incident threshold, HawkEye creates an incident and sends an alert to your email, chat (Slack, Microsoft Teams, Discord or Telegram), PagerDuty or webhook destinations. It keeps checking, and tells you when the website recovers.' },
+  { q: 'If one server hosting twenty sites goes down, do I get twenty alerts?', a: 'No. The first alert goes out at once, and the others that follow within two minutes arrive as one message listing them, sent separately to each destination, so a client’s channel only lists that client’s sites. A site that keeps going down and coming back (three outages in an hour) gets one “flapping” alert instead of one per outage, and you are alerted straight away if it then stays down. Both are on by default and can be turned off.' },
   { q: 'Will HawkEye guarantee that my website is always available?', a: 'No monitoring service can guarantee that a website will always be available or detect every possible problem. HawkEye provides periodic checks and recorded results to help you identify and investigate availability issues.' },
   { q: 'Does HawkEye warn me before my SSL certificate expires?', a: 'Yes, on every plan. For each HTTPS monitor, HawkEye reads the certificate your site presents during its checks, shows the expiry date and a countdown, and alerts your destinations 30, 14, 7 and 1 days before it expires and again if it does. Renew the certificate and HawkEye picks up the new date automatically. It reports the certificate it sees for the monitored address; it cannot tell you about other hostnames or certificates revoked early.' },
   { q: 'Does HawkEye warn me before my domain name expires?', a: 'Yes, on every plan, up to the number of domains your plan lists. HawkEye works out the registered domain of each website you monitor. It looks up the registration expiry date with the domain’s registry once a day and alerts your destinations 30, 14, 7 and 1 days before it expires. Not every registry shares this date, and some hide it for privacy. For those domains HawkEye shows “Expiry unavailable”. Warnings are a reminder; you remain responsible for renewing.' },
@@ -273,7 +273,7 @@ export function LandingPage() {
       <section className="section split" aria-labelledby="truth-h">
         <img src={brand.icons.websites} alt="" width={170} height={170} />
         <div>
-          <p className="eyebrow">Checks that tell the truth</p>
+          <p className="eyebrow">Smart alerts reduce noise</p>
           <h2 id="truth-h">A failed check is not an incident.</h2>
           <p>
             A failed check is checked again 15 seconds later, and a site counts as offline only when that fails too; it counts as recovered only after

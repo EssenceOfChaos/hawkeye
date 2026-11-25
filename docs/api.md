@@ -238,7 +238,7 @@ malformed ID gives 404) or, if absent, the organization the caller **owns** (the
 
 **Monitor fields.** `type` is `http` (a website or API, the default), `heartbeat` or `dns`, set on create and fixed after that. Editable: `name` (1–100), `url`, `method` (`GET` default, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`), `expected_status_code`
 (100–599 or null; null means any response below 400 is up), `check_interval_seconds` (30–86400, at least the plan minimum: 300 on Free, 60 on Pro, 30 on Agency; default 60, or the plan minimum
-when that is longer, so 30 s is only ever chosen), `timeout_seconds` (1–30 and **at most half the interval**, so 15 at 30 s; default 10), `slow_threshold_ms` (100–60000 and below the timeout, or null = off; see *Slow-response alerts*) and `slow_checks` (2–10, default 3), `trace_context` (boolean, default false; see *Trace context*), `recheck` (`auto` default, `always` or `off`; see *Re-check before alerting*), `tag_ids`, `alert_delay_minutes` (0–1440, default 0) and `quiet_hours` (`{start, end, timezone}` or null; see *Alert routing, alert delay and quiet hours*). Read-only and ignored if sent: `slow_since`, `current_status`, `consecutive_*`, `last_*`,
+when that is longer, so 30 s is only ever chosen), `timeout_seconds` (1–30 and **at most half the interval**, so 15 at 30 s; default 10), `slow_threshold_ms` (100–60000 and below the timeout, or null = off; see *Slow-response alerts*) and `slow_checks` (2–10, default 3), `trace_context` (boolean, default false; see *Trace context*), `recheck` (`auto` default, `always` or `off`; see *Re-check before alerting*), `tag_ids`, `alert_delay_minutes` (0–1440, default 0), `quiet_hours` (`{start, end, timezone}` or null; see *Alert routing, alert delay and quiet hours*) and `flap_suppression` (boolean, default true; see *Grouped alerts and flapping*). Read-only and ignored if sent: `flapping_since`, `slow_since`, `current_status`, `consecutive_*`, `last_*`,
 `enabled` (use pause/resume), `organization_id`. `effective_check_interval_seconds` is what the scheduler will use: the stored
 interval raised to the plan minimum, so a downgrade takes effect without rewriting data.
 
@@ -378,8 +378,9 @@ database index). Deleting a monitor closes its open incident silently.
 | `GET /incidents` | organization-wide, newest first. Query: `status` (`open`/`resolved`), `from`, `to` (RFC 3339, on `started_at`), `limit` (1–100, default 25), `offset` |
 | `GET /monitors/:id/incidents` | same filters for one monitor; 404 if it belongs to another organization |
 
-Incident: `{id, monitor_id, monitor_name, started_at, resolved_at, status, cause_category, summary, duration_seconds, update_count}`
-(`duration_seconds` is the elapsed time so far while open; `update_count` is how many updates have been posted on it).
+Incident: `{id, monitor_id, monitor_name, started_at, resolved_at, status, cause_category, summary, duration_seconds, update_count, flapping, alerts_paused}`
+(`duration_seconds` is the elapsed time so far while open; `update_count` is how many updates have been posted on it; `flapping`: the monitor was
+flapping when it began; `alerts_paused`: so no outage or recovery alert was sent for it, see *Grouped alerts and flapping*).
 
 ### Incident updates
 
@@ -471,7 +472,8 @@ Alerts go only to destinations that are **enabled and verified**, and only for t
 
 | Method & path | Who | Notes |
 |---|---|---|
-| `GET /notification-settings` | any member | `{notification_settings: [{id, user_id, channel, destination, enabled, verified, monitor_scope, tag_ids, created_at}], max, telegram_bot}`; `telegram_bot` is the @name (without @) of HawkEye's bot when chats can be connected through it, else `""` |
+| `GET /notification-settings` | any member | `{notification_settings: [{id, user_id, channel, destination, enabled, verified, monitor_scope, tag_ids, created_at}], max, telegram_bot, alert_grouping}`; `telegram_bot` is the @name (without @) of HawkEye's bot when chats can be connected through it, else `""`; `alert_grouping` is whether alerts that arrive together are grouped (default true) |
+| `PUT /notification-settings/grouping` | owner | `{enabled}` → `{alert_grouping}`; recorded in the security log (`organization.alert_grouping_changed`) |
 | `POST /notification-settings` | owner, verified email | `{channel?, destination, bot_token?, region?}`; `channel` is `email` (default), `slack`, `discord`, `teams`, `telegram`, `pagerduty` or `webhook`. **Email:** your own address is verified at once; any other address is emailed a confirmation link and gets no alerts until confirmed. **Slack / Discord / Teams / webhook:** `destination` is an `https://` URL (no IP addresses, port 443 only). Slack: `https://hooks.slack.com/services/…`; Discord: `https://discord.com/api/webhooks/<id>/<token>` (also `discordapp.com`, `ptb.`/`canary.discord.com`, `/api/v<n>/…`; a `?thread_id=` query is kept); Teams: a Workflows webhook (`https://….logic.azure.com/workflows/…` or `https://….powerplatform.com/…/workflows/…`; retired Office 365 connector URLs are refused). **Telegram (own bot):** `bot_token` is the token from @BotFather and `destination` the chat ID (a number such as `-1001234567890`, or `@channelname`); errors name `bot_token` or `destination`. To use HawkEye's bot instead, see `telegram-link` below. **PagerDuty:** `destination` is the 32-character integration key of an Events API v2 integration and `region` is `us` (default) or `eu`; it is stored as the sealed enqueue URL (`https://events[.eu].pagerduty.com/v2/enqueue`, key moved into the body when sending) and listed as `US service, key ending abcd`. The test triggers an `info` incident and resolves it at once; a 400 from PagerDuty is explained as a wrong key or region. See *PagerDuty alerts*. A test message is delivered first and nothing is saved unless the receiver accepts it (400 `VALIDATION_ERROR` naming the reason; for Telegram with a hint such as "check the chat ID"). The URL (for Telegram, the Bot API URL holding the token) is stored encrypted and listings show only its host (`hooks.slack.com/…`), or `chat <id>` for Telegram. A webhook also returns `signing_secret` **once**. Rate-limited. 409 `DESTINATION_EXISTS`, 403 `NOTIFICATION_SETTINGS_LIMIT` (max 10) |
 | `POST /notification-settings/telegram-link` | owner, verified email | 201 `{telegram_link: {bot, code, chat_url, group_url, channel_url, expires_at}}`: a one-time code (15 minutes; a new link cancels the previous one) that connects a Telegram chat through HawkEye's bot. `chat_url` (`t.me/<bot>?start=<code>`) connects a private chat, `group_url` (`?startgroup=`) a group; for a channel, add the bot as an admin (`channel_url`) and post `/connect <code>` there. The chat appears in the list as a verified `telegram` destination named after the chat, once someone taps Start. 503 `TELEGRAM_UNAVAILABLE` when the bot is not configured or not reached yet; 403 `NOTIFICATION_SETTINGS_LIMIT` when the list is full |
 | `POST /notification-settings/:id/test` | owner, verified email | Sends a test to one **confirmed** recipient → 204. **Email:** the "HawkEye test alert" email (gold, says nothing is wrong, names who asked); at most `EMAIL_ACTION_LIMIT_PER_HOUR` per address per hour, then 429 `RATE_LIMITED` with `Retry-After`. **Webhook / chat:** a test message (signed for webhooks); 400 if it is not delivered. An address that has not confirmed → 409 `NOT_VERIFIED` (nothing is sent). Works on a recipient that is turned off (it tests delivery, not the switch); another organization's id is a 404. |
@@ -497,6 +499,29 @@ zone; start and end must differ): every day in that window the monitor's outage,
 ends. Slow-response and certificate alerts ignore the delay. If the problem ends while its alert is still held, the alert is canceled
 (`status: skipped`, `suppressed: ended_while_held`) and that destination gets no "recovered" or "back to normal" either. An alert that was never held but is
 simply late (a stopped dispatcher) is never canceled. Held alerts keep the schedule they were given; changing the settings affects later alerts only.
+
+### Grouped alerts and flapping
+
+**Grouping** (on by default; the owner turns it off with `PUT /notification-settings/grouping`). Alerts are grouped per destination and per kind
+(`outage`, `recovery`, `flapping`, `flapping_ended`). The first alert of a kind to a destination is sent as soon as it is due, as always. One that falls
+due within `ALERT_GROUP_WINDOW` (2 minutes) of the last one sent there is held until that window has passed, then sent with every other alert of that
+kind due for that destination, as **one message** listing them (the email names up to 25 monitors, chat messages 10, and counts the rest). Alerts due at
+the same moment, such as several held by quiet hours, are sent together too. An alert is held at most once, and a held alert is always sent even if its
+monitor recovers first. Routing decides first, so a client's destination only lists that client's monitors. **Webhooks and PagerDuty are never grouped**:
+they get one event per alert. Slow-response, certificate, domain and DNS change alerts aren't grouped.
+
+**Flapping** (`flap_suppression` on a monitor, default true). A monitor's third outage within an hour opens a **flap episode** (`flapping_since` on
+the monitor) and sends one `flapping` alert instead of its outage alert, outside quiet hours and without the alert delay. While it lasts, each outage
+is still an incident (`flapping: true`, `alerts_paused: true`) and counts in uptime, but sends no outage or recovery alert. The episode ends:
+
+- **settled**: no open incident, and the last one ended 30 minutes ago: one `flapping_ended` alert.
+- **stayed down**: an outage of the episode has lasted 15 minutes, or four check intervals if longer. Its ordinary `outage` alert is sent (saying the
+  monitor had been flapping), `alerts_paused` turns false, and its recovery is alerted as usual.
+- **ended**: `flap_suppression` was turned off (an outage still open is alerted at once, as for *stayed down*) or the monitor paused (one
+  `flapping_ended` alert).
+
+Nothing is decided during a maintenance window. PagerDuty uses one dedup key per episode (`hawkeye:flapping:<episode>`): `flapping` and the outage of
+an episode that stayed down trigger it, `flapping_ended` and that outage's recovery resolve it.
 
 ## Check locations
 
@@ -716,7 +741,7 @@ resolve carries only the key and `dedup_key`. Alert routing by tag, delays and q
 
 Every enabled, verified destination receives outage, recovery, certificate-expiry and domain-expiry alerts through the same durable queue as email (retries with backoff, at-least-once). A 2xx is success; 408, 429, 5xx and network errors are retried; any other 4xx (for example 404/410 for a revoked URL) fails the delivery permanently. Requests go through the SSRF-safe client, so private addresses are refused.
 
-Webhook requests are `POST` with `Content-Type: application/json` and these headers: `X-HawkEye-Event` (`outage`, `recovery`, `ssl_expiry`, `domain_expiry`, `slow`, `slow_recovery`, `dns_change`, `dns_change_closed`, `test`), `X-HawkEye-Delivery` (stable across retries; use it to drop duplicates), `X-HawkEye-Timestamp` (Unix seconds) and `X-HawkEye-Signature` = `sha256=` + hex HMAC-SHA256 of `"<timestamp>.<raw body>"` keyed with the signing secret. Reject requests whose signature does not match or whose timestamp is old. Body:
+Webhook requests are `POST` with `Content-Type: application/json` and these headers: `X-HawkEye-Event` (`outage`, `recovery`, `ssl_expiry`, `domain_expiry`, `slow`, `slow_recovery`, `dns_change`, `dns_change_closed`, `flapping`, `flapping_ended`, `test`), `X-HawkEye-Delivery` (stable across retries; use it to drop duplicates), `X-HawkEye-Timestamp` (Unix seconds) and `X-HawkEye-Signature` = `sha256=` + hex HMAC-SHA256 of `"<timestamp>.<raw body>"` keyed with the signing secret. Reject requests whose signature does not match or whose timestamp is old. Body:
 
 ```json
 {"event": "outage", "sent_at": "2026-10-12T15:00:00Z", "url": "https://app.example.com/incidents",
@@ -725,8 +750,10 @@ Webhook requests are `POST` with `Content-Type: application/json` and these head
 ```
 
 `ssl_expiry` carries `certificate: {expires_at, warning_days}` instead of `incident` (`warning_days` 30, 14, 7, 1, or 0 once expired); `domain_expiry` carries `domain: {name, expires_at, warning_days}` and no `monitor` (its `url` points at `/domains`); `slow` and `slow_recovery` carry `slowdown: {started_at, resolved_at, threshold_ms, peak_ms}` (`resolved_at` only on `slow_recovery`) instead of `incident`, and their `url` points at the monitor; `dns_change` and `dns_change_closed` carry
-`dns_change: {record_type, before, after, status, detected_at, closed_at, accepted_by}` (PagerDuty gets a warning that the close resolves); `test`
-carries none of them. Chat destinations receive an equivalent, unsigned message in the app's own format: Slack incoming-webhook blocks; a Discord embed colored by severity, with mentions switched off (`allowed_mentions: {parse: []}`) so names such as `@everyone` never ping; a Teams Adaptive Card with an "Open in HawkEye" button; and a Telegram `sendMessage` in HTML mode with link previews off. Text from monitors (names, addresses, causes) is escaped for each app's markup so it cannot add links or formatting.
+`dns_change: {record_type, before, after, status, detected_at, closed_at, accepted_by}` (PagerDuty gets a warning that the close resolves); `flapping`
+and `flapping_ended` carry `flapping: {started_at, ended_at, outages, status}` (`status` `open`, `settled`, `stayed_down` or `ended`) instead of
+`incident`, and an `outage` or `recovery` of an episode that stayed down carries it next to `incident`; `test` carries none of them. Webhooks are never
+grouped: each alert is its own request. Chat destinations receive an equivalent, unsigned message in the app's own format: Slack incoming-webhook blocks; a Discord embed colored by severity, with mentions switched off (`allowed_mentions: {parse: []}`) so names such as `@everyone` never ping; a Teams Adaptive Card with an "Open in HawkEye" button; and a Telegram `sendMessage` in HTML mode with link previews off. Text from monitors (names, addresses, causes) is escaped for each app's markup so it cannot add links or formatting.
 
 ## Slow-response alerts
 

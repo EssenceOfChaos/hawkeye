@@ -50,7 +50,21 @@ type Alert struct {
 	DNSAfter      []string
 	DNSStatus     string
 	DNSAcceptedBy string
+
+	// Flapping (EventFlapping, EventFlappingEnded, and the outage and recovery of an incident that began while its monitor was flapping): the
+	// episode, when it began, how many outages it counted, and its status (open while it lasts; then settled, stayed_down or ended). For the
+	// flapping events StartedAt and ResolvedAt are the episode's, and Cause is that of its latest outage.
+	FlapEpisodeID string
+	FlappingSince *time.Time
+	FlapOutages   int
+	FlapStatus    string
+
+	// Group holds the alerts combined into this message (see Group): two or more of one event, to one destination. Empty for a single alert.
+	Group []Alert
 }
+
+// FlapSettle is how long a flapping monitor stays up, with no new outage, before it counts as settled (internal/incidents/flap.go).
+const FlapSettle = 30 * time.Minute
 
 // IsHeartbeat reports whether the alert is about a heartbeat (cron job) monitor, which has no website to name.
 func (a Alert) IsHeartbeat() bool { return a.MonitorType == "heartbeat" }
@@ -108,6 +122,12 @@ func Duration(d time.Duration) string {
 // Render builds the alert email (branded HTML plus a plain-text alternative).
 func Render(a Alert) email.Message {
 	name, url := clean(a.MonitorName), clean(a.MonitorURL)
+	if len(a.Group) > 0 {
+		return renderGroup(a)
+	}
+	if a.Event == EventFlapping || a.Event == EventFlappingEnded {
+		return renderFlap(a, name, url)
+	}
 	if a.Event == EventSSLExpiry {
 		return renderSSL(a, name, url)
 	}
@@ -158,6 +178,7 @@ func Render(a Alert) email.Message {
 			"HawkEye has detected repeated failures while checking " + name + ".",
 			"We recommend reviewing the website and its hosting environment. HawkEye will continue monitoring according to your configured check interval, and will email you once when the website recovers.",
 		}
+		c.Paragraphs = withFlapNote(c.Paragraphs, a, name)
 		c.Facts = []email.Fact{{Label: "Website", Value: url}, {Label: "Detected at", Value: started}}
 		if a.Cause != "" {
 			c.Facts = append(c.Facts, email.Fact{Label: "Latest result", Value: clean(a.Cause)})
@@ -194,6 +215,7 @@ func renderDNS(a Alert, name, host string) email.Message {
 		"HawkEye has detected repeated failures while looking up " + name + ".",
 		"We recommend reviewing the record with your DNS provider and confirming the change was intended. HawkEye will keep looking it up on your configured schedule, and will email you once when it recovers.",
 	}
+	c.Paragraphs = withFlapNote(c.Paragraphs, a, name)
 	c.Facts = []email.Fact{{Label: "Host name", Value: host}, {Label: "Detected at", Value: started}}
 	if a.Cause != "" {
 		c.Facts = append(c.Facts, email.Fact{Label: "Latest result", Value: clean(a.Cause)})
@@ -234,6 +256,7 @@ func renderHeartbeat(a Alert, name string) email.Message {
 	} else {
 		c.Paragraphs = []string{"HawkEye expected a ping from the scheduled job " + name + " and none arrived in time, including the grace time. The job may not have run, may have failed before pinging, or may be unable to reach HawkEye."}
 	}
+	c.Paragraphs = withFlapNote(c.Paragraphs, a, name)
 	c.Paragraphs = append(c.Paragraphs, "Check the job's logs and the ping log in HawkEye. You will get one more message when the job pings successfully again.")
 	c.Facts = []email.Fact{{Label: "Detected at", Value: started}}
 	if a.Cause != "" {
