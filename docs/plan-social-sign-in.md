@@ -163,7 +163,8 @@ Data export includes the identities (provider, email, dates); account deletion r
 3. Web: the buttons, "Last used", the error messages and the wording sweep.
 4. Sign-in methods in account settings, the emails and security log entries.
 5. Docs (`docs/api.md`, `docs/security.md`, `docs/architecture.md`, the Getting Started guide, `llms.txt`, README), the Privacy Policy update
-   once approved, and the landing FAQ ("Can I sign in with Google, GitHub or X?").
+   once approved, and the landing FAQ ("Can I sign in with Google, GitHub or X?"; removed 2026-11-24: the sign-in buttons speak for themselves,
+   and the FAQ had grown too long).
 
 ## Decisions that are yours
 
