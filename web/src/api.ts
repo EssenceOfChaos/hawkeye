@@ -231,6 +231,13 @@ export interface Monitor {
   alert_delay_minutes: number
   /** Alerts for this monitor are held during this daily window and sent when it ends; null for none. */
   quiet_hours: QuietHours | null
+  /**
+   * When it keeps going down and coming back (3 outages within an hour), one "flapping" alert instead of an alert per outage and recovery; it is
+   * still alerted at once if it stays down. On by default.
+   */
+  flap_suppression?: boolean
+  /** Set while it is flapping: its outage and recovery alerts are held back. */
+  flapping_since?: string | null
   /** Set for heartbeat monitors only. */
   heartbeat: HeartbeatInfo | null
   /** Set for DNS monitors only. */
@@ -581,6 +588,10 @@ export interface Incident {
   duration_seconds: number
   /** How many updates the team has posted on it. */
   update_count?: number
+  /** The monitor was flapping when this outage began. */
+  flapping?: boolean
+  /** So no outage or recovery alert was sent for it (one "flapping" alert covered it). */
+  alerts_paused?: boolean
 }
 
 export type IncidentUpdateStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved'
@@ -737,6 +748,7 @@ export interface MonitorInput {
   tag_ids?: string[]
   alert_delay_minutes?: number
   quiet_hours?: QuietHours | null
+  flap_suppression?: boolean
 }
 
 /** One step as sent when saving or testing a multi-step API check. auth.secret left out keeps the step's stored secret (by position). */
@@ -765,6 +777,7 @@ export interface WorkflowInput {
   tag_ids?: string[]
   alert_delay_minutes?: number
   quiet_hours?: QuietHours | null
+  flap_suppression?: boolean
   recheck?: RecheckSetting
 }
 
@@ -777,6 +790,7 @@ export interface HeartbeatInput {
   tag_ids?: string[]
   alert_delay_minutes?: number
   quiet_hours?: QuietHours | null
+  flap_suppression?: boolean
 }
 
 /** Creates or edits a DNS monitor. url is the host name to look up. */
@@ -793,6 +807,7 @@ export interface DnsInput {
   tag_ids?: string[]
   alert_delay_minutes?: number
   quiet_hours?: QuietHours | null
+  flap_suppression?: boolean
   recheck?: RecheckSetting
 }
 

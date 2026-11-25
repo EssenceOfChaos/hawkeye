@@ -39,4 +39,24 @@ describe('AlertTiming', () => {
     render(<Harness initialQuiet={{ start: '01:00', end: '02:00', timezone: 'Etc/GMT+5' }} />)
     expect((screen.getByLabelText('Time zone') as HTMLSelectElement).value).toBe('Etc/GMT+5')
   })
+
+  it('holds back alerts while flapping by default, and says what turning it off means', () => {
+    function Flap() {
+      const [on, setOn] = useState(true)
+      return <AlertTiming delay={0} quiet={null} errors={{}} onDelay={() => {}} onQuiet={() => {}} flap={{ value: on, onChange: setOn }} />
+    }
+    render(<Flap />)
+    const toggle = screen.getByLabelText('Hold back alerts while it’s flapping') as HTMLInputElement
+    expect(toggle.checked).toBe(true)
+    expect(screen.getByText(/After 3 outages in an hour, you get one “flapping” alert/)).toBeInTheDocument()
+    expect(screen.getByText(/If it stays down, you’re alerted at once/)).toBeInTheDocument()
+    fireEvent.click(toggle)
+    expect(toggle.checked).toBe(false)
+    expect(screen.getByText(/Every outage and recovery is alerted/)).toBeInTheDocument()
+  })
+
+  it('has no flapping setting unless the form offers one', () => {
+    render(<Harness />)
+    expect(screen.queryByLabelText('Hold back alerts while it’s flapping')).not.toBeInTheDocument()
+  })
 })

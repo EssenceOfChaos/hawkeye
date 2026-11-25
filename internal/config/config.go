@@ -123,6 +123,9 @@ type Config struct {
 	RecheckDelay      time.Duration
 	WorkerMetricsPort int
 	NotifyMaxAttempts int
+	// AlertGroupWindow: after an alert reaches a destination, further alerts of the same kind within this window are sent together as one message
+	// (docs/plan-alert-grouping.md). 0 turns grouping off for the installation; each organization's owner can also turn it off.
+	AlertGroupWindow time.Duration
 	// CanaryURLs: comma-separated https endpoints the worker probes to tell its own network trouble from a customer's site being down. Empty uses the
 	// built-in three (Cloudflare, Google, Apple); "off" disables the canary. CanaryInterval is how often it probes in the background.
 	CanaryURLs     string
@@ -396,6 +399,7 @@ func load(get func(string) string) (Config, error) {
 		RecheckDelay:         duration("RECHECK_DELAY", 15*time.Second),
 		WorkerMetricsPort:    integer("WORKER_METRICS_PORT", 9090),
 		NotifyMaxAttempts:    integer("NOTIFY_MAX_ATTEMPTS", 6),
+		AlertGroupWindow:     duration("ALERT_GROUP_WINDOW", 2*time.Minute),
 		RunRetention:         !boolean("DISABLE_RETENTION"),
 		RetentionInterval:    duration("RETENTION_INTERVAL", time.Hour),
 		RetentionBatch:       integer("RETENTION_BATCH", 5000),
@@ -538,6 +542,9 @@ func load(get func(string) string) (Config, error) {
 	}
 	if c.RecheckDelay != 0 && (c.RecheckDelay < 5*time.Second || c.RecheckDelay > 5*time.Minute) {
 		errs = append(errs, errors.New("RECHECK_DELAY: must be 0 (off) or between 5s and 5m"))
+	}
+	if c.AlertGroupWindow != 0 && (c.AlertGroupWindow < 30*time.Second || c.AlertGroupWindow > 15*time.Minute) {
+		errs = append(errs, errors.New("ALERT_GROUP_WINDOW: must be 0 (off) or between 30s and 15m"))
 	}
 	if c.DomainCheckInterval < time.Minute {
 		errs = append(errs, errors.New("DOMAIN_CHECK_INTERVAL: must be at least 1m"))

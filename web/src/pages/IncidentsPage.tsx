@@ -122,7 +122,10 @@ export function IncidentsPage() {
                   <Fragment key={i.id}>
                     <tr>
                       <td><Link to={`/monitors/${i.monitor_id}/edit`}>{i.monitor_name}</Link></td>
-                      <td><IncidentStatus status={i.status} /></td>
+                      <td>
+                        <IncidentStatus status={i.status} />
+                        {i.alerts_paused && <>{' '}<small className="hint" title="It was flapping: one “flapping” alert covered this outage">· no alert (flapping)</small></>}
+                      </td>
                       <td><StartedAt iso={i.started_at} /></td>
                       <td>{formatDuration(i.duration_seconds)}{i.status === 'open' && ' so far'}</td>
                       <td>{i.summary ?? (i.cause_category ? CAUSES[i.cause_category] ?? i.cause_category : '—')}</td>

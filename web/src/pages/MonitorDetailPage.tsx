@@ -123,6 +123,12 @@ export function MonitorDetailPage() {
               {m.slow_cause && <> {m.slow_cause}</>}
             </Alert>
           )}
+          {m.flapping_since && (
+            <Alert tone="warning" role="status">
+              Flapping since {formatDateTime(m.flapping_since)}: it keeps going offline and coming back. HawkEye is holding back an alert for each
+              outage. You’ll hear once it has stayed up for 30 minutes, or straight away if it stays offline.
+            </Alert>
+          )}
           {dns && <DnsChanges monitor={m} onChanged={() => void api<{ monitor: Monitor }>('GET', `/monitors/${m.id}`).then((r) => setChanged(r.monitor))} />}
 
           {m.workflow?.secrets.some((s) => !s.set) && (
@@ -199,7 +205,7 @@ export function MonitorDetailPage() {
                 <li key={i.id}>
                   <IncidentStatus status={i.status} />{' '}
                   <span>{new Date(i.started_at).toLocaleString()}</span>
-                  <span className="hint"> · {formatDuration(i.duration_seconds)}{i.status === 'open' && ' so far'}{i.summary ? ` · ${i.summary}` : ''}</span>
+                  <span className="hint"> · {formatDuration(i.duration_seconds)}{i.status === 'open' && ' so far'}{i.summary ? ` · ${i.summary}` : ''}{i.alerts_paused ? ' · no alert (flapping)' : ''}</span>
                 </li>
               ))}
             </ul>

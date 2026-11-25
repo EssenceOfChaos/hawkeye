@@ -33,7 +33,8 @@ Monitor the engine from outside the application (an external uptime check on `/h
 only thing that can notice its own outage. Both probes answer GET and HEAD, so checkers that default to HEAD (UptimeRobot) work as is.
 
 | `hawkeye_notification_deliveries_total{event,result}` | `sent`, `retry`, `failed`, `skipped`. Alert on a sustained `failed` or `retry` rate: email provider trouble |
-| `hawkeye_notification_pending`, `hawkeye_notification_oldest_pending_seconds` | alerts waiting; the oldest due one should stay under a minute or two |
+| `hawkeye_notification_pending`, `hawkeye_notification_oldest_pending_seconds` | alerts waiting; the oldest due one should stay under a minute or two. Alerts held for grouping wait up to `ALERT_GROUP_WINDOW` but are not due, so they don't raise the oldest age |
+| `hawkeye_notification_groups_total{event}` | messages that combined several alerts to one destination; a jump means many monitors failed together (a shared host, or our own network: check the canary) |
 
 | `hawkeye_domain_lookups_total{result}` | domain expiry lookups: `known`, `unavailable` (the registry gives no date: normal for some TLDs), `error` (transient). Alert if `error` dominates for hours: a registry, IANA or the worker's network is failing |
 | `hawkeye_retention_last_success_timestamp_seconds` | alert if older than ~3 × `RETENTION_INTERVAL`: retention is not completing and the database will grow |
@@ -530,7 +531,9 @@ Fewer than 5 completed checks exist in the window (new monitor, paused monitor, 
 
 (1) Is the monitor's incident open? `SELECT * FROM incidents WHERE monitor_id = '…' ORDER BY started_at DESC LIMIT 3;`
 (2) Were deliveries created? `SELECT d.event_type, d.status, d.attempt_count, d.last_error, s.destination FROM notification_deliveries d JOIN notification_settings s ON s.id = d.notification_setting_id WHERE d.incident_id = '…';`
-No rows means no enabled, verified recipient existed when the incident opened (check `notification_settings.verified_at`/`enabled`).
+No rows means no enabled, verified recipient existed when the incident opened (check `notification_settings.verified_at`/`enabled`), or the
+monitor was flapping (`incidents.alerts_paused`; its `flapping` alert is on the `flap_episodes` row: `WHERE d.flap_episode_id = …`). A
+`pending` row with `group_held` is waiting, at most `ALERT_GROUP_WINDOW`, to be sent with others.
 `pending` with a future `next_attempt_at` is a retry waiting for backoff; `failed` has the sanitized reason in `last_error`.
 (3) Is a worker running (the dispatcher lives in `cmd/worker`)? In development the email provider is `console`, so mail appears in the worker log, not a mailbox.
 To retry a failed delivery now: `UPDATE notification_deliveries SET status='pending', attempt_count=0, next_attempt_at=now() WHERE id='…';`
@@ -612,6 +615,12 @@ of at least 30 s (the default). Limits are in code: 30 deploy starts an hour and
 
 `JOB_LEASE` must exceed the longest check: 30 s max timeout plus connection setup. Raising `FAILURE_THRESHOLD` reduces false alarms and delays detection by one interval per step
 (the immediate re-check covers only the second failure; any further ones wait for their intervals).
+
+`ALERT_GROUP_WINDOW` (default 2 min; 30 s to 15 min, or 0 to turn grouping off for the installation) is how long, after an alert reaches a
+destination, further alerts of the same kind wait to be sent there together (`docs/plan-alert-grouping.md`). The first alert is never held. The flap
+job (`incidents.FlapJob`, every 30 s on workers that run the dispatcher) ends flap episodes; its errors are logged as `flap sweep failed`.
+To see why a flapping monitor's outage sent no alert: `SELECT started_at, alerts_paused, flap_episode_id FROM incidents WHERE monitor_id = '…'
+ORDER BY started_at DESC LIMIT 5;` and `SELECT * FROM flap_episodes WHERE monitor_id = '…' ORDER BY started_at DESC LIMIT 3;`.
 
 `RECHECK_DELAY` (default 15 s; 5 s to 5 min, or 0 to turn re-checks off for the installation) is how long after a healthy monitor's first failure the
 same location checks it again (`docs/plan-immediate-recheck.md`). Shorter alerts sooner but is more likely to land in the same blip. A re-check reuses

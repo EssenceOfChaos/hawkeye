@@ -129,6 +129,13 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
   index: one open per monitor) and enqueues one `notification_deliveries` row per enabled, verified recipient; any move into `up` closes an
   open incident and enqueues recovery deliveries. Status, incident and deliveries therefore commit atomically
   (`TestIncidentAndNotificationsCommitAtomicallyWithTheResult`). The dispatcher (in `cmd/worker`) sends them; see `docs/api.md` for retry rules.
+- **Grouping and flapping** (migration `000057`, `docs/plan-alert-grouping.md`): the dispatcher claims a delivery in a transaction and, for a groupable
+  kind and channel, locks the destination's `notification_settings` row (`FOR NO KEY UPDATE`), so two dispatchers can't both think an alert is the
+  first. An alert due within `ALERT_GROUP_WINDOW` of the last one of its kind sent there is held once (`group_held`), and when due it is sent with
+  every other due alert of that kind to that destination as one message (`notifications.Group`). `incidents.Engine.Opened` counts the monitor's
+  incidents in the last hour: the third opens a `flap_episodes` row and queues `flapping` deliveries; later incidents join it with
+  `alerts_paused`. `incidents.FlapJob` (every 30 s, beside the dispatcher) closes episodes under the monitor's row lock, the same lock recording a
+  result takes.
 - **Reporting (Phase 6):** reports add up hourly totals (`check_rollups`, `internal/rollups`) for whole hours and `check_results` (index
   `(monitor_id, checked_at)`) for the rest; series are aggregated in SQL into at most 150 buckets so dashboards never load raw history. Adding up
   raw results alone took seconds for 90 days of 50 monitors (a 1-minute plan with 200 monitors writes ≈ 288k rows/day), which the totals brought

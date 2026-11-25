@@ -439,6 +439,10 @@ export function Alerts() {
           The alert says what got slower (the DNS lookup, connecting, the TLS handshake or the server’s wait) compared with the monitor’s past week.</li>
         <li><strong>Certificates</strong> 30, 14, 7 and 1 days before they expire, and <strong>domains</strong> before their registration lapses.</li>
       </ul>
+      <p>
+        When many monitors fail together, or one keeps going down and coming back, you get one alert instead of many. See{' '}
+        <a href="#grouping">fewer alerts at once</a>.
+      </p>
 
       <h2 id="routing">Send each client’s alerts to the right people</h2>
       <p>
@@ -466,6 +470,30 @@ export function Alerts() {
         <li>Turn it off, or on, with <strong>Re-check right away before alerting</strong> under Alert timing on the monitor’s edit page.</li>
         <li>A monitor that is already down isn’t re-checked, and 30-second checks aren’t either: the next check comes just as soon.</li>
         <li>Re-checks appear in the check history, labeled <strong>Re-check</strong>, but don’t count in uptime or response times.</li>
+      </ul>
+
+      <h2 id="grouping">Fewer alerts at once: grouping and flapping</h2>
+      <p>
+        <strong>Grouping.</strong> When one server hosting twenty client sites goes down, you don’t want twenty alerts. The first alert always goes out
+        at once. Any others of the same kind that follow within two minutes are held and sent together, as one message listing every monitor. Grouping
+        is per destination, so a client’s channel only ever lists that client’s monitors. Recoveries are grouped the same way. Webhooks and PagerDuty
+        still get one event per alert, as integrations expect. The owner can turn grouping off for the whole team on the Alerts page.
+      </p>
+      <p>
+        <strong>Flapping.</strong> A monitor that goes offline three times in an hour, coming back each time, is <em>flapping</em>. Instead of an
+        outage and a recovery alert every few minutes, you get one “flapping” alert, and the monitor shows <strong>Flapping</strong>. While it lasts,
+        its outages are still recorded on the Incidents page (marked “no alert”) and still count in uptime. Then:
+      </p>
+      <ul>
+        <li>Once it has stayed up for 30 minutes, you get one message saying it has stopped flapping, and alerts are back to normal.</li>
+        <li>
+          If it goes down and stays down, it is never kept quiet: after 15 minutes (or four check intervals, if those are longer) you get an ordinary
+          outage alert, and a recovery alert when it is back.
+        </li>
+        <li>
+          It is on by default for every monitor. Turn it off with <strong>Hold back alerts while it’s flapping</strong> under Alert timing on the
+          monitor’s edit page; if the monitor is down at that moment, its outage is alerted straight away.
+        </li>
       </ul>
 
       <h2 id="timing">Alert delay and quiet hours</h2>

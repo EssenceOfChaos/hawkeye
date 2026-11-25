@@ -7,6 +7,7 @@ import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
 import { TagChip } from '../components/Tags'
+import { Toggle } from '../components/Toggle'
 
 type Channel = NotificationSetting['channel']
 
@@ -192,6 +193,40 @@ function StatusLabel({ s }: { s: NotificationSetting }) {
   return <span className="d-badge d-badge-soft d-badge-success"><span aria-hidden="true">✔</span> Receiving alerts</span>
 }
 
+/**
+ * Grouping: when many monitors fail together, each destination gets one message listing them instead of one per monitor. The first alert always
+ * goes out at once. On by default; only the owner changes it.
+ */
+export function AlertGroupingSetting({ on, isOwner, onChange }: { on: boolean; isOwner: boolean; onChange: (on: boolean) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const hint = 'The first alert goes out at once. Others that follow within 2 minutes come in one message listing them, so twenty sites on one server send you one alert, not twenty. Webhooks and PagerDuty still get one event per alert.'
+  if (!isOwner) {
+    return <p className="hint">{on ? 'Alerts that arrive together are grouped into one message.' : 'Every alert is sent as its own message.'} The owner can change this.</p>
+  }
+  async function toggle(next: boolean) {
+    setBusy(true)
+    setError(null)
+    try {
+      onChange((await api<{ alert_grouping: boolean }>('PUT', '/notification-settings/grouping', { enabled: next })).alert_grouping)
+      return true
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'That did not work. Try again.')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <section className="card narrow-left" aria-labelledby="grouping-h">
+      <h2 id="grouping-h" className="sr-only">Grouped alerts</h2>
+      <Toggle checked={on} busy={busy} onToggle={toggle}>Group alerts that arrive together</Toggle>
+      <p className="hint">{on ? hint : 'Every alert is sent as its own message, however many arrive at once.'}</p>
+      {error && <small className="error">{error}</small>}
+    </section>
+  )
+}
+
 export function NotificationsPage() {
   const { user, organization } = useAuth()
   const isOwner = organization?.role === 'owner'
@@ -215,11 +250,13 @@ export function NotificationsPage() {
   const [tags, setTags] = useState<TagSummary[]>([])
   const [coverage, setCoverage] = useState<AlertCoverage | null>(null)
   const [routing, setRouting] = useState<string | null>(null) // the destination whose routing is being edited
+  const [grouping, setGrouping] = useState<boolean | null>(null)
 
   const load = useCallback(async () => {
     try {
-      const r = await api<{ notification_settings: NotificationSetting[]; max: number; telegram_bot?: string }>('GET', '/notification-settings')
+      const r = await api<{ notification_settings: NotificationSetting[]; max: number; telegram_bot?: string; alert_grouping?: boolean }>('GET', '/notification-settings')
       setItems(r.notification_settings)
+      setGrouping(r.alert_grouping ?? null)
       setMax(r.max)
       setTelegramBot(r.telegram_bot ?? '')
       setError(null)
@@ -415,6 +452,8 @@ export function NotificationsPage() {
           </table>
         </div>
       )}
+
+      {grouping !== null && <AlertGroupingSetting on={grouping} isOwner={isOwner} onChange={setGrouping} />}
 
       {isOwner ? (
         <section className="card narrow-left" aria-labelledby="add-h">

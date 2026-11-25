@@ -120,6 +120,7 @@ export function MonitorFormPage() {
   const [slowChecks, setSlowChecks] = useState('3')
   const [traceOn, setTraceOn] = useState(false)
   const [recheck, setRecheck] = useState<RecheckSetting>('auto')
+  const [flap, setFlap] = useState(true)
   const [avgMs, setAvgMs] = useState<number | null>(null) // this monitor's average response over the last 24 hours, as a guide
   const [allTags, setAllTags] = useState<TagSummary[]>([])
   const [tagIDs, setTagIDs] = useState<string[]>([])
@@ -193,6 +194,7 @@ export function MonitorFormPage() {
         setSlowChecks(String(m.slow_checks ?? 3))
         setTraceOn(Boolean(m.trace_context))
         setRecheck(m.recheck ?? 'auto')
+        setFlap(m.flap_suppression ?? true)
         setTagIDs((m.tags ?? []).map((t) => t.id))
         setAlertDelay(m.alert_delay_minutes ?? 0)
         setQuiet(m.quiet_hours ?? null)
@@ -215,7 +217,8 @@ export function MonitorFormPage() {
   const keepsSecret = storedAuthType === authType
 
   async function onSubmitHeartbeat() {
-    const payload: HeartbeatInput = { name, check_interval_seconds: period, grace_seconds: grace, tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet }
+    const payload: HeartbeatInput = { name, check_interval_seconds: period, grace_seconds: grace, tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet,
+      flap_suppression: flap }
     try {
       if (editing) {
         await api('PATCH', `/monitors/${monitorID}`, payload)
@@ -236,7 +239,7 @@ export function MonitorFormPage() {
     const payload: DnsInput = {
       name, url: host, dns_record_type: recordType, dns_expected: dnsExpected.trim() === '' ? null : dnsExpected,
       dns_change_alerts: dnsChangeAlerts, dns_change_strict: dnsChangeAlerts && (recordType === 'A' || recordType === 'AAAA') && dnsChangeStrict,
-      tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet, recheck,
+      tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet, recheck, flap_suppression: flap,
     }
     if (allRegions.length > 1) payload.regions = chosen
     if (intervalSeconds() !== undefined) payload.check_interval_seconds = intervalSeconds()
@@ -253,7 +256,7 @@ export function MonitorFormPage() {
 
   async function onSubmitWorkflow() {
     const payload: WorkflowInput = {
-      name, steps: stepsInput(steps), secrets: secretsInput(secrets), cookies, tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet, recheck,
+      name, steps: stepsInput(steps), secrets: secretsInput(secrets), cookies, tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet, recheck, flap_suppression: flap,
     }
     if (allRegions.length > 1) payload.regions = chosen
     if (intervalSeconds() !== undefined) payload.check_interval_seconds = intervalSeconds()
@@ -289,6 +292,7 @@ export function MonitorFormPage() {
       tag_ids: tagIDs,
       alert_delay_minutes: alertDelay,
       quiet_hours: quiet,
+      flap_suppression: flap,
     }
     if (allRegions.length > 1) payload.regions = chosen
     if (intervalSeconds() !== undefined) payload.check_interval_seconds = intervalSeconds()
@@ -441,7 +445,7 @@ export function MonitorFormPage() {
             hint={`How often the job runs: 1 day for a nightly job, 1 hour for an hourly one. Your plan allows ${minAllowed} minute(s) or more, up to 30 days.`} />
           <DurationField id="grace" label="Grace time" seconds={grace} onChange={setGrace} error={f.grace_seconds}
             hint="How late a ping may be before it counts as missed: allow for the job's usual run time and a little more (1 minute to 7 days)." />
-          <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f} />
+          <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f} flap={{ value: flap, onChange: setFlap }} />
           <div className="row">
             <button type="submit" disabled={busy}>{editing ? 'Save changes' : 'Create and show the ping address'}</button>
             <Link to={editing ? `/monitors/${monitorID}` : '/monitors'}>Cancel</Link>
@@ -489,7 +493,7 @@ export function MonitorFormPage() {
             {(f.dns_change_alerts ?? f.dns_change_strict) && <small className="error">{f.dns_change_alerts ?? f.dns_change_strict}</small>}
           </fieldset>
           <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f}
-            recheck={{ value: recheck, onChange: setRecheck, writes: writeMethod, fast: fast && canFast }} />
+            recheck={{ value: recheck, onChange: setRecheck, writes: writeMethod, fast: fast && canFast }} flap={{ value: flap, onChange: setFlap }} />
           {regionPicker}
           <IntervalField min={minAllowed} value={intervalMin} onChange={setIntervalMin} fast={fast && canFast} onFast={canFast ? setFast : undefined}
             error={f.check_interval_seconds ?? f.timeout_seconds}
@@ -514,7 +518,7 @@ export function MonitorFormPage() {
             </Alert>
           )}
           <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f}
-            recheck={{ value: recheck, onChange: setRecheck, writes: writeMethod, fast: fast && canFast }} />
+            recheck={{ value: recheck, onChange: setRecheck, writes: writeMethod, fast: fast && canFast }} flap={{ value: flap, onChange: setFlap }} />
           {regionPicker}
           <IntervalField min={minIntervalMin} value={intervalMin} onChange={setIntervalMin} error={f.check_interval_seconds}
             hint={writeMethod ? `Checks that change data run at most every ${WRITE_MIN_MINUTES} minutes. Leave empty for the default (1 minute, or your plan's fastest).`
@@ -708,7 +712,7 @@ export function MonitorFormPage() {
           </fieldset>
 
           <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f}
-            recheck={{ value: recheck, onChange: setRecheck, writes: writeMethod, fast: fast && canFast }} />
+            recheck={{ value: recheck, onChange: setRecheck, writes: writeMethod, fast: fast && canFast }} flap={{ value: flap, onChange: setFlap }} />
 
           {regionPicker}
 

@@ -523,6 +523,7 @@ func registerAPI(e *echo.Echo, o Options) {
 	scoped.POST("/notification-settings", h.createSetting, requireOwner, requireVerifiedEmail, limit("create-alert"))
 	scoped.POST("/notification-settings/telegram-link", h.telegramLink, requireOwner, requireVerifiedEmail, limit("create-alert"))
 	// A member may turn off or remove their own address (the handlers restrict them to it); everything else about recipients is the owner's.
+	scoped.PUT("/notification-settings/grouping", h.setGrouping, requireOwner)
 	scoped.PATCH("/notification-settings/:settingID", h.updateSetting)
 	scoped.PUT("/notification-settings/:settingID/routing", h.setRouting, requireOwner)
 	api.GET("/notification-settings/coverage", h.alertCoverage)

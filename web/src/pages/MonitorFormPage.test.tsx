@@ -355,6 +355,7 @@ describe('MonitorFormPage: heartbeat (cron job) monitors', () => {
     const post = vi.mocked(globalThis.fetch).mock.calls.find(([, init]) => init?.method === 'POST')!
     expect(JSON.parse(post[1]!.body as string)).toEqual({
       type: 'heartbeat', name: 'Nightly backup', check_interval_seconds: 21600, grace_seconds: 1800, tag_ids: [], alert_delay_minutes: 0, quiet_hours: null,
+      flap_suppression: true,
     })
   })
 
@@ -400,7 +401,7 @@ describe('MonitorFormPage: DNS monitors', () => {
     const post = vi.mocked(globalThis.fetch).mock.calls.find(([, init]) => init?.method === 'POST')!
     expect(JSON.parse(post[1]!.body as string)).toEqual({
       type: 'dns', name: 'Mail', url: 'example.com', dns_record_type: 'MX', dns_expected: 'mail.example.com', tag_ids: [], alert_delay_minutes: 0, quiet_hours: null,
-      recheck: 'auto', dns_change_alerts: true, dns_change_strict: false,
+      recheck: 'auto', dns_change_alerts: true, dns_change_strict: false, flap_suppression: true,
     })
   })
 

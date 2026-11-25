@@ -22,13 +22,15 @@ const delayLabel = (m: number) => (m === 0 ? 'As soon as an outage is confirmed'
  * When this monitor's alerts go out: an optional wait before an outage is announced (a short blip then alerts nobody), and quiet hours during which
  * alerts are held until morning. Both apply to every destination that receives this monitor's alerts.
  */
-export function AlertTiming({ delay, onDelay, quiet, onQuiet, recheck, errors }: {
+export function AlertTiming({ delay, onDelay, quiet, onQuiet, recheck, flap, errors }: {
   delay: number
   onDelay: (minutes: number) => void
   quiet: QuietHours | null
   onQuiet: (q: QuietHours | null) => void
   /** Checked monitors only (not heartbeats): the immediate re-check before alerting. */
   recheck?: RecheckProps
+  /** Flap suppression: one "flapping" alert instead of one per outage when the monitor keeps going down and coming back. */
+  flap?: { value: boolean; onChange: (on: boolean) => void }
   errors: Record<string, string | undefined>
 }) {
   const options = DELAYS.includes(delay) ? DELAYS : [...DELAYS, delay].sort((a, b) => a - b)
@@ -46,6 +48,18 @@ export function AlertTiming({ delay, onDelay, quiet, onQuiet, recheck, errors }:
           Counted from the first failed check. If the site is back before then, nobody is alerted about it. Slow-response and certificate warnings are not delayed.
         </small>
       </div>
+
+      {flap && (
+        <div className="field">
+          <Toggle checked={flap.value} onToggle={flap.onChange}>Hold back alerts while it’s flapping</Toggle>
+          <small className="hint">
+            {flap.value
+              ? 'After 3 outages in an hour, you get one “flapping” alert instead of one per outage, then a message once it has stayed up for 30 minutes. If it stays down, you’re alerted at once.'
+              : 'Every outage and recovery is alerted, however often it goes down and comes back.'}
+          </small>
+          {errors.flap_suppression && <small className="error">{errors.flap_suppression}</small>}
+        </div>
+      )}
 
       <Toggle checked={quiet !== null} onToggle={(on) => onQuiet(on ? { start: '22:00', end: '07:00', timezone: localTimeZone() } : null)}>Quiet hours for this monitor</Toggle>
       {quiet && (

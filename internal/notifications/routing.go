@@ -134,10 +134,11 @@ func (t Timing) At(now time.Time) time.Time { return t.Quiet.Until(now) }
 
 // cancelHeld skips the not-yet-due alerts of a problem that has just ended (outage or slow, matched by the column and id), so nobody is told about a
 // problem that is already over. Only deliberately held alerts qualify: scheduled later than they were queued, never attempted, and not yet due. An
-// alert that is merely late (a busy or stopped dispatcher) is always sent.
+// alert that is merely late (a busy or stopped dispatcher) is always sent, and so is one held to be grouped with others (group_held): grouping
+// changes how alerts are packaged, never whether they are sent.
 func cancelHeld(ctx context.Context, tx pgx.Tx, column string, id uuid.UUID, event string) error {
 	_, err := tx.Exec(ctx, `UPDATE notification_deliveries SET status = 'skipped', suppressed = 'ended_while_held'
-		WHERE `+column+` = $1 AND event_type = $2 AND status = 'pending' AND attempt_count = 0
+		WHERE `+column+` = $1 AND event_type = $2 AND status = 'pending' AND attempt_count = 0 AND NOT group_held
 			AND next_attempt_at > created_at AND next_attempt_at > now()`, id, event)
 	return err
 }
