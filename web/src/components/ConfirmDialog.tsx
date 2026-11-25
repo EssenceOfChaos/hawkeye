@@ -24,9 +24,12 @@ export function ConfirmDialog({ title, message, confirmLabel, cancelLabel = 'Can
   useEffect(() => {
     const d = ref.current
     if (!d) return
-    // showModal puts the dialog in the top layer, makes the page behind it inert and closes it on Esc. jsdom lacks it, so tests get a plain open dialog.
-    if (typeof d.showModal === 'function') d.showModal()
-    else d.setAttribute('open', '')
+    // showModal puts the dialog in the top layer, makes the page behind it inert and closes it on Esc. Every browser the build targets has it;
+    // the fallback is only for jsdom in tests, which lacks it. The open check matters under StrictMode, which runs this effect twice in
+    // development: some older Safari versions throw when showModal is called on a dialog that is already open.
+    if (typeof d.showModal === 'function') {
+      if (!d.open) d.showModal()
+    } else d.setAttribute('open', '')
     ;(danger ? cancelRef : confirmRef).current?.focus()
   }, [danger])
 

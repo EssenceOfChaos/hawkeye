@@ -71,6 +71,55 @@ describe('useConfirm', () => {
     await answered('false')
   })
 
+  it('asks a second question straight after the first is answered, in a dialog of its own', async () => {
+    function TwoInARow() {
+      const { confirm, dialog } = useConfirm()
+      const [log, setLog] = useState<string[]>([])
+      const ask = async () => {
+        const first = await confirm({ title: 'First?', message: 'One.', confirmLabel: 'Yes, first' })
+        const second = await confirm({ title: 'Second?', message: 'Two.', confirmLabel: 'Yes, second' })
+        setLog([String(first), String(second)])
+      }
+      return <><button type="button" onClick={() => void ask()}>Ask</button><output>{log.join(',')}</output>{dialog}</>
+    }
+    render(<TwoInARow />)
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Yes, first' }))
+    // The second dialog is a fresh one: shown, with working buttons.
+    expect(await screen.findByRole('dialog', { name: 'Second?' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, second' }))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('true,true'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('cancels an open question when another is asked, so its caller never waits forever', async () => {
+    function Overlapping() {
+      const { confirm, dialog } = useConfirm()
+      const [log, setLog] = useState<string[]>([])
+      const ask = (name: string) => async () => {
+        const ok = await confirm({ title: `${name}?`, message: name, confirmLabel: `Delete ${name}` })
+        setLog((l) => [...l, `${name}:${ok}`])
+      }
+      return (
+        <>
+          <button type="button" onClick={() => void ask('A')()}>Ask A</button>
+          <button type="button" onClick={() => void ask('B')()}>Ask B</button>
+          <output>{log.join(',')}</output>
+          {dialog}
+        </>
+      )
+    }
+    render(<Overlapping />)
+    fireEvent.click(screen.getByRole('button', { name: 'Ask A' }))
+    await screen.findByRole('dialog', { name: 'A?' })
+    // jsdom has no showModal, so the page behind stays clickable; a real browser makes it inert.
+    fireEvent.click(screen.getByRole('button', { name: 'Ask B' }))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('A:false'))
+    expect(screen.getByRole('dialog', { name: 'B?' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete B' }))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('A:false,B:true'))
+  })
+
   it('focuses the confirm button when the action is not destructive', () => {
     render(<Harness danger={false} />)
     open()

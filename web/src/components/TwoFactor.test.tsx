@@ -185,6 +185,8 @@ describe('RequireTwoFactorCard', () => {
     }, { enabled: true })
     mount(<RequireTwoFactorCard orgID="o" />)
     await userEvent.click(await screen.findByRole('button', { name: 'Require two-factor sign-in' }))
+    // Members are emailed a lock-out notice that can't be unsent, so a stray Enter must not confirm.
+    expect(await screen.findByRole('button', { name: 'Cancel' })).toHaveFocus()
     expect(await answerConfirm('Require it')).toContain('1 member doesn’t use two-factor sign-in yet')
     expect(calls.find((c) => c.method === 'PUT')!.body).toEqual({ required: true })
     expect(await screen.findByText(/has until/)).toBeInTheDocument()

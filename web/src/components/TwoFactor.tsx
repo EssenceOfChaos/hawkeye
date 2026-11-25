@@ -264,6 +264,7 @@ export function RequireTwoFactorCard({ orgID }: { orgID: string }) {
       title: 'Require two-factor sign-in?',
       message: `${without} member${without === 1 ? ' doesn’t' : 's don’t'} use two-factor sign-in yet. They’ll be emailed and have ${state?.grace_days ?? 7} days to set it up before this organization is closed to them.`,
       confirmLabel: 'Require it',
+      danger: true, // members get a lock-out notice that can't be unsent, so Cancel has the focus
     }))) return
     setBusy(true)
     setError(null)
