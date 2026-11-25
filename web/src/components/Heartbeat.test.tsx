@@ -1,10 +1,10 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Monitor } from '../api'
-import { formatPeriod } from '../format'
+import { formatDateTime, formatPeriod, formatShortDateTime } from '../format'
 import { pingExamples } from '../pingExamples'
-import { PingSetup } from './Heartbeat'
+import { PingLog, PingSetup } from './Heartbeat'
 import { StatusBadge } from './StatusBadge'
 
 describe('formatPeriod', () => {
@@ -39,6 +39,21 @@ describe('PingSetup', () => {
   it('drops the waiting note once the job has pinged', () => {
     render(<MemoryRouter><PingSetup monitor={heartbeat('2026-11-03T02:00:00Z')} onChanged={() => undefined} /></MemoryRouter>)
     expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+})
+
+describe('PingLog', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('keeps the time on one line: a short date that never wraps, with the full date on hover', async () => {
+    const at = '2026-11-25T17:22:51Z'
+    const ping = { id: 'p1', received_at: at, kind: 'failure', exit_status: null, method: 'POST', source_ip: '203.0.113.7', user_agent: 'hawk_eye/0.1.0 (Elixir)', body: 'MyApp.Nightly failed on attempt 1 of 1', ignored: false }
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ pings: [ping] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))))
+    render(<PingLog monitorID="m1" refresh={0} />)
+    const time = await screen.findByText(formatShortDateTime(at))
+    expect(time.tagName).toBe('TIME')
+    expect(time).toHaveAttribute('title', formatDateTime(at))
+    expect(time.closest('td')).toHaveClass('nowrap')
   })
 })
 

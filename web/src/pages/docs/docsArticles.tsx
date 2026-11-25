@@ -186,6 +186,35 @@ urllib.request.urlopen("${PING}", timeout=10)`}</Code>
       <p><strong>Node.js</strong> (18 or later)</p>
       <Code>{`await fetch("${PING}", { signal: AbortSignal.timeout(10_000) })`}</Code>
 
+      <h3 id="elixir">Elixir and Oban</h3>
+      <p>
+        The open-source <a href="https://github.com/EssenceOfChaos/hawk_eye">hawk_eye</a> package reports Oban workers for you. It listens to Oban’s
+        telemetry events, so the workers themselves don’t change. Add <code>{'{:hawk_eye, "~> 0.1"}'}</code> to your dependencies, create a heartbeat
+        monitor for each scheduled worker, and map each worker to its monitor’s ping address:
+      </p>
+      <Code>{`# config/runtime.exs
+if config_env() == :prod do
+  config :hawk_eye,
+    oban: [
+      workers: %{
+        MyApp.Workers.NightlyReport => System.get_env("HAWKEYE_NIGHTLY_REPORT")
+      }
+    ]
+end`}</Code>
+      <ul>
+        <li>A job that succeeds sends a success ping, with how long it took.</li>
+        <li>A failure that Oban will retry sends nothing, so an error that fixes itself alerts nobody.</li>
+        <li>
+          A failure on the job’s last attempt, or a job the worker discards, reports a failure. The error message appears in the monitor’s ping log;
+          job arguments are never sent.
+        </li>
+      </ul>
+      <p>For Quantum jobs, GenServer timers or release tasks, wrap the work instead:</p>
+      <Code>{`HawkEye.track(System.get_env("HAWKEYE_CLEANUP"), fn -> MyApp.Cleanup.run() end)`}</Code>
+      <p>
+        More on the <Link to="/elixir">Elixir page</Link> and in the <a href="https://hexdocs.pm/hawk_eye">package documentation</a>.
+      </p>
+
       <h2 id="alerts">What happens when a ping is missed</h2>
       <ul>
         <li>

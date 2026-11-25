@@ -130,7 +130,7 @@ export function ResponseChart({ title, points, bucketSeconds, range, loading }: 
               <tbody>
                 {points.map((p) => (
                   <tr key={p.t}>
-                    <td><time dateTime={p.t}>{formatDateTime(p.t)}</time></td>
+                    <td className="nowrap"><time dateTime={p.t}>{formatDateTime(p.t)}</time></td>
                     <td className="num">{formatMs(p.avg_ms)}</td>
                     <td className="num">{formatMs(p.max_ms)}</td>
                     <td className="num">{p.checks}</td>

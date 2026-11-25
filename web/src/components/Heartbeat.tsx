@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, pingURL, type HeartbeatPing, type Monitor } from '../api'
-import { DURATION_UNITS, durationUnitFor, formatDateTime } from '../format'
+import { DURATION_UNITS, durationUnitFor, formatDateTime, formatShortDateTime } from '../format'
 import { pingExamples } from '../pingExamples'
 import { Alert } from './Alert'
 import { CopyField } from './BadgeCard'
@@ -83,7 +83,10 @@ export function PingSetup({ monitor, onChanged }: { monitor: Monitor; onChanged:
           <li>Send the end of the job’s output as the body of a POST (up to 1,000 characters are kept) and it appears in the ping log below.</li>
           <li><code>--retry 5</code> makes curl try again if the network hiccups, so one lost request does not look like a missed run.</li>
         </ul>
-        <p><Link to="/docs/cron-job-monitoring">Read the full guide</Link></p>
+        <p>
+          <Link to="/docs/cron-job-monitoring">Read the full guide</Link>. Using Oban? The <Link to="/elixir">hawk_eye package</Link> reports its jobs
+          for you.
+        </p>
       </details>
       <div className="row">
         <button type="button" className="linklike" disabled={busy} onClick={() => void rotate()}>Get a new ping address</button>
@@ -116,7 +119,7 @@ export function PingLog({ monitorID, refresh }: { monitorID: string; refresh: nu
             <tbody>
               {pings.map((p) => (
                 <tr key={p.id}>
-                  <td><time dateTime={p.received_at}>{formatDateTime(p.received_at)}</time></td>
+                  <td className="nowrap"><time dateTime={p.received_at} title={formatDateTime(p.received_at)}>{formatShortDateTime(p.received_at)}</time></td>
                   <td>
                     {p.kind === 'success'
                       ? <span className="badge up"><span aria-hidden="true">✔</span> Success</span>
