@@ -130,11 +130,14 @@ const NARROW: Layout = {
 
 const HEADER_TEXT: Record<string, string> = { '01': 'What HawkEye watches', '02': 'Confirms the outage', '03': 'Tells you and your team' }
 
-/** The status panel's text for each state: [title, detail]. */
+/**
+ * The status panel's text for each state: [title, detail]. SVG text never wraps, so each detail must fit the panel: in the wide layout about 230
+ * units at 13.5px (roughly 30 characters), in the narrow one the short version at 12px. Measure in a browser after changing one.
+ */
 const STATUS: { state: State | State[]; tone: 'up' | 'warn' | 'down'; title: string; detail: string; short: string }[] = [
-  { state: ['healthy', 'down'], tone: 'up', title: 'All checks passing', detail: 'Every check answered as expected', short: 'Every check answered' },
+  { state: ['healthy', 'down'], tone: 'up', title: 'All checks passing', detail: 'All answers as expected', short: 'Every check answered' },
   { state: 'failing', tone: 'warn', title: 'API check failed', detail: 'Checking again before alerting', short: 'Checking again first' },
-  { state: ['confirmed', 'alerted', 'resolving'], tone: 'down', title: 'Outage confirmed', detail: 'Failed again on an immediate re-check', short: 'Failed again on a re-check' },
+  { state: ['confirmed', 'alerted', 'resolving'], tone: 'down', title: 'Outage confirmed', detail: 'Immediate re-check failed too', short: 'Failed again on a re-check' },
   { state: ['recovered', 'closed'], tone: 'up', title: 'API back online', detail: 'Recovered, incident closed', short: 'Incident closed' },
 ]
 
