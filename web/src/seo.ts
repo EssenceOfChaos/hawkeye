@@ -72,7 +72,7 @@ export const PAGES: readonly PageMeta[] = [
   {
     path: '/docs/cron-job-monitoring',
     title: 'Cron Job & Heartbeat Monitoring | HawkEye Docs',
-    description: 'Get alerted when a cron job, backup or scheduled task stops running or fails. Ping examples for crontab, systemd, Kubernetes, GitHub Actions and more.',
+    description: 'Get alerted when a cron job, backup or scheduled task stops running or fails. Ping examples for crontab, systemd, Kubernetes, GitHub Actions and Oban.',
     index: true,
   },
   {
@@ -105,6 +105,12 @@ export const PAGES: readonly PageMeta[] = [
       url: `${SITE_URL}/about`,
       about: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL, logo: `${SITE_URL}/icon-192.png` },
     },
+  },
+  {
+    path: '/elixir',
+    title: 'Oban Job Monitoring for Elixir | HawkEye',
+    description: 'Get alerted when an Oban job fails on its last attempt or stops running. An open-source Elixir package, no changes to your workers, free plan.',
+    index: true,
   },
   { path: '/contact', title: 'Contact HawkEye', description: 'Questions about HawkEye website and API monitoring? Send us a message and we will get back to you.', index: true },
   { path: '/privacy', title: 'Privacy Policy | HawkEye', description: 'What personal information HawkEye collects, how it is used and shared, how long it is kept, and your privacy rights.', index: true },

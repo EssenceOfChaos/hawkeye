@@ -12,6 +12,7 @@ import { TwoFactorCard } from '../components/TwoFactor'
 import { SecurityLog } from '../components/SecurityLog'
 import { PasswordOrConfirm, SignInMethodsCard, type SignInMethodsInfo } from '../components/SignInMethods'
 import { needsConfirmation, PROVIDER_NAMES, readSocialReturn, reauthReady, socialError, type Provider, type Reauth } from '../socialSignIn'
+import { useConfirm } from '../components/useConfirm'
 
 function msg(e: unknown): string {
   return e instanceof ApiError ? e.message : 'That did not work. Try again.'
@@ -108,6 +109,7 @@ function ExportData() {
 }
 
 function DeleteAccount({ email, reauth }: { email: string; reauth: Reauth }) {
+  const { confirm, dialog } = useConfirm()
   const { refresh } = useAuth()
   const navigate = useNavigate()
   const [password, setPassword] = useState('')
@@ -118,7 +120,7 @@ function DeleteAccount({ email, reauth }: { email: string; reauth: Reauth }) {
 
   async function submit(e: SubmitEvent) {
     e.preventDefault()
-    if (!window.confirm('Permanently delete your account and all of its data? This cannot be undone.')) return
+    if (!(await confirm({ title: 'Delete your account?', message: 'Your account and all of its data are permanently deleted. This cannot be undone.', confirmLabel: 'Delete my account', danger: true }))) return
     setBusy(true)
     setError(null)
     try {
@@ -145,6 +147,7 @@ function DeleteAccount({ email, reauth }: { email: string; reauth: Reauth }) {
         {error && <Alert>{error}</Alert>}
         <button type="submit" className="danger" disabled={busy || !matches || !reauthReady(reauth, password)}>Delete my account</button>
       </form>
+      {dialog}
     </section>
   )
 }

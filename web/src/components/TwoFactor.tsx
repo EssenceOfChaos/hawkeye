@@ -7,6 +7,7 @@ import { CopyField } from './BadgeCard'
 import { Field } from './Field'
 import { PasswordOrConfirm } from './SignInMethods'
 import { needsConfirmation, reauthReady, type Reauth } from '../socialSignIn'
+import { useConfirm } from './useConfirm'
 
 const day = (iso: string) => new Date(iso).toLocaleDateString([], { dateStyle: 'medium' })
 
@@ -237,6 +238,7 @@ interface MemberTwoFactor {
  * first. Members who don't have it get a grace period and an email.
  */
 export function RequireTwoFactorCard({ orgID }: { orgID: string }) {
+  const { confirm, dialog } = useConfirm()
   const { twoFactor } = useAuth()
   const [state, setState] = useState<{ required: boolean; grace_days: number; members: MemberTwoFactor[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -258,7 +260,12 @@ export function RequireTwoFactorCard({ orgID }: { orgID: string }) {
 
   async function set(required: boolean) {
     const without = state?.members.filter((m) => !m.two_factor_enabled).length ?? 0
-    if (required && without > 0 && !window.confirm(`${without} member${without === 1 ? ' doesn’t' : 's don’t'} use two-factor sign-in yet. They’ll be emailed and have ${state?.grace_days ?? 7} days to set it up before this organization is closed to them. Require it?`)) return
+    if (required && without > 0 && !(await confirm({
+      title: 'Require two-factor sign-in?',
+      message: `${without} member${without === 1 ? ' doesn’t' : 's don’t'} use two-factor sign-in yet. They’ll be emailed and have ${state?.grace_days ?? 7} days to set it up before this organization is closed to them.`,
+      confirmLabel: 'Require it',
+      danger: true, // members get a lock-out notice that can't be unsent, so Cancel has the focus
+    }))) return
     setBusy(true)
     setError(null)
     try {
@@ -300,6 +307,7 @@ export function RequireTwoFactorCard({ orgID }: { orgID: string }) {
           ))}
         </ul>
       )}
+      {dialog}
     </section>
   )
 }

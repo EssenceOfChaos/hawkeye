@@ -4,6 +4,7 @@ import { api, ApiError, type StatusPageDomain, type StatusPageDomainState, type 
 import { Alert } from './Alert'
 import { CopyField } from './BadgeCard'
 import { Field } from './Field'
+import { useConfirm } from './useConfirm'
 
 // Full class names so the CSS generator can see them.
 const STATE: Record<StatusPageDomainState, { label: string; cls: string; text: string }> = {
@@ -36,6 +37,7 @@ export function CustomDomainCard({ pageID, isOwner, onChange }: {
   isOwner: boolean
   onChange?: (hostname: string, state: StatusPageDomainState | '') => void
 }) {
+  const { confirm, dialog } = useConfirm()
   const [view, setView] = useState<StatusPageDomainView | null>(null)
   const [hostname, setHostname] = useState('')
   const [editing, setEditing] = useState(false)
@@ -83,8 +85,8 @@ export function CustomDomainCard({ pageID, isOwner, onChange }: {
     // Otherwise the problem it found is shown in the card, with the time of the check.
     show(v, v.domain?.state === 'active' ? 'Both records are right: the page is live on this domain.' : null)
   })
-  const remove = (d: StatusPageDomain) => {
-    if (!window.confirm(`Stop serving this page on ${d.hostname}? You can set it up again later, with new DNS records.`)) return
+  const remove = async (d: StatusPageDomain) => {
+    if (!(await confirm({ title: `Stop serving this page on ${d.hostname}?`, message: 'You can set it up again later, with new DNS records.', confirmLabel: 'Remove domain', danger: true }))) return
     void run(async () => {
       await api('DELETE', base)
       show({ ...view!, domain: null }, `${d.hostname} was removed. You can delete its DNS records.`)
@@ -158,6 +160,7 @@ export function CustomDomainCard({ pageID, isOwner, onChange }: {
         </form>
       )}
       {!isOwner && !d && included && <p className="hint">This page has no custom domain. Only the organization owner can set one up.</p>}
+      {dialog}
     </section>
   )
 }

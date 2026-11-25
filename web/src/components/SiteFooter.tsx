@@ -49,6 +49,7 @@ export function SiteFooter({ onHome = false }: { onHome?: boolean }) {
           )}
           <Link className="d-link d-link-hover" to="/docs">Docs</Link>
           <Link className="d-link d-link-hover" to="/tools">Free tools</Link>
+          <Link className="d-link d-link-hover" to="/elixir">Elixir and Oban</Link>
           {signedIn ? (
             <Link className="d-link d-link-hover" to="/dashboard">Dashboard</Link>
           ) : (

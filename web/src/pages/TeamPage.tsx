@@ -8,10 +8,12 @@ import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
 import { RequireTwoFactorCard } from '../components/TwoFactor'
 import { OrganizationName } from '../components/OrganizationName'
+import { useConfirm } from '../components/useConfirm'
 
 const day = (iso: string) => new Date(iso).toLocaleDateString([], { dateStyle: 'medium' })
 
 export function TeamPage() {
+  const { confirm, dialog } = useConfirm()
   const { user, organization, organizations, refresh } = useAuth()
   const isOwner = organization?.role === 'owner'
   const orgId = organization?.id
@@ -83,8 +85,8 @@ export function TeamPage() {
     }
   }
 
-  function remove(m: Member) {
-    if (!window.confirm(`Remove ${m.email} from ${organization?.name}? They lose access straight away. Their own account is not affected.`)) return
+  async function remove(m: Member) {
+    if (!(await confirm({ title: `Remove ${m.email} from ${organization?.name}?`, message: 'They lose access straight away. Their own account is not affected.', confirmLabel: 'Remove member', danger: true }))) return
     void run(() => api('DELETE', `/organizations/${orgId}/members/${m.user_id}`), `${m.email} was removed.`)
   }
 
@@ -111,7 +113,7 @@ export function TeamPage() {
   }
 
   async function leave() {
-    if (!window.confirm(`Leave ${organization?.name}? You will no longer see its websites. You can only come back if the owner invites you again.`)) return
+    if (!(await confirm({ title: `Leave ${organization?.name}?`, message: 'You will no longer see its websites. You can only come back if the owner invites you again.', confirmLabel: 'Leave organization', danger: true }))) return
     try {
       await api('POST', `/organizations/${orgId}/leave`)
       await refresh() // the list no longer has it, so the app falls back to the person's own organization
@@ -264,6 +266,7 @@ export function TeamPage() {
           {organizations.length > 1 && <button type="button" className="danger" onClick={() => void leave()}>Leave {organization?.name}</button>}
         </>
       )}
+      {dialog}
     </>
   )
 }

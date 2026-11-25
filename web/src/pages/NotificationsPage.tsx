@@ -8,6 +8,7 @@ import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
 import { TagChip } from '../components/Tags'
 import { Toggle } from '../components/Toggle'
+import { useConfirm } from '../components/useConfirm'
 
 type Channel = NotificationSetting['channel']
 
@@ -228,6 +229,7 @@ export function AlertGroupingSetting({ on, isOwner, onChange }: { on: boolean; i
 }
 
 export function NotificationsPage() {
+  const { confirm, dialog } = useConfirm()
   const { user, organization } = useAuth()
   const isOwner = organization?.role === 'owner'
   const mine = (s: NotificationSetting) => s.user_id !== null && s.user_id === user?.id
@@ -345,8 +347,8 @@ export function NotificationsPage() {
     [load],
   )
 
-  function remove(s: NotificationSetting) {
-    if (window.confirm(`Stop sending alerts to ${s.destination} and remove it?`)) {
+  async function remove(s: NotificationSetting) {
+    if (await confirm({ title: `Stop sending alerts to ${s.destination}?`, message: 'It is removed from your alert recipients.', confirmLabel: 'Remove', danger: true })) {
       void run(() => api('DELETE', `/notification-settings/${s.id}`))
     }
   }
@@ -517,6 +519,7 @@ export function NotificationsPage() {
       ) : (
         <p className="hint">Only the organization owner can add or change alert recipients. You can turn off or remove your own address.</p>
       )}
+      {dialog}
     </>
   )
 }

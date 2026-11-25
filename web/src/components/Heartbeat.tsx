@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api, ApiError, pingURL, type HeartbeatPing, type Monitor } from '../api'
-import { DURATION_UNITS, durationUnitFor, formatDateTime } from '../format'
+import { DURATION_UNITS, durationUnitFor, formatDateTime, formatShortDateTime } from '../format'
 import { pingExamples } from '../pingExamples'
 import { Alert } from './Alert'
 import { CopyField } from './BadgeCard'
+import { useConfirm } from './useConfirm'
 
 /** A number and a unit (minutes, hours or days), reported to the parent in seconds. */
 export function DurationField({ id, label, seconds, onChange, error, hint }: {
@@ -41,6 +42,7 @@ export function DurationField({ id, label, seconds, onChange, error, hint }: {
  * Where a heartbeat monitor's job sends its pings, with examples to copy. Anyone who can edit monitors can give it a new address (if the old one leaked).
  */
 export function PingSetup({ monitor, onChanged }: { monitor: Monitor; onChanged: (m: Monitor) => void }) {
+  const { confirm, dialog } = useConfirm()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const hb = monitor.heartbeat
@@ -48,7 +50,7 @@ export function PingSetup({ monitor, onChanged }: { monitor: Monitor; onChanged:
   const url = pingURL(hb.ping_token)
 
   async function rotate() {
-    if (!window.confirm('Give this monitor a new ping address? The current address stops working at once, so update your job to use the new one.')) return
+    if (!(await confirm({ title: 'Get a new ping address?', message: 'The current address stops working at once, so update your job to use the new one.', confirmLabel: 'Get a new address', danger: true }))) return
     setBusy(true)
     setError(null)
     try {
@@ -83,11 +85,15 @@ export function PingSetup({ monitor, onChanged }: { monitor: Monitor; onChanged:
           <li>Send the end of the job’s output as the body of a POST (up to 1,000 characters are kept) and it appears in the ping log below.</li>
           <li><code>--retry 5</code> makes curl try again if the network hiccups, so one lost request does not look like a missed run.</li>
         </ul>
-        <p><Link to="/docs/cron-job-monitoring">Read the full guide</Link></p>
+        <p>
+          <Link to="/docs/cron-job-monitoring">Read the full guide</Link>. Using Oban? The <Link to="/elixir">hawk_eye package</Link> reports its jobs
+          for you.
+        </p>
       </details>
       <div className="row">
         <button type="button" className="linklike" disabled={busy} onClick={() => void rotate()}>Get a new ping address</button>
       </div>
+      {dialog}
     </section>
   )
 }
@@ -116,7 +122,7 @@ export function PingLog({ monitorID, refresh }: { monitorID: string; refresh: nu
             <tbody>
               {pings.map((p) => (
                 <tr key={p.id}>
-                  <td><time dateTime={p.received_at}>{formatDateTime(p.received_at)}</time></td>
+                  <td className="nowrap"><time dateTime={p.received_at} title={formatDateTime(p.received_at)}>{formatShortDateTime(p.received_at)}</time></td>
                   <td>
                     {p.kind === 'success'
                       ? <span className="badge up"><span aria-hidden="true">✔</span> Success</span>

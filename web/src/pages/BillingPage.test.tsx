@@ -9,6 +9,7 @@ vi.mock('../navigation', () => ({ redirectTo: vi.fn() }))
 import { redirectTo } from '../navigation'
 vi.mock('../analytics', async (orig) => ({ ...(await orig<typeof import('../analytics')>()), trackPurchase: vi.fn(), trackSubscription: vi.fn(), trackCheckoutStarted: vi.fn() }))
 import { trackCheckoutStarted, trackPurchase, trackSubscription } from '../analytics'
+import { answerConfirm } from '../testConfirm'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -115,14 +116,14 @@ describe('BillingPage', () => {
   })
 
   it('confirms before canceling and says access continues', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     const posts = setup({ subscription: sub({ plan: pro, paid_access: true, can_manage: true, has_subscription: true, current_period_end: '2026-12-01T00:00:00Z' }) })
     const btn = await screen.findByRole('button', { name: 'Cancel subscription' })
     await userEvent.click(btn)
+    expect(await answerConfirm('Keep subscription')).toMatch(/keep your paid plan until the end of the period/)
     expect(posts).toHaveLength(0)
     await userEvent.click(btn)
+    await answerConfirm('Cancel subscription')
     expect(posts.map((p) => p.url)).toEqual(['/api/v1/billing/cancel-subscription'])
-    expect(confirm.mock.calls[0][0]).toMatch(/keep your paid plan until the end of the period/)
   })
 
   it('shows a pending cancellation with the end date', async () => {

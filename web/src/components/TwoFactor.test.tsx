@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
 import { LoginPage } from '../pages/AuthPages'
 import { RequireTwoFactorCard, TwoFactorCard, TwoFactorRequirementNotice } from './TwoFactor'
+import { answerConfirm } from '../testConfirm'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -182,10 +183,11 @@ describe('RequireTwoFactorCard', () => {
         return json(200, { required: true, grace_days: 7, members: [members[0], { ...members[1], grace_ends_at: '2026-11-15T00:00:00Z' }] })
       }
     }, { enabled: true })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     mount(<RequireTwoFactorCard orgID="o" />)
     await userEvent.click(await screen.findByRole('button', { name: 'Require two-factor sign-in' }))
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('1 member doesn’t use two-factor sign-in yet'))
+    // Members are emailed a lock-out notice that can't be unsent, so a stray Enter must not confirm.
+    expect(await screen.findByRole('button', { name: 'Cancel' })).toHaveFocus()
+    expect(await answerConfirm('Require it')).toContain('1 member doesn’t use two-factor sign-in yet')
     expect(calls.find((c) => c.method === 'PUT')!.body).toEqual({ required: true })
     expect(await screen.findByText(/has until/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Stop requiring it' })).toBeInTheDocument()

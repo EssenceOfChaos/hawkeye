@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Monitor, Plan } from '../api'
 import { BadgeCard } from './BadgeCard'
+import { answerConfirm } from '../testConfirm'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -40,12 +41,10 @@ describe('BadgeCard', () => {
   })
 
   it('confirms before turning it off', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const calls = setup('TOKEN', true)
     await userEvent.click(screen.getByLabelText('Public uptime badge'))
-    expect(confirm).toHaveBeenCalled()
+    expect(await answerConfirm('Cancel')).toMatch(/stop showing/)
     expect(calls.some((c) => c.startsWith('DELETE'))).toBe(false)
-    confirm.mockRestore()
   })
 
   it('shows members the code when the badge is on, but no switch', async () => {

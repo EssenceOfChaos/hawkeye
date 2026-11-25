@@ -46,6 +46,7 @@ const DashboardPage = lazyWithReload(() => import('./pages/DashboardPage').then(
 const OpenApiImportPage = lazyWithReload(() => import('./pages/OpenApiImportPage').then((m) => ({ default: m.OpenApiImportPage })))
 // Lazy: a long page of copy that only visitors who open it need.
 const AboutPage = lazyWithReload(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })))
+const ElixirPage = lazyWithReload(() => import('./pages/ElixirPage').then((m) => ({ default: m.ElixirPage })))
 const MonitorDetailPage = lazyWithReload(() => import('./pages/MonitorDetailPage').then((m) => ({ default: m.MonitorDetailPage })))
 
 function RequireAuth() {
@@ -114,6 +115,7 @@ export function AppRoutes() {
       <Route path="/docs/codex" element={<DocPage path="/docs/codex" />} />
       <Route path="/docs/deploys" element={<DocPage path="/docs/deploys" />} />
       <Route path="/about" element={<Lazy><AboutPage /></Lazy>} />
+      <Route path="/elixir" element={<Lazy><ElixirPage /></Lazy>} />
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />

@@ -8,6 +8,7 @@ import { PageIcon } from '../components/Brand'
 import { DomainBadge } from '../components/Domains'
 import { domainLeft } from '../format'
 import { Field } from '../components/Field'
+import { useConfirm } from '../components/useConfirm'
 
 const day = (iso: string) => new Date(iso).toLocaleDateString([], { dateStyle: 'medium' })
 
@@ -28,6 +29,7 @@ function Expiry({ d }: { d: TrackedDomain }) {
 }
 
 export function DomainsPage() {
+  const { confirm, dialog } = useConfirm()
   const { organization } = useAuth()
   const isOwner = organization?.role === 'owner'
 
@@ -74,8 +76,8 @@ export function DomainsPage() {
   }
 
   async function remove(d: TrackedDomain) {
-    const extra = d.monitor_count > 0 ? ' Your monitors still use it, so it stays in the list, but it is no longer pinned.' : ''
-    if (!window.confirm(`Stop tracking ${d.name}?${extra}`)) return
+    const message = d.monitor_count > 0 ? 'Your monitors still use it, so it stays in the list, but it is no longer pinned.' : 'It is removed from the list.'
+    if (!(await confirm({ title: `Stop tracking ${d.name}?`, message, confirmLabel: 'Stop tracking', danger: true }))) return
     try {
       await api('DELETE', `/domains/${d.id}`)
       await load()
@@ -160,6 +162,7 @@ export function DomainsPage() {
       ) : (
         <p className="hint">Only the organization owner can add or remove domains.</p>
       )}
+      {dialog}
     </>
   )
 }

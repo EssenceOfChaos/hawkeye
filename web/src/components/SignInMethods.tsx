@@ -4,6 +4,7 @@ import { needsConfirmation, type Reauth, PROVIDER_NAMES, PROVIDER_ORDER, startSo
 import { Alert } from './Alert'
 import { Field } from './Field'
 import { ProviderLogo } from './SocialButtons'
+import { useConfirm } from './useConfirm'
 
 /** How the signed-in person can sign in (GET /account/sign-in-methods). */
 export interface SignInMethodsInfo {
@@ -61,6 +62,7 @@ export function SignInMethodsCard({ info, reauth, notice, onChanged }: {
   notice: { tone: 'ok' | 'error'; text: string } | null
   onChanged: () => Promise<void>
 }) {
+  const { confirm, dialog } = useConfirm()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
@@ -68,7 +70,7 @@ export function SignInMethodsCard({ info, reauth, notice, onChanged }: {
   const shown = PROVIDER_ORDER.filter((p) => info.providers.includes(p) || info.identities.some((i) => i.provider === p))
 
   async function disconnect(p: Provider) {
-    if (!window.confirm(`Stop signing in with ${PROVIDER_NAMES[p]}?`)) return
+    if (!(await confirm({ title: `Stop signing in with ${PROVIDER_NAMES[p]}?`, message: `This account will no longer sign in with ${PROVIDER_NAMES[p]}.`, confirmLabel: 'Disconnect', danger: true }))) return
     setBusy(true)
     setError(null)
     setDone(null)
@@ -125,6 +127,7 @@ export function SignInMethodsCard({ info, reauth, notice, onChanged }: {
         })}
       </ul>
       {!reauth.hasPassword && <SetPassword reauth={reauth} onDone={onChanged} />}
+      {dialog}
     </section>
   )
 }

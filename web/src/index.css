@@ -904,8 +904,32 @@ main.auth .card p a { font-weight: 600; }
 .about-team { align-items: center; padding: clamp(1.25rem, 3vw, 2.5rem); }
 .about-team .scout img { max-width: none; } /* .split img caps images at 30% of their box, which would shrink Scout inside his own frame */
 .mon-final-inner p:not(.hint) { font-size: 1.05rem; margin: 1rem 0 0; }
+/* Confirmation dialog (components/ConfirmDialog.tsx): daisyUI's modal in the brand's panel colors, in place of window.confirm. */
+/* The dialog fills the screen (daisyUI's overlay): drop the browser's default dialog border, which framed the whole viewport, and dim the page in brand navy. */
+.confirm-dialog { border: 0; color: var(--text); }
+.confirm-dialog[open] { background-color: #020b17b8; backdrop-filter: blur(2px); }
+.confirm-dialog .d-modal-box { box-sizing: border-box; /* no preflight here: without it daisyUI's 91% width plus the padding overflows a phone screen */ position: relative; max-width: 28rem; padding: 1.5rem 1.5rem 1.25rem; background: linear-gradient(180deg, var(--panel), var(--panel-2)); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 24px 60px -20px #000c; color: var(--text); }
+.confirm-dialog h2 { color: var(--text); /* the same inside a .danger-zone card, whose h2 is red */ margin: 0 2.25rem .6rem 0; font-family: var(--font-display); font-size: 1.2rem; line-height: 1.3; overflow-wrap: anywhere; }
+.confirm-message { color: var(--muted); }
+.confirm-message p { margin: 0 0 .5rem; }
+.confirm-dialog .d-modal-action { margin-top: 1.5rem; gap: .6rem; flex-wrap: wrap; }
+.confirm-close { position: absolute; top: .75rem; right: .75rem; display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); }
+.confirm-close:hover:not(:disabled) { background: var(--panel-hi); color: var(--text); }
+.confirm-close svg { width: 1.25rem; height: 1.25rem; }
+.confirm-dialog .confirm-ok { background: linear-gradient(135deg, var(--gold-hi), var(--gold-lo)); color: var(--ink-on-gold); border-color: #f0ca7d; font-weight: 700; }
+.confirm-dialog .confirm-ok.danger { background: var(--down); color: #2b0d0b; border-color: var(--down); }
+.confirm-dialog .confirm-ok:hover:not(:disabled) { filter: brightness(1.06); }
+/* The Elixir page (/elixir): numbered setup steps, the last one (the config) across both columns because its lines are long. */
+.elixir-steps { list-style: none; margin: 1.5rem 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; counter-reset: step; }
+.elixir-steps > li { counter-increment: step; min-width: 0; }
+.elixir-steps > li:last-child { grid-column: 1 / -1; }
+.elixir-steps h3::before { content: counter(step); display: inline-grid; place-items: center; width: 1.8rem; height: 1.8rem; margin-right: .6rem; border-radius: 50%; background: var(--gold); color: #08172b; font-size: 1rem; vertical-align: .1em; }
+.elixir-steps p { margin: 0; }
+.elixir .about-lede code, .elixir .mon-earth-copy code { color: var(--gold-hi); }
+.elixir .table-wrap.about-panel { padding: .5rem 1rem; margin-top: 1.5rem; }
+.elixir .doc-code-wrap { margin-top: .75rem; }
 @media (max-width: 60rem) { .about .features.about-three { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 52rem) { .about-panels { grid-template-columns: 1fr; } }
+@media (max-width: 52rem) { .about-panels, .elixir-steps { grid-template-columns: 1fr; } }
 @media (max-width: 40rem) {
   .about .features.about-three { grid-template-columns: 1fr; }
   .about-team { text-align: left; } /* .split centers text when it stacks; this is several paragraphs */

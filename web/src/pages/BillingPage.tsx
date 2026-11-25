@@ -10,6 +10,7 @@ import { redirectTo } from '../navigation'
 import { checkoutCents, markCheckoutReturn, reportPurchaseIfPaid } from '../purchaseConversion'
 import { trackCheckoutStarted } from '../analytics'
 import { shortInterval } from '../format'
+import { useConfirm } from '../components/useConfirm'
 
 const POLL_MS = 3000
 const POLL_MAX = 20 // about a minute
@@ -23,6 +24,7 @@ function statusText(s: BillingSubscription): { icon: string; text: string; tone:
 }
 
 export function BillingPage() {
+  const { confirm, dialog } = useConfirm()
   const { user, organization } = useAuth()
   const isOwner = organization?.role === 'owner'
   const verified = Boolean(user?.email_verified_at)
@@ -94,7 +96,13 @@ export function BillingPage() {
   }
 
   async function cancel() {
-    if (!window.confirm('Cancel your subscription? You keep your paid plan until the end of the period you have paid for. Your monitors and data are not deleted.')) return
+    if (!(await confirm({
+      title: 'Cancel your subscription?',
+      message: 'You keep your paid plan until the end of the period you have paid for. Your monitors and data are not deleted.',
+      confirmLabel: 'Cancel subscription',
+      cancelLabel: 'Keep subscription',
+      danger: true,
+    }))) return
     setBusy('cancel')
     setError(null)
     try {
@@ -214,6 +222,7 @@ export function BillingPage() {
           {sub.paid_access && <p className="hint">To change plan, use Manage billing.</p>}
         </section>
       )}
+      {dialog}
     </>
   )
 }

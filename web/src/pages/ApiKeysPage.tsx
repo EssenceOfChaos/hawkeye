@@ -5,6 +5,7 @@ import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
 import { CopyField } from '../components/BadgeCard'
 import { Field } from '../components/Field'
+import { useConfirm } from '../components/useConfirm'
 
 const day = (iso: string) => new Date(iso).toLocaleDateString([], { dateStyle: 'medium' })
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -44,6 +45,7 @@ const accessLabel = (scope: ApiKey['scope']) => (scope === 'write' ? 'Read and w
 
 /** API keys for the current organization: make one (shown once), see who made which, when each was last used and when it expires, and revoke. */
 export function ApiKeysPage() {
+  const { confirm, dialog } = useConfirm()
   const { user, organization } = useAuth()
   const isOwner = organization?.role === 'owner'
   const verified = Boolean(user?.email_verified_at)
@@ -104,7 +106,7 @@ export function ApiKeysPage() {
 
   async function revoke(k: ApiKey) {
     const whose = k.mine ? '' : ` It belongs to ${k.owner_email}.`
-    if (!window.confirm(`Revoke “${k.name}”? Anything using it stops working right away.${whose}`)) return
+    if (!(await confirm({ title: `Revoke “${k.name}”?`, message: `Anything using it stops working right away.${whose}`, confirmLabel: 'Revoke key', danger: true }))) return
     try {
       await api('DELETE', `/api-keys/${k.id}`)
       if (created?.key.id === k.id) setCreated(null)
@@ -235,6 +237,7 @@ export function ApiKeysPage() {
         )
       )}
       <ConnectedApps isOwner={isOwner} />
+      {dialog}
     </>
   )
 }
@@ -251,6 +254,7 @@ interface ConnectedApp {
 
 /** Apps connected through OAuth (such as Claude's connector): what each may do, and a way to disconnect it. */
 function ConnectedApps({ isOwner }: { isOwner: boolean }) {
+  const { confirm, dialog } = useConfirm()
   const [apps, setApps] = useState<ConnectedApp[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -269,7 +273,7 @@ function ConnectedApps({ isOwner }: { isOwner: boolean }) {
 
   async function disconnect(a: ConnectedApp) {
     const whose = a.mine ? '' : ` It was connected by ${a.owner_email}.`
-    if (!window.confirm(`Disconnect ${a.client_name}? It stops working with HawkEye right away.${whose}`)) return
+    if (!(await confirm({ title: `Disconnect ${a.client_name}?`, message: `It stops working with HawkEye right away.${whose}`, confirmLabel: 'Disconnect', danger: true }))) return
     try {
       await api('DELETE', `/oauth/connected-apps/${a.id}`)
       setError(null)
@@ -313,6 +317,7 @@ function ConnectedApps({ isOwner }: { isOwner: boolean }) {
           </table>
         </div>
       )}
+      {dialog}
     </section>
   )
 }
