@@ -4,6 +4,7 @@ import { Alert } from './Alert'
 import { Appear } from './Appear'
 import { Toggle } from './Toggle'
 import { badgeLink, BADGE_SIZES as SIZES, snippets, type BadgeSize as Size } from '../badge'
+import { useConfirm } from './useConfirm'
 
 /** A read-only value with a Copy button. */
 export function CopyField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
@@ -27,6 +28,7 @@ export function CopyField({ label, value, mono }: { label: string; value: string
 
 /** A monitor's public uptime badge: the owner turns it on, and anyone on the team can copy the code to embed it on a website or in a README. */
 export function BadgeCard({ monitor, plan, isOwner }: { monitor: Monitor; plan: Plan | undefined; isOwner: boolean }) {
+  const { confirm, dialog } = useConfirm()
   const [token, setToken] = useState(monitor.badge_token)
   const [size, setSize] = useState<Size>('large')
   const [busy, setBusy] = useState(false)
@@ -40,7 +42,7 @@ export function BadgeCard({ monitor, plan, isOwner }: { monitor: Monitor; plan: 
   }, [token])
 
   async function toggle(on: boolean): Promise<boolean> {
-    if (!on && !window.confirm('Turn off the public badge? Anywhere it is embedded it will stop showing. Turning it on again gives it a new address.')) return true
+    if (!on && !(await confirm({ title: 'Turn off the public badge?', message: 'Anywhere it is embedded it will stop showing. Turning it on again gives it a new address.', confirmLabel: 'Turn off badge', danger: true }))) return true
     setBusy(true)
     setError(null)
     try {
@@ -107,6 +109,7 @@ export function BadgeCard({ monitor, plan, isOwner }: { monitor: Monitor; plan: 
           </p>
         </Appear>
       )}
+      {dialog}
     </section>
   )
 }

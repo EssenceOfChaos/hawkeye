@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
 import { TeamPage } from './TeamPage'
+import { answerConfirm } from '../testConfirm'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -111,16 +112,16 @@ describe('TeamPage for the owner', () => {
   })
 
   it('removes a member only after confirming, and never offers to remove the owner', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     const calls = setup()
     await screen.findByRole('cell', { name: 'bob@example.com' })
     expect(screen.queryByRole('button', { name: 'Remove owner@example.com' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Remove bob@example.com' }))
+    await answerConfirm('Cancel')
     expect(calls.some((c) => c.m === 'DELETE')).toBe(false)
     await userEvent.click(screen.getByRole('button', { name: 'Remove bob@example.com' }))
+    await answerConfirm('Remove member')
     expect(await screen.findByText('bob@example.com was removed.')).toBeInTheDocument()
     expect(calls.find((c) => c.m === 'DELETE')?.url).toBe('/api/v1/organizations/org-1/members/u-bob')
-    confirm.mockRestore()
   })
 
   it('resends and cancels a pending invitation', async () => {
@@ -160,9 +161,9 @@ describe('TeamPage for a member', () => {
   })
 
   it('lets a member leave after confirming', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     const calls = setup({ role: 'member', me: { id: 'u-bob', email: 'bob@example.com' }, extraOrg: true })
     await userEvent.click(await screen.findByRole('button', { name: 'Leave Acme' }))
+    await answerConfirm('Leave organization')
     await vi.waitFor(() => expect(calls.some((c) => c.m === 'POST' && c.url === '/api/v1/organizations/org-1/leave')).toBe(true))
   })
 

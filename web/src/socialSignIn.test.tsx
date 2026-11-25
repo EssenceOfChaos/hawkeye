@@ -6,6 +6,7 @@ import { AuthProvider } from './AuthProvider'
 import { AccountPage } from './pages/AccountPage'
 import { LoginPage, RegisterPage } from './pages/AuthPages'
 import { lastUsed, readSocialReturn, rememberSignIn } from './socialSignIn'
+import { answerConfirm } from './testConfirm'
 
 const json = (status: number, body: unknown) =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
@@ -150,13 +151,13 @@ describe('sign-in methods in account settings', () => {
   }
 
   it('lists the password and providers, connects one and disconnects another', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     const posts = mount('/account', { signedIn: true, methods: both })
     const card = within(await screen.findByRole('region', { name: 'Sign-in methods' }))
     expect(card.getByText('me@users.example', { exact: false })).toBeInTheDocument()
     await userEvent.click(card.getByRole('button', { name: 'Connect Google' }))
     expect(posts.at(-1)).toMatchObject({ url: 'POST /api/v1/auth/social/google/start', body: { intent: 'connect' } })
     await userEvent.click(card.getByRole('button', { name: 'Disconnect' }))
+    expect(await answerConfirm('Disconnect')).toMatch(/Stop signing in with GitHub/)
     expect(posts.at(-1)?.url).toBe('DELETE /api/v1/account/sign-in-methods/github')
     // With a password, the password is still asked for where it was.
     expect(screen.getByRole('heading', { name: 'Change password' })).toBeInTheDocument()

@@ -5,6 +5,7 @@ import { DURATION_UNITS, durationUnitFor, formatDateTime, formatShortDateTime } 
 import { pingExamples } from '../pingExamples'
 import { Alert } from './Alert'
 import { CopyField } from './BadgeCard'
+import { useConfirm } from './useConfirm'
 
 /** A number and a unit (minutes, hours or days), reported to the parent in seconds. */
 export function DurationField({ id, label, seconds, onChange, error, hint }: {
@@ -41,6 +42,7 @@ export function DurationField({ id, label, seconds, onChange, error, hint }: {
  * Where a heartbeat monitor's job sends its pings, with examples to copy. Anyone who can edit monitors can give it a new address (if the old one leaked).
  */
 export function PingSetup({ monitor, onChanged }: { monitor: Monitor; onChanged: (m: Monitor) => void }) {
+  const { confirm, dialog } = useConfirm()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const hb = monitor.heartbeat
@@ -48,7 +50,7 @@ export function PingSetup({ monitor, onChanged }: { monitor: Monitor; onChanged:
   const url = pingURL(hb.ping_token)
 
   async function rotate() {
-    if (!window.confirm('Give this monitor a new ping address? The current address stops working at once, so update your job to use the new one.')) return
+    if (!(await confirm({ title: 'Get a new ping address?', message: 'The current address stops working at once, so update your job to use the new one.', confirmLabel: 'Get a new address', danger: true }))) return
     setBusy(true)
     setError(null)
     try {
@@ -91,6 +93,7 @@ export function PingSetup({ monitor, onChanged }: { monitor: Monitor; onChanged:
       <div className="row">
         <button type="button" className="linklike" disabled={busy} onClick={() => void rotate()}>Get a new ping address</button>
       </div>
+      {dialog}
     </section>
   )
 }

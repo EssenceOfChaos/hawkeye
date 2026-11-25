@@ -4,6 +4,7 @@ import { Alert } from './Alert'
 import { Appear } from './Appear'
 import { UPDATE_STATUS } from '../updateStatus'
 import { UpdateStatusBadge } from './UpdateStatusBadge'
+import { useConfirm } from './useConfirm'
 
 const MAX_UPDATE_LENGTH = 1000
 
@@ -23,6 +24,7 @@ export function IncidentUpdates({ incident, isOwner, canDraft = false, onCountCh
   canDraft?: boolean
   onCountChange?: (n: number) => void
 }) {
+  const { confirm, dialog } = useConfirm()
   const [updates, setUpdates] = useState<IncidentUpdate[] | null>(null)
   const [pages, setPages] = useState<StatusPageRef[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -78,7 +80,7 @@ export function IncidentUpdates({ incident, isOwner, canDraft = false, onCountCh
 
   // Fills the box with a first draft for the chosen status. The person edits it and posts it themselves; replacing their own text asks first.
   async function draft() {
-    if (message.trim() && !window.confirm('Replace what you have written with a draft?')) return
+    if (message.trim() && !(await confirm({ title: 'Replace your text with a draft?', message: 'What you have written so far is replaced.', confirmLabel: 'Replace with draft', danger: true }))) return
     setDrafting(true)
     setError(null)
     try {
@@ -93,7 +95,7 @@ export function IncidentUpdates({ incident, isOwner, canDraft = false, onCountCh
   }
 
   async function remove(u: IncidentUpdate) {
-    if (!window.confirm(pages.length ? 'Delete this update? It also disappears from the public status page.' : 'Delete this update?')) return
+    if (!(await confirm({ title: 'Delete this update?', message: pages.length ? 'It also disappears from the public status page.' : 'This cannot be undone.', confirmLabel: 'Delete update', danger: true }))) return
     try {
       await api('DELETE', `${base}/${u.id}`)
       changed((updates ?? []).filter((x) => x.id !== u.id))
@@ -168,6 +170,7 @@ export function IncidentUpdates({ incident, isOwner, canDraft = false, onCountCh
           })}
         </ol>
       )}
+      {dialog}
     </div>
   )
 }

@@ -8,6 +8,7 @@ import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
 import { Toggle } from '../components/Toggle'
 import { RecentDeploys } from '../components/RecentDeploys'
+import { useConfirm } from '../components/useConfirm'
 
 const REPEAT_LABEL: Record<MaintenanceWindow['repeat'], string> = { none: 'One time', daily: 'Every day', weekly: 'Every week' }
 const DURATIONS = [
@@ -36,6 +37,7 @@ function StatusLabel({ w }: { w: MaintenanceWindow }) {
 }
 
 export function MaintenancePage() {
+  const { confirm, dialog } = useConfirm()
   const { organization } = useAuth()
   const isOwner = organization?.role === 'owner'
 
@@ -91,7 +93,7 @@ export function MaintenancePage() {
   }
 
   async function remove(w: MaintenanceWindow) {
-    if (!window.confirm(`Delete the maintenance window “${w.name}”?`)) return
+    if (!(await confirm({ title: `Delete the maintenance window “${w.name}”?`, message: 'Alerts are no longer quieted during it.', confirmLabel: 'Delete window', danger: true }))) return
     try {
       await api('DELETE', `/maintenance-windows/${w.id}`)
       await load()
@@ -198,6 +200,7 @@ export function MaintenancePage() {
       )}
 
       <RecentDeploys />
+      {dialog}
     </>
   )
 }

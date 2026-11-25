@@ -9,6 +9,7 @@ import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { Field } from '../components/Field'
 import { Toggle } from '../components/Toggle'
+import { useConfirm } from '../components/useConfirm'
 
 /** A short note beside a custom domain that is not simply live, in the list of pages. */
 const DOMAIN_NOTE: Record<Exclude<StatusPageDomainState, 'active'>, string> = {
@@ -113,6 +114,7 @@ export function StatusPagesPage() {
 
 /** The editor for one status page (or a new one). */
 export function StatusPageEditor() {
+  const { confirm, dialog } = useConfirm()
   const { pageID } = useParams()
   const editing = Boolean(pageID)
   const navigate = useNavigate()
@@ -205,7 +207,7 @@ export function StatusPageEditor() {
   }
 
   async function remove() {
-    if (!pageID || !window.confirm(`Delete “${title}”? Its address will stop working.`)) return
+    if (!pageID || !(await confirm({ title: `Delete “${title}”?`, message: 'Its address will stop working.', confirmLabel: 'Delete status page', danger: true }))) return
     try {
       await api('DELETE', `/status-pages/${encodeURIComponent(pageID)}`)
       navigate('/status-pages', { state: { notice: `${title} was deleted.` } satisfies ListState })
@@ -352,6 +354,7 @@ export function StatusPageEditor() {
       {loaded && pageID && (
         <CustomDomainCard pageID={pageID} isOwner={isOwner} onChange={(h, st) => { setDomain(h); setDomainState(st) }} />
       )}
+      {dialog}
     </>
   )
 }

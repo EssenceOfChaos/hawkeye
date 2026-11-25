@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
 import { AlertGroupingSetting, NotificationsPage } from './NotificationsPage'
+import { answerConfirm } from '../testConfirm'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -98,13 +99,11 @@ describe('NotificationsPage', () => {
   })
 
   it('asks for confirmation before removing a recipient', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const calls = setup({ items: [mk('1', 'me@example.com', { user_id: 'u' })] })
     const row = (await screen.findByText('me@example.com')).closest('tr')!
     await userEvent.click(within(row).getByRole('button', { name: /Remove me@example.com/ }))
-    expect(confirm).toHaveBeenCalled()
+    expect(await answerConfirm('Cancel')).toMatch(/Stop sending alerts to me@example.com/)
     expect(calls.some((c) => c.startsWith('DELETE'))).toBe(false)
-    confirm.mockRestore()
   })
 
   it('adds a webhook, shows the signing secret once, and offers a test message', async () => {

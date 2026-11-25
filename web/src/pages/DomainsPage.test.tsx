@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
 import { DomainsPanel } from '../components/Domains'
 import { DomainsPage } from './DomainsPage'
+import { answerConfirm } from '../testConfirm'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -110,11 +111,11 @@ describe('DomainsPage', () => {
   })
 
   it('lets owners remove only the domains they added', async () => {
-    vi.stubGlobal('confirm', () => true)
     const calls = setup({ domains: [domain(), domain({ id: 'd2', name: 'mine.org', manual: true, monitor_count: 0 })] })
     await screen.findByText('mine.org')
     expect(screen.getAllByRole('button', { name: /Stop tracking/ })).toHaveLength(1)
     await userEvent.click(screen.getByRole('button', { name: 'Stop tracking mine.org' }))
+    await answerConfirm('Stop tracking')
     expect(calls.some((c) => c.m === 'DELETE' && c.url.endsWith('/domains/d2'))).toBe(true)
   })
 

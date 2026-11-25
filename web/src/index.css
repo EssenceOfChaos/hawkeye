@@ -909,7 +909,7 @@ main.auth .card p a { font-weight: 600; }
 .confirm-dialog { border: 0; color: var(--text); }
 .confirm-dialog[open] { background-color: #020b17b8; backdrop-filter: blur(2px); }
 .confirm-dialog .d-modal-box { box-sizing: border-box; /* no preflight here: without it daisyUI's 91% width plus the padding overflows a phone screen */ position: relative; max-width: 28rem; padding: 1.5rem 1.5rem 1.25rem; background: linear-gradient(180deg, var(--panel), var(--panel-2)); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 24px 60px -20px #000c; color: var(--text); }
-.confirm-dialog h2 { margin: 0 2.25rem .6rem 0; font-family: var(--font-display); font-size: 1.2rem; line-height: 1.3; overflow-wrap: anywhere; }
+.confirm-dialog h2 { color: var(--text); /* the same inside a .danger-zone card, whose h2 is red */ margin: 0 2.25rem .6rem 0; font-family: var(--font-display); font-size: 1.2rem; line-height: 1.3; overflow-wrap: anywhere; }
 .confirm-message { color: var(--muted); }
 .confirm-message p { margin: 0 0 .5rem; }
 .confirm-dialog .d-modal-action { margin-top: 1.5rem; gap: .6rem; flex-wrap: wrap; }

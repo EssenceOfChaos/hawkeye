@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
 import { AccountPage } from './AccountPage'
 import { PrivacyPage, TermsPage } from './LegalPages'
+import { answerConfirm } from '../testConfirm'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -154,25 +155,25 @@ describe('AccountPage', () => {
   })
 
   it('asks for a final confirmation, deletes, and returns to the home page', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     const posts = setup()
     await userEvent.type(await screen.findByLabelText('Your password'), 'my-password-123')
     await userEvent.type(screen.getByLabelText('Type me@example.com to confirm'), 'me@example.com')
     const btn = screen.getByRole('button', { name: 'Delete my account' })
     await userEvent.click(btn)
+    expect(await answerConfirm('Cancel')).toMatch(/permanently deleted/)
     expect(posts).toHaveLength(0) // canceled at the confirm dialog
     await userEvent.click(btn)
-    expect(confirm).toHaveBeenCalledTimes(2)
+    await answerConfirm('Delete my account')
     expect(posts[0]).toEqual({ url: '/api/v1/account/delete', body: { password: 'my-password-123', confirm_email: 'me@example.com' } })
     expect(await screen.findByRole('heading', { name: 'Home page' })).toBeInTheDocument()
   })
 
   it('explains why a shared organization blocks deletion', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     setup({ post: () => json(409, { error: { code: 'OWNS_SHARED_ORGANIZATION', message: 'You own an organization that has other members. Remove them first.' } }) })
     await userEvent.type(await screen.findByLabelText('Your password'), 'my-password-123')
     await userEvent.type(screen.getByLabelText('Type me@example.com to confirm'), 'me@example.com')
     await userEvent.click(screen.getByRole('button', { name: 'Delete my account' }))
+    await answerConfirm('Delete my account')
     expect(await screen.findByRole('alert')).toHaveTextContent(/other members/)
     expect(screen.queryByRole('heading', { name: 'Home page' })).not.toBeInTheDocument()
   })

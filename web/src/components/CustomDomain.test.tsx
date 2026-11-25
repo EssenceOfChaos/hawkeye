@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { StatusPageDomain } from '../api'
 import { CustomDomainCard } from './CustomDomain'
+import { answerConfirm } from '../testConfirm'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -80,9 +81,9 @@ describe('CustomDomainCard', () => {
   })
 
   it('removes the domain after asking', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     const { calls, onChange } = renderCard((m) => (m === 'DELETE' ? Promise.resolve(new Response(null, { status: 204 })) : json(200, view(domain({ state: 'active' })))))
     await userEvent.click(await screen.findByRole('button', { name: 'Remove' }))
+    await answerConfirm('Remove domain')
     expect(await screen.findByText(/status.client.com was removed/)).toBeInTheDocument()
     expect(calls.some((c) => c.m === 'DELETE')).toBe(true)
     expect(onChange).toHaveBeenLastCalledWith('', '')

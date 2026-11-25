@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
 import { ApiKeysPage } from './ApiKeysPage'
+import { answerConfirm } from '../testConfirm'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -120,9 +121,8 @@ describe('ApiKeysPage', () => {
 
   it('asks before revoking', async () => {
     const calls = setup({ keys: [key()] })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     await userEvent.click(await screen.findByRole('button', { name: 'Revoke Grafana' }))
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('stops working right away'))
+    expect(await answerConfirm('Revoke key')).toContain('stops working right away')
     expect(calls.some((c) => c.m === 'DELETE' && c.url.endsWith('/api-keys/k1'))).toBe(true)
   })
 
