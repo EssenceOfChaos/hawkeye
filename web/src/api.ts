@@ -218,6 +218,8 @@ export interface Monitor {
   slow_cause?: string | null
   /** Each check sends a W3C traceparent header with a new trace ID (website and API monitors; off by default). */
   trace_context?: boolean
+  /** Keep the first 4 KB of a failed response with the incident, encrypted, shown in the app only. Off by default. */
+  capture_failure_body?: boolean
   /**
    * After a first failure, check again from the same location 15 seconds later before alerting. `auto` does so only when every request is
    * read-only (GET, HEAD, OPTIONS; DNS lookups), `always` whatever the methods, `off` never. Not used by heartbeats.
@@ -592,6 +594,58 @@ export interface Incident {
   flapping?: boolean
   /** So no outage or recovery alert was sent for it (one "flapping" alert covered it). */
   alerts_paused?: boolean
+  /** It has a failure snapshot: what HawkEye saw when the outage was confirmed (GET /incidents/:id/snapshot). */
+  has_snapshot?: boolean
+}
+
+/** What a check saw of a response (no body). Headers come from a fixed allowlist, so cookies and credentials are never among them. */
+export interface ResponseFacts {
+  /** 0 when no response arrived (a timeout, a refused connection). */
+  status_code?: number
+  final_url?: string
+  content_type?: string
+  /** -1 when unknown. */
+  size_bytes: number
+  size_at_least?: boolean
+  headers?: { name: string; value: string }[]
+  server_addr?: string
+  cert_expires_at?: string
+  cert_issuer?: string
+  timings?: Timings
+}
+
+export interface SnapshotChange {
+  /** status, server_addr, final_url, content_type, certificate, header, size or timing */
+  field: string
+  /** The header's name, or the timing phase (dns, connect, tls, wait). */
+  name?: string
+  before: string
+  after: string
+}
+
+export interface LocationState {
+  region: string
+  name: string
+  status: 'up' | 'down' | 'unknown'
+  error?: string
+  checked_at: string
+}
+
+/** What HawkEye saw when an incident's outage was confirmed. The body excerpt is fetched on its own (GET /incidents/:id/snapshot/body). */
+export interface FailureSnapshot {
+  checked_at: string
+  region: string
+  facts: ResponseFacts
+  step_index: number | null
+  step_name: string | null
+  changes: SnapshotChange[]
+  locations: LocationState[]
+  has_body_excerpt: boolean
+  body_excerpt_cleared_at: string | null
+  /** The monitor kept failed responses when this outage was confirmed. */
+  body_requested?: boolean
+  /** With nothing kept: the response wasn't text. */
+  body_binary?: boolean
 }
 
 export type IncidentUpdateStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved'
@@ -743,6 +797,8 @@ export interface MonitorInput {
   slow_threshold_ms?: number | null
   slow_checks?: number
   trace_context?: boolean
+  /** Keep the first 4 KB of a failed response with the incident, encrypted, shown in the app only. Off by default. */
+  capture_failure_body?: boolean
   recheck?: RecheckSetting
   /** Replaces the monitor's tags. */
   tag_ids?: string[]
@@ -778,6 +834,7 @@ export interface WorkflowInput {
   alert_delay_minutes?: number
   quiet_hours?: QuietHours | null
   flap_suppression?: boolean
+  capture_failure_body?: boolean
   recheck?: RecheckSetting
 }
 

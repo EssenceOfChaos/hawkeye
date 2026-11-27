@@ -59,6 +59,9 @@ type Alert struct {
 	FlapOutages   int
 	FlapStatus    string
 
+	// Outage alerts of website and API monitors: what the confirming check saw (nil without a snapshot). Never the body excerpt.
+	Snapshot *AlertSnapshot
+
 	// Group holds the alerts combined into this message (see Group): two or more of one event, to one destination. Empty for a single alert.
 	Group []Alert
 }
@@ -182,6 +185,10 @@ func Render(a Alert) email.Message {
 		c.Facts = []email.Fact{{Label: "Website", Value: url}, {Label: "Detected at", Value: started}}
 		if a.Cause != "" {
 			c.Facts = append(c.Facts, email.Fact{Label: "Latest result", Value: clean(a.Cause)})
+		}
+		if a.Snapshot != nil {
+			c.Facts = append(c.Facts, snapshotFacts(a.Snapshot)...)
+			c.Quote = snapshotQuote(a.Snapshot)
 		}
 		c.Facts = append(c.Facts, email.Fact{Label: "Incident status", Value: "Open"})
 	}

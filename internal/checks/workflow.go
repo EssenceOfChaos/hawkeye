@@ -74,6 +74,9 @@ type Workflow struct {
 	Steps   []Step
 	Secrets map[string]string
 	Cookies bool // keep cookies between steps, in a jar that lasts one run
+	// CaptureBody keeps the start of the failing step's response body in Result.Excerpt (Target.CaptureBody), with every secret and saved
+	// value hidden.
+	CaptureBody bool
 }
 
 // StepOutcome is what a run records about one step: never response content, header values or variable values.
@@ -86,6 +89,9 @@ type StepOutcome struct {
 	Timings       *Timings `json:"timings,omitempty"`
 	ErrorCategory string   `json:"error_category,omitempty"`
 	ErrorSummary  string   `json:"error_summary,omitempty"`
+	// Facts is what the step saw of its response, for failure snapshots: never stored with the result (hence no JSON), with secrets and saved
+	// values hidden.
+	Facts *ResponseFacts `json:"-"`
 }
 
 // RunWorkflow runs w and returns the monitor's result: the failing step's (named in ErrorSummary), or the last step's when all passed, with
@@ -109,7 +115,7 @@ func (c *Checker) TryWorkflow(ctx context.Context, w Workflow) (Result, []*Previ
 func (c *Checker) runWorkflow(ctx context.Context, w Workflow, preview bool) (Result, []*Preview, error) {
 	start := c.now()
 	deadline := start.Add(WorkflowTimeout)
-	out := Result{CheckedAt: start, Steps: []StepOutcome{}}
+	out := Result{CheckedAt: start, Steps: []StepOutcome{}, FailedStep: -1}
 	vars := map[string]string{}
 	red := newRedactor(w.Secrets)
 	var jar http.CookieJar
@@ -142,6 +148,7 @@ func (c *Checker) runWorkflow(ctx context.Context, w Workflow, preview bool) (Re
 		out.Success, out.ErrorCategory = false, category
 		out.ErrorSummary = truncate(fmt.Sprintf("Step %d (%s): %s", i+1, red.clean(st.Name), step.ErrorSummary), maxSummaryLen)
 		out.StatusCode = step.StatusCode
+		out.Facts, out.FailedStep = step.Facts, i
 		out.FinishedAt = c.now()
 		if timed {
 			t := total
@@ -161,6 +168,7 @@ func (c *Checker) runWorkflow(ctx context.Context, w Workflow, preview bool) (Re
 			return fail(i, st, step, CatTimeout, fmt.Sprintf("The run took longer than %d seconds", int(WorkflowTimeout/time.Second)))
 		}
 		t.Timeout = min(t.Timeout, left)
+		t.CaptureBody = w.CaptureBody
 		res, resp, err := c.run(ctx, t, jar, preview || len(st.Extractions) > 0)
 		if err != nil {
 			return Result{}, nil, err // shutting down
@@ -175,7 +183,10 @@ func (c *Checker) runWorkflow(ctx context.Context, w Workflow, preview bool) (Re
 		if i == 0 {
 			out.CertExpiresAt = res.CertExpiresAt // the first step's host is the one the workflow is about
 		}
-		step.StatusCode, step.ResponseTimeMs, step.Timings = res.StatusCode, res.ResponseTimeMs, res.Timings
+		step.StatusCode, step.ResponseTimeMs, step.Timings, step.Facts = res.StatusCode, res.ResponseTimeMs, res.Timings, red.facts(res.Facts)
+		if e := res.Excerpt; e != nil {
+			out.Excerpt = &Excerpt{Text: red.trimPartial(red.clean(e.Text)), Truncated: e.Truncated, Binary: e.Binary} // only a failing step has one
+		}
 		if res.ResponseTimeMs != nil {
 			total, timed = total+*res.ResponseTimeMs, true
 		}
@@ -349,6 +360,33 @@ func (r *redactor) add(v string) {
 		}
 	}
 	sort.Slice(r.values, func(i, j int) bool { return len(r.values[i]) > len(r.values[j]) })
+}
+
+// facts is f with secrets and saved values hidden in its addresses and header values (nil stays nil).
+func (r *redactor) facts(f *ResponseFacts) *ResponseFacts {
+	if f == nil {
+		return nil
+	}
+	c := *f
+	c.FinalURL = r.clean(c.FinalURL)
+	c.Headers = make([]Header, len(f.Headers))
+	for i, h := range f.Headers {
+		c.Headers[i] = Header{Name: h.Name, Value: r.clean(h.Value)}
+	}
+	return &c
+}
+
+// trimPartial drops the start of a secret left at the very end of s (at least minPartialSecret bytes of it), as when a cut fell inside one.
+func (r *redactor) trimPartial(s string) string {
+	for _, v := range r.values {
+		for k := min(len(v)-1, len(s)); k >= minPartialSecret; k-- {
+			if strings.HasSuffix(s, v[:k]) {
+				s = s[:len(s)-k]
+				break
+			}
+		}
+	}
+	return s
 }
 
 func (r *redactor) clean(s string) string {

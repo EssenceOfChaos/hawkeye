@@ -11,15 +11,19 @@ import (
 
 	"hawkeye/internal/checks"
 	"hawkeye/internal/notifications"
+	"hawkeye/internal/secrets"
 )
 
 // Engine implements checks.Incidents. Its methods run inside the transaction that records the check result.
-type Engine struct{}
+type Engine struct {
+	// Box seals failure snapshots' body excerpts. Without it (heartbeat-only stores, tools), excerpts are not kept; the rest of the snapshot is.
+	Box *secrets.Box
+}
 
-// Opened records a confirmed outage. failures is the length of the current failure streak, so the
-// incident starts at the first failed check of the streak rather than at the confirming one.
+// Opened records a confirmed outage and what the confirming check saw (snapshot.go). o.Failures is the length of the current failure streak,
+// so the incident starts at the first failed check of the streak rather than at the confirming one.
 // At most one incident is open per monitor (partial unique index); a second call is a no-op.
-func (Engine) Opened(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, failures int, category, summary string) error {
+func (e Engine) Opened(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, o checks.Outage) error {
 	var orgID uuid.UUID
 	if err := tx.QueryRow(ctx, `SELECT organization_id FROM monitors WHERE id = $1`, monitorID).Scan(&orgID); err != nil {
 		return err
@@ -32,11 +36,14 @@ func (Engine) Opened(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, failur
 				ORDER BY checked_at DESC LIMIT $2) s), now()),
 			NULLIF($3, ''), NULLIF($4, ''))
 		ON CONFLICT (monitor_id) WHERE status = 'open' DO NOTHING
-		RETURNING id, started_at`, monitorID, failures, category, summary).Scan(&id, &startedAt)
+		RETURNING id, started_at`, monitorID, o.Failures, o.Result.ErrorCategory, o.Summary).Scan(&id, &startedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil // already open: do not notify twice
 	}
 	if err != nil {
+		return err
+	}
+	if err := saveSnapshot(ctx, tx, e.Box, id, monitorID, o); err != nil {
 		return err
 	}
 	timing, err := notifications.MonitorTiming(ctx, tx, monitorID)
@@ -170,4 +177,6 @@ type Incident struct {
 	// "flapping" alert covered it); false again if the monitor then stayed down and the outage was alerted.
 	Flapping     bool `json:"flapping"`
 	AlertsPaused bool `json:"alerts_paused"`
+	// HasSnapshot: what HawkEye saw when the outage was confirmed is kept (GET /incidents/:id/snapshot).
+	HasSnapshot bool `json:"has_snapshot"`
 }

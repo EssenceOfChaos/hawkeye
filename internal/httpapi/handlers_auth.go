@@ -38,6 +38,7 @@ import (
 	"hawkeye/internal/organizations"
 	"hawkeye/internal/plans"
 	"hawkeye/internal/regions"
+	"hawkeye/internal/secrets"
 	"hawkeye/internal/sitecheck"
 	"hawkeye/internal/socialauth"
 	"hawkeye/internal/sslcheck"
@@ -87,6 +88,7 @@ type handlers struct {
 	twoFactor       *twofactor.Service             // two-factor sign-in; nil turns its settings off (sign-in still enforces it for accounts that have it)
 	audit           *audit.Recorder                // the security log; nil records nothing
 	workflowChecker *checks.Checker                // test runs of multi-step API checks and test requests; nil turns them off
+	box             *secrets.Box                   // opens failure snapshots' body excerpts; nil turns that off
 	social          map[string]socialauth.Provider // sign-in providers by name (google, github); empty offers none
 	tokenRoutes     map[string]bool                // "METHOD /path" of the routes open to API keys
 }

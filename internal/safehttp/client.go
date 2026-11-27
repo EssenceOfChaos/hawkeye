@@ -181,6 +181,9 @@ func dialContext(ctx context.Context, cfg Config, network, addr string) (net.Con
 	for _, ip := range ips {
 		conn, err := cfg.Dial(ctx, network, net.JoinHostPort(ip.String(), portStr))
 		if err == nil {
+			if phases != nil {
+				phases.connected(ip)
+			}
 			return conn, nil
 		}
 		lastErr = err

@@ -112,7 +112,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 	}
 	planSvc := plans.NewService("http://app.test")
 	opts := httpapi.Options{
-		Logger: log, DB: pool, RequestTimeout: 10 * time.Second, BodyLimit: 1_000_000,
+		Logger: log, DB: pool, RequestTimeout: 10 * time.Second, BodyLimit: 1_000_000, SecretBox: testutil.SecretBox(),
 		Auth: svc, Orgs: organizations.NewService(pool), AuthRateLimitPerMin: rateLimit,
 		Plans: planSvc, Monitors: monitors.NewService(pool, planSvc, monitors.WithSecretBox(testutil.SecretBox()), monitors.WithDomainSync(domains.SyncTx)), Pool: pool, PgPool: pool,
 		Notifications: notifications.NewService(pool, mail, log, "http://app.test", "alerts@test", notifications.WithTelegramBot(o.telegram),

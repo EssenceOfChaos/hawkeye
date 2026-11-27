@@ -125,6 +125,15 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
   when the request fails counts up to the failure. Stored as `smallint` columns on `check_results` (NULL without a breakdown) and as sums plus
   `phase_count` in `check_rollups`, so `rollups.Source` gives averages from raw results and totals alike. `incidents.SlowStarted` compares the
   confirming check with the monitor's week before its slow streak (`usualTimings`) and stores the explanation in `slowdowns.cause`.
+- **Failure snapshots (migration `000058`, `docs/plan-failure-snapshots.md`):** `checks.run` builds `ResponseFacts` for every request that
+  opened a connection (allowlisted headers, size, the server address `dialContext` connected to, certificate issuer, timings); workflow steps pass
+  theirs through the run's redactor. Nothing new is stored with the check result. A successful, counting check writes the facts to
+  that location's `monitor_last_good` row only when `Fingerprint()` changes (status, final URL, media type, stable headers, server network, certificate, size in
+  25% steps). Per location, because CDNs and geo-DNS answer each location from other servers; a failure is compared with the same location's. On `WentDown` the store passes an `Outage` (the confirming `Result`, its region,
+  each location's state) to `incidents.Engine.Opened`, which writes `incident_snapshots` in the same transaction: the facts, `checks.Compare`
+  against the last good response and the week's average timings, and, when `capture_failure_body` is on, the excerpt sealed with the incident ID
+  as context (the worker's engine has the secrets box; the API's heartbeat store doesn't need it). The dispatcher joins the snapshot for outage
+  deliveries only and never selects the excerpt. Editing a monitor's request or its locations deletes its `monitor_last_good` rows; retention clears excerpts 30 days after resolution.
 - **Incidents and alerts (Phase 5):** `Store.Record` calls `incidents.Engine` inside its transaction. `WentDown` opens an incident (partial unique
   index: one open per monitor) and enqueues one `notification_deliveries` row per enabled, verified recipient; any move into `up` closes an
   open incident and enqueues recovery deliveries. Status, incident and deliveries therefore commit atomically

@@ -216,7 +216,8 @@ func TestEngineIsIdempotentAndRaceSafe(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			if err := (incidents.Engine{}).Opened(t.Context(), tx, e.monitor, 2, "dns", "DNS lookup failed"); err != nil {
+			if err := (incidents.Engine{}).Opened(t.Context(), tx, e.monitor, checks.Outage{Failures: 2, Summary: "DNS lookup failed",
+				Result: checks.Result{ErrorCategory: "dns", FailedStep: -1}}); err != nil {
 				t.Error(err)
 			}
 			tx.Commit(t.Context())

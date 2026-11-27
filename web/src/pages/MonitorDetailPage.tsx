@@ -10,6 +10,7 @@ import { PingLog, PingSetup } from '../components/Heartbeat'
 import { RangePicker } from '../components/RangePicker'
 import { ResponseChart } from '../components/ResponseChart'
 import { TimingBar } from '../components/TimingBar'
+import { FailureSnapshot } from '../components/FailureSnapshot'
 import { StatusBadge } from '../components/StatusBadge'
 import { AvgResponseTile, StatTile, UptimeHero } from '../components/Uptime'
 import { WorkflowRun } from '../components/WorkflowRun'
@@ -206,6 +207,8 @@ export function MonitorDetailPage() {
                   <IncidentStatus status={i.status} />{' '}
                   <span>{new Date(i.started_at).toLocaleString()}</span>
                   <span className="hint"> · {formatDuration(i.duration_seconds)}{i.status === 'open' && ' so far'}{i.summary ? ` · ${i.summary}` : ''}{i.alerts_paused ? ' · no alert (flapping)' : ''}</span>
+                  {/* While it lasts, the outage's snapshot is the first thing to look at; past ones are a click away on the Incidents page. */}
+                  {i.status === 'open' && i.has_snapshot && <FailureSnapshot incidentID={i.id} monitorID={monitorID} />}
                 </li>
               ))}
             </ul>

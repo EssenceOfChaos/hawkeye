@@ -121,6 +121,7 @@ export function MonitorFormPage() {
   const [traceOn, setTraceOn] = useState(false)
   const [recheck, setRecheck] = useState<RecheckSetting>('auto')
   const [flap, setFlap] = useState(true)
+  const [captureBody, setCaptureBody] = useState(false)
   const [avgMs, setAvgMs] = useState<number | null>(null) // this monitor's average response over the last 24 hours, as a guide
   const [allTags, setAllTags] = useState<TagSummary[]>([])
   const [tagIDs, setTagIDs] = useState<string[]>([])
@@ -195,6 +196,7 @@ export function MonitorFormPage() {
         setTraceOn(Boolean(m.trace_context))
         setRecheck(m.recheck ?? 'auto')
         setFlap(m.flap_suppression ?? true)
+        setCaptureBody(Boolean(m.capture_failure_body))
         setTagIDs((m.tags ?? []).map((t) => t.id))
         setAlertDelay(m.alert_delay_minutes ?? 0)
         setQuiet(m.quiet_hours ?? null)
@@ -257,6 +259,7 @@ export function MonitorFormPage() {
   async function onSubmitWorkflow() {
     const payload: WorkflowInput = {
       name, steps: stepsInput(steps), secrets: secretsInput(secrets), cookies, tag_ids: tagIDs, alert_delay_minutes: alertDelay, quiet_hours: quiet, recheck, flap_suppression: flap,
+      capture_failure_body: captureBody,
     }
     if (allRegions.length > 1) payload.regions = chosen
     if (intervalSeconds() !== undefined) payload.check_interval_seconds = intervalSeconds()
@@ -293,6 +296,7 @@ export function MonitorFormPage() {
       alert_delay_minutes: alertDelay,
       quiet_hours: quiet,
       flap_suppression: flap,
+      capture_failure_body: captureBody,
     }
     if (allRegions.length > 1) payload.regions = chosen
     if (intervalSeconds() !== undefined) payload.check_interval_seconds = intervalSeconds()
@@ -367,6 +371,20 @@ export function MonitorFormPage() {
     setAssertions((as) => as.map((a, j) => (j === i ? { ...a, ...patch } : a)))
 
   const f = error?.fields ?? {}
+  // Website, API and multi-step monitors: an opt-in, because it keeps text the monitored site wrote.
+  const failureBodyField = (
+    <fieldset className="group">
+      <legend>Failure details</legend>
+      <Toggle checked={captureBody} onToggle={setCaptureBody}>Keep the start of failed responses</Toggle>
+      <small className="hint">
+        Every outage already records the status, a short list of headers, the timings and what changed since the last good check. With this on,
+        HawkEye also keeps the first 4 KB of the failed response, encrypted, so you can read the error page on the incident. Passwords, tokens and
+        header values this monitor sends are hidden in it. It is never put in alerts, and it is deleted 30 days after the incident ends.
+      </small>
+      {f.capture_failure_body && <small className="error">{f.capture_failure_body}</small>}
+    </fieldset>
+  )
+
   const totalChecks = contains.length + notContains.length + assertions.length
   // A field error for one submitted check, found through where that check came from.
   const errorAt = (list: Origin['list'], row: number): string | undefined => {
@@ -517,6 +535,7 @@ export function MonitorFormPage() {
               call again and again, such as a test account. This needs a verified email address, and checks run at most every {WRITE_MIN_MINUTES} minutes.
             </Alert>
           )}
+          {failureBodyField}
           <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f}
             recheck={{ value: recheck, onChange: setRecheck, writes: writeMethod, fast: fast && canFast }} flap={{ value: flap, onChange: setFlap }} />
           {regionPicker}
@@ -710,6 +729,8 @@ export function MonitorFormPage() {
             </small>
             {f.trace_context && <small className="error">{f.trace_context}</small>}
           </fieldset>
+
+          {failureBodyField}
 
           <AlertTiming delay={alertDelay} onDelay={setAlertDelay} quiet={quiet} onQuiet={setQuiet} errors={f}
             recheck={{ value: recheck, onChange: setRecheck, writes: writeMethod, fast: fast && canFast }} flap={{ value: flap, onChange: setFlap }} />

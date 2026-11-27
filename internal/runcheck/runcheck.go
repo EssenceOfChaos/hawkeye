@@ -37,10 +37,10 @@ func Run(ctx context.Context, pool *pgxpool.Pool, checker *checks.Checker, box *
 	var dnsType, dnsExpected, kind string // dnsType is set for DNS monitors, whose url is the host name to look up
 	err := pool.QueryRow(ctx, `SELECT url, method, expected_status_code, timeout_seconds, enabled,
 		request_headers, COALESCE(request_body, ''), auth_type, COALESCE(auth_username, ''), COALESCE(auth_header_name, ''),
-		COALESCE(auth_secret, ''), assertions, COALESCE(dns_record_type, ''), COALESCE(dns_expected, ''), kind, trace_context
+		COALESCE(auth_secret, ''), assertions, COALESCE(dns_record_type, ''), COALESCE(dns_expected, ''), kind, trace_context, capture_failure_body
 		FROM monitors WHERE id = $1 AND deleted_at IS NULL`, monitorID).
 		Scan(&t.URL, &t.Method, &t.ExpectedStatus, &timeoutSecs, &enabled, &t.Headers, &t.Body, &t.Auth.Type,
-			&t.Auth.Username, &t.Auth.HeaderName, &t.Auth.Secret, &t.Assertions, &dnsType, &dnsExpected, &kind, &t.TraceContext)
+			&t.Auth.Username, &t.Auth.HeaderName, &t.Auth.Secret, &t.Assertions, &dnsType, &dnsExpected, &kind, &t.TraceContext, &t.CaptureBody)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows) || err == nil && !enabled:
 		return checks.Result{}, ErrInactive
@@ -66,6 +66,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, checker *checks.Checker, box *
 		if err != nil {
 			return checks.Result{}, fmt.Errorf("%w: load workflow: %w", ErrSetup, err)
 		}
+		wf.CaptureBody = t.CaptureBody
 		return checker.RunWorkflow(ctx, wf)
 	case dnsType != "":
 		return checker.CheckDNS(ctx, checks.DNSTarget{Host: t.URL, RecordType: dnsType, Expected: dnsExpected, Timeout: t.Timeout})
