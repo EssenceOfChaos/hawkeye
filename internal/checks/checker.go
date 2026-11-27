@@ -57,6 +57,9 @@ type Target struct {
 	// TraceContext sends a W3C traceparent header with a new random trace ID, sampled, so the request shows up in the site's own tracing. The ID
 	// is returned in Result.TraceID.
 	TraceContext bool
+	// CaptureBody keeps the start of a failed response's body in Result.Excerpt (the monitor opted in; off by default). Successful checks
+	// read no more of the body than without it.
+	CaptureBody bool
 }
 
 // Result is the outcome of one completed check. ResponseTimeMs is the time until response headers arrived.
@@ -89,6 +92,13 @@ type Result struct {
 	ContentType string
 	// Steps is set for multi-step API checks: what each step that ran did (workflow.go). Stored with the result; never response content.
 	Steps []StepOutcome
+	// Facts is what the check saw of the response, for failure snapshots (snapshot.go): set when a connection was attempted. For a workflow,
+	// the failing step's (FailedStep), or nil when every step passed (each step's are on Steps). Never stored with the result.
+	Facts *ResponseFacts
+	// FailedStep is the index of a workflow's failing step, or -1.
+	FailedStep int
+	// Excerpt is the start of a failed response's body, when the target asked for it (CaptureBody). Never stored with the result.
+	Excerpt *Excerpt
 }
 
 // Timings splits a check's time into phases, each summed over every connection the check made (one per redirect). Their sum is close to
@@ -185,7 +195,7 @@ type response struct {
 // run performs one request as Check describes. jar, when set, sends and keeps cookies across a workflow's steps. With keep, the response's
 // headers, cookies and body are returned for extractions (the body is read even without assertions).
 func (c *Checker) run(ctx context.Context, t Target, jar http.CookieJar, keep bool) (Result, *response, error) {
-	res := Result{CheckedAt: c.now()}
+	res := Result{CheckedAt: c.now(), FailedStep: -1}
 	var kept *response
 	finish := func() (Result, *response, error) {
 		res.FinishedAt = c.now()
@@ -258,14 +268,24 @@ func (c *Checker) run(ctx context.Context, t Target, jar http.CookieJar, keep bo
 
 	resp, err := client.Do(req)
 	elapsed := int(c.now().Sub(res.CheckedAt) / time.Millisecond)
-	res.Timings = timingsFrom(phases.Snapshot())
+	pt := phases.Snapshot()
+	res.Timings = timingsFrom(pt)
 	res.CertExpiresAt = cert.expiry()
+	if pt.Connections > 0 {
+		res.Facts = &ResponseFacts{SizeBytes: -1, Timings: res.Timings, CertExpiresAt: res.CertExpiresAt, CertIssuer: cert.issuerName()}
+		if pt.Addr.IsValid() {
+			res.Facts.ServerAddr = pt.Addr.Unmap().String()
+		}
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return Result{}, nil, ctx.Err() // caller shut down; the outcome says nothing about the site
 		}
 		if res.CertExpiresAt == nil {
 			res.CertExpiresAt = expiredCertificate(err, c.now())
+			if res.Facts != nil {
+				res.Facts.CertExpiresAt = res.CertExpiresAt
+			}
 		}
 		res.ErrorCategory, res.ErrorSummary = Classify(err)
 		return finish()
@@ -278,9 +298,16 @@ func (c *Checker) run(ctx context.Context, t Target, jar http.CookieJar, keep bo
 	if mt, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type")); err == nil {
 		res.ContentType = mt
 	}
-	// The body is only read when assertions need it, and then only up to MaxBodyBytes; it is never stored.
-	var respBody []byte
+	if res.Facts == nil { // a response always comes over a connection; this only guards a custom transport in tests
+		res.Facts = &ResponseFacts{SizeBytes: -1, Timings: res.Timings}
+	}
+	res.Facts.StatusCode, res.Facts.FinalURL, res.Facts.ContentType = code, res.FinalURL, res.ContentType
+	res.Facts.Headers = keepHeaders(resp.Header)
+	// The body is only read when assertions need it, and then only up to MaxBodyBytes; it is never stored. Otherwise it is drained, and with
+	// CaptureBody the drain keeps its first MaxExcerptBytes in case the check fails.
+	var respBody, head []byte
 	truncated := false
+	var bodyRead int64
 	if len(t.Assertions) > 0 || keep {
 		respBody, err = io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes+1))
 		if err != nil {
@@ -293,8 +320,29 @@ func (c *Checker) run(ctx context.Context, t Target, jar http.CookieJar, keep bo
 		if len(respBody) > MaxBodyBytes {
 			respBody, truncated = respBody[:MaxBodyBytes], true
 		}
+		bodyRead = int64(len(respBody))
 	} else {
-		_, _ = io.CopyN(io.Discard, resp.Body, maxDrainBytes)
+		if t.CaptureBody {
+			head, _ = io.ReadAll(io.LimitReader(resp.Body, MaxExcerptBytes+1))
+		}
+		n, _ := io.CopyN(io.Discard, resp.Body, maxDrainBytes-int64(len(head)))
+		bodyRead = int64(len(head)) + n
+		truncated = bodyRead >= maxDrainBytes
+	}
+	if resp.ContentLength >= 0 {
+		res.Facts.SizeBytes = resp.ContentLength
+	} else {
+		res.Facts.SizeBytes, res.Facts.SizeAtLeast = bodyRead, truncated
+	}
+	excerpt := func() {
+		if !t.CaptureBody {
+			return
+		}
+		b, more := head, len(head) > MaxExcerptBytes || truncated
+		if respBody != nil {
+			b, more = respBody, truncated || len(respBody) > MaxExcerptBytes
+		}
+		res.Excerpt = excerptOf(b, more, credentialRedactor(t))
 	}
 	if keep {
 		kept = &response{header: resp.Header, cookies: resp.Cookies(), body: respBody, truncated: truncated}
@@ -311,10 +359,12 @@ func (c *Checker) run(ctx context.Context, t Target, jar http.CookieJar, keep bo
 		if t.ExpectedStatus != nil {
 			res.ErrorSummary = fmt.Sprintf("Received HTTP %d, expected %d", code, *t.ExpectedStatus)
 		}
+		excerpt()
 		return finish()
 	}
 	if msg := evaluate(t.Assertions, respBody, truncated); msg != "" {
 		res.Success, res.ErrorCategory, res.ErrorSummary = false, CatAssertion, truncate(msg, maxSummaryLen)
+		excerpt()
 	}
 	return finish()
 }
@@ -345,9 +395,10 @@ func applyAuth(req *http.Request, a Auth) string {
 
 // certWatch records the expiry of the certificate presented by the monitored host. Handshake callbacks can arrive on other goroutines.
 type certWatch struct {
-	host string
-	mu   sync.Mutex
-	at   *time.Time
+	host   string
+	mu     sync.Mutex
+	at     *time.Time
+	issuer string
 }
 
 func (w *certWatch) handshakeDone(cs tls.ConnectionState, err error) {
@@ -359,7 +410,7 @@ func (w *certWatch) handshakeDone(cs tls.ConnectionState, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.at == nil {
-		w.at = &na
+		w.at, w.issuer = &na, cs.PeerCertificates[0].Issuer.CommonName
 	}
 }
 
@@ -367,6 +418,12 @@ func (w *certWatch) expiry() *time.Time {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.at
+}
+
+func (w *certWatch) issuerName() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.issuer
 }
 
 // expiredCertificate returns the certificate's expiry when a handshake failed because the server's own certificate had expired.

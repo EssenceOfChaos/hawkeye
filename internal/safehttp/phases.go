@@ -2,6 +2,7 @@ package safehttp
 
 import (
 	"context"
+	"net/netip"
 	"sync"
 	"time"
 )
@@ -15,6 +16,7 @@ type Phases struct {
 	dns, connect, tls, wait  time.Duration
 	connections              int
 	tlsStart, wroteRequestAt time.Time
+	addr                     netip.Addr // the address of the latest connection opened
 }
 
 type phasesKey struct{}
@@ -27,6 +29,12 @@ func WithPhases(ctx context.Context, p *Phases) context.Context {
 func phasesFrom(ctx context.Context) *Phases {
 	p, _ := ctx.Value(phasesKey{}).(*Phases)
 	return p
+}
+
+func (p *Phases) connected(a netip.Addr) {
+	p.mu.Lock()
+	p.addr = a
+	p.mu.Unlock()
 }
 
 func (p *Phases) add(field *time.Duration, d time.Duration) {
@@ -72,6 +80,9 @@ type PhaseTimes struct {
 	DNS, Connect, TLS, Wait time.Duration
 	// Connections is how many connections were opened: 1 plus the number of redirects followed.
 	Connections int
+	// Addr is the server address of the latest connection that opened (after redirects, the one that answered); invalid when none opened.
+	// It always passed the client's address rules, so it is public in production.
+	Addr netip.Addr
 }
 
 // Snapshot returns the times so far. A phase still in progress (a handshake or a wait cut short by a timeout) counts up to now, so a
@@ -79,7 +90,7 @@ type PhaseTimes struct {
 func (p *Phases) Snapshot() PhaseTimes {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	t := PhaseTimes{DNS: p.dns, Connect: p.connect, TLS: p.tls, Wait: p.wait, Connections: p.connections}
+	t := PhaseTimes{DNS: p.dns, Connect: p.connect, TLS: p.tls, Wait: p.wait, Connections: p.connections, Addr: p.addr}
 	if !p.tlsStart.IsZero() {
 		t.TLS += time.Since(p.tlsStart)
 	}
