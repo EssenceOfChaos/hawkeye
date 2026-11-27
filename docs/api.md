@@ -165,7 +165,7 @@ that are not browsers send none. It is stateless (no MCP sessions; `GET` and `DE
 | `get_account_overview` | read | – | `GET /usage`, `GET /dashboard/summary` |
 | `list_monitors`, `get_monitor` | read | – | `GET /monitors`, `GET /monitors/:id` (never headers, body or credentials) |
 | `get_uptime` | read | – | `GET /monitors/:id/uptime` (or every monitor), presets only |
-| `list_incidents`, `get_incident` | read | – | `GET /incidents`, `GET /incidents/:id/updates` |
+| `list_incidents`, `get_incident` | read | – | `GET /incidents`, `GET /incidents/:id/updates`, `GET /incidents/:id/snapshot` (never the body) |
 | `list_status_pages`, `list_maintenance_windows` | read | – | `GET /status-pages`, `GET /maintenance-windows` |
 | `suggest_monitors` | read, open world | – | `POST /monitors/suggestions`; returns `create_monitor` arguments, creates nothing |
 | `pause_monitors`, `resume_monitors` | write | write key, paid plan | `POST /monitors/bulk` (by IDs or by tag name) |
@@ -238,7 +238,7 @@ malformed ID gives 404) or, if absent, the organization the caller **owns** (the
 
 **Monitor fields.** `type` is `http` (a website or API, the default), `heartbeat` or `dns`, set on create and fixed after that. Editable: `name` (1–100), `url`, `method` (`GET` default, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`), `expected_status_code`
 (100–599 or null; null means any response below 400 is up), `check_interval_seconds` (30–86400, at least the plan minimum: 300 on Free, 60 on Pro, 30 on Agency; default 60, or the plan minimum
-when that is longer, so 30 s is only ever chosen), `timeout_seconds` (1–30 and **at most half the interval**, so 15 at 30 s; default 10), `slow_threshold_ms` (100–60000 and below the timeout, or null = off; see *Slow-response alerts*) and `slow_checks` (2–10, default 3), `trace_context` (boolean, default false; see *Trace context*), `recheck` (`auto` default, `always` or `off`; see *Re-check before alerting*), `tag_ids`, `alert_delay_minutes` (0–1440, default 0), `quiet_hours` (`{start, end, timezone}` or null; see *Alert routing, alert delay and quiet hours*) and `flap_suppression` (boolean, default true; see *Grouped alerts and flapping*). Read-only and ignored if sent: `flapping_since`, `slow_since`, `current_status`, `consecutive_*`, `last_*`,
+when that is longer, so 30 s is only ever chosen), `timeout_seconds` (1–30 and **at most half the interval**, so 15 at 30 s; default 10), `slow_threshold_ms` (100–60000 and below the timeout, or null = off; see *Slow-response alerts*) and `slow_checks` (2–10, default 3), `trace_context` (boolean, default false; see *Trace context*), `capture_failure_body` (boolean, default false; website, API and multi-step monitors only, a 400 otherwise; see *Failure snapshots*), `recheck` (`auto` default, `always` or `off`; see *Re-check before alerting*), `tag_ids`, `alert_delay_minutes` (0–1440, default 0), `quiet_hours` (`{start, end, timezone}` or null; see *Alert routing, alert delay and quiet hours*) and `flap_suppression` (boolean, default true; see *Grouped alerts and flapping*). Read-only and ignored if sent: `flapping_since`, `slow_since`, `current_status`, `consecutive_*`, `last_*`,
 `enabled` (use pause/resume), `organization_id`. `effective_check_interval_seconds` is what the scheduler will use: the stored
 interval raised to the plan minimum, so a downgrade takes effect without rewriting data.
 
@@ -377,10 +377,40 @@ database index). Deleting a monitor closes its open incident silently.
 |---|---|
 | `GET /incidents` | organization-wide, newest first. Query: `status` (`open`/`resolved`), `from`, `to` (RFC 3339, on `started_at`), `limit` (1–100, default 25), `offset` |
 | `GET /monitors/:id/incidents` | same filters for one monitor; 404 if it belongs to another organization |
+| `GET /incidents/:id/snapshot` | the incident's failure snapshot (below); 404 when it has none or belongs to another organization. Open to API keys |
+| `GET /incidents/:id/snapshot/body` | the opt-in body excerpt, `{body: {text, truncated}}`, `Cache-Control: no-store`; 404 when none was kept or it was cleared. **Session only** (`SESSION_REQUIRED` for API keys and connected apps) |
 
-Incident: `{id, monitor_id, monitor_name, started_at, resolved_at, status, cause_category, summary, duration_seconds, update_count, flapping, alerts_paused}`
+Incident: `{id, monitor_id, monitor_name, started_at, resolved_at, status, cause_category, summary, duration_seconds, update_count, flapping, alerts_paused, has_snapshot}`
 (`duration_seconds` is the elapsed time so far while open; `update_count` is how many updates have been posted on it; `flapping`: the monitor was
-flapping when it began; `alerts_paused`: so no outage or recovery alert was sent for it, see *Grouped alerts and flapping*).
+flapping when it began; `alerts_paused`: so no outage or recovery alert was sent for it, see *Grouped alerts and flapping*; `has_snapshot`: see
+*Failure snapshots*).
+
+### Failure snapshots
+
+When an outage of a website, API or multi-step monitor is confirmed, the incident keeps what the confirming check saw (heartbeat and DNS incidents
+have none, nor do incidents from before 2026-11-27). Snapshot:
+
+```json
+{"checked_at": "…", "region": "primary", "step_index": null, "step_name": null,
+ "facts": {"status_code": 502, "final_url": "https://example.com/health", "content_type": "text/html", "size_bytes": 1200,
+           "headers": [{"name": "Server", "value": "cloudflare"}], "server_addr": "198.51.100.9",
+           "cert_expires_at": "…", "cert_issuer": "R11", "timings": {"dns_ms": 12, "connect_ms": 31, "tls_ms": 48, "wait_ms": 2410, "redirects": 0}},
+ "changes": [{"field": "status", "before": "200", "after": "502"}, {"field": "timing", "name": "wait", "before": "180 ms", "after": "2.4 s"}],
+ "locations": [{"region": "eu-central", "name": "Amsterdam", "status": "down", "error": "Received HTTP 502", "checked_at": "…"}],
+ "has_body_excerpt": false, "body_excerpt_cleared_at": null}
+```
+
+- `facts.status_code` is 0 (left out) when no response arrived; the rest says how far the check got. `size_bytes` is -1 when unknown, with
+  `size_at_least` when reading stopped at a limit. Headers come from a fixed allowlist (`docs/security.md#failure-snapshots`), never cookies or
+  credentials. For a multi-step check, `facts` are the failing step's, named by `step_index` (0-based) and `step_name`.
+- `changes` compares with the monitor's last good response (reset when the request is edited): `status`, `server_addr` (only a move to another /24
+  or /48: load balancers rotate within one), `final_url`, `content_type`, `certificate`, `header` (with `name`; volatile ones such as `Age` and request
+  IDs never count), `size` (more than halved, or grown by half) and `timing` (the phase that grew most, when over twice its 7-day average and at least
+  100 ms longer). At most 6, most telling first; empty for a monitor with no good check yet.
+- `locations`: each location's latest result, for monitors checked from several.
+- With `capture_failure_body` on, a failed check that got a text response also keeps its first 4 KB, with the monitor's credential and header values
+  (and a workflow's secrets and saved values) replaced by `[hidden]`, encrypted, and cleared 30 days after the incident resolves. It is returned only by
+  the session-only `/snapshot/body`, never in alerts, webhooks, MCP or reports.
 
 ### Incident updates
 
@@ -752,7 +782,9 @@ Webhook requests are `POST` with `Content-Type: application/json` and these head
 `ssl_expiry` carries `certificate: {expires_at, warning_days}` instead of `incident` (`warning_days` 30, 14, 7, 1, or 0 once expired); `domain_expiry` carries `domain: {name, expires_at, warning_days}` and no `monitor` (its `url` points at `/domains`); `slow` and `slow_recovery` carry `slowdown: {started_at, resolved_at, threshold_ms, peak_ms}` (`resolved_at` only on `slow_recovery`) instead of `incident`, and their `url` points at the monitor; `dns_change` and `dns_change_closed` carry
 `dns_change: {record_type, before, after, status, detected_at, closed_at, accepted_by}` (PagerDuty gets a warning that the close resolves); `flapping`
 and `flapping_ended` carry `flapping: {started_at, ended_at, outages, status}` (`status` `open`, `settled`, `stayed_down` or `ended`) instead of
-`incident`, and an `outage` or `recovery` of an episode that stayed down carries it next to `incident`; `test` carries none of them. Webhooks are never
+`incident`, and an `outage` or `recovery` of an episode that stayed down carries it next to `incident`; `test` carries none of them. An `outage`
+of a website, API or multi-step monitor also carries `incident.snapshot: {response, failed_step, changes, locations}` (as in *Failure snapshots*,
+never the body). Chat apps and PagerDuty get at most three short lines of it: the timings, the top two changes and the locations. Webhooks are never
 grouped: each alert is its own request. Chat destinations receive an equivalent, unsigned message in the app's own format: Slack incoming-webhook blocks; a Discord embed colored by severity, with mentions switched off (`allowed_mentions: {parse: []}`) so names such as `@everyone` never ping; a Teams Adaptive Card with an "Open in HawkEye" button; and a Telegram `sendMessage` in HTML mode with link previews off. Text from monitors (names, addresses, causes) is escaped for each app's markup so it cannot add links or formatting.
 
 ## Slow-response alerts

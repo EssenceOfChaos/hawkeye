@@ -1,6 +1,7 @@
 # Plan: rich failure snapshots
 
-Status: **in progress** on branch `feat/failure-snapshots` (2026-11-27). Roadmap 2, feature #8 (Q2, about 3 build weeks). It builds on the timing breakdown (#3,
+Status: **built** on branch `feat/failure-snapshots` (2026-11-27), not yet released. Where the build differs from the first draft of this plan,
+the text below says what was built (see *Changes while building*). Roadmap 2, feature #8 (Q2, about 3 build weeks). It builds on the timing breakdown (#3,
 PR #84), immediate re-checks (#2), more check locations (#1) and alert grouping (#10).
 
 When an outage is confirmed, the alert and the incident say **what HawkEye actually saw**, not only "Received HTTP 502":
@@ -65,7 +66,8 @@ check, so they don't show up as "changed" every time, and different edges in dif
 `monitors.last_good jsonb` holds the `ResponseFacts` of the latest successful check (for a workflow, one entry per step, keyed by position).
 It is written **only when its fingerprint changes** (status, final URL, content type, stable headers, server address, certificate; not
 timings or size), so a steady site writes it once and then rarely. The `UPDATE monitors` that every check already runs carries it, so it adds
-no extra statement. Size is kept, but a change under 20% doesn't change the fingerprint.
+no extra statement. Size counts in steps of 25%, and the server address by its network (/24 or /48), so small size changes and a load balancer's
+rotating addresses don't rewrite it.
 
 ### What changed
 
@@ -135,13 +137,14 @@ several.
 
 **Grouped alerts:** unchanged. Each monitor's line stays short; the link goes to the incidents, where the snapshots are.
 
-**Webhooks:** `incident.snapshot` with every field above except the body excerpt. **PagerDuty:** the same in `custom_details`.
+**Webhooks:** `incident.snapshot` with every field above except the body excerpt. **PagerDuty:** the chat lines, in `custom_details.details`.
 
 **Incidents page and monitor page:** the incident row expands (like its updates) into **What HawkEye saw**: the facts, headers, timing bar
 (the existing `TimingBar`), changes, locations, and the "Show response" button when an excerpt exists.
 
-**API and MCP:** `GET /incidents/:id` gains `snapshot` (no body). `GET /incidents/:id/snapshot/body` returns the excerpt to members, with
-`Cache-Control: no-store`. MCP `get_incident` returns the snapshot without the body, so "why did my site go
+**API and MCP:** `GET /incidents/:id/snapshot` (no body; open to API keys), and each incident in lists gains `has_snapshot`.
+`GET /incidents/:id/snapshot/body` returns the excerpt to members, with `Cache-Control: no-store`, **session only**: API keys and connected apps get
+`SESSION_REQUIRED`, so no script or assistant ever receives response text. MCP `get_incident` returns the snapshot without the body, so "why did my site go
 down?" can be answered from Claude.
 
 **Status pages, badges and client reports:** no change. They show uptime, not diagnostics.
@@ -218,3 +221,15 @@ down?" can be answered from Claude.
    matters, turning the excerpt on or off, is logged.
 5. **The header allowlist** is the list above. Adding to it later is easy; a header that turns out to carry secrets is not easy to take
    back.
+
+## Changes while building (2026-11-27)
+
+- **Endpoints.** There is no `GET /incidents/:id`, so the snapshot has its own `GET /incidents/:id/snapshot`, and the body endpoint is session-only
+  rather than open to API keys (an OAuth-connected assistant uses the same token routes, and the excerpt must never reach one).
+- **Found in a run against httpbin.org:** an AWS load balancer answered from another IPv6 address of the same /48, which showed as "server address
+  changed". Addresses are now compared by network (/24, /48). The content type was also listed twice (as the media type and as the `Content-Type`
+  header); the header is now volatile for comparison.
+- **Size** counts as changed when it more than halved or grew by half (the fingerprint uses 25% steps).
+- **On a phone** the expanded incident row stays at the screen's width instead of the table's (this also fixes the incident updates form there).
+- **Not changed:** the incident engine is constructed with the secrets box only in the worker, where outages open; the API's heartbeat store opens
+  heartbeat incidents, which have no snapshot.

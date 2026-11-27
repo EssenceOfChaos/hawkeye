@@ -45,7 +45,7 @@ const FEATURES = [
     icon: brand.icons.incident,
     title: 'Incident tracking',
     lead: 'Every incident, clearly accounted for.',
-    text: 'See when a problem began and when service recovered.',
+    text: 'See when a problem began, what changed since it last worked, and when service recovered.',
   },
   {
     icon: brand.icons.notifications,

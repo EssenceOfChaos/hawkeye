@@ -74,7 +74,7 @@ The app's `/privacy` and `/terms` pages are the reviewed text (see the status at
 | Contact-form messages (name, email, message, optional website, account id/plan if signed in) | support | live in the support mailbox, not the database; decide a deletion period |
 | Server logs (request ids, no bodies; tokens redacted) | operations | set by your log retention |
 
-Alert content (monitor name and address, event time, short failure description) is also sent to customer-chosen Slack, Discord, Microsoft Teams, Telegram and webhook endpoints; those services are third parties the customer chooses, not our sub-processors.
+Alert content (monitor name and address, event time, short failure description and, for outages, the failure snapshot without any response body) is also sent to customer-chosen Slack, Discord, Microsoft Teams, Telegram and webhook endpoints; those services are third parties the customer chooses, not our sub-processors.
 
 Sub-processors to list: hosting provider, database provider, SMTP provider, Stripe, Sentry (if `SENTRY_DSN` set; events are scrubbed of emails/tokens), uptime monitor.
 
@@ -101,3 +101,14 @@ Sub-processors to list: hosting provider, database provider, SMTP provider, Stri
 > **X added (2026-11-24; confirm with counsel):** X is a third provider on the same terms, named in 2A, 2E and 4A. One difference: X grants
 > sign-in only with access that also covers reading the person's posts (`tweet.read`). HawkEye reads only the account ID and confirmed email and
 > drops the access at once; 2A now says so in plain words. X's Developer Agreement applies to the app.
+
+> **Failure snapshots (added 2026-11-27; confirm with counsel):** when an outage is confirmed, HawkEye keeps with the incident what the confirming
+> check saw: status code, content type and size, final address (no query), the server's IP address and certificate expiry and issuer, timings,
+> each location's latest result, an allowlist of response headers (never cookies or credentials) and what changed since the last good check; the
+> last good check's same details are kept on the monitor. All of it describes the customer's own site. New and opt-in per monitor (off by
+> default): the first 4 KB of a failed response's body, encrypted, with the monitor's own credentials and header values hidden, shown only in the
+> app to the organization's members, never in alerts, to API keys or to AI features, and cleared 30 days after the incident resolves. A response
+> body can contain personal data about the customer's own visitors (an error page echoing an email address, for example), which is why it is off
+> by default. The Privacy Policy now says so in 2A (the API checks item) and in 5 (retention), and its "Last updated" date is 2026-11-27. Open
+> question for counsel: whether the excerpt makes HawkEye a processor of the customer's end users' personal data in a way the Terms or a DPA must
+> cover, and whether the Terms should ask customers not to turn it on for responses that carry sensitive data.

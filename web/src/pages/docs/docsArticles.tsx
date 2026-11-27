@@ -473,6 +473,25 @@ export function Alerts() {
         <a href="#grouping">fewer alerts at once</a>.
       </p>
 
+      <h2 id="snapshot">What HawkEye saw</h2>
+      <p>
+        An outage alert for a website or API says what the confirming check actually got, so you can often tell the cause without opening a
+        browser: the status code, content type and size, the address it ended up at, the server’s IP address, the time each step took, and what each
+        location saw. It also lists <strong>what changed since the last good check</strong>, such as a new status code, a different server
+        network, an HTML page where JSON used to be, a response much smaller than usual, or a server that is suddenly slower than its past week.
+      </p>
+      <p>
+        The same details, with the response headers, are on the incident: click <strong>What HawkEye saw</strong> on the Incidents page. Only a
+        fixed list of headers is kept (such as <code>Server</code>, <code>Cache-Control</code> and CDN cache headers), so cookies and credentials
+        never are. Webhooks receive them as a <code>snapshot</code> object.
+      </p>
+      <p>
+        <strong>The response itself</strong> is kept only if you turn on <strong>Keep the start of failed responses</strong> under Failure details
+        on the monitor’s edit page. HawkEye then keeps the first 4 KB of a failed response, encrypted, with the passwords, tokens and header values the
+        monitor sends hidden. It is shown only in the app, behind <strong>Show response</strong>: never in alerts, never to API keys or connected
+        assistants. It is deleted 30 days after the incident ends.
+      </p>
+
       <h2 id="routing">Send each client’s alerts to the right people</h2>
       <p>
         By default every destination receives alerts for every monitor. To route them, tag your monitors (for example by client) and, on the Alerts

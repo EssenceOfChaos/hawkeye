@@ -47,7 +47,8 @@ Limits are enforced in the service layer inside the same transaction as the writ
   anything, and adding one requires a verified account email and is rate-limited — so the product cannot be used to spam third parties.
 - Maximum 10 recipients per organization; only owners change recipients (members can view).
 - Email subjects/bodies are plain text built from monitor names and URLs with control characters stripped, so a malicious monitor name cannot inject headers or extra lines (`TestRenderCannotInjectHeadersOrLines`).
-- Stored delivery errors are truncated and sanitized; check results never contain response bodies.
+- Stored delivery errors are truncated and sanitized; check results never contain response bodies. Failure snapshots in alerts carry allowlisted
+  headers and facts only, never the opt-in body excerpt (see [Failure snapshots](#failure-snapshots)).
 - **Not yet implemented:** one-click unsubscribe links in alert emails (recipients can only be removed by an owner), and bounce/complaint handling (needs a real email provider).
 
 ## SSRF controls (Phase 4)
@@ -66,7 +67,7 @@ Users submit URLs that our servers fetch, so the check engine is an SSRF risk. T
 | Alternate IP spellings (`2130706433`, `0x7f.1`, `127.1`, octal) | They are treated as host names, resolved, and the resulting address is validated; also rejected earlier by monitor URL validation | `TestAlternateIPSpellingsNeverConnect` (asserts a local listener sees zero connections) |
 | Port abuse (SSH, databases, internal services) | Only ports 80 and 443, checked at monitor creation, at dial time and on redirects | `TestPortsOtherThan80And443AreBlocked` |
 | Proxy bypass | The transport ignores `HTTP(S)_PROXY`; a proxy would dial for us | `TestEnvironmentProxyIsIgnored` |
-| Data exfiltration through responses | Bodies are never stored or interpreted (at most 64 KiB is drained); only status, timing and a fixed error summary are persisted. Raw network errors (which can contain internal IPs) are never stored | `TestProhibitedDestinationsUnderProductionPolicy` |
+| Data exfiltration through responses | Check results never store or interpret bodies (at most 64 KiB is drained); only status, timing and a fixed error summary are persisted. A failure snapshot adds allowlisted headers and the server address (always one the policy allowed), and, only for monitors that opted in, the first 4 KB of a failed body, sealed and shown only to the organization's members in the app. Raw network errors (which can contain internal IPs) are never stored | `TestProhibitedDestinationsUnderProductionPolicy`, `TestHeaderAllowlistHasNoSecrets` |
 | Resource exhaustion | Hard per-check timeout (1–30 s, covers DNS, connect, TLS, headers and redirects), 64 KiB response header limit, bounded worker concurrency | `TestTimeout` |
 
 Mutation checks performed while developing: removing the pre-dial validation fails six tests; honoring proxy
@@ -252,6 +253,29 @@ An addition to email and password (`internal/socialauth`, `internal/auth/social.
 - **Confirmation:** posting and deleting incident updates and deleting maintenance windows are marked destructive, so Claude asks before running
   them. That is a request to the client: other clients may not ask, which is why the description of `post_incident_update` says it is public.
 - **No conversation data:** the server stores nothing about the conversation; logs and metrics record the tool, outcome and duration only.
+
+## Failure snapshots
+
+When an outage is confirmed, the incident keeps what the confirming check saw (`incident_snapshots`, `docs/plan-failure-snapshots.md`), and the
+monitor keeps its last good response to compare with (`monitors.last_good`). Both are `checks.ResponseFacts`:
+
+- **Headers: an allowlist, never a denylist** (`checks.snapshotHeaders`): `Server`, cache and CDN headers, `Content-Type`, `Location` (reduced to
+  scheme, host and path), `WWW-Authenticate` (scheme only), rate-limit headers and a few request IDs. Values are cut to 200 characters, at most 20
+  headers. `TestHeaderAllowlistHasNoSecrets` fails if a cookie, auth, token, key, session or CSRF header is ever added.
+- **Addresses:** the final URL without credentials, query or fragment, and the server IP the client connected to (it already passed the address
+  policy). Multi-step checks pass every fact through the run's redactor, so saved values and secrets are `[hidden]`.
+- **The body excerpt is opt-in** (`monitors.capture_failure_body`, off by default; turning it on or off is in the security log through the
+  monitor's changed fields). Only a failed check that got a response keeps one: at most 4 KB of UTF-8 text (binary bodies are dropped), with the
+  monitor's credential and custom header values replaced by `[hidden]` (and a workflow's secrets and saved values), sealed with the secrets box
+  bound to the incident (`incidents.ExcerptContext`), cleared by retention 30 days after the incident resolves. Successful checks read no more of
+  the body than before.
+- **Where the excerpt can go:** only `GET /incidents/:id/snapshot/body`, which is session-only (API keys and connected apps get `SESSION_REQUIRED`)
+  and `Cache-Control: no-store`, rendered by the app as text. It is never selected by the dispatcher (alerts, webhooks, PagerDuty), MCP
+  (`get_incident` returns the snapshot without it), reports, status pages or AI drafts. Tests: `TestOutageAlertsCarryTheSnapshotButNeverTheExcerpt`,
+  `TestSnapshotsAreTheOrganizationsAndTheBodyIsForPeopleInTheApp`, `TestMCPGetIncidentHasTheSnapshotButNotTheBody`,
+  `TestTheBodyExcerptIsOptInSealedAndHidesTheKey`, `TestSnapshotExcerptsAreClearedAfterThirtyDays`.
+- **Text from the monitored site** (header values, the excerpt) is shown as plain text: quoted and escaped in emails, cut to 240 characters a line
+  in chat, React text in the app (`TestSnapshotHeaderValuesAreEscapedInTheEmail`, `FailureSnapshot.test.tsx`).
 
 ## Feature waitlists (public sign-up form)
 

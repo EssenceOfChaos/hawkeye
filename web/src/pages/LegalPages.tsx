@@ -28,7 +28,7 @@ const SUPPORT = 'customer_support@hawkeye.observer'
 export function PrivacyPage() {
   return (
     <Shell title="HawkEye Privacy Policy" draft={false}>
-      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 23, 2026</p>
+      <p><strong>Effective date:</strong> October 14, 2026<br /><strong>Last updated:</strong> November 27, 2026</p>
       <p>
         HawkEye Observer (“HawkEye,” “we,” “us,” or “our”) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and retain information when you
         visit our website, create an account, or use our website-monitoring service (together, the “Service”).
@@ -71,7 +71,8 @@ export function PrivacyPage() {
       <p>When you configure a website or endpoint for monitoring, we process information needed to operate the Service, which includes:</p>
       <ul>
         <li>Monitor name and URL, and your monitoring settings (such as check interval and accepted status codes).</li>
-        <li>For API checks, the request you configure: the request method, custom headers, a request body, authentication credentials (a username and password, a bearer token, or an API key), and the response checks you define. For multi-step API checks, the same for each step, the values you choose to pass from one step to the next, and secrets you save for them (such as a test account’s password), which are encrypted like other credentials. For each run we keep each step’s name, status code, time and, if it failed, the reason; we never store what the responses contained, and secrets and passed values are hidden in results and alerts.</li>
+        <li>For API checks, the request you configure: the request method, custom headers, a request body, authentication credentials (a username and password, a bearer token, or an API key), and the response checks you define. For multi-step API checks, the same for each step, the values you choose to pass from one step to the next, and secrets you save for them (such as a test account’s password), which are encrypted like other credentials. For each run we keep each step’s name, status code, time and, if it failed, the reason; secrets and passed values are hidden in results and alerts.</li>
+        <li>When an outage is confirmed, a record of what the check saw, kept with the incident: the status code, content type and size, the address it ended up at, the server’s IP address and certificate, the time each step took, what each check location saw, a fixed list of response headers that never includes cookies or credentials, and what changed since the last successful check. We keep the last successful check’s same details with the monitor to compare against. We do not store what responses contained, unless you turn on <strong>Keep the start of failed responses</strong> for a monitor: we then keep the first 4 KB of a failed response, encrypted, with the credentials and header values that monitor sends hidden, and show it only in the app to your team.</li>
         <li>For each check: the time, the HTTP status code, the response time, whether your response checks passed, and a short error category if it failed. To evaluate response checks we read the response (up to the first 1 MB) while the check runs; we do not store its content.</li>
         <li>For heartbeat (cron job) monitors, each ping your job sends to its private ping address: the time, the request method, the IP address and user agent it came from, whether it reported success or failure (and any exit status), and the first 1,000 characters of anything your job sends with it. We keep the last 100 pings of each heartbeat monitor, show them only to your organization, and delete them with the monitor. Do not send passwords or other secrets in a ping.</li>
         <li>Incident and recovery records, alert settings, and records of the notifications we sent.</li>
@@ -251,7 +252,7 @@ export function PrivacyPage() {
       <h3>F. Chat and webhook destinations</h3>
       <p>
         If you add a Slack, Discord, Microsoft Teams, Telegram, PagerDuty or webhook destination, we send alert content to the address you provide: the monitor’s name and web address, the time of the event, a short description of the failure (or the certificate
-        or domain expiry date), and a link back to HawkEye. That destination is operated by you or by a third party you chose (for example Slack, Discord, Microsoft, Telegram or PagerDuty), and its handling of the information is governed by its own terms and policies, not this
+        or domain expiry date), for outages what the check saw (status, timings, server address, what changed since the last successful check and, for email and webhooks, the kept response headers; never the response itself), and a link back to HawkEye. That destination is operated by you or by a third party you chose (for example Slack, Discord, Microsoft, Telegram or PagerDuty), and its handling of the information is governed by its own terms and policies, not this
         Policy. Treat these addresses and bot tokens as secrets: anyone who has one can post to your channel.
       </p>
 
@@ -276,6 +277,7 @@ export function PrivacyPage() {
       <p>Other retention periods:</p>
       <ul>
         <li><strong>Resolved incidents</strong> follow the same plan periods. Incidents that are still open are kept until they are resolved.</li>
+        <li><strong>Failed responses</strong> you chose to keep for a monitor are deleted 30 days after their incident is resolved, on every plan; the rest of what the check saw is kept with the incident.</li>
         <li><strong>Monitors you delete</strong> are permanently removed after 30 days. Their credentials, custom headers, and request body are erased immediately when you delete them.</li>
         <li><strong>Sessions and one-time links</strong> (sign-in sessions, password-reset and verification links) expire automatically, within 14 days, 1 hour, and 48 hours respectively, and are then removed.</li>
         <li><strong>API keys</strong> are deleted 30 days after you revoke them, 90 days after they expire, or as soon as you leave the organization or close your account.</li>
