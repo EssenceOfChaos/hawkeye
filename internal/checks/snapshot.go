@@ -2,7 +2,9 @@ package checks
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -16,13 +18,17 @@ import (
 )
 
 // What a check saw of a response, for failure snapshots (docs/plan-failure-snapshots.md). ResponseFacts is never stored with a check result:
-// it is kept as the monitor's last good response (monitors.last_good) and, when an outage is confirmed, in the incident's snapshot.
+// it is kept as each location's last good response (monitor_last_good) and, when an outage is confirmed, in the incident's snapshot.
 
 const (
 	maxSnapshotHeaders = 20
 	maxHeaderValueLen  = 200
 	// MaxExcerptBytes is how much of a failed response's body a monitor that opted in keeps.
 	MaxExcerptBytes = 4 << 10
+	// excerptSlack is read beyond MaxExcerptBytes so that a secret crossing the cut is still recognized and hidden before cutting.
+	excerptSlack = 1 << 10
+	// minPartialSecret is the shortest start of a secret left at the end of an excerpt that is dropped (shorter ones say nothing).
+	minPartialSecret = 3
 	// maxChanges bounds the "what changed since the last good check" list.
 	maxChanges = 6
 )
@@ -37,7 +43,7 @@ var snapshotHeaders = []struct {
 }{
 	{name: "Age", volatile: true},
 	{name: "Cache-Control"},
-	{name: "Cf-Cache-Status"},
+	{name: "Cf-Cache-Status", volatile: true}, // HIT, MISS, EXPIRED... from one request to the next
 	{name: "Cf-Ray", volatile: true},
 	{name: "Content-Encoding"},
 	{name: "Content-Length", volatile: true}, // size is compared on its own, with a tolerance
@@ -47,10 +53,10 @@ var snapshotHeaders = []struct {
 	{name: "Ratelimit-", prefix: true, volatile: true},
 	{name: "Retry-After", volatile: true},
 	{name: "Server"},
-	{name: "Via"},
+	{name: "Via", volatile: true}, // names the edge server (CloudFront puts a per-edge ID in it)
 	{name: "Www-Authenticate"},
 	{name: "X-Amz-Cf-Pop", volatile: true},
-	{name: "X-Cache"},
+	{name: "X-Cache", volatile: true}, // hit or miss
 	{name: "X-Powered-By"},
 	{name: "X-Ratelimit-", prefix: true, volatile: true},
 	{name: "X-Request-Id", volatile: true},
@@ -130,24 +136,56 @@ func reducedLocation(v string) string {
 	return displayURL(u)
 }
 
-// excerptOf builds the excerpt of a body (the first bytes read, at most MaxExcerptBytes kept), with secrets hidden.
+// excerptOf builds the excerpt of a body (the first bytes read, at most MaxExcerptBytes kept), with secrets hidden. Secrets are hidden in a
+// window a little longer than what is kept, before cutting, so one that crosses the cut is still caught; the start of a secret left at the very
+// end (one that continues past the window) is dropped.
 func excerptOf(body []byte, more bool, red *redactor) *Excerpt {
-	n := validPrefix(body, MaxExcerptBytes)
-	kept := body[:n]
-	if !utf8.Valid(kept) {
+	w := validPrefix(body, MaxExcerptBytes+excerptSlack)
+	window := body[:w]
+	if !utf8.Valid(window) {
 		return &Excerpt{Binary: true}
 	}
-	return &Excerpt{Text: red.clean(string(kept)), Truncated: more || n < len(body)}
+	text := red.clean(string(window))
+	n := validPrefix([]byte(text), MaxExcerptBytes)
+	cut := n < len(text)
+	return &Excerpt{Text: red.trimPartial(text[:n]), Truncated: more || w < len(body) || cut}
 }
 
-// credentialRedactor hides what a monitor sends that may come back in a response: its credentials and its custom header values.
+// credentialRedactor hides what a monitor sends that may come back in a response (an error page that echoes the request): its credentials,
+// including the encoded form basic authentication actually sends, its custom header values, and its request body with each string in it.
 func credentialRedactor(t Target) *redactor {
 	r := &redactor{}
 	r.add(t.Auth.Secret)
+	if t.Auth.Type == AuthBasic {
+		r.add(base64.StdEncoding.EncodeToString([]byte(t.Auth.Username + ":" + t.Auth.Secret)))
+	}
 	for _, h := range t.Headers {
 		r.add(h.Value)
 	}
+	if b := strings.TrimSpace(t.Body); b != "" {
+		r.add(b)
+		var v any
+		if json.Unmarshal([]byte(b), &v) == nil {
+			addJSONStrings(r, v)
+		}
+	}
 	return r
+}
+
+// addJSONStrings adds every string value (not key) of a JSON document to r: a login body's password, a token request's secret.
+func addJSONStrings(r *redactor, v any) {
+	switch x := v.(type) {
+	case string:
+		r.add(x)
+	case []any:
+		for _, e := range x {
+			addJSONStrings(r, e)
+		}
+	case map[string]any:
+		for _, e := range x {
+			addJSONStrings(r, e)
+		}
+	}
 }
 
 // Fingerprint identifies the parts of the facts that make a response "the same" as before: status, final address, content type, stable
@@ -228,8 +266,10 @@ func Compare(lastGood *ResponseFacts, failing ResponseFacts, usual *Timings) []C
 	if responded && lastGood.StatusCode != 0 {
 		add("status", "", strconv.Itoa(lastGood.StatusCode), strconv.Itoa(failing.StatusCode))
 	}
-	// Load balancers and CDNs answer from many addresses of one network: only a move to another network counts.
-	if failing.ServerAddr != "" && lastGood.ServerAddr != "" && addrNetwork(failing.ServerAddr) != addrNetwork(lastGood.ServerAddr) {
+	// Load balancers and CDNs answer from many addresses of one network: only a move to another network counts. A check that followed a
+	// redirect and then got no response may name an earlier hop's server, not the one the last good check reached: not compared.
+	hopUnknown := !responded && failing.Timings != nil && failing.Timings.Redirects > 0
+	if failing.ServerAddr != "" && lastGood.ServerAddr != "" && !hopUnknown && addrNetwork(failing.ServerAddr) != addrNetwork(lastGood.ServerAddr) {
 		add("server_addr", "", lastGood.ServerAddr, failing.ServerAddr)
 	}
 	if responded {

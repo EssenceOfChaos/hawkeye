@@ -282,12 +282,16 @@ func (c *Checker) run(ctx context.Context, t Target, jar http.CookieJar, keep bo
 			return Result{}, nil, ctx.Err() // caller shut down; the outcome says nothing about the site
 		}
 		if res.CertExpiresAt == nil {
-			res.CertExpiresAt = expiredCertificate(err, c.now())
+			var issuer string
+			res.CertExpiresAt, issuer = expiredCertificate(err, c.now())
 			if res.Facts != nil {
-				res.Facts.CertExpiresAt = res.CertExpiresAt
+				res.Facts.CertExpiresAt, res.Facts.CertIssuer = res.CertExpiresAt, issuer
 			}
 		}
 		res.ErrorCategory, res.ErrorSummary = Classify(err)
+		if res.ErrorCategory == CatBlocked {
+			res.Facts = nil // the address rules refused it before any request: nothing was seen
+		}
 		return finish()
 	}
 	defer resp.Body.Close()
@@ -323,7 +327,7 @@ func (c *Checker) run(ctx context.Context, t Target, jar http.CookieJar, keep bo
 		bodyRead = int64(len(respBody))
 	} else {
 		if t.CaptureBody {
-			head, _ = io.ReadAll(io.LimitReader(resp.Body, MaxExcerptBytes+1))
+			head, _ = io.ReadAll(io.LimitReader(resp.Body, MaxExcerptBytes+excerptSlack+1))
 		}
 		n, _ := io.CopyN(io.Discard, resp.Body, maxDrainBytes-int64(len(head)))
 		bodyRead = int64(len(head)) + n
@@ -338,7 +342,7 @@ func (c *Checker) run(ctx context.Context, t Target, jar http.CookieJar, keep bo
 		if !t.CaptureBody {
 			return
 		}
-		b, more := head, len(head) > MaxExcerptBytes || truncated
+		b, more := head, len(head) > MaxExcerptBytes+excerptSlack || truncated
 		if respBody != nil {
 			b, more = respBody, truncated || len(respBody) > MaxExcerptBytes
 		}
@@ -426,22 +430,22 @@ func (w *certWatch) issuerName() string {
 	return w.issuer
 }
 
-// expiredCertificate returns the certificate's expiry when a handshake failed because the server's own certificate had expired.
-func expiredCertificate(err error, now time.Time) *time.Time {
+// expiredCertificate returns the certificate's expiry and issuer when a handshake failed because the server's own certificate had expired.
+func expiredCertificate(err error, now time.Time) (*time.Time, string) {
 	var cv *tls.CertificateVerificationError
 	if !errors.As(err, &cv) || len(cv.UnverifiedCertificates) == 0 {
-		return nil
+		return nil, ""
 	}
 	var inv x509.CertificateInvalidError
 	if !errors.As(cv.Err, &inv) || inv.Reason != x509.Expired {
-		return nil
+		return nil, ""
 	}
 	leaf := cv.UnverifiedCertificates[0]
 	if !leaf.NotAfter.Before(now) {
-		return nil // an intermediate expired, not the site's certificate
+		return nil, "" // an intermediate expired, not the site's certificate
 	}
 	na := leaf.NotAfter
-	return &na
+	return &na, leaf.Issuer.CommonName
 }
 
 func truncate(s string, n int) string {

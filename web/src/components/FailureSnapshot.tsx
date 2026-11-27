@@ -149,7 +149,10 @@ export function FailureSnapshot({ incidentID, monitorID }: { incidentID: string;
       {!snap.has_body_excerpt && snap.body_excerpt_cleared_at && (
         <p className="hint">The response was removed 30 days after the incident ended.</p>
       )}
-      {!snap.has_body_excerpt && !snap.body_excerpt_cleared_at && f.status_code ? (
+      {!snap.has_body_excerpt && !snap.body_excerpt_cleared_at && snap.body_requested && (
+        <p className="hint">{snap.body_binary ? 'The response wasn’t text, so it wasn’t kept.' : 'The response had no body to keep.'}</p>
+      )}
+      {!snap.has_body_excerpt && !snap.body_excerpt_cleared_at && !snap.body_requested && f.status_code ? (
         <p className="hint">
           To see the response itself next time, turn on <Link to={`/monitors/${monitorID}/edit`}>Keep the start of failed responses</Link> in the
           monitor’s alert settings.

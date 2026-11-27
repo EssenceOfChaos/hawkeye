@@ -63,7 +63,8 @@ check, so they don't show up as "changed" every time, and different edges in dif
 
 ### The last good response
 
-`monitors.last_good jsonb` holds the `ResponseFacts` of the latest successful check (for a workflow, one entry per step, keyed by position).
+`monitor_last_good` holds, per monitor and **per location**, the `ResponseFacts` of the latest successful check (for a workflow, one entry per
+step, keyed by position). Per location because CDNs and geo-DNS answer each location from other servers.
 It is written **only when its fingerprint changes** (status, final URL, content type, stable headers, server address, certificate; not
 timings or size), so a steady site writes it once and then rarely. The `UPDATE monitors` that every check already runs carries it, so it adds
 no extra statement. Size counts in steps of 25%, and the server address by its network (/24 or /48), so small size changes and a load balancer's
@@ -233,3 +234,18 @@ down?" can be answered from Claude.
 - **On a phone** the expanded incident row stays at the screen's width instead of the table's (this also fixes the incident updates form there).
 - **Not changed:** the incident engine is constructed with the secrets box only in the worker, where outages open; the API's heartbeat store opens
   heartbeat incidents, which have no snapshot.
+
+## Changes after review (2026-11-27)
+
+A code review of the branch found nine problems; all were fixed:
+
+- **Last good responses are per location** (`monitor_last_good`, in migration `000058`), not one per monitor: with several locations they took
+  turns overwriting one value, and a failure was compared with another location's servers. Editing the request or the locations clears them.
+- **`X-Cache`, `Cf-Cache-Status` and `Via` are volatile:** they change between HIT and MISS, and per CDN edge.
+- **An expired certificate keeps its issuer** (from the failed handshake), so it no longer shows as a changed certificate.
+- **The excerpt hides more:** basic authentication in its encoded form, the request body and every string in a JSON body. Secrets are hidden in
+  a slightly longer window before the 4 KB cut, and a secret's start left at the very end is dropped.
+- **No server address change after a failed redirect** (the address may be an earlier hop's).
+- **Refused destinations have no snapshot;** a failed DNS lookup still does, with its timings.
+- **`body_requested` and `body_binary`** on the snapshot, so the app says "the response had no body" or "wasn't text" instead of asking to turn
+  on a setting that is already on.

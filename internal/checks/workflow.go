@@ -185,7 +185,7 @@ func (c *Checker) runWorkflow(ctx context.Context, w Workflow, preview bool) (Re
 		}
 		step.StatusCode, step.ResponseTimeMs, step.Timings, step.Facts = res.StatusCode, res.ResponseTimeMs, res.Timings, red.facts(res.Facts)
 		if e := res.Excerpt; e != nil {
-			out.Excerpt = &Excerpt{Text: red.clean(e.Text), Truncated: e.Truncated, Binary: e.Binary} // only a failing step has one
+			out.Excerpt = &Excerpt{Text: red.trimPartial(red.clean(e.Text)), Truncated: e.Truncated, Binary: e.Binary} // only a failing step has one
 		}
 		if res.ResponseTimeMs != nil {
 			total, timed = total+*res.ResponseTimeMs, true
@@ -374,6 +374,19 @@ func (r *redactor) facts(f *ResponseFacts) *ResponseFacts {
 		c.Headers[i] = Header{Name: h.Name, Value: r.clean(h.Value)}
 	}
 	return &c
+}
+
+// trimPartial drops the start of a secret left at the very end of s (at least minPartialSecret bytes of it), as when a cut fell inside one.
+func (r *redactor) trimPartial(s string) string {
+	for _, v := range r.values {
+		for k := min(len(v)-1, len(s)); k >= minPartialSecret; k-- {
+			if strings.HasSuffix(s, v[:k]) {
+				s = s[:len(s)-k]
+				break
+			}
+		}
+	}
+	return s
 }
 
 func (r *redactor) clean(s string) string {

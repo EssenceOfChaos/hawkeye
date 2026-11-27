@@ -12,6 +12,7 @@ import (
 
 	"hawkeye/internal/checks"
 	"hawkeye/internal/incidents"
+	"hawkeye/internal/regions"
 	"hawkeye/internal/safehttp"
 	"hawkeye/internal/testutil"
 	"hawkeye/internal/worker"
@@ -61,9 +62,9 @@ func TestAnOutageKeepsWhatHawkEyeSawAndWhatChanged(t *testing.T) {
 	// Good checks keep the last good response, written once while it stays the same.
 	e.round(t, w)
 	var fp1, fp2 string
-	e.pool.QueryRow(t.Context(), `SELECT COALESCE(last_good_fp, '') FROM monitors WHERE id = $1`, id).Scan(&fp1)
+	e.pool.QueryRow(t.Context(), `SELECT COALESCE((SELECT fingerprint FROM monitor_last_good WHERE monitor_id = $1), '')`, id).Scan(&fp1)
 	e.round(t, w)
-	e.pool.QueryRow(t.Context(), `SELECT COALESCE(last_good_fp, '') FROM monitors WHERE id = $1`, id).Scan(&fp2)
+	e.pool.QueryRow(t.Context(), `SELECT COALESCE((SELECT fingerprint FROM monitor_last_good WHERE monitor_id = $1), '')`, id).Scan(&fp2)
 	if fp1 == "" || fp1 != fp2 {
 		t.Fatalf("last good fingerprint %q then %q", fp1, fp2)
 	}
@@ -150,6 +151,63 @@ func TestNoExcerptUnlessTheMonitorOptedIn(t *testing.T) {
 	// A new monitor has no last good response: a snapshot, but no changes.
 	s, err := incidents.LoadSnapshot(t.Context(), e.pool, inc)
 	if err != nil || s == nil || len(s.Changes) != 0 {
+		t.Fatalf("%v %+v", err, s)
+	}
+}
+
+// Each location keeps its own last good response, and a failure is compared with what the same location saw: geo-DNS and CDNs answer each
+// location from other servers, which must not show up as changes.
+func TestEachLocationIsComparedWithItsOwnLastGoodResponse(t *testing.T) {
+	e := newEnv(t)
+	set, _ := regions.Parse("us,eu")
+	id := e.monitor(t, "https://example.com")
+	e.pool.Exec(t.Context(), `UPDATE monitors SET regions = '{us,eu}' WHERE id = $1`, id)
+	store := checks.NewStore(e.pool, checks.Thresholds{Failure: 1, Recovery: 1}, incidents.Engine{Box: testutil.SecretBox()}).WithRegions(set)
+	record := func(region string, ok bool, addr, server string) {
+		t.Helper()
+		now := time.Now()
+		code := 200
+		r := checks.Result{CheckedAt: now, FinishedAt: now, Region: region, Success: ok, StatusCode: &code, FailedStep: -1,
+			Facts: &checks.ResponseFacts{StatusCode: code, SizeBytes: 100, ServerAddr: addr, Headers: []checks.Header{{Name: "Server", Value: server}}}}
+		if !ok {
+			code = 503
+			r.ErrorCategory, r.ErrorSummary, r.Facts.StatusCode = checks.CatHTTPStatus, "Received HTTP 503", 503
+		}
+		if _, err := store.Record(t.Context(), id, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record("us", true, "198.51.100.7", "edge-us")
+	record("eu", true, "203.0.113.7", "edge-eu")
+	var n int
+	e.pool.QueryRow(t.Context(), `SELECT count(*) FROM monitor_last_good WHERE monitor_id = $1`, id).Scan(&n)
+	if n != 2 {
+		t.Fatalf("%d last good responses, want one per location", n)
+	}
+	// Both fail from their own usual servers: the only change is the status, not a server or address from the other location.
+	record("us", false, "198.51.100.7", "edge-us")
+	record("eu", false, "203.0.113.7", "edge-eu")
+	s, err := incidents.LoadSnapshot(t.Context(), e.pool, e.openIncident(t, id))
+	if err != nil || s == nil {
+		t.Fatalf("%v %+v", err, s)
+	}
+	if len(s.Changes) != 1 || s.Changes[0].Field != "status" {
+		t.Fatalf("changes %+v", s.Changes)
+	}
+}
+
+// With capture on, a response with no body says so instead of asking to turn on the setting that already is.
+func TestABodylessFailureIsRecordedAsRequested(t *testing.T) {
+	e := newEnv(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusBadGateway) }))
+	defer srv.Close()
+	id := e.monitor(t, srv.URL)
+	e.pool.Exec(t.Context(), `UPDATE monitors SET capture_failure_body = true WHERE id = $1`, id)
+	w := e.snapshotWorker(loopbackCfg())
+	e.round(t, w)
+	e.round(t, w)
+	s, err := incidents.LoadSnapshot(t.Context(), e.pool, e.openIncident(t, id))
+	if err != nil || s == nil || s.HasExcerpt || !s.BodyRequested || s.BodyBinary {
 		t.Fatalf("%v %+v", err, s)
 	}
 }

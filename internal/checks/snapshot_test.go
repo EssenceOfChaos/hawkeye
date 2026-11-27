@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -230,7 +231,7 @@ func TestCompare(t *testing.T) {
 func TestCompareKeepsAtMostSixChanges(t *testing.T) {
 	good := &ResponseFacts{StatusCode: 200, SizeBytes: 100}
 	failing := ResponseFacts{StatusCode: 500, SizeBytes: 100}
-	for _, n := range []string{"Cache-Control", "Cf-Cache-Status", "Content-Encoding", "Server", "Via", "X-Cache", "X-Powered-By"} {
+	for _, n := range []string{"Cache-Control", "Content-Encoding", "Location", "Server", "Www-Authenticate", "X-Powered-By"} {
 		failing.Headers = append(failing.Headers, Header{Name: n, Value: "v"})
 	}
 	if c := Compare(good, failing, nil); len(c) != maxChanges || c[0].Field != "status" {
@@ -259,5 +260,75 @@ func TestCompareIgnoresBalancedAddressesAndCountsTheContentTypeOnce(t *testing.T
 	}
 	if a, b := (ResponseFacts{ServerAddr: "203.0.113.7"}), (ResponseFacts{ServerAddr: "203.0.113.9"}); a.Fingerprint() != b.Fingerprint() {
 		t.Fatal("a balanced address rewrote the last good response")
+	}
+}
+
+// Cache state and edge names change between requests: never a change, never a new last good response.
+func TestCacheHeadersAreVolatile(t *testing.T) {
+	a := ResponseFacts{StatusCode: 200, SizeBytes: 100, Headers: []Header{{Name: "Cf-Cache-Status", Value: "HIT"}, {Name: "Via", Value: "1.1 abc.cloudfront.net"},
+		{Name: "X-Cache", Value: "Hit from cloudfront"}}}
+	b := ResponseFacts{StatusCode: 200, SizeBytes: 100, Headers: []Header{{Name: "Cf-Cache-Status", Value: "MISS"}, {Name: "Via", Value: "1.1 def.cloudfront.net"},
+		{Name: "X-Cache", Value: "Miss from cloudfront"}}}
+	if a.Fingerprint() != b.Fingerprint() || len(Compare(&a, b, nil)) != 0 {
+		t.Fatalf("%+v", Compare(&a, b, nil))
+	}
+}
+
+// A site still serving its expired certificate shows the same certificate, issuer included: no "certificate changed".
+func TestAnExpiredCertificateKeepsItsIssuer(t *testing.T) {
+	url, cfg := tlsServer(t, time.Now().Add(-48*time.Hour), time.Now().Add(-time.Hour), sleepy(0))
+	r := check(t, cfg, Target{URL: url})
+	if r.Success || r.Facts == nil || r.Facts.CertExpiresAt == nil || r.Facts.CertIssuer != "test ca" {
+		t.Fatalf("%s %+v", r.ErrorCategory, r.Facts)
+	}
+	good := *r.Facts
+	if c := Compare(&good, *r.Facts, nil); len(c) != 0 {
+		t.Fatalf("%+v", c)
+	}
+}
+
+func TestExcerptHidesBasicAuthAndTheRequestBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		b, _ := io.ReadAll(r.Body)
+		w.Write([]byte("Authorization: " + r.Header.Get("Authorization") + "\nbody: " + string(b)))
+	}))
+	defer srv.Close()
+	r := check(t, loopbackCfg(), Target{URL: srv.URL, Method: "POST", CaptureBody: true, Auth: Auth{Type: AuthBasic, Username: "user", Secret: "hunter2"},
+		Body: `{"client_secret":"cs-0123456789","grant":"x"}`})
+	e := r.Excerpt
+	if e == nil || strings.Contains(e.Text, "dXNlcjpodW50ZXIy") || strings.Contains(e.Text, "cs-0123456789") {
+		t.Fatalf("not hidden: %+v", e)
+	}
+}
+
+// A secret that crosses the 4 KB cut is hidden whole, not left half in the clear; the start of one that runs past what was read is dropped.
+func TestASecretAtTheCutIsHidden(t *testing.T) {
+	secret := "sk_live_" + strings.Repeat("A", 32)
+	red := &redactor{}
+	red.add(secret)
+	body := []byte(strings.Repeat("y", MaxExcerptBytes-16) + secret + strings.Repeat("z", 100))
+	e := excerptOf(body, false, red)
+	if strings.Contains(e.Text, "sk_live_") || !e.Truncated || len(e.Text) > MaxExcerptBytes {
+		t.Fatalf("%q", e.Text[len(e.Text)-40:])
+	}
+	if got := red.trimPartial(strings.Repeat("y", 10) + secret[:12]); got != strings.Repeat("y", 10) {
+		t.Fatalf("%q", got)
+	}
+}
+
+// After a redirect with no response, the address may be an earlier hop's: not compared with the last good one.
+func TestNoAddressChangeAfterAFailedRedirect(t *testing.T) {
+	good := &ResponseFacts{StatusCode: 200, SizeBytes: 100, ServerAddr: "198.51.100.7"}
+	failing := ResponseFacts{SizeBytes: -1, ServerAddr: "203.0.113.9", Timings: &Timings{Redirects: 1}}
+	if c := Compare(good, failing, nil); len(c) != 0 {
+		t.Fatalf("%+v", c)
+	}
+}
+
+// A destination the address rules refuse was never contacted: no facts, so no snapshot.
+func TestABlockedDestinationHasNoFacts(t *testing.T) {
+	if r := check(t, loopbackCfg(), Target{URL: "http://10.0.0.1/"}); r.ErrorCategory != CatBlocked || r.Facts != nil {
+		t.Fatalf("%s %+v", r.ErrorCategory, r.Facts)
 	}
 }

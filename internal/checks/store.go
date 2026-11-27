@@ -127,6 +127,10 @@ func (s *Store) Record(ctx context.Context, monitorID uuid.UUID, r Result) (Outc
 func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r Result) (Outcome, error) {
 	var out Outcome
 	err := func() error {
+		region := r.Region
+		if region == "" {
+			region = s.regions.Primary()
+		}
 		var enabled, maintenance bool
 		var orgID uuid.UUID
 		var chosen []string
@@ -141,8 +145,9 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 				slow_threshold_ms, slow_checks, slow_streak, normal_streak, EXISTS (SELECT 1 FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'),
 				CASE WHEN kind = 'heartbeat' THEN 'off' ELSE recheck END, upper(method) NOT IN `+writeMethodsSQL+` AND NOT EXISTS (SELECT 1 FROM monitor_steps WHERE monitor_id = monitors.id AND upper(method) IN `+writeMethodsSQL+`),
 				COALESCE(EXTRACT(EPOCH FROM next_check_at - $2), 0)::float8,
-				CASE WHEN kind = 'dns' THEN COALESCE(dns_record_type, '') ELSE '' END, dns_change_alerts, dns_change_strict, COALESCE(last_good_fp, '')
-			FROM monitors WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, monitorID, r.FinishedAt).
+				CASE WHEN kind = 'dns' THEN COALESCE(dns_record_type, '') ELSE '' END, dns_change_alerts, dns_change_strict,
+				COALESCE((SELECT fingerprint FROM monitor_last_good WHERE monitor_id = monitors.id AND region = $3), '')
+			FROM monitors WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, monitorID, r.FinishedAt, region).
 			Scan(&out.Before.Status, &out.Before.Failures, &out.Before.Successes, &enabled, &maintenance, &orgID, &chosen,
 				&speed.thresholdMs, &speed.checks, &speed.state.SlowStreak, &speed.state.NormalStreak, &speed.state.Slow,
 				&rf.setting, &rf.readOnly, &untilNext, &dns.recordType, &dns.on, &dns.strict, &lastGoodFP)
@@ -153,10 +158,6 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 			return err
 		}
 
-		region := r.Region
-		if region == "" {
-			region = s.regions.Primary()
-		}
 		summary := truncate(r.ErrorSummary, maxSummaryLen)
 		var steps any // NULL unless a workflow run
 		if len(r.Steps) > 0 {
@@ -207,23 +208,24 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 		rf.locationFailures, rf.monitorDown = out.After.Failures, out.Before.Status == StatusDown
 		rf.untilNextCheck = time.Duration(untilNext * float64(time.Second))
 		out.Recheck = wantRecheck(rf, s.thresholds.Failure, s.recheck)
-		// The last good response, for "what changed" in a later failure snapshot: written only when it differs (NULL leaves it).
-		var goodFacts any
-		var goodFP *string
-		if counts && r.Success {
-			if facts, fp := lastGood(r); fp != "" && fp != lastGoodFP {
-				goodFacts, goodFP = facts, &fp
-			}
-		}
 		_, err = tx.Exec(ctx, `UPDATE monitors SET current_status = $2, consecutive_failures = $3, consecutive_successes = $4,
-			last_checked_at = $5, last_success_at = CASE WHEN $6 THEN $5 ELSE last_success_at END,
-			last_good = CASE WHEN $7::text IS NULL THEN last_good ELSE $8::jsonb END, last_good_fp = COALESCE($7, last_good_fp)
-			WHERE id = $1`, monitorID, out.After.Status, out.After.Failures, out.After.Successes, r.FinishedAt, r.Success, goodFP, goodFacts)
+			last_checked_at = $5, last_success_at = CASE WHEN $6 THEN $5 ELSE last_success_at END
+			WHERE id = $1`, monitorID, out.After.Status, out.After.Failures, out.After.Successes, r.FinishedAt, r.Success)
 		if err != nil {
 			return err
 		}
 		if err := s.recordCertificate(ctx, tx, monitorID, r); err != nil {
 			return err
+		}
+		// This location's last good response, for "what changed" in a later failure snapshot: written only when it differs.
+		if counts && r.Success {
+			if facts, fp := lastGood(r); fp != "" && fp != lastGoodFP {
+				if _, err := tx.Exec(ctx, `INSERT INTO monitor_last_good (monitor_id, region, facts, fingerprint) VALUES ($1, $2, $3, $4)
+					ON CONFLICT (monitor_id, region) DO UPDATE SET facts = EXCLUDED.facts, fingerprint = EXCLUDED.fingerprint, updated_at = now()`,
+					monitorID, region, facts, fp); err != nil {
+					return err
+				}
+			}
 		}
 		// DNS change alerts follow the record's answers, outside maintenance like the streaks (a re-check is an extra look, not one more check in a
 		// row). The answers are only kept in the change-alert tables, never with the result.
@@ -406,7 +408,7 @@ func lastGood(r Result) (any, string) {
 	return facts, fps.String()
 }
 
-// LastGoodFor picks, from a stored last_good value, the facts to compare a failure with: the monitor's own, or the failing step's.
+// LastGoodFor picks, from a stored monitor_last_good value, the facts to compare a failure with: the monitor's own, or the failing step's.
 func LastGoodFor(raw []byte, step int) *ResponseFacts {
 	if len(raw) == 0 {
 		return nil

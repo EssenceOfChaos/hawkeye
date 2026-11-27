@@ -397,18 +397,18 @@ have none, nor do incidents from before 2026-11-27). Snapshot:
            "cert_expires_at": "…", "cert_issuer": "R11", "timings": {"dns_ms": 12, "connect_ms": 31, "tls_ms": 48, "wait_ms": 2410, "redirects": 0}},
  "changes": [{"field": "status", "before": "200", "after": "502"}, {"field": "timing", "name": "wait", "before": "180 ms", "after": "2.4 s"}],
  "locations": [{"region": "eu-central", "name": "Amsterdam", "status": "down", "error": "Received HTTP 502", "checked_at": "…"}],
- "has_body_excerpt": false, "body_excerpt_cleared_at": null}
+ "has_body_excerpt": false, "body_excerpt_cleared_at": null, "body_requested": false, "body_binary": false}
 ```
 
 - `facts.status_code` is 0 (left out) when no response arrived; the rest says how far the check got. `size_bytes` is -1 when unknown, with
   `size_at_least` when reading stopped at a limit. Headers come from a fixed allowlist (`docs/security.md#failure-snapshots`), never cookies or
   credentials. For a multi-step check, `facts` are the failing step's, named by `step_index` (0-based) and `step_name`.
-- `changes` compares with the monitor's last good response (reset when the request is edited): `status`, `server_addr` (only a move to another /24
+- `changes` compares with the last good response **of the same location** (forgotten when the request or the locations are edited): `status`, `server_addr` (only a move to another /24
   or /48: load balancers rotate within one), `final_url`, `content_type`, `certificate`, `header` (with `name`; volatile ones such as `Age` and request
   IDs never count), `size` (more than halved, or grown by half) and `timing` (the phase that grew most, when over twice its 7-day average and at least
   100 ms longer). At most 6, most telling first; empty for a monitor with no good check yet.
 - `locations`: each location's latest result, for monitors checked from several.
-- With `capture_failure_body` on, a failed check that got a text response also keeps its first 4 KB, with the monitor's credential and header values
+- With `capture_failure_body` on, a failed check that got a text response also keeps its first 4 KB, with the monitor's credentials (basic authentication also in its encoded form), header values and request body (and each string in it)
   (and a workflow's secrets and saved values) replaced by `[hidden]`, encrypted, and cleared 30 days after the incident resolves. It is returned only by
   the session-only `/snapshot/body`, never in alerts, webhooks, MCP or reports.
 

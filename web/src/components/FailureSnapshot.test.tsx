@@ -73,6 +73,17 @@ describe('FailureSnapshot', () => {
     expect(await screen.findByText('The response was removed 30 days after the incident ended.')).toBeInTheDocument()
   })
 
+  it('says why nothing was kept when the monitor already keeps responses', async () => {
+    setup({ ...SNAP, has_body_excerpt: false, body_requested: true, body_binary: true })
+    expect(await screen.findByText('The response wasn’t text, so it wasn’t kept.')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Keep the start of failed responses' })).toBeNull()
+  })
+
+  it('says an empty response had nothing to keep', async () => {
+    setup({ ...SNAP, has_body_excerpt: false, body_requested: true })
+    expect(await screen.findByText('The response had no body to keep.')).toBeInTheDocument()
+  })
+
   it('renders nothing for an incident without a snapshot', async () => {
     const { container } = setup(null)
     await vi.waitFor(() => expect(container.textContent).toBe(''))

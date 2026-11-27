@@ -257,7 +257,7 @@ An addition to email and password (`internal/socialauth`, `internal/auth/social.
 ## Failure snapshots
 
 When an outage is confirmed, the incident keeps what the confirming check saw (`incident_snapshots`, `docs/plan-failure-snapshots.md`), and the
-monitor keeps its last good response to compare with (`monitors.last_good`). Both are `checks.ResponseFacts`:
+monitor keeps each location's last good response to compare with (`monitor_last_good`). Both are `checks.ResponseFacts`:
 
 - **Headers: an allowlist, never a denylist** (`checks.snapshotHeaders`): `Server`, cache and CDN headers, `Content-Type`, `Location` (reduced to
   scheme, host and path), `WWW-Authenticate` (scheme only), rate-limit headers and a few request IDs. Values are cut to 200 characters, at most 20
@@ -266,7 +266,9 @@ monitor keeps its last good response to compare with (`monitors.last_good`). Bot
   policy). Multi-step checks pass every fact through the run's redactor, so saved values and secrets are `[hidden]`.
 - **The body excerpt is opt-in** (`monitors.capture_failure_body`, off by default; turning it on or off is in the security log through the
   monitor's changed fields). Only a failed check that got a response keeps one: at most 4 KB of UTF-8 text (binary bodies are dropped), with the
-  monitor's credential and custom header values replaced by `[hidden]` (and a workflow's secrets and saved values), sealed with the secrets box
+  monitor's credentials (the basic authentication password also base64-encoded with the user name, as sent), custom header values, request body
+  and each string in a JSON body replaced by `[hidden]` (and a workflow's secrets and saved values), hidden before the 4 KB cut so one crossing it is
+  caught, with a leftover start of a secret dropped, sealed with the secrets box
   bound to the incident (`incidents.ExcerptContext`), cleared by retention 30 days after the incident resolves. Successful checks read no more of
   the body than before.
 - **Where the excerpt can go:** only `GET /incidents/:id/snapshot/body`, which is session-only (API keys and connected apps get `SESSION_REQUIRED`)

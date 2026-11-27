@@ -543,9 +543,9 @@ These are customers' alerts. For our own alerts not reaching Telegram, see *Metr
 ### What did HawkEye see? (failure snapshots)
 
 An incident's snapshot: `SELECT checked_at, region, facts, step_name, changes, locations, body_excerpt IS NOT NULL AS has_excerpt, body_cleared_at
-FROM incident_snapshots WHERE incident_id = '…';` (no row for heartbeat and DNS incidents, or a check that connected nowhere). The monitor's last good
-response it was compared with: `SELECT last_good, last_good_fp FROM monitors WHERE id = '…';` (NULL until a good check after creation or after its
-request was edited). Never decrypt or read a customer's `body_excerpt` while supporting them: it is response text the customer chose to keep for their
+FROM incident_snapshots WHERE incident_id = '…';` (no row for heartbeat and DNS incidents, or a check that connected nowhere). Each location's last good
+response it was compared with: `SELECT region, facts, fingerprint, updated_at FROM monitor_last_good WHERE monitor_id = '…';` (none until a good
+check after creation, or after its request or locations were edited). Never decrypt or read a customer's `body_excerpt` while supporting them: it is response text the customer chose to keep for their
 own team, and the app shows it to them. Retention clears excerpts 30 days after the incident resolves (`hawkeye_retention_deleted_total{table="snapshot_excerpts"}`).
 
 ### Metrics unreachable

@@ -30,12 +30,16 @@ type Snapshot struct {
 	Changes    []checks.Change        `json:"changes"`
 	Locations  []checks.LocationState `json:"locations"`
 	HasExcerpt bool                   `json:"has_body_excerpt"`
+	// BodyRequested: the monitor kept failed responses when this outage was confirmed; with no excerpt, BodyBinary says the response wasn't
+	// text, otherwise it had no body (or the server can't encrypt).
+	BodyRequested bool `json:"body_requested"`
+	BodyBinary    bool `json:"body_binary"`
 	// ExcerptCleared is when retention removed the excerpt (ExcerptRetention after the incident resolved).
 	ExcerptCleared *time.Time `json:"body_excerpt_cleared_at"`
 }
 
-// saveSnapshot stores what the confirming check saw, in the transaction that opens the incident. Checks that saw no connection at all
-// (heartbeats, DNS monitors, a refused destination) have no snapshot.
+// saveSnapshot stores what the confirming check saw, in the transaction that opens the incident. Checks without facts have no snapshot:
+// heartbeats, DNS monitors, and destinations the address rules refused. A failed DNS lookup of a website does have one (its timings).
 func saveSnapshot(ctx context.Context, tx pgx.Tx, box *secrets.Box, incidentID, monitorID uuid.UUID, o checks.Outage) error {
 	r := o.Result
 	if r.Facts == nil {
@@ -43,7 +47,9 @@ func saveSnapshot(ctx context.Context, tx pgx.Tx, box *secrets.Box, incidentID, 
 	}
 	var raw []byte
 	var capture bool
-	if err := tx.QueryRow(ctx, `SELECT last_good, capture_failure_body FROM monitors WHERE id = $1`, monitorID).Scan(&raw, &capture); err != nil {
+	// Compared with what the same location saw when it last worked: other locations may be answered by other servers.
+	if err := tx.QueryRow(ctx, `SELECT (SELECT facts FROM monitor_last_good WHERE monitor_id = m.id AND region = $2), capture_failure_body
+		FROM monitors m WHERE id = $1`, monitorID, o.Region).Scan(&raw, &capture); err != nil {
 		return err
 	}
 	var usual *checks.Timings
@@ -68,6 +74,7 @@ func saveSnapshot(ctx context.Context, tx pgx.Tx, box *secrets.Box, incidentID, 
 	}
 	var sealed *string
 	truncated, binary := false, false
+	requested := capture && r.Facts.StatusCode != 0 // a response arrived, so there was something to keep
 	// The monitor's setting is checked again here: it may have been turned off while the check ran.
 	if e := r.Excerpt; e != nil && capture {
 		truncated, binary = e.Truncated, e.Binary
@@ -86,9 +93,9 @@ func saveSnapshot(ctx context.Context, tx pgx.Tx, box *secrets.Box, incidentID, 
 		locations = o.Locations
 	}
 	_, err := tx.Exec(ctx, `INSERT INTO incident_snapshots (incident_id, checked_at, region, facts, step_index, step_name, changes, locations,
-			body_excerpt, body_truncated, body_binary)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		incidentID, r.CheckedAt, o.Region, r.Facts, stepIndex, stepName, changes, locations, sealed, truncated, binary)
+			body_excerpt, body_requested, body_truncated, body_binary)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		incidentID, r.CheckedAt, o.Region, r.Facts, stepIndex, stepName, changes, locations, sealed, requested, truncated, binary)
 	return err
 }
 
@@ -98,9 +105,10 @@ func LoadSnapshot(ctx context.Context, q interface {
 }, incidentID uuid.UUID) (*Snapshot, error) {
 	var s Snapshot
 	err := q.QueryRow(ctx, `SELECT checked_at, region, facts, step_index, step_name, changes, COALESCE(locations, '[]'), body_excerpt IS NOT NULL,
-			body_cleared_at
+			body_cleared_at, body_requested, body_binary
 		FROM incident_snapshots WHERE incident_id = $1`, incidentID).
-		Scan(&s.CheckedAt, &s.Region, &s.Facts, &s.StepIndex, &s.StepName, &s.Changes, &s.Locations, &s.HasExcerpt, &s.ExcerptCleared)
+		Scan(&s.CheckedAt, &s.Region, &s.Facts, &s.StepIndex, &s.StepName, &s.Changes, &s.Locations, &s.HasExcerpt, &s.ExcerptCleared,
+			&s.BodyRequested, &s.BodyBinary)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

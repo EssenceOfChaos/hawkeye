@@ -642,6 +642,10 @@ export interface FailureSnapshot {
   locations: LocationState[]
   has_body_excerpt: boolean
   body_excerpt_cleared_at: string | null
+  /** The monitor kept failed responses when this outage was confirmed. */
+  body_requested?: boolean
+  /** With nothing kept: the response wasn't text. */
+  body_binary?: boolean
 }
 
 export type IncidentUpdateStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved'
