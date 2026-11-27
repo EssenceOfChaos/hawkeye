@@ -548,6 +548,23 @@ response it was compared with: `SELECT region, facts, fingerprint, updated_at FR
 check after creation, or after its request or locations were edited). Never decrypt or read a customer's `body_excerpt` while supporting them: it is response text the customer chose to keep for their
 own team, and the app shows it to them. Retention clears excerpts 30 days after the incident resolves (`hawkeye_retention_deleted_total{table="snapshot_excerpts"}`).
 
+### AI incident analysis
+
+Runs in the worker (primary only) when `ANTHROPIC_API_KEY` is set and `AI_ANALYSIS_ENABLED` isn't `false`; the API offers the switch on the same
+conditions. `hawkeye_ai_analyses_total{status}` counts runs (`done`, `declined`, `failed`, `retry`, `over_limit`, `off`) and
+`hawkeye_ai_analysis_tokens_total{direction}` the tokens they used (about 1,500 in and a few hundred out each).
+`hawkeye_ai_analysis_model_seconds{result}` is how long the model took to answer, and `hawkeye_ai_analysis_latency_seconds` the time from the
+outage being confirmed (or "Analyze again") to the analysis being stored, for runs done on the first attempt: queue wait plus the model. They decide
+phase 2 of `docs/plan-ai-incident-analysis.md` (holding the outage alert for its analysis). p95 over a week:
+`histogram_quantile(0.95, sum by (le) (rate(hawkeye_ai_analysis_model_seconds_bucket{result="done"}[7d])))`, and the same for
+`hawkeye_ai_analysis_latency_seconds_bucket`. The database has the end-to-end figure too: `SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY
+extract(epoch FROM finished_at - requested_at)) FROM incident_analyses WHERE status = 'done' AND attempts = 1 AND finished_at > now() - interval '7 days';`. **HawkEyeAIAnalysisFailing**
+fires when more runs fail or are retried than succeed over 15 minutes: check Anthropic's status page and that the key is valid (the worker logs
+`incident analysis unavailable` with the error). To stop spending during a provider incident, set `AI_ANALYSIS_ENABLED=false` and redeploy:
+queued runs wait, and run when it's back on. A stuck run: `SELECT status, attempts, run_at, locked_until FROM incident_analyses WHERE incident_id = '…';`
+(a `running` row past `locked_until` is taken over by the next poll). An organization's usage this month: `SELECT count(*) FROM ai_analysis_usage
+WHERE organization_id = '…' AND created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC';`. Prompts and answers are never logged.
+
 ### Metrics unreachable
 
 `HawkEyeMetricsUnreachable`, `HawkEyeMetricsMissing` or `HawkEyeAlertRulesFailing`: some alert rules can no longer fire, so treat this as a blind spot, not noise.

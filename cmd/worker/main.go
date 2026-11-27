@@ -29,6 +29,7 @@ import (
 	"hawkeye/internal/errtrack"
 	"hawkeye/internal/healthcheck"
 	"hawkeye/internal/heartbeats"
+	"hawkeye/internal/incidentanalysis"
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/lifecycle"
 	"hawkeye/internal/logging"
@@ -248,6 +249,16 @@ func run() error {
 		if cfg.RunMonthlyReports {
 			job := monthlyreport.NewJob(pool, mailer, branding.NewService(pool), monthlyreport.Config{Interval: cfg.MonthlyReportInterval,
 				AppBaseURL: cfg.AppBaseURL, Pace: time.Second}, m, log).WithReporter(reporter)
+			spawn(func() { job.Run(ctx) })
+		}
+		// AI incident analysis: writes the likely cause of outages for organizations that turned it on (internal/incidentanalysis).
+		switch {
+		case cfg.AnthropicAPIKey == "":
+			log.Info("AI incident analysis is off: ANTHROPIC_API_KEY is not set")
+		case !cfg.RunAIAnalysis:
+			log.Info("AI incident analysis is off on this worker (AI_ANALYSIS_ENABLED=false)")
+		default:
+			job := incidentanalysis.NewJob(pool, incidentanalysis.New(cfg.AnthropicAPIKey), m, log).WithReporter(reporter)
 			spawn(func() { job.Run(ctx) })
 		}
 		// Status pages on customers' own domains: re-checks each claimed domain's DNS records on its schedule and tells the owner when one goes

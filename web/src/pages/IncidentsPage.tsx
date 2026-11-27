@@ -8,6 +8,8 @@ import { brand } from '../brand'
 import { PageIcon } from '../components/Brand'
 import { AIDraftsSetting } from '../components/AIDrafts'
 import { useAIDrafts } from '../useAIDrafts'
+import { AIAnalysisSetting, IncidentAnalysisPanel } from '../components/AIAnalysis'
+import { useAIAnalysis } from '../useAIAnalysis'
 import { IncidentUpdates } from '../components/IncidentUpdates'
 import { FailureSnapshot } from '../components/FailureSnapshot'
 import { useAuth } from '../auth'
@@ -56,6 +58,7 @@ export function IncidentsPage() {
   const { organization } = useAuth()
   const isOwner = organization?.role === 'owner'
   const [drafts, setDrafts] = useAIDrafts()
+  const [analysis, setAnalysis, reloadAnalysis] = useAIAnalysis()
 
   const startRequest = useLatestRequest()
   const load = useCallback(async () => {
@@ -99,6 +102,7 @@ export function IncidentsPage() {
       </p>
 
       {isOwner && drafts && <AIDraftsSetting state={drafts} onChange={setDrafts} />}
+      {isOwner && analysis && <AIAnalysisSetting state={analysis} onChange={setAnalysis} />}
 
       {error && <Alert>{error}</Alert>}
       {items === null && !error && <p role="status"><span className="d-loading d-loading-spinner d-loading-sm" aria-hidden="true" /> Loading incidents…</p>}
@@ -151,6 +155,9 @@ export function IncidentsPage() {
                     {shown && (
                       <tr className="incident-updates-row" id={`updates-${i.id}`}>
                         <td colSpan={6}>
+                          {(i.has_analysis || i.has_snapshot) && (
+                            <IncidentAnalysisPanel incidentID={i.id} hasAnalysis={Boolean(i.has_analysis)} setting={analysis} onRequested={reloadAnalysis} />
+                          )}
                           {i.has_snapshot && <FailureSnapshot incidentID={i.id} monitorID={i.monitor_id} />}
                           <IncidentUpdates incident={i} isOwner={isOwner} canDraft={Boolean(drafts?.available && drafts.included && drafts.enabled)}
                             onCountChange={(count) => setItems((all) => all?.map((x) => (x.id === i.id ? { ...x, update_count: count } : x)) ?? all)} />

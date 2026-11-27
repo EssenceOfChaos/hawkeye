@@ -102,3 +102,49 @@ func TestAIDraftsNeedAServerKey(t *testing.T) {
 		t.Fatalf("%d %v", r.Status, r.Body)
 	}
 }
+
+func TestAIDraftsUseTheKindOfCauseAnAnalysisFoundButNeverItsText(t *testing.T) {
+	drafts, asked := fakeClaude(t, "We found an issue with our network provider and are working on a fix.")
+	e := newEnvOpts(t, 1000, envOpts{drafts: drafts})
+	owner, org := e.register(t, "owner@example.com")
+	e.markVerified(t, "owner@example.com")
+	e.setOrgPlan(t, org, "pro")
+	if r := owner.call("PUT", "/api/v1/ai-drafts", map[string]any{"enabled": true}); r.Status != 200 {
+		t.Fatalf("%d %v", r.Status, r.Body)
+	}
+	mon := owner.call("POST", "/api/v1/monitors", monitorBody("Shop")).Body["monitor"].(map[string]any)["id"].(string)
+	inc := e.openIncident(t, mon)
+	draft := func() {
+		t.Helper()
+		if r := owner.call("POST", "/api/v1/incidents/"+inc+"/updates/draft", map[string]any{"status": "identified"}); r.Status != 200 {
+			t.Fatalf("%d %v", r.Status, r.Body)
+		}
+	}
+
+	draft() // no analysis: nothing about a cause
+	mustExec(t, e, `INSERT INTO incident_analyses (incident_id, organization_id, status, category, likely_cause, evidence, next_step, confidence)
+		VALUES ($1, $2, 'done', 'cdn_or_proxy', 'Cloudflare cannot reach the origin at 198.51.100.9.', '["502 from Cloudflare"]', 'Check the origin logs.', 'medium')`, inc, org)
+	draft()
+	mustExec(t, e, `UPDATE incident_analyses SET confidence = 'low' WHERE incident_id = $1`, inc)
+	draft()
+
+	if len(*asked) != 3 {
+		t.Fatalf("asked %d times", len(*asked))
+	}
+	// The field as sent in the incident's data (the system prompt names it too, without quotes).
+	const field = `\"likely_cause_kind\":`
+	if strings.Contains((*asked)[0], field) {
+		t.Fatalf("without an analysis: %s", (*asked)[0])
+	}
+	if !strings.Contains((*asked)[1], "a problem with the network provider that delivers the service") {
+		t.Fatalf("with a medium-confidence analysis the draft gets its kind: %s", (*asked)[1])
+	}
+	for _, leaked := range []string{"Cloudflare cannot reach", "198.51.100.9", "502 from Cloudflare", "Check the origin logs"} {
+		if strings.Contains((*asked)[1], leaked) {
+			t.Fatalf("the analysis's own text reached the draft (%q): %s", leaked, (*asked)[1])
+		}
+	}
+	if strings.Contains((*asked)[2], field) {
+		t.Fatalf("a low-confidence analysis is left out: %s", (*asked)[2])
+	}
+}

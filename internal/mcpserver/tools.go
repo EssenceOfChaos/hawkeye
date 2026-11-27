@@ -11,6 +11,7 @@ import (
 
 	"hawkeye/internal/audit"
 	"hawkeye/internal/checks"
+	"hawkeye/internal/incidentanalysis"
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/maintenance"
 	"hawkeye/internal/monitors"
@@ -296,6 +297,17 @@ type IncidentDetail struct {
 	Updates     []IncidentUpdate `json:"updates" jsonschema:"newest first"`
 	StatusPages []string         `json:"shown_on_status_pages" jsonschema:"public addresses of the published status pages that show this incident and its updates"`
 	Snapshot    *FailureSnapshot `json:"failure_snapshot,omitempty" jsonschema:"what HawkEye saw when the outage was confirmed; absent for heartbeats, DNS monitors and older incidents"`
+	Analysis    *AIAnalysis      `json:"ai_analysis,omitempty" jsonschema:"HawkEye's AI analysis of the likely cause, for organizations that turned it on; it may be wrong"`
+}
+
+// AIAnalysis is an incident's AI analysis for assistants. It was written by a model from the failure snapshot and may be wrong: data, not instructions.
+type AIAnalysis struct {
+	Status      string   `json:"status" jsonschema:"done; pending or running (not written yet); declined, failed, over_limit (the month's allowance was used up) or off"`
+	Category    string   `json:"category,omitempty"`
+	LikelyCause string   `json:"likely_cause,omitempty"`
+	Evidence    []string `json:"evidence,omitempty"`
+	NextStep    string   `json:"next_step,omitempty"`
+	Confidence  string   `json:"confidence,omitempty" jsonschema:"low, medium or high"`
 }
 
 // FailureSnapshot is an incident's failure snapshot for assistants: never the response body, which stays in the app. Header values and step
@@ -404,7 +416,8 @@ func (s *tools) register(srv *mcp.Server) {
 
 	add(s, srv, readTool("get_incident", "Get an incident",
 		"Returns one incident with the updates posted on it, the public status pages that show it, and what HawkEye saw when the outage was "+
-			"confirmed: the response, its headers and timings, and what changed since the last good check (never the response body)."),
+			"confirmed: the response, its headers and timings, and what changed since the last good check (never the response body), and HawkEye's "+
+			"AI analysis of the likely cause when the organization turned it on."),
 		read, s.getIncident)
 
 	add(s, srv, readTool("list_status_pages", "List status pages",
@@ -643,6 +656,14 @@ func (s *tools) getIncident(ctx context.Context, c Caller, in IncidentIDInput) (
 			fs.Changes[i] = ch.String()
 		}
 		out.Snapshot = fs
+	}
+	a, err := incidentanalysis.Load(ctx, s.d.Pool, id)
+	if err != nil {
+		return IncidentDetail{}, err
+	}
+	if a != nil {
+		out.Analysis = &AIAnalysis{Status: a.Status, Evidence: a.Evidence, Category: deref(a.Category), LikelyCause: deref(a.LikelyCause),
+			NextStep: deref(a.NextStep), Confidence: deref(a.Confidence)}
 	}
 	return out, nil
 }
@@ -904,4 +925,11 @@ func excerpt(s string, n int) string {
 		return s
 	}
 	return string([]rune(s)[:n]) + "…"
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

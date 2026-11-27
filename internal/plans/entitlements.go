@@ -24,6 +24,7 @@ const (
 	LimitWorkflows      = "workflows"
 	LimitWorkflowSteps  = "workflow_steps"
 	LimitAIDrafts       = "ai_drafts"
+	LimitAIAnalyses     = "ai_analyses"
 	LimitPageDomains    = "status_page_domains"
 )
 
@@ -92,6 +93,11 @@ func (e *LimitError) Message() string {
 		return fmt.Sprintf("Your %s plan allows up to %d steps in a multi-step API check.", e.Plan.Name, e.Limit)
 	case LimitAIDrafts:
 		return fmt.Sprintf("AI-drafted incident updates are not included in your %s plan. Upgrade to have a first draft written for you.", e.Plan.Name)
+	case LimitAIAnalyses:
+		if e.Limit == 0 {
+			return fmt.Sprintf("AI incident analysis is not included in your %s plan. Upgrade to have the likely cause of an outage written for you.", e.Plan.Name)
+		}
+		return fmt.Sprintf("Your %s plan includes %d AI incident analyses a month and all of them are used. More are available from the 1st of next month, or upgrade for more.", e.Plan.Name, e.Limit)
 	case LimitMaintenance:
 		return fmt.Sprintf("Maintenance windows are not included in your %s plan. Upgrade to silence alerts during planned work.", e.Plan.Name)
 	case LimitReports:
@@ -166,6 +172,23 @@ func (s *Service) CanUseAIDrafts(ctx context.Context, db DB, orgID uuid.UUID) er
 		return s.limitError(ctx, db, LimitAIDrafts, 0, 0, p)
 	}
 	return nil
+}
+
+// CanUseAIAnalysis returns a *LimitError when the plan includes no AI incident analyses. The monthly allowance is counted by internal/incidentanalysis.
+func (s *Service) CanUseAIAnalysis(ctx context.Context, db DB, orgID uuid.UUID) error {
+	p, err := EffectivePlan(ctx, db, orgID)
+	if err != nil {
+		return err
+	}
+	if p.MaxAIAnalyses <= 0 {
+		return s.limitError(ctx, db, LimitAIAnalyses, 0, 0, p)
+	}
+	return nil
+}
+
+// AIAnalysisLimitError is the error for an organization whose month's analyses are used up.
+func (s *Service) AIAnalysisLimitError(ctx context.Context, db DB, p Plan, used int) error {
+	return s.limitError(ctx, db, LimitAIAnalyses, p.MaxAIAnalyses, used, p)
 }
 
 // CanGenerateReports returns a *LimitError when the plan does not include PDF reports. It guards downloading a report and turning on the monthly email;

@@ -485,7 +485,7 @@ func TestEveryRouteIsClassifiedForAPIKeys(t *testing.T) {
 		"POST /api/v1/monitors/:monitorID/pause", "POST /api/v1/monitors/:monitorID/resume",
 		"POST /api/v1/monitors/:monitorID/badge", "DELETE /api/v1/monitors/:monitorID/badge",
 		"GET /api/v1/monitors/:monitorID/pings", "POST /api/v1/monitors/:monitorID/ping-token",
-		"GET /api/v1/monitors/:monitorID/incidents", "GET /api/v1/monitors/:monitorID/dns-changes", "POST /api/v1/monitors/:monitorID/dns-changes/:changeID/accept", "GET /api/v1/incidents", "GET /api/v1/incidents/:incidentID/updates", "GET /api/v1/incidents/:incidentID/snapshot",
+		"GET /api/v1/monitors/:monitorID/incidents", "GET /api/v1/monitors/:monitorID/dns-changes", "POST /api/v1/monitors/:monitorID/dns-changes/:changeID/accept", "GET /api/v1/incidents", "GET /api/v1/incidents/:incidentID/updates", "GET /api/v1/incidents/:incidentID/snapshot", "GET /api/v1/incidents/:incidentID/analysis",
 		"POST /api/v1/incidents/:incidentID/updates", "DELETE /api/v1/incidents/:incidentID/updates/:updateID",
 		"GET /api/v1/billing/subscription",
 		"GET /api/v1/branding", "PUT /api/v1/branding", "GET /api/v1/branding/logo", "PUT /api/v1/branding/logo", "DELETE /api/v1/branding/logo",

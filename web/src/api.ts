@@ -55,6 +55,8 @@ export interface Plan {
   api_write_enabled?: boolean
   /** AI-drafted incident updates, once the owner turns them on (Pro and Agency). */
   ai_drafts_enabled?: boolean
+  /** AI incident analyses a calendar month (UTC), once the owner turns them on. */
+  max_ai_analyses?: number
   /** Multi-step API checks the plan allows (each also counts as a monitor), and steps in each. */
   max_workflows?: number
   max_workflow_steps?: number
@@ -596,6 +598,22 @@ export interface Incident {
   alerts_paused?: boolean
   /** It has a failure snapshot: what HawkEye saw when the outage was confirmed (GET /incidents/:id/snapshot). */
   has_snapshot?: boolean
+  /** An AI analysis was asked for, written or tried (GET /incidents/:id/analysis). */
+  has_analysis?: boolean
+}
+
+/** An incident's AI analysis: the likely cause, written by a model from the failure snapshot. It may be wrong. */
+export interface IncidentAnalysis {
+  /** pending or running (not written yet), done, declined, failed, over_limit (the month's analyses were used up) or off. */
+  status: 'pending' | 'running' | 'done' | 'declined' | 'failed' | 'over_limit' | 'off'
+  category: string | null
+  likely_cause: string | null
+  evidence: string[]
+  next_step: string | null
+  confidence: 'low' | 'medium' | 'high' | null
+  model: string | null
+  requested_at: string
+  finished_at: string | null
 }
 
 /** What a check saw of a response (no body). Headers come from a fixed allowlist, so cookies and credentials are never among them. */

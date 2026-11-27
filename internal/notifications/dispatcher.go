@@ -293,13 +293,16 @@ func (d *Dispatcher) load(ctx context.Context, tx pgx.Tx, list []uuid.UUID) ([]c
 			COALESCE(sd.threshold_ms, 0), COALESCE(sd.peak_ms, 0), COALESCE(sd.cause, ''),
 			COALESCE(dc.record_type, ''), COALESCE(dc.before, '{}'), COALESCE(dc.after, '{}'), COALESCE(dc.status, ''), COALESCE(au.email, ''),
 			COALESCE(fe.id::text, ''), fe.started_at, COALESCE(fe.outages, 0), COALESCE(fe.status, ''),
-			sn.facts, COALESCE(sn.step_name, ''), sn.changes, sn.locations
+			sn.facts, COALESCE(sn.step_name, ''), sn.changes, sn.locations,
+			an.category, an.likely_cause, an.next_step, an.confidence
 		FROM unnest($1::uuid[]) WITH ORDINALITY AS c(id, n)
 		JOIN notification_deliveries p ON p.id = c.id
 		JOIN notification_settings s ON s.id = p.notification_setting_id
 		LEFT JOIN incidents i ON i.id = p.incident_id
 		-- What the confirming check saw, for outage alerts. Never the body excerpt: that stays in the app.
 		LEFT JOIN incident_snapshots sn ON sn.incident_id = i.id AND p.event_type = 'outage'
+		-- The AI analysis of the outage, for recovery alerts (by then it has had time to be written).
+		LEFT JOIN incident_analyses an ON an.incident_id = i.id AND an.status = 'done' AND p.event_type = 'recovery'
 		LEFT JOIN slowdowns sd ON sd.id = p.slowdown_id
 		LEFT JOIN dns_changes dc ON dc.id = p.dns_change_id
 		LEFT JOIN users au ON au.id = dc.accepted_by
@@ -321,17 +324,30 @@ func (d *Dispatcher) load(ctx context.Context, tx pgx.Tx, list []uuid.UUID) ([]c
 		var step string
 		var changes []checks.Change
 		var locations []checks.LocationState
+		var anCategory, anCause, anNext, anConfidence *string
 		if err := rows.Scan(&c.id, &c.settingID, &c.channel, &c.hawkeyeBot, &c.secret, &c.attempts, &c.alert.Event, &c.alert.To, &c.enabled, &c.verified,
 			&c.alert.StartedAt, &c.alert.ResolvedAt, &c.alert.Cause, &c.alert.MonitorID, &c.alert.MonitorName, &c.alert.MonitorURL, &c.alert.MonitorType,
 			&c.alert.SSLExpiresAt, &c.alert.SSLBucket, &c.alert.DomainName, &c.alert.DomainExpiresAt, &c.alert.DomainBucket,
 			&c.alert.SlowThresholdMs, &c.alert.SlowPeakMs, &c.alert.SlowCause,
 			&c.alert.DNSRecordType, &c.alert.DNSBefore, &c.alert.DNSAfter, &c.alert.DNSStatus, &c.alert.DNSAcceptedBy,
 			&c.alert.FlapEpisodeID, &c.alert.FlappingSince, &c.alert.FlapOutages, &c.alert.FlapStatus,
-			&facts, &step, &changes, &locations); err != nil {
+			&facts, &step, &changes, &locations, &anCategory, &anCause, &anNext, &anConfidence); err != nil {
 			return nil, err
 		}
 		if facts != nil {
 			c.alert.Snapshot = &AlertSnapshot{Facts: *facts, StepName: step, Changes: changes, Locations: locations}
+		}
+		if anCause != nil {
+			c.alert.Analysis = &AlertAnalysis{LikelyCause: *anCause}
+			if anCategory != nil {
+				c.alert.Analysis.Category = *anCategory
+			}
+			if anNext != nil {
+				c.alert.Analysis.NextStep = *anNext
+			}
+			if anConfidence != nil {
+				c.alert.Analysis.Confidence = *anConfidence
+			}
 		}
 		out = append(out, c)
 	}

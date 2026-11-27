@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { api, ApiError, type BillingInterval, type BillingSubscription, type Plan, type Usage } from '../api'
+import { AnalysisUsage } from '../components/AIAnalysis'
 import { PlanComparison } from '../components/PlanComparison'
+import { useAIAnalysis } from '../useAIAnalysis'
 import { IntervalToggle, PlanDetails } from '../components/PlanDetails'
 import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
@@ -33,6 +35,7 @@ export function BillingPage() {
   const checkout = params.get('checkout')
 
   const [sub, setSub] = useState<BillingSubscription | null>(null)
+  const [analysis] = useAIAnalysis()
   const [usage, setUsage] = useState<Usage | null>(null)
   const [plans, setPlans] = useState<Plan[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -171,6 +174,9 @@ export function BillingPage() {
             <strong>{usage.monitors_used}</strong> of <strong>{usage.monitor_limit}</strong> monitors used · checks every{' '}
             {shortInterval(usage.plan.minimum_check_interval_seconds)} · {usage.plan.history_retention_days} days of history
           </p>
+          {analysis?.available && analysis.included && (analysis.enabled
+            ? <AnalysisUsage state={analysis} />
+            : <p className="hint">AI incident analysis is off. {isOwner ? 'Turn it on from the Incidents page' : 'The owner can turn it on from the Incidents page'} to have the likely cause of each outage written for you.</p>)}
           {usage.over_limit && (
             <Alert>
               You have {usage.monitors_used} monitors but your plan includes {usage.monitor_limit}. Nothing has been deleted. To add monitors,
@@ -220,7 +226,7 @@ export function BillingPage() {
               )
             })}
           </ul>
-          <PlanComparison plans={plans} collapsed />
+          <PlanComparison plans={plans} />
           {sub.paid_access && <p className="hint">To change plan, use Manage billing.</p>}
         </section>
       )}

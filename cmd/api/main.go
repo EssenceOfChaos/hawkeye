@@ -173,11 +173,13 @@ func run() error {
 		// "Set up from your domain" is for signed-in customers, so it stays on when the public free tools are turned off.
 		Discovery: discovery.New(safehttp.Config{}),
 		Drafts:    newDrafts(cfg.AnthropicAPIKey, log),
-		APITokens: apiTokens,
-		TwoFactor: twoFactorSvc,
-		OAuth:     oauthSvc,
-		Waitlist:  waitlist.NewService(pool, mailer, log, cfg.AppBaseURL),
-		Audit:     auditLog,
+		// The worker runs the analyses (internal/incidentanalysis); the API lets people turn it on and read the results.
+		AIAnalysis: cfg.AnthropicAPIKey != "" && cfg.RunAIAnalysis,
+		APITokens:  apiTokens,
+		TwoFactor:  twoFactorSvc,
+		OAuth:      oauthSvc,
+		Waitlist:   waitlist.NewService(pool, mailer, log, cfg.AppBaseURL),
+		Audit:      auditLog,
 		// Test runs of multi-step API checks, through the same SSRF-safe client (and strict policy) as the worker's checks.
 		WorkflowChecker: checks.NewChecker(safehttp.Config{}),
 		SecretBox:       box,

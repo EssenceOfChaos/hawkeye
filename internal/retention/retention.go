@@ -62,8 +62,8 @@ func (c Config) withDefaults() Config {
 
 // Stats counts what one pass removed.
 type Stats struct {
-	CheckResults, Rollups, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits, SentEmails, AuditEvents, Deploys, Excerpts int
-	Skipped                                                                                                                                        bool // another instance holds the lock
+	CheckResults, Rollups, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits, SentEmails, AuditEvents, Deploys, Excerpts, AIUsage int
+	Skipped                                                                                                                                                 bool // another instance holds the lock
 }
 
 type Job struct {
@@ -242,6 +242,10 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 	st.SentEmails, err2 = j.batchesNoOrg(ctx, `DELETE FROM weekly_summaries WHERE (user_id, organization_id, week) IN (
 			SELECT user_id, organization_id, week FROM weekly_summaries WHERE week < $1 LIMIT $2)`, j.now().Add(-91*24*time.Hour))
 	note(err2)
+	// AI analysis usage only counts in its calendar month (internal/incidentanalysis); keep the month before for questions about a bill.
+	st.AIUsage, err2 = j.batchesNoOrg(ctx, `DELETE FROM ai_analysis_usage WHERE (incident_id, requested_at) IN (
+			SELECT incident_id, requested_at FROM ai_analysis_usage WHERE created_at < $1 LIMIT $2)`, j.now().AddDate(0, -2, 0))
+	note(err2)
 	// Shared rate-limit counters only matter for the current window; keep a day for investigation.
 	st.RateLimits, err2 = j.batchesNoOrg(ctx, `DELETE FROM rate_limits WHERE (key, window_start) IN (
 			SELECT key, window_start FROM rate_limits WHERE window_start < $1 LIMIT $2)`, j.now().Add(-24*time.Hour))
@@ -275,6 +279,7 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 	j.m.RetentionDeleted.WithLabelValues("tokens").Add(float64(st.Tokens))
 	j.m.RetentionDeleted.WithLabelValues("billing_events").Add(float64(st.BillingEvents))
 	j.m.RetentionDeleted.WithLabelValues("rate_limits").Add(float64(st.RateLimits))
+	j.m.RetentionDeleted.WithLabelValues("ai_analysis_usage").Add(float64(st.AIUsage))
 	j.m.RetentionDeleted.WithLabelValues("audit_events").Add(float64(st.AuditEvents))
 	j.m.RetentionDeleted.WithLabelValues("deploys").Add(float64(st.Deploys))
 	j.m.RetentionDeleted.WithLabelValues("snapshot_excerpts").Add(float64(st.Excerpts))

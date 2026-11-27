@@ -78,6 +78,7 @@ type handlers struct {
 	sitecheck       *sitecheck.Service
 	discovery       *discovery.Service     // "set up from your domain" suggestions; nil turns them off
 	drafts          *incidentdraft.Service // AI-drafted incident updates; nil when the server has no ANTHROPIC_API_KEY
+	aiAnalysis      bool                   // AI incident analysis is available on this server
 	log             *slog.Logger
 	limits          limiterDeps
 	emailPerHour    int

@@ -43,13 +43,14 @@ const GROUPS: { title: string; rows: Row[] }[] = [
       { label: 'Monthly PDF uptime reports', value: (p) => !!p.reports_enabled },
       { label: 'Reports with your name and logo', value: (p) => !!p.branded_reports_enabled },
       { label: 'AI-drafted incident updates', value: (p) => !!p.ai_drafts_enabled },
+      { label: 'AI incident analyses per month', value: (p) => ((p.max_ai_analyses ?? 0) > 0 ? p.max_ai_analyses!.toLocaleString('en-US') : false) },
       { label: 'API and Claude (MCP) access', value: (p) => (p.api_write_enabled ? 'Read and make changes' : 'Read and add monitors') },
     ],
   },
 ]
 
 /** What every plan has, said once instead of on every card. Only built features, in the words buyers shop for. */
-export const INCLUDED = [
+const INCLUDED = [
   'Website, API, cron job and DNS monitoring',
   'Failures re-checked within seconds before alerting',
   'One alert, not twenty, when sites fail together or keep flapping',
@@ -67,47 +68,44 @@ function show(v: Cell): ReactNode {
 }
 
 /**
- * The plan comparison table and the list of what every plan includes, shown under the pricing cards. `collapsed` puts it behind a "Compare plans"
- * disclosure, for pages where the cards come first (the billing page and the campaign landing page).
+ * Under the pricing cards: what every plan includes, always shown (the cards name only what differs), then the full comparison table behind a
+ * "Compare plans" disclosure for the visitors who want every detail. The same on the landing pages and the billing page.
  */
-export function PlanComparison({ plans, collapsed = false }: { plans: Plan[]; collapsed?: boolean }) {
+export function PlanComparison({ plans }: { plans: Plan[] }) {
   const groups = GROUPS.map((g) => ({ ...g, rows: g.rows.filter((r) => new Set(plans.map((p) => String(r.value(p)))).size > 1) })).filter((g) => g.rows.length > 0)
-  const body = (
-    <>
-      <div className="table-wrap plan-compare-wrap">
-        <table className="plan-compare">
-          <caption className="sr-only">Plan comparison</caption>
-          <thead>
-            <tr>
-              <td />
-              {plans.map((p) => <th key={p.code} scope="col">{p.name}</th>)}
-            </tr>
-          </thead>
-          {groups.map((g) => (
-            <tbody key={g.title}>
-              <tr className="plan-compare-group"><th scope="colgroup" colSpan={plans.length + 1}>{g.title}</th></tr>
-              {g.rows.map((r) => (
-                <tr key={r.label}>
-                  <th scope="row">{r.label}</th>
-                  {plans.map((p) => <td key={p.code}>{show(r.value(p))}</td>)}
-                </tr>
-              ))}
-            </tbody>
-          ))}
-        </table>
-      </div>
+  return (
+    <div className="plan-compare-section">
       <div className="plan-included">
         <h3>Every plan includes</h3>
         <ul>{INCLUDED.map((i) => <li key={i}>{i}</li>)}</ul>
       </div>
-    </>
-  )
-  return collapsed ? (
-    <details className="plan-compare-details">
-      <summary>Compare plans</summary>
-      {body}
-    </details>
-  ) : (
-    <div className="plan-compare-section">{body}</div>
+      {groups.length > 0 && (
+        <details className="plan-compare-details">
+          <summary>Compare plans</summary>
+          <div className="table-wrap plan-compare-wrap">
+            <table className="plan-compare">
+              <caption className="sr-only">Plan comparison</caption>
+              <thead>
+                <tr>
+                  <td />
+                  {plans.map((p) => <th key={p.code} scope="col">{p.name}</th>)}
+                </tr>
+              </thead>
+              {groups.map((g) => (
+                <tbody key={g.title}>
+                  <tr className="plan-compare-group"><th scope="colgroup" colSpan={plans.length + 1}>{g.title}</th></tr>
+                  {g.rows.map((r) => (
+                    <tr key={r.label}>
+                      <th scope="row">{r.label}</th>
+                      {plans.map((p) => <td key={p.code}>{show(r.value(p))}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
+            </table>
+          </div>
+        </details>
+      )}
+    </div>
   )
 }

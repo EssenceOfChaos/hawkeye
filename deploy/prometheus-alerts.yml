@@ -162,6 +162,10 @@ groups:
         expr: sum(increase(hawkeye_ad_conversions_total{result=~"rejected|failed"}[6h])) > 0
         labels: {severity: ticket}
         annotations: {summary: "OpenAI Ads refused or gave up on server-side conversion events (wrong OPENAI_ADS_API_KEY or pixel id, or a payload OpenAI no longer accepts)", runbook: "docs/operations.md#openai-ads-conversions"}
+      - alert: HawkEyeAIAnalysisFailing
+        expr: sum(increase(hawkeye_ai_analyses_total{status=~"failed|retry"}[15m])) > 2 and sum(increase(hawkeye_ai_analyses_total{status=~"failed|retry"}[15m])) > sum(increase(hawkeye_ai_analyses_total{status="done"}[15m]))
+        labels: {severity: ticket}
+        annotations: {summary: "Most AI incident analyses are failing to reach the model (Anthropic outage, or a wrong or revoked ANTHROPIC_API_KEY); customers see no likely cause on new incidents", runbook: "docs/operations.md#ai-incident-analysis"}
       - alert: HawkEyeCanaryImpaired
         expr: hawkeye_canary_up{job="worker"} == 0
         for: 3m

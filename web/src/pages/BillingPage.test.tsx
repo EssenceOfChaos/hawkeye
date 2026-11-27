@@ -36,7 +36,7 @@ function sub(o: object = {}) {
 }
 const usage = (plan = free, used = 2) => ({ plan, monitors_used: used, monitor_limit: plan.max_monitors, over_limit: used > plan.max_monitors, next_plan: null })
 
-interface Opts { role?: 'owner' | 'member'; verified?: boolean; subscription?: object; usage?: object; path?: string; post?: (url: string, body: unknown) => Promise<Response> }
+interface Opts { role?: 'owner' | 'member'; verified?: boolean; subscription?: object; usage?: object; path?: string; analysis?: object; post?: (url: string, body: unknown) => Promise<Response> }
 
 function setup(o: Opts = {}) {
   const posts: { url: string; body: unknown }[] = []
@@ -50,6 +50,7 @@ function setup(o: Opts = {}) {
     }
     if (url.includes('/billing/subscription')) return json(200, { subscription: o.subscription ?? sub(), usage: o.usage ?? usage() })
     if (url.includes('/plans')) return json(200, { plans: [free, pro, agency], billing_enabled: true })
+    if (url.endsWith('/ai-analysis') && o.analysis) return json(200, { available: true, included: true, enabled: true, limit: 25, used: 0, model: 'Claude', ...o.analysis })
     return json(404, {})
   }))
   render(<MemoryRouter initialEntries={[o.path ?? '/billing']}><AuthProvider><BillingPage /></AuthProvider></MemoryRouter>)
@@ -71,6 +72,20 @@ describe('BillingPage', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Choose Agency' }))
     expect(trackCheckoutStarted).toHaveBeenCalledWith(5900, 'agency', 'month', 'chk_1')
     expect(vi.mocked(trackCheckoutStarted).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(redirectTo).mock.invocationCallOrder[0])
+  })
+
+  it('shows how much of the month’s AI analyses is used, with the plan’s usage', async () => {
+    setup({ analysis: { used: 20, limit: 25 } })
+    const ring = await screen.findByRole('progressbar', { name: 'AI analyses used this month' })
+    expect(ring).toHaveAttribute('aria-valuenow', '20')
+    expect(ring.closest('section')).toHaveAccessibleName('Current plan: Free')
+    expect(screen.getByText(/5 left · starts again/)).toBeInTheDocument()
+  })
+
+  it('says AI analysis is off instead of showing an empty ring', async () => {
+    setup({ role: 'member', analysis: { enabled: false } })
+    expect(await screen.findByText(/AI incident analysis is off. The owner can turn it on from the Incidents page/)).toBeInTheDocument()
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
   })
 
   it('shows the free plan limits and no cancel button', async () => {

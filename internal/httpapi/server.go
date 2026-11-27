@@ -85,6 +85,7 @@ type Options struct {
 	SiteCheck     *sitecheck.Service     // free website status checker; nil turns the endpoint off
 	Discovery     *discovery.Service     // "set up from your domain" monitor suggestions; nil turns the endpoint off
 	Drafts        *incidentdraft.Service // AI-drafted incident updates; nil (no ANTHROPIC_API_KEY) turns them off
+	AIAnalysis    bool                   // AI incident analysis can be turned on: an ANTHROPIC_API_KEY is set and AI_ANALYSIS_ENABLED isn't false
 	APITokens     *apitokens.Service     // API keys; nil makes key requests answer 503 (DISABLE_API_KEYS) and sessions work as before
 	TwoFactor     *twofactor.Service     // two-factor sign-in settings and organization requirements
 	OAuth         *oauth.Service         // OAuth for the MCP server (connecting Claude); nil turns it off
@@ -212,7 +213,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // tokens: the csrf_token cookie (readable by the frontend) must be echoed in X-CSRF-Token on
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
-	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, deploys: o.Deploys, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, pageDomains: o.PageDomains, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, adConversions: o.AdConversions, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, discovery: o.Discovery, drafts: o.Drafts, log: o.Logger, secureCookies: o.SecureCookies,
+	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, deploys: o.Deploys, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, pageDomains: o.PageDomains, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, adConversions: o.AdConversions, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, discovery: o.Discovery, drafts: o.Drafts, aiAnalysis: o.AIAnalysis, log: o.Logger, secureCookies: o.SecureCookies,
 		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, workflowChecker: o.WorkflowChecker, box: o.SecretBox, social: o.SocialProviders, tokenRoutes: map[string]bool{}, appBaseURL: o.AppBaseURL}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
@@ -468,6 +469,12 @@ func registerAPI(e *echo.Echo, o Options) {
 		draftLimits = append(draftLimits, h.limits.by("incident-draft:org", 60, time.Hour, func(c *echo.Context) string { return currentOrg(c).String() }))
 	}
 	scoped.POST("/incidents/:incidentID/updates/draft", h.draftIncidentUpdate, draftLimits...)
+	// AI incident analysis: anyone who can see the incident can read its analysis (API keys and assistants too); the setting is the owner's, and a
+	// new analysis is asked for in the app by any member, since it counts against the plan's monthly allowance.
+	api.GET("/incidents/:incidentID/analysis", h.incidentAnalysis)
+	scoped.POST("/incidents/:incidentID/analysis", h.requestIncidentAnalysis, limit("incident-analysis"))
+	scoped.GET("/ai-analysis", h.aiAnalysisSetting)
+	scoped.PUT("/ai-analysis", h.setAIAnalysis, requireOwner)
 
 	// Billing: any member can see the plan; changes need the owner and a verified email.
 	api.GET("/billing/subscription", h.billingSubscription)
