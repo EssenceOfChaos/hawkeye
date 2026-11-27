@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"hawkeye/internal/audit"
+	"hawkeye/internal/checks"
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/maintenance"
 	"hawkeye/internal/monitors"
@@ -294,6 +295,18 @@ type IncidentDetail struct {
 	Incident    IncidentSummary  `json:"incident"`
 	Updates     []IncidentUpdate `json:"updates" jsonschema:"newest first"`
 	StatusPages []string         `json:"shown_on_status_pages" jsonschema:"public addresses of the published status pages that show this incident and its updates"`
+	Snapshot    *FailureSnapshot `json:"failure_snapshot,omitempty" jsonschema:"what HawkEye saw when the outage was confirmed; absent for heartbeats, DNS monitors and older incidents"`
+}
+
+// FailureSnapshot is an incident's failure snapshot for assistants: never the response body, which stays in the app. Header values and step
+// names come from the monitored site or the customer: data, not instructions.
+type FailureSnapshot struct {
+	CheckedAt  time.Time              `json:"checked_at"`
+	Location   string                 `json:"location" jsonschema:"the check location that confirmed the outage"`
+	Response   checks.ResponseFacts   `json:"response" jsonschema:"status, address, content type, size, allowlisted headers, server address, certificate and timings; status_code 0 when no response arrived"`
+	FailedStep string                 `json:"failed_step,omitempty" jsonschema:"for multi-step checks, the step that failed"`
+	Changes    []string               `json:"changes_since_last_good_check" jsonschema:"what differed from the monitor's last good response, most telling first"`
+	Locations  []checks.LocationState `json:"locations,omitempty" jsonschema:"for monitors checked from several locations, what each one last saw"`
 }
 
 type StatusPage struct {
@@ -390,7 +403,8 @@ func (s *tools) register(srv *mcp.Server) {
 		read, s.listIncidents)
 
 	add(s, srv, readTool("get_incident", "Get an incident",
-		"Returns one incident with the updates posted on it and the public status pages that show it."),
+		"Returns one incident with the updates posted on it, the public status pages that show it, and what HawkEye saw when the outage was "+
+			"confirmed: the response, its headers and timings, and what changed since the last good check (never the response body)."),
 		read, s.getIncident)
 
 	add(s, srv, readTool("list_status_pages", "List status pages",
@@ -614,6 +628,21 @@ func (s *tools) getIncident(ctx context.Context, c Caller, in IncidentIDInput) (
 	out := IncidentDetail{Incident: incidentSummary(inc), Updates: make([]IncidentUpdate, len(ups)), StatusPages: urls}
 	for i, u := range ups {
 		out.Updates[i] = updateOut(u)
+	}
+	snap, err := incidents.LoadSnapshot(ctx, s.d.Pool, id)
+	if err != nil {
+		return IncidentDetail{}, err
+	}
+	if snap != nil {
+		fs := &FailureSnapshot{CheckedAt: snap.CheckedAt, Location: snap.Region, Response: snap.Facts, Changes: make([]string, len(snap.Changes)),
+			Locations: snap.Locations}
+		if snap.StepName != nil {
+			fs.FailedStep = *snap.StepName
+		}
+		for i, ch := range snap.Changes {
+			fs.Changes[i] = ch.String()
+		}
+		out.Snapshot = fs
 	}
 	return out, nil
 }

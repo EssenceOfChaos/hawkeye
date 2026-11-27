@@ -178,7 +178,11 @@ func (h *handlers) createMonitor(c *echo.Context) error {
 	if err != nil {
 		return mapError(err)
 	}
-	h.recordOrg(c, audit.MonitorCreated, monitorTarget(m), map[string]any{"type": m.Type})
+	details := map[string]any{"type": m.Type}
+	if m.CaptureFailureBody {
+		details["capture_failure_body"] = true // keeping response text is worth seeing in the log from the start
+	}
+	h.recordOrg(c, audit.MonitorCreated, monitorTarget(m), details)
 	return c.JSON(http.StatusCreated, map[string]any{"monitor": m})
 }
 

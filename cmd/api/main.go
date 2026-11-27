@@ -180,6 +180,7 @@ func run() error {
 		Audit:     auditLog,
 		// Test runs of multi-step API checks, through the same SSRF-safe client (and strict policy) as the worker's checks.
 		WorkflowChecker: checks.NewChecker(safehttp.Config{}),
+		SecretBox:       box,
 		SocialProviders: socialProviders,
 		AppBaseURL:      cfg.AppBaseURL,
 		Version:         cfg.AppVersion,

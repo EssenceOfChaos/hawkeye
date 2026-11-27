@@ -38,6 +38,7 @@ import (
 	"hawkeye/internal/plans"
 	"hawkeye/internal/ratelimit"
 	"hawkeye/internal/regions"
+	"hawkeye/internal/secrets"
 	"hawkeye/internal/sitecheck"
 	"hawkeye/internal/socialauth"
 	"hawkeye/internal/sslcheck"
@@ -92,6 +93,8 @@ type Options struct {
 	// WorkflowChecker runs test runs of multi-step API checks (POST /monitors/test-workflow) and test requests from the monitor form
 	// (POST /monitors/test-request); nil turns both endpoints off.
 	WorkflowChecker *checks.Checker
+	// SecretBox opens failure snapshots' body excerpts (GET /incidents/:id/snapshot/body); nil turns that endpoint off.
+	SecretBox *secrets.Box
 	// SocialProviders are the sign-in providers offered (google, github), by name; empty offers none. Email and password work either way.
 	SocialProviders map[string]socialauth.Provider
 	AppBaseURL      string   // public address of the app (status page and ping addresses in MCP tool results)
@@ -210,7 +213,7 @@ func requestLogger(log *slog.Logger) echo.MiddlewareFunc {
 // unsafe methods. Webhooks (Phase 7) are mounted outside this group because they use signatures.
 func registerAPI(e *echo.Echo, o Options) {
 	h := &handlers{auth: o.Auth, orgs: o.Orgs, plans: o.Plans, monitors: o.Monitors, pool: o.Pool, db: o.PgPool, notifications: o.Notifications, maintenance: o.Maintenance, deploys: o.Deploys, domains: o.Domains, regions: o.Regions, statusPages: o.StatusPages, pageDomains: o.PageDomains, badges: o.Badges, heartbeats: o.Heartbeats, billing: o.Billing, adConversions: o.AdConversions, account: o.Account, contact: o.Contact, invitations: o.Invitations, lifecycle: o.Lifecycle, branding: o.Branding, sslcheck: o.SSLCheck, sitecheck: o.SiteCheck, discovery: o.Discovery, drafts: o.Drafts, log: o.Logger, secureCookies: o.SecureCookies,
-		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, workflowChecker: o.WorkflowChecker, social: o.SocialProviders, tokenRoutes: map[string]bool{}, appBaseURL: o.AppBaseURL}
+		apiTokens: o.APITokens, twoFactor: o.TwoFactor, oauth: o.OAuth, waitlist: o.Waitlist, audit: o.Audit, workflowChecker: o.WorkflowChecker, box: o.SecretBox, social: o.SocialProviders, tokenRoutes: map[string]bool{}, appBaseURL: o.AppBaseURL}
 
 	v1 := e.Group("/api/v1", middleware.CSRFWithConfig(middleware.CSRFConfig{
 		// A mail client's one-click unsubscribe is a bare POST with no cookies, so it cannot carry a CSRF token. Nothing is lost: the endpoint uses no
@@ -451,6 +454,9 @@ func registerAPI(e *echo.Echo, o Options) {
 	api.POST("/monitors/:monitorID/dns-changes/:changeID/accept", h.acceptDNSChange)
 	api.GET("/incidents", h.listIncidents)
 	api.GET("/incidents/:incidentID/updates", h.listIncidentUpdates)
+	api.GET("/incidents/:incidentID/snapshot", h.incidentSnapshot)
+	// The body excerpt is for people in the app: session only, never API keys or connected apps (assistants), like AI drafts.
+	scoped.GET("/incidents/:incidentID/snapshot/body", h.incidentSnapshotBody)
 	api.POST("/incidents/:incidentID/updates", h.postIncidentUpdate, requireOwner, limit("incident-update"))
 	api.DELETE("/incidents/:incidentID/updates/:updateID", h.deleteIncidentUpdate, requireOwner)
 	// AI-drafted updates: session only (a draft is for a person to edit), the owner (as for posting), and a per-organization budget, since each draft
