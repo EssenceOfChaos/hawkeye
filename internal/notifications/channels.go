@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"hawkeye/internal/checks"
 	"hawkeye/internal/safehttp"
 	"hawkeye/internal/validation"
 )
@@ -226,6 +227,15 @@ type PayloadIncident struct {
 	StartedAt  time.Time  `json:"started_at"`
 	ResolvedAt *time.Time `json:"resolved_at"`
 	Cause      string     `json:"cause,omitempty"`
+	// Snapshot is what the confirming check saw, on outage events of website and API monitors. Never the response body.
+	Snapshot *PayloadSnapshot `json:"snapshot,omitempty"`
+}
+
+type PayloadSnapshot struct {
+	Response  checks.ResponseFacts   `json:"response"`
+	Step      string                 `json:"failed_step,omitempty"`
+	Changes   []checks.Change        `json:"changes"`
+	Locations []checks.LocationState `json:"locations,omitempty"`
 }
 
 type PayloadCertificate struct {
@@ -299,6 +309,12 @@ func buildWebhook(a Alert, now time.Time) WebhookPayload {
 		}
 	default:
 		p.Incident = &PayloadIncident{StartedAt: a.StartedAt.UTC(), Cause: a.Cause}
+		if sn := a.Snapshot; sn != nil {
+			p.Incident.Snapshot = &PayloadSnapshot{Response: sn.Facts, Step: sn.StepName, Changes: sn.Changes, Locations: sn.Locations}
+			if p.Incident.Snapshot.Changes == nil {
+				p.Incident.Snapshot.Changes = []checks.Change{}
+			}
+		}
 		if a.ResolvedAt != nil {
 			r := a.ResolvedAt.UTC()
 			p.Incident.ResolvedAt = &r
@@ -414,6 +430,9 @@ func chatContent(a Alert, now time.Time) chatMessage {
 		m.Lines = []string{"Detected " + a.StartedAt.UTC().Format("2006-01-02 15:04 UTC")}
 		if a.Cause != "" {
 			m.Lines = append(m.Lines, clean(a.Cause))
+		}
+		if a.Snapshot != nil {
+			m.Lines = append(m.Lines, snapshotChatLines(a.Snapshot)...)
 		}
 		if note := flapChatNote(a); note != "" {
 			m.Lines = append(m.Lines, note)

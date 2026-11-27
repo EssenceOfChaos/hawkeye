@@ -54,6 +54,9 @@ type Alert struct {
 	// Flapping (EventFlapping, EventFlappingEnded, and the outage and recovery of an incident that began while its monitor was flapping): the
 	// episode, when it began, how many outages it counted, and its status (open while it lasts; then settled, stayed_down or ended). For the
 	// flapping events StartedAt and ResolvedAt are the episode's, and Cause is that of its latest outage.
+	// Outage alerts of website and API monitors: what the confirming check saw (nil without a snapshot). Never the body excerpt.
+	Snapshot *AlertSnapshot
+
 	FlapEpisodeID string
 	FlappingSince *time.Time
 	FlapOutages   int
@@ -182,6 +185,10 @@ func Render(a Alert) email.Message {
 		c.Facts = []email.Fact{{Label: "Website", Value: url}, {Label: "Detected at", Value: started}}
 		if a.Cause != "" {
 			c.Facts = append(c.Facts, email.Fact{Label: "Latest result", Value: clean(a.Cause)})
+		}
+		if a.Snapshot != nil {
+			c.Facts = append(c.Facts, snapshotFacts(a.Snapshot)...)
+			c.Quote = snapshotQuote(a.Snapshot)
 		}
 		c.Facts = append(c.Facts, email.Fact{Label: "Incident status", Value: "Open"})
 	}
