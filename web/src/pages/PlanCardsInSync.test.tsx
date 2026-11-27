@@ -78,18 +78,20 @@ describe('pricing cards stay in sync', () => {
     expect(billing).toEqual(landing)
   })
 
-  it('include every plan feature switched on in the plans table, on all three pages', async () => {
+  it('show the limits on every card and only what each plan adds over the one before it, on all three pages', async () => {
     for (const [ui, signedIn] of [[<LandingPage key="landing" />, false], [<MonitoringLandingPage key="monitoring" />, false], [<BillingPage key="billing" />, true]] as const) {
       const cards = await cardsOn(ui, signedIn)
-      expect(cards.Agency).toEqual(expect.arrayContaining([
-        '200 monitors', 'Cron job and DNS monitoring, with DNS change alerts', 'Checks from up to 3 locations', '5 team members', 'Require two-factor sign-in for your team', 'Domain expiry warnings for up to 100 domains',
-        'Maintenance windows, and quiet alerts during deploys from CI', 'Monthly PDF uptime reports', 'Branded Reports with name and logo', 'API and Claude (MCP) access: read and make changes',
-        '50 multi-step API checks of up to 10 steps', 'AI-drafted incident updates',
-      ]))
-      expect(cards.Free).not.toContain('AI-drafted incident updates')
-      expect(cards.Free).toContain('One multi-step API check of up to 3 steps')
-      expect(cards.Free).not.toContain('Branded Reports with name and logo')
-      expect(cards.Free).toContain('API and Claude (MCP) access: read and add monitors')
+      expect(cards.Free.slice(2)).toEqual(['5 monitors', 'Checks every 5 minutes', '7 days of history', 'Checks from 1 location'])
+      expect(cards.Pro.slice(2)).toEqual([
+        '50 monitors', 'Checks every 1 minute', '90 days of history', 'Checks from up to 3 locations',
+        'Maintenance windows and quiet deploys from CI', 'API and Claude can make changes, not just read', 'Monthly PDF uptime reports', 'AI-drafted incident updates',
+      ])
+      expect(cards.Agency.slice(2)).toEqual([
+        '200 monitors', 'Checks every 1 minute', '365 days of history', 'Checks from up to 3 locations',
+        '5 team members, with two-factor sign-in you can require', 'Status pages on your clients’ own domains', 'Reports with your name and logo',
+      ])
+      // Features every plan has are said once, under the cards, not repeated on each.
+      for (const card of Object.values(cards)) expect(card).not.toContain('Alerts that show what changed: status, headers and timings')
     }
   })
 

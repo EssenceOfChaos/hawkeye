@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -94,8 +94,8 @@ describe('BillingPage', () => {
 
   it('lists team seats on the plan that has them, and only there', async () => {
     setup({})
-    expect(await screen.findByText('5 team members')).toBeInTheDocument()
-    expect(screen.getAllByText(/team members/)).toHaveLength(1)
+    expect(await screen.findByText('5 team members, with two-factor sign-in you can require')).toBeInTheDocument()
+    expect(within(document.querySelector('ul.plans') as HTMLElement).getAllByText(/team members/)).toHaveLength(1)
   })
 
   it('shows members a read-only view', async () => {

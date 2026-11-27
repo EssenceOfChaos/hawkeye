@@ -4,6 +4,7 @@ import { type BillingInterval, type Plan } from '../api'
 import { usePlans } from '../hooks'
 import { useAuth } from '../auth'
 import { brand } from '../brand'
+import { PlanComparison } from '../components/PlanComparison'
 import { IntervalToggle, PlanDetails } from '../components/PlanDetails'
 import { ComingSoon } from '../components/ComingSoon'
 import { MonitoringFlow } from '../components/MonitoringFlow'
@@ -147,13 +148,13 @@ const FAQ = [
   { q: 'What happens if I downgrade?', a: 'Your existing monitors are never deleted automatically. You may not be able to add new ones until you are within the new plan’s limits, and history older than the new plan’s retention period is removed. Maintenance windows you already created keep working, but you cannot create new ones until you are on a paid plan. Domains beyond the new plan’s limit stay in your list but are no longer looked up. API keys keep reading, but stop making changes until you upgrade again.' },
 ]
 
-export function PlanCard({ plan, featured, billingEnabled, signedIn, interval = 'month' }: {
-  plan: Plan; featured: boolean; billingEnabled: boolean; signedIn: boolean; interval?: BillingInterval
+export function PlanCard({ plan, previous, featured, billingEnabled, signedIn, interval = 'month' }: {
+  plan: Plan; previous?: Plan; featured: boolean; billingEnabled: boolean; signedIn: boolean; interval?: BillingInterval
 }) {
   const card = (
     <div className={`plan${featured ? ' featured' : ''}`}>
       <h3>{plan.name}</h3>
-      <PlanDetails plan={plan} interval={interval} />
+      <PlanDetails plan={plan} previous={previous} interval={interval} />
       {plan.monthly_price_cents === 0 ? (
         <Link className="button primary" to="/register">Create free account</Link>
       ) : billingEnabled ? (
@@ -172,12 +173,6 @@ export function LandingPage() {
   const { plans, billingEnabled, annualEnabled } = usePlans()
   const [period, setPeriod] = useState<BillingInterval>('month')
   const multiLocation = plans?.some((p) => (p.max_regions ?? 1) > 1) ?? false
-  const multiSeat = plans?.some((p) => (p.max_team_members ?? 1) > 1) ?? false
-  const subMinute = plans?.some((p) => p.minimum_check_interval_seconds < 60) ?? false
-  // What paid plans add over Free, in words with no numbers (the cards carry those). Keep it in step with PlanDetails when a plan feature is added.
-  const paidAdvantages =
-    `Paid plans add more monitors, faster checks, longer history, a higher domain limit, ${multiLocation ? 'checks from several locations, ' : ''}maintenance windows, more multi-step API checks, monthly PDF uptime reports, AI-drafted incident updates and API keys that can make every change. ` +
-    `Agency ${multiSeat ? 'also ' : ''}adds ${subMinute ? 'the fastest checks, ' : ''}${multiSeat ? 'team members, ' : ''}reports with your own name and logo, and status pages on your clients’ own domains.`
 
   const signedIn = status === 'authenticated'
 
@@ -336,7 +331,7 @@ export function LandingPage() {
       <section aria-labelledby="pricing-h" className="section">
         <h2 id="pricing-h">Simple plans. Clear visibility.</h2>
         <p className="hint">
-          Use HawkEye free for as long as you like. Upgrade when your monitoring needs grow. Every plan includes website and API monitoring (with a multi-step API check), SSL certificate expiry warnings, domain expiry warnings (up to a limit that grows with the plan), incident tracking, alerts by email, Slack, Microsoft Teams, Discord, Telegram, PagerDuty and webhook, and public status pages (one on Free, more on paid plans). {paidAdvantages} The free plan is a real plan, not a trial, and monitors are never deleted if you move to a smaller plan.
+          Use HawkEye free for as long as you like. Upgrade when your monitoring needs grow. The free plan is a real plan, not a trial, and monitors are never deleted if you move to a smaller plan.
         </p>
         {plans === null && (
           <div role="status" aria-label="Loading plans" className="plans-loading">
@@ -349,11 +344,12 @@ export function LandingPage() {
         {plans && plans.length > 0 && billingEnabled && annualEnabled && <IntervalToggle value={period} onChange={setPeriod} plans={plans} />}
         {plans && plans.length > 0 && (
           <Reveal as="ul" className="plans">
-            {plans.map((p) => (
-              <PlanCard key={p.code} plan={p} featured={p.code === 'pro'} billingEnabled={billingEnabled} signedIn={signedIn} interval={period} />
+            {plans.map((p, i) => (
+              <PlanCard key={p.code} plan={p} previous={plans[i - 1]} featured={p.code === 'pro'} billingEnabled={billingEnabled} signedIn={signedIn} interval={period} />
             ))}
           </Reveal>
         )}
+        {plans && plans.length > 0 && <PlanComparison plans={plans} />}
       </section>
 
       <section className="section split trust">

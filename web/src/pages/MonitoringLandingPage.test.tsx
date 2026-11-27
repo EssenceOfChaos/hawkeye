@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
@@ -55,7 +55,7 @@ describe('MonitoringLandingPage', () => {
   it('shows live plan prices and the multi-location note only when plans offer several locations', async () => {
     renderPage(anonymous)
     expect(await screen.findByText('50 monitors')).toBeInTheDocument()
-    expect(screen.getByText('$19')).toBeInTheDocument()
+    expect(within(document.querySelector('ul.plans') as HTMLElement).getByText('$19')).toBeInTheDocument()
     expect(screen.getByText(/Checks from several locations/)).toBeInTheDocument()
   })
 
