@@ -237,3 +237,27 @@ func TestCompareKeepsAtMostSixChanges(t *testing.T) {
 		t.Fatalf("%d changes: %+v", len(c), c)
 	}
 }
+
+// A load balancer answering from another address of the same network is not a change; a move to another network is. The content type is
+// compared once, as the media type, never again as its header.
+func TestCompareIgnoresBalancedAddressesAndCountsTheContentTypeOnce(t *testing.T) {
+	good := &ResponseFacts{StatusCode: 200, SizeBytes: 100, ContentType: "application/json", ServerAddr: "2600:1f18:2da1:d401::1",
+		Headers: []Header{{Name: "Content-Type", Value: "application/json"}}}
+	failing := ResponseFacts{StatusCode: 200, SizeBytes: 100, ContentType: "text/html", ServerAddr: "2600:1f18:2da1:d402::9",
+		Headers: []Header{{Name: "Content-Type", Value: "text/html; charset=utf-8"}}}
+	c := Compare(good, failing, nil)
+	if len(c) != 1 || c[0].Field != "content_type" {
+		t.Fatalf("%+v", c)
+	}
+	failing.ServerAddr = "2a05:d014::1"
+	if c := Compare(good, failing, nil); len(c) != 2 || c[0].Field != "server_addr" {
+		t.Fatalf("%+v", c)
+	}
+	v4 := &ResponseFacts{StatusCode: 200, SizeBytes: 100, ServerAddr: "203.0.113.7"}
+	if c := Compare(v4, ResponseFacts{StatusCode: 200, SizeBytes: 100, ServerAddr: "203.0.113.200"}, nil); len(c) != 0 {
+		t.Fatalf("same /24: %+v", c)
+	}
+	if a, b := (ResponseFacts{ServerAddr: "203.0.113.7"}), (ResponseFacts{ServerAddr: "203.0.113.9"}); a.Fingerprint() != b.Fingerprint() {
+		t.Fatal("a balanced address rewrote the last good response")
+	}
+}

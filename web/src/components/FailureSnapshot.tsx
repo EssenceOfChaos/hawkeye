@@ -79,7 +79,9 @@ export function FailureSnapshot({ incidentID, monitorID }: { incidentID: string;
     <section className="failure-snapshot" aria-labelledby={`snapshot-${incidentID}`}>
       <h3 id={`snapshot-${incidentID}`}>What HawkEye saw</h3>
       <p className="hint">
-        The check that confirmed the outage, from {snap.locations.find((l) => l.region === snap.region)?.name ?? snap.region},{' '}
+        The check that confirmed the outage
+        {/* Only monitors checked from several locations have names for them; with one, where it ran says nothing. */}
+        {snap.locations.length > 1 && <>, from {snap.locations.find((l) => l.region === snap.region)?.name ?? snap.region}</>},{' '}
         <time dateTime={snap.checked_at}>{new Date(snap.checked_at).toLocaleString()}</time>.
       </p>
       <dl className="dns-diff">

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strconv"
@@ -40,7 +41,7 @@ var snapshotHeaders = []struct {
 	{name: "Cf-Ray", volatile: true},
 	{name: "Content-Encoding"},
 	{name: "Content-Length", volatile: true}, // size is compared on its own, with a tolerance
-	{name: "Content-Type"},
+	{name: "Content-Type", volatile: true},   // the media type is compared on its own (ContentType), without parameters such as charset
 	{name: "Fly-Request-Id", volatile: true},
 	{name: "Location"},
 	{name: "Ratelimit-", prefix: true, volatile: true},
@@ -154,7 +155,7 @@ func credentialRedactor(t Target) *redactor {
 // so a steady site's last good response is written once and then rarely.
 func (f ResponseFacts) Fingerprint() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d\n%s\n%s\n%s\n%s\n", f.StatusCode, f.FinalURL, f.ContentType, f.ServerAddr, f.CertIssuer)
+	fmt.Fprintf(&b, "%d\n%s\n%s\n%s\n%s\n", f.StatusCode, f.FinalURL, f.ContentType, addrNetwork(f.ServerAddr), f.CertIssuer)
 	if f.CertExpiresAt != nil {
 		b.WriteString(f.CertExpiresAt.UTC().Format(time.RFC3339))
 	}
@@ -227,7 +228,8 @@ func Compare(lastGood *ResponseFacts, failing ResponseFacts, usual *Timings) []C
 	if responded && lastGood.StatusCode != 0 {
 		add("status", "", strconv.Itoa(lastGood.StatusCode), strconv.Itoa(failing.StatusCode))
 	}
-	if failing.ServerAddr != "" && lastGood.ServerAddr != "" {
+	// Load balancers and CDNs answer from many addresses of one network: only a move to another network counts.
+	if failing.ServerAddr != "" && lastGood.ServerAddr != "" && addrNetwork(failing.ServerAddr) != addrNetwork(lastGood.ServerAddr) {
 		add("server_addr", "", lastGood.ServerAddr, failing.ServerAddr)
 	}
 	if responded {
@@ -277,6 +279,24 @@ func Compare(lastGood *ResponseFacts, failing ResponseFacts, usual *Timings) []C
 		out = out[:maxChanges]
 	}
 	return out
+}
+
+// addrNetwork is the network an address belongs to for comparing servers: its /24 for IPv4 and /48 for IPv6, the blocks providers route and
+// balance within. "" stays "".
+func addrNetwork(s string) string {
+	a, err := netip.ParseAddr(s)
+	if err != nil {
+		return s
+	}
+	bits := 48
+	if a.Is4() {
+		bits = 24
+	}
+	p, err := a.Prefix(bits)
+	if err != nil {
+		return s
+	}
+	return p.String()
 }
 
 func stableHeaders(hs []Header) map[string]string {
