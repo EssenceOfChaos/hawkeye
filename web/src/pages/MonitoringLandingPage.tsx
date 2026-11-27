@@ -4,6 +4,7 @@ import { type BillingInterval } from '../api'
 import { useAuth } from '../auth'
 import { brand, STATUS_URL } from '../brand'
 import { CookieSettingsButton } from '../components/CookieBanner'
+import { PlanComparison } from '../components/PlanComparison'
 import { IntervalToggle } from '../components/PlanDetails'
 import { ProductShots } from '../components/ProductShots'
 import { Reveal } from '../components/Reveal'
@@ -132,11 +133,12 @@ export function MonitoringLandingPage() {
         {plans && plans.length > 0 && billingEnabled && annualEnabled && <IntervalToggle value={period} onChange={setPeriod} plans={plans} />}
         {plans && plans.length > 0 && (
           <Reveal as="ul" className="plans">
-            {plans.map((p) => (
-              <PlanCard key={p.code} plan={p} featured={p.code === 'pro'} billingEnabled={billingEnabled} signedIn={signedIn} interval={period} />
+            {plans.map((p, i) => (
+              <PlanCard key={p.code} plan={p} previous={plans[i - 1]} featured={p.code === 'pro'} billingEnabled={billingEnabled} signedIn={signedIn} interval={period} />
             ))}
           </Reveal>
         )}
+        {plans && plans.length > 0 && <PlanComparison plans={plans} collapsed />}
       </section>
 
       <section className="mon-final" aria-labelledby="mon-final-h">

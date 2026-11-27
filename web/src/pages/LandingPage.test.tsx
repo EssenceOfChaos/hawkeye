@@ -32,8 +32,8 @@ describe('LandingPage', () => {
     await screen.findByText('200 monitors')
     const cards = document.querySelector('ul.plans') as HTMLElement
     expect(within(cards).getAllByText(/team members/)).toHaveLength(1)
-    expect(within(cards).getByText('5 team members')).toBeInTheDocument()
-    expect(screen.getByText(/Agency also adds team members, reports with your own name and logo, and status pages on your clients’ own domains/)).toBeInTheDocument()
+    expect(within(cards).getByText('5 team members, with two-factor sign-in you can require')).toBeInTheDocument()
+    expect([...cards.querySelectorAll('.plan-plus')].map((e) => e.textContent)).toEqual(['Everything in Pro, plus:'])
   })
 
   it('lists reports on a plan only when that plan includes them', async () => {
@@ -44,8 +44,10 @@ describe('LandingPage', () => {
     ]
     renderLanding((url) => (url.includes('/plans') ? json(200, { plans: withReports }) : json(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } })))
     await screen.findByText('200 monitors')
-    expect(screen.getAllByText('Monthly PDF uptime reports')).toHaveLength(2)
-    expect(screen.getAllByText('Branded Reports with name and logo')).toHaveLength(1)
+    // Each card names only what its plan adds: Pro adds reports, Agency adds the branding on them.
+    const cards = document.querySelector('ul.plans') as HTMLElement
+    expect(within(cards).getAllByText('Monthly PDF uptime reports')).toHaveLength(1)
+    expect(within(cards).getAllByText('Reports with your name and logo')).toHaveLength(1)
   })
 
   it('shows the brand, pricing from the API and honest availability labels', async () => {
@@ -54,7 +56,7 @@ describe('LandingPage', () => {
     )
     expect(screen.getAllByRole('img', { name: 'HawkEye' }).length).toBeGreaterThan(0)
     expect(await screen.findByText('50 monitors')).toBeInTheDocument()
-    expect(screen.getByText('$19')).toBeInTheDocument()
+    expect(within(document.querySelector('ul.plans') as HTMLElement).getByText('$19')).toBeInTheDocument()
     // Paid checkout is not built yet, so the page must not pretend it is.
     expect(screen.getByRole('button', { name: /open soon/i })).toBeDisabled()
     expect(screen.getAllByRole('link', { name: 'Create free account' }).length).toBeGreaterThan(0)
@@ -166,11 +168,10 @@ describe('LandingPage', () => {
     expect(screen.getByText('Cron job and DNS monitoring', { selector: '.value-strip li' })).toBeInTheDocument()
     expect(screen.getByText('Multi-step API checks', { selector: '.value-strip li' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'SSL certificate alerts' })).toBeInTheDocument()
-    // Every plan card lists them, so visitors can see they are not paid extras.
-    expect(screen.getAllByText('SSL certificate expiry warnings')).toHaveLength(plans.length)
-    expect(screen.getAllByText('Website and API monitoring').length).toBeGreaterThanOrEqual(plans.length)
-    expect(screen.getByText(/Every plan includes website and API monitoring/)).toBeInTheDocument()
-    expect(screen.getByText(/Paid plans add more monitors, faster checks, longer history.*maintenance windows, more multi-step API checks, monthly PDF uptime reports, AI-drafted incident updates and API keys that can make every change/)).toBeInTheDocument()
+    // Said once under the cards, so visitors can see they are not paid extras.
+    const included = screen.getByRole('heading', { name: 'Every plan includes' }).parentElement!
+    expect(within(included).getByText('Website, API, cron job and DNS monitoring')).toBeInTheDocument()
+    expect(within(included).getByText('SSL certificate and domain expiry warnings')).toBeInTheDocument()
     expect(screen.getByText('Where can HawkEye send alerts?')).toBeInTheDocument()
     expect(screen.getByText('Does HawkEye warn me before my SSL certificate expires?')).toBeInTheDocument()
     expect(screen.getByText(/Can I monitor an API\?/)).toBeInTheDocument()
@@ -182,11 +183,11 @@ describe('LandingPage', () => {
     )
     await screen.findByText('50 monitors')
     expect(screen.getByRole('heading', { name: 'Domain expiry alerts' })).toBeInTheDocument()
-    expect(screen.getByText('Domain expiry warnings for up to 3 domains')).toBeInTheDocument()
-    expect(screen.getByText('Domain expiry warnings for up to 25 domains')).toBeInTheDocument()
+    const row = screen.getByRole('rowheader', { name: 'Domains watched for expiry' }).closest('tr')!
+    expect([...row.querySelectorAll('td')].map((td) => td.textContent)).toEqual(plans.map((p) => String(p.max_domains)))
     expect(screen.getByText('Does HawkEye warn me before my domain name expires?')).toBeInTheDocument()
     expect(screen.getByText(/Not every registry shares this date/)).toBeInTheDocument()
-    expect(screen.getByText(/Every plan includes .*domain expiry warnings/)).toBeInTheDocument()
+    expect(screen.getByText('SSL certificate and domain expiry warnings')).toBeInTheDocument()
   })
 
   it('puts the no-false-alarms message above the feature list, and says the true thing about it', () => {

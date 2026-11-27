@@ -252,7 +252,25 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .plan .price strong { font-size: 2rem; }
 .plan .price-note { margin-top: -.5rem; }
 .interval-toggle { justify-content: center; }
-.plan ul { padding-left: 1.1rem; flex: 1; }
+.plan ul { padding-left: 1.1rem; margin: 0; }
+.plan-limits li { font-weight: 600; }
+.plan-plus { margin: .35rem 0 0; color: var(--muted); font-size: .9rem; }
+.plan-spacer { flex: 1; } /* pushes the button to the bottom, so the buttons line up across cards of different lengths */
+.plan-compare-section, .plan-compare-details { margin-top: 2rem; }
+.plan-compare-details summary { cursor: pointer; font-weight: 600; color: var(--gold-hi); }
+.plan-compare-details[open] summary { margin-bottom: 1rem; }
+.plan-compare-wrap { border: 1px solid var(--line); border-radius: .75rem; background: linear-gradient(180deg, #0f2744cc, #0b1f38cc); }
+.plan-compare { font-size: .95rem; }
+.plan-compare thead th { text-transform: none; letter-spacing: 0; font-size: 1rem; color: var(--text); }
+.plan-compare tbody th { color: var(--text); font-size: inherit; font-weight: 400; text-transform: none; letter-spacing: 0; border-bottom-color: #ffffff17; }
+.plan-compare td { text-align: center; font-variant-numeric: tabular-nums; }
+.plan-compare thead th { text-align: center; }
+.plan-compare tr.plan-compare-group th { color: var(--gold-hi); font-size: .78rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; padding-top: 1.1rem; }
+.plan-included { margin-top: 1.5rem; }
+.plan-included h3 { margin: 0 0 .5rem; font-size: 1.1rem; }
+.plan-included ul { margin: 0; padding-left: 1.1rem; columns: 2 18rem; column-gap: 2rem; }
+.plan-included li { break-inside: avoid; margin-bottom: .35rem; }
+@media (max-width: 40rem) { .plan-compare { font-size: .85rem; } .plan-compare th, .plan-compare td { padding: .55rem .4rem; } }
 .landing .hint { opacity: .8; }
 .landing-footer { padding-top: 3rem; padding-bottom: 1.5rem; border-top: 1px solid var(--line); margin-top: 2rem; background: transparent; color: inherit; }
 .landing-footer aside p { max-width: 20rem; margin: .5rem 0 0; opacity: .8; }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { api, ApiError, type BillingInterval, type BillingSubscription, type Plan, type Usage } from '../api'
+import { PlanComparison } from '../components/PlanComparison'
 import { IntervalToggle, PlanDetails } from '../components/PlanDetails'
 import { Alert } from '../components/Alert'
 import { useAuth } from '../auth'
@@ -200,12 +201,12 @@ export function BillingPage() {
           {whyNot && !sub.paid_access && <p className="hint">{whyNot}</p>}
           {annual && !sub.paid_access && <IntervalToggle value={period} onChange={setPeriod} plans={plans} />}
           <ul className="plans app-plans">
-            {plans.map((p) => {
+            {plans.map((p, i) => {
               const current = p.code === sub.plan.code
               return (
                 <li key={p.code} className={`plan${current ? ' featured' : ''}`}>
                   <h3>{p.name}{current && <span className="soon">Current plan</span>}</h3>
-                  <PlanDetails plan={p} interval={shown} />
+                  <PlanDetails plan={p} previous={plans[i - 1]} interval={shown} />
                   {!current && p.monthly_price_cents > 0 && !sub.paid_access && (
                     <button className="primary" disabled={!canBuy || busy !== null}
                       onClick={() => void go(p.code, '/billing/checkout-session', shown === 'year' ? { plan: p.code, interval: 'year' } : { plan: p.code },
@@ -219,6 +220,7 @@ export function BillingPage() {
               )
             })}
           </ul>
+          <PlanComparison plans={plans} collapsed />
           {sub.paid_access && <p className="hint">To change plan, use Manage billing.</p>}
         </section>
       )}

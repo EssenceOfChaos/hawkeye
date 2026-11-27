@@ -21,14 +21,36 @@ export function IntervalToggle({ value, onChange, plans }: { value: BillingInter
   )
 }
 
+const seats = (p: Plan) => p.max_team_members ?? 1
+const regions = (p: Plan) => p.max_regions ?? 1
+
 /**
- * Everything on a pricing card below the plan's name: the tagline, the price and the feature list. The landing page, the monitoring landing page and the
- * billing page all render this, so a new plan feature is added in one place and the three can never disagree (PlanCardsInSync.test.tsx guards it).
+ * The plan features a card can name in its "Everything in <previous plan>, plus" list: each is on or off per plan. A card lists only the ones its
+ * plan has and the plan before it does not, so the cards show what differs between plans. Everything else (limits that every plan has, and the
+ * features all plans share) is in the comparison table, PlanComparison.tsx.
  */
-export function PlanDetails({ plan, interval = 'month' }: { plan: Plan; interval?: BillingInterval }) {
+const ADDITIONS: { has: (p: Plan) => boolean; label: (p: Plan) => string }[] = [
+  { has: (p) => seats(p) > 1, label: (p) => `${seats(p)} team members, with two-factor sign-in you can require` },
+  { has: (p) => !!p.maintenance_enabled, label: () => 'Maintenance windows and quiet deploys from CI' },
+  { has: (p) => !!p.api_write_enabled, label: () => 'API and Claude can make changes, not just read' },
+  { has: (p) => !!p.status_page_branding, label: () => 'Status pages with your clients’ logos and colors' },
+  { has: (p) => !!p.status_page_white_label, label: () => 'White-label status pages, no HawkEye branding' },
+  { has: (p) => (p.max_status_page_domains ?? 0) > 0, label: () => 'Status pages on your clients’ own domains' },
+  { has: (p) => !!p.reports_enabled, label: () => 'Monthly PDF uptime reports' },
+  { has: (p) => !!p.branded_reports_enabled, label: () => 'Reports with your name and logo' },
+  { has: (p) => !!p.ai_drafts_enabled, label: () => 'AI-drafted incident updates' },
+]
+
+/**
+ * Everything on a pricing card below the plan's name: the tagline, the price, the four limits that differ on every plan, and what the plan adds
+ * over the one before it. The landing page, the monitoring landing page and the billing page all render this, so a plan change is made in one place
+ * and the three can never disagree (PlanCardsInSync.test.tsx guards it). `previous` is the next cheaper plan, or none for the cheapest.
+ */
+export function PlanDetails({ plan, previous, interval = 'month' }: { plan: Plan; previous?: Plan; interval?: BillingInterval }) {
   const tagline = planTagline(plan.code)
   const yearly = interval === 'year' && plan.annual_price_cents != null && plan.monthly_price_cents > 0
   const free = monthsFree(plan)
+  const added = previous ? ADDITIONS.filter((a) => a.has(plan) && !a.has(previous)) : []
   return (
     <>
       {tagline && <p className="plan-tagline">{tagline}</p>}
@@ -48,36 +70,21 @@ export function PlanDetails({ plan, interval = 'month' }: { plan: Plan; interval
           {plan.monthly_price_cents > 0 && <span> / month</span>}
         </p>
       )}
-      <ul>
+      <ul className="plan-limits">
         <li>{plan.max_monitors} monitors</li>
         <li>Checks every {formatPeriod(plan.minimum_check_interval_seconds)}</li>
         <li>{plan.history_retention_days} days of history</li>
-        {(plan.max_regions ?? 1) > 1 && <li>Checks from up to {plan.max_regions} locations</li>}
-        {(plan.max_team_members ?? 1) > 1 && <li>{plan.max_team_members} team members</li>}
-        {(plan.max_team_members ?? 1) > 1 && <li>Require two-factor sign-in for your team</li>}
-        <li>Website and API monitoring</li>
-        <li>Failures re-checked within seconds before alerting</li>
-        <li>One alert, not twenty, when sites fail together or keep flapping</li>
-        <li>Alerts that show what changed: status, headers and timings</li>
-        <li>Response times split into DNS, connect, TLS and server time</li>
-        {(plan.max_workflows ?? 0) > 0 && (
-          <li>{plan.max_workflows === 1 ? 'One multi-step API check' : `${plan.max_workflows} multi-step API checks`} of up to {plan.max_workflow_steps} steps</li>
-        )}
-        <li>Cron job and DNS monitoring, with DNS change alerts</li>
-        <li>SSL certificate expiry warnings</li>
-        {plan.max_domains !== undefined && <li>Domain expiry warnings for up to {plan.max_domains} domains</li>}
-        <li>Email, Slack, Teams, Discord, Telegram, PagerDuty and webhook alerts</li>
-        <li>{plan.api_write_enabled ? 'API and Claude (MCP) access: read and make changes' : 'API and Claude (MCP) access: read and add monitors'}</li>
-        <li>{(plan.max_status_pages ?? 1) > 1 ? `${plan.max_status_pages} public status pages` : 'Public status page'}</li>
-        {plan.status_page_white_label
-          ? <li>White-label status pages: your clients’ logos and colors, no HawkEye branding</li>
-          : plan.status_page_branding && <li>Status pages with your clients’ logos and colors</li>}
-        {(plan.max_status_page_domains ?? 0) > 0 && <li>Status pages on your clients’ own domains</li>}
-        {plan.maintenance_enabled && <li>Maintenance windows, and quiet alerts during deploys from CI</li>}
-        {plan.ai_drafts_enabled && <li>AI-drafted incident updates</li>}
-        {plan.reports_enabled && <li>Monthly PDF uptime reports</li>}
-        {plan.branded_reports_enabled && <li>Branded Reports with name and logo</li>}
+        <li>{regions(plan) > 1 ? `Checks from up to ${regions(plan)} locations` : 'Checks from 1 location'}</li>
       </ul>
+      {added.length > 0 && (
+        <>
+          <p className="plan-plus">Everything in {previous!.name}, plus:</p>
+          <ul className="plan-adds">
+            {added.map((a) => <li key={a.label(plan)}>{a.label(plan)}</li>)}
+          </ul>
+        </>
+      )}
+      <span className="plan-spacer" />
     </>
   )
 }
