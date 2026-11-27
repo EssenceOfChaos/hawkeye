@@ -138,7 +138,7 @@ export function MonitoringLandingPage() {
             ))}
           </Reveal>
         )}
-        {plans && plans.length > 0 && <PlanComparison plans={plans} collapsed />}
+        {plans && plans.length > 0 && <PlanComparison plans={plans} />}
       </section>
 
       <section className="mon-final" aria-labelledby="mon-final-h">

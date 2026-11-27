@@ -256,7 +256,8 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .plan-limits li { font-weight: 600; }
 .plan-plus { margin: .35rem 0 0; color: var(--muted); font-size: .9rem; }
 .plan-spacer { flex: 1; } /* pushes the button to the bottom, so the buttons line up across cards of different lengths */
-.plan-compare-section, .plan-compare-details { margin-top: 2rem; }
+.plan-compare-section { margin-top: 2rem; }
+.plan-compare-details { margin-top: 1.25rem; }
 .plan-compare-details summary { cursor: pointer; font-weight: 600; color: var(--gold-hi); }
 .plan-compare-details[open] summary { margin-bottom: 1rem; }
 .plan-compare-wrap { border: 1px solid var(--line); border-radius: .75rem; background: linear-gradient(180deg, #0f2744cc, #0b1f38cc); }
@@ -266,7 +267,7 @@ a.button.primary, button.primary, .button.primary { background: linear-gradient(
 .plan-compare td { text-align: center; font-variant-numeric: tabular-nums; }
 .plan-compare thead th { text-align: center; }
 .plan-compare tr.plan-compare-group th { color: var(--gold-hi); font-size: .78rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; padding-top: 1.1rem; }
-.plan-included { margin-top: 1.5rem; }
+.plan-included { margin-top: 0; }
 .plan-included h3 { margin: 0 0 .5rem; font-size: 1.1rem; }
 .plan-included ul { margin: 0; padding-left: 1.1rem; columns: 2 18rem; column-gap: 2rem; }
 .plan-included li { break-inside: avoid; margin-bottom: .35rem; }
@@ -663,7 +664,18 @@ h1, h2 { letter-spacing: -.02em; line-height: 1.2; }
 .incident-updates .d-alert { margin: 0; }
 /* What HawkEye saw (failure snapshots), above an incident's updates. Text from the monitored site wraps anywhere, so a long header never widens the page. */
 /* The expanded row is as wide as the table, which scrolls sideways on a phone: keep its content in view at the screen's width instead. */
-.incident-updates-row .failure-snapshot, .incident-updates-row .incident-updates { position: sticky; left: .75rem; max-width: min(46rem, calc(100vw - 3rem)); }
+.incident-updates-row .incident-analysis, .incident-updates-row .failure-snapshot, .incident-updates-row .incident-updates { position: sticky; left: .75rem; max-width: min(46rem, calc(100vw - 3rem)); }
+.analysis-usage { display: flex; align-items: center; gap: .85rem; margin-top: .75rem; }
+.analysis-usage p { margin: 0; }
+.analysis-usage .d-radial-progress { flex: none; font-size: .72rem; font-weight: 700; color: var(--gold); background: #ffffff0d; }
+.analysis-usage .d-radial-progress > span { color: var(--text); }
+.analysis-usage.near .d-radial-progress { color: var(--warn); }
+.analysis-usage.full .d-radial-progress { color: var(--down); }
+.incident-analysis { max-width: 46rem; padding: .25rem 0 .75rem; border-bottom: 1px solid var(--line); margin-bottom: .75rem; }
+.incident-analysis h3 { margin: 0 0 .35rem; font-size: 1.05rem; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.incident-analysis h3 .soon { margin: 0; }
+.incident-analysis .analysis-cause { font-size: 1.02rem; margin: 0 0 .4rem; }
+.incident-analysis p { margin: .35rem 0; }
 .failure-snapshot { max-width: 46rem; padding: .25rem 0 .75rem; border-bottom: 1px solid var(--line); margin-bottom: .75rem; }
 .failure-snapshot h3 { margin: 0 0 .25rem; font-size: 1.05rem; }
 .failure-snapshot h4 { margin: .75rem 0 .25rem; font-size: .95rem; }
