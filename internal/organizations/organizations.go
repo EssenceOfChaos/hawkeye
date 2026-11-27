@@ -180,6 +180,26 @@ func (s *Service) AIDraftsEnabled(ctx context.Context, orgID uuid.UUID) (bool, e
 	return on, err
 }
 
+// AIAnalysisEnabled reports whether the organization's owner has turned on AI incident analysis (the plan must include it too:
+// plans.CanUseAIAnalysis).
+func (s *Service) AIAnalysisEnabled(ctx context.Context, orgID uuid.UUID) (bool, error) {
+	var on bool
+	err := s.pool.QueryRow(ctx, `SELECT ai_analysis_enabled FROM organizations WHERE id = $1`, orgID).Scan(&on)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, ErrNotFound
+	}
+	return on, err
+}
+
+// SetAIAnalysis turns AI incident analysis on or off. The caller checks that the person is the owner and, to turn it on, the plan.
+func (s *Service) SetAIAnalysis(ctx context.Context, orgID uuid.UUID, on bool) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE organizations SET ai_analysis_enabled = $2 WHERE id = $1`, orgID, on)
+	if err == nil && tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
 // SetAIDrafts turns AI-drafted incident updates on or off. The caller checks that the person is the owner and, to turn them on, the plan.
 func (s *Service) SetAIDrafts(ctx context.Context, orgID uuid.UUID, on bool) error {
 	tag, err := s.pool.Exec(ctx, `UPDATE organizations SET ai_drafts_enabled = $2 WHERE id = $1`, orgID, on)

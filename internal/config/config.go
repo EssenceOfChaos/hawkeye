@@ -89,8 +89,12 @@ type Config struct {
 
 	SentryDSN  string
 	AppVersion string
-	// AnthropicAPIKey turns on AI-drafted incident updates (internal/incidentdraft). Empty: the feature is off and says so.
+	// AnthropicAPIKey turns on AI-drafted incident updates (internal/incidentdraft) and AI incident analysis (internal/incidentanalysis). Empty:
+	// both are off and say so.
 	AnthropicAPIKey string
+	// RunAIAnalysis runs AI incident analyses on this worker, when AnthropicAPIKey is set. AI_ANALYSIS_ENABLED=false turns off only this feature
+	// (on both the API and the worker), for example during an incident with the model provider; analyses wait until it is back on.
+	RunAIAnalysis bool
 	// OpenAIAdsAPIKey turns on server-side conversion reporting to OpenAI Ads (internal/adconversions), for the pixel OpenAIAdsPixelID (the one the
 	// web app's pixel uses). Empty: nothing is recorded or sent from the server; the browser pixel still runs.
 	OpenAIAdsAPIKey  string
@@ -421,6 +425,7 @@ func load(get func(string) string) (Config, error) {
 		RunWeeklySummary:      !boolean("DISABLE_WEEKLY_SUMMARY"),
 		WeeklySummaryInterval: duration("WEEKLY_SUMMARY_INTERVAL", 15*time.Minute),
 		RunMonthlyReports:     !boolean("DISABLE_MONTHLY_REPORTS"),
+		RunAIAnalysis:         str("AI_ANALYSIS_ENABLED", "true") != "false",
 		MonthlyReportInterval: duration("MONTHLY_REPORT_INTERVAL", time.Hour),
 
 		StripeSecretKey:         str("STRIPE_SECRET_KEY", ""),
@@ -602,7 +607,7 @@ func load(get func(string) string) (Config, error) {
 
 	if c.WorkerChecksOnly {
 		c.RunScheduler, c.RunRetention, c.RunDomainChecks, c.RunLifecycle, c.RunWeeklySummary, c.RunMonthlyReports = false, false, false, false, false, false
-		c.RunStatusPageDomains = false
+		c.RunStatusPageDomains, c.RunAIAnalysis = false, false
 	}
 
 	// Production must never fall back to a development secret.

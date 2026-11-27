@@ -81,6 +81,7 @@ type envOpts struct {
 	site      *sitecheck.Service
 	setup     *discovery.Service
 	drafts    *incidentdraft.Service
+	analysis  bool // AI incident analysis available on the server
 	telegram  *notifications.TelegramBot
 	noAPIKeys bool                       // DISABLE_API_KEYS
 	oauthPerM int                        // OAUTH_TOKEN_RATE_LIMIT_PER_MIN (0: the default)
@@ -134,6 +135,7 @@ func buildApp(t *testing.T, pool *pgxpool.Pool, mail *email.Memory, rateLimit in
 		SiteCheck:   o.site,
 		Discovery:   o.setup,
 		Drafts:      o.drafts,
+		AIAnalysis:  o.analysis,
 		HSTS:        o.hsts, Metrics: o.metrics, Errors: o.reporter, EmailActionLimitPerHour: o.emailPerH, GlobalRateLimitPerMin: o.global,
 	}
 	if o.shared {

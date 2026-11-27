@@ -131,14 +131,26 @@ type ExportAuth struct {
 }
 
 type ExportIncident struct {
-	ID            uuid.UUID      `json:"id"`
-	MonitorID     uuid.UUID      `json:"monitor_id"`
-	StartedAt     time.Time      `json:"started_at"`
-	ResolvedAt    *time.Time     `json:"resolved_at"`
-	Status        string         `json:"status"`
-	CauseCategory *string        `json:"cause_category"`
-	Summary       *string        `json:"summary"`
-	Updates       []ExportUpdate `json:"updates"` // the notes the team posted on it, oldest first
+	ID            uuid.UUID       `json:"id"`
+	MonitorID     uuid.UUID       `json:"monitor_id"`
+	StartedAt     time.Time       `json:"started_at"`
+	ResolvedAt    *time.Time      `json:"resolved_at"`
+	Status        string          `json:"status"`
+	CauseCategory *string         `json:"cause_category"`
+	Summary       *string         `json:"summary"`
+	Updates       []ExportUpdate  `json:"updates"` // the notes the team posted on it, oldest first
+	AIAnalysis    *ExportAnalysis `json:"ai_analysis,omitempty"`
+}
+
+// ExportAnalysis is an incident's AI analysis (internal/incidentanalysis), when one was written.
+type ExportAnalysis struct {
+	Category    string    `json:"category"`
+	LikelyCause string    `json:"likely_cause"`
+	Evidence    []string  `json:"evidence"`
+	NextStep    string    `json:"next_step"`
+	Confidence  string    `json:"confidence"`
+	Model       string    `json:"model"`
+	WrittenAt   time.Time `json:"written_at"`
 }
 
 type ExportUpdate struct {
@@ -323,6 +335,24 @@ func (s *Service) fillOrg(ctx context.Context, o *ExportOrg) error {
 		}
 		if n, ok := at[id]; ok {
 			o.Incidents[n].Updates = append(o.Incidents[n].Updates, u)
+		}
+	}
+	rows.Close()
+
+	rows, err = s.pool.Query(ctx, `SELECT a.incident_id, a.category, a.likely_cause, COALESCE(a.evidence, '[]'), a.next_step, a.confidence, a.model, a.finished_at
+		FROM incident_analyses a WHERE a.organization_id = $1 AND a.status = 'done'`, o.ID)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var id uuid.UUID
+		var a ExportAnalysis
+		if err := rows.Scan(&id, &a.Category, &a.LikelyCause, &a.Evidence, &a.NextStep, &a.Confidence, &a.Model, &a.WrittenAt); err != nil {
+			rows.Close()
+			return err
+		}
+		if n, ok := at[id]; ok {
+			o.Incidents[n].AIAnalysis = &a
 		}
 	}
 	rows.Close()

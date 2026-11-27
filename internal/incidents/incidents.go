@@ -54,6 +54,13 @@ func (e Engine) Opened(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, o ch
 	if flapping, err := flapOutage(ctx, tx, orgID, monitorID, id, timing); flapping || err != nil {
 		return err
 	}
+	// An AI analysis of the snapshot, for organizations that turned it on (internal/incidentanalysis runs it). Not for a flapping monitor's
+	// outages, which would use up the month's analyses on one unsteady site.
+	if _, err := tx.Exec(ctx, `INSERT INTO incident_analyses (incident_id, organization_id)
+		SELECT $1, o.id FROM organizations o
+		WHERE o.id = $2 AND o.ai_analysis_enabled AND EXISTS (SELECT 1 FROM incident_snapshots WHERE incident_id = $1)`, id, orgID); err != nil {
+		return err
+	}
 	// The alert waits for the monitor's alert delay (counted from the first failed check) and for the end of its quiet hours.
 	_, err = notifications.Enqueue(ctx, tx, orgID, monitorID, id, notifications.EventOutage, timing.OutageAt(time.Now(), startedAt))
 	return err
@@ -179,4 +186,6 @@ type Incident struct {
 	AlertsPaused bool `json:"alerts_paused"`
 	// HasSnapshot: what HawkEye saw when the outage was confirmed is kept (GET /incidents/:id/snapshot).
 	HasSnapshot bool `json:"has_snapshot"`
+	// HasAnalysis: an AI analysis was asked for, written or tried (GET /incidents/:id/analysis).
+	HasAnalysis bool `json:"has_analysis"`
 }

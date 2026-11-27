@@ -61,6 +61,8 @@ type Alert struct {
 
 	// Outage alerts of website and API monitors: what the confirming check saw (nil without a snapshot). Never the body excerpt.
 	Snapshot *AlertSnapshot
+	// Recovery alerts: the AI analysis of the outage's likely cause, when the organization turned analysis on and one was written.
+	Analysis *AlertAnalysis
 
 	// Group holds the alerts combined into this message (see Group): two or more of one event, to one destination. Empty for a single alert.
 	Group []Alert
@@ -170,6 +172,12 @@ func Render(a Alert) email.Message {
 			c.Facts = append(c.Facts,
 				email.Fact{Label: "Recovery confirmed", Value: a.ResolvedAt.UTC().Format("2006-01-02 15:04 UTC")},
 				email.Fact{Label: "Incident duration", Value: Duration(a.ResolvedAt.Sub(a.StartedAt))})
+		}
+		if an := a.Analysis; an != nil {
+			c.Facts = append(c.Facts, email.Fact{Label: "Likely cause (AI, may be wrong)", Value: clean(an.LikelyCause)})
+			if an.NextStep != "" {
+				c.Facts = append(c.Facts, email.Fact{Label: "Suggested next step", Value: clean(an.NextStep)})
+			}
 		}
 		c.Paragraphs = append(c.Paragraphs, "Review the incident timeline to see the recorded failures and recovery checks.")
 	default:

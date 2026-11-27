@@ -229,6 +229,15 @@ type PayloadIncident struct {
 	Cause      string     `json:"cause,omitempty"`
 	// Snapshot is what the confirming check saw, on outage events of website and API monitors. Never the response body.
 	Snapshot *PayloadSnapshot `json:"snapshot,omitempty"`
+	// AIAnalysis is the likely cause written by AI analysis, on recovery events when the organization turned it on. It may be wrong.
+	AIAnalysis *PayloadAnalysis `json:"ai_analysis,omitempty"`
+}
+
+type PayloadAnalysis struct {
+	Category    string `json:"category"`
+	LikelyCause string `json:"likely_cause"`
+	NextStep    string `json:"next_step"`
+	Confidence  string `json:"confidence"`
 }
 
 type PayloadSnapshot struct {
@@ -315,6 +324,9 @@ func buildWebhook(a Alert, now time.Time) WebhookPayload {
 				p.Incident.Snapshot.Changes = []checks.Change{}
 			}
 		}
+		if an := a.Analysis; an != nil {
+			p.Incident.AIAnalysis = &PayloadAnalysis{Category: an.Category, LikelyCause: an.LikelyCause, NextStep: an.NextStep, Confidence: an.Confidence}
+		}
 		if a.ResolvedAt != nil {
 			r := a.ResolvedAt.UTC()
 			p.Incident.ResolvedAt = &r
@@ -381,6 +393,9 @@ func chatContent(a Alert, now time.Time) chatMessage {
 			if a.IsDNS() {
 				m.Lines = []string{"Failing for " + Duration(a.ResolvedAt.Sub(a.StartedAt))}
 			}
+		}
+		if an := a.Analysis; an != nil {
+			m.Lines = append(m.Lines, cutLine("Likely cause (AI, may be wrong): "+clean(an.LikelyCause)))
 		}
 	case EventDNSChange:
 		m.Title, m.Tone = "🔀 DNS record changed for "+clean(a.MonitorURL), toneWarning

@@ -17,6 +17,12 @@ type AlertSnapshot struct {
 	Locations []checks.LocationState
 }
 
+// AlertAnalysis is the AI analysis a recovery alert repeats (internal/incidentanalysis): written by a model from the snapshot, so labeled as
+// possibly wrong wherever it is shown.
+type AlertAnalysis struct {
+	Category, LikelyCause, NextStep, Confidence string
+}
+
 const (
 	maxEmailHeaders = 10
 	maxChatChanges  = 2
@@ -155,4 +161,12 @@ func snapshotChatLines(s *AlertSnapshot) []string {
 		out = out[:3]
 	}
 	return out
+}
+
+// cutLine keeps a chat line within maxChatLine characters.
+func cutLine(v string) string {
+	if r := []rune(v); len(r) > maxChatLine {
+		return string(r[:maxChatLine-1]) + "…"
+	}
+	return v
 }
