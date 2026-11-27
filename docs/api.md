@@ -165,7 +165,7 @@ that are not browsers send none. It is stateless (no MCP sessions; `GET` and `DE
 | `get_account_overview` | read | – | `GET /usage`, `GET /dashboard/summary` |
 | `list_monitors`, `get_monitor` | read | – | `GET /monitors`, `GET /monitors/:id` (never headers, body or credentials) |
 | `get_uptime` | read | – | `GET /monitors/:id/uptime` (or every monitor), presets only |
-| `list_incidents`, `get_incident` | read | – | `GET /incidents`, `GET /incidents/:id/updates`, `GET /incidents/:id/snapshot` (never the body) |
+| `list_incidents`, `get_incident` | read | – | `GET /incidents`, `GET /incidents/:id/updates`, `GET /incidents/:id/snapshot` (never the body), `GET /incidents/:id/analysis` (as `ai_analysis`) |
 | `list_status_pages`, `list_maintenance_windows` | read | – | `GET /status-pages`, `GET /maintenance-windows` |
 | `suggest_monitors` | read, open world | – | `POST /monitors/suggestions`; returns `create_monitor` arguments, creates nothing |
 | `pause_monitors`, `resume_monitors` | write | write key, paid plan | `POST /monitors/bulk` (by IDs or by tag name) |
@@ -380,10 +380,10 @@ database index). Deleting a monitor closes its open incident silently.
 | `GET /incidents/:id/snapshot` | the incident's failure snapshot (below); 404 when it has none or belongs to another organization. Open to API keys |
 | `GET /incidents/:id/snapshot/body` | the opt-in body excerpt, `{body: {text, truncated}}`, `Cache-Control: no-store`; 404 when none was kept or it was cleared. **Session only** (`SESSION_REQUIRED` for API keys and connected apps) |
 
-Incident: `{id, monitor_id, monitor_name, started_at, resolved_at, status, cause_category, summary, duration_seconds, update_count, flapping, alerts_paused, has_snapshot}`
+Incident: `{id, monitor_id, monitor_name, started_at, resolved_at, status, cause_category, summary, duration_seconds, update_count, flapping, alerts_paused, has_snapshot, has_analysis}`
 (`duration_seconds` is the elapsed time so far while open; `update_count` is how many updates have been posted on it; `flapping`: the monitor was
 flapping when it began; `alerts_paused`: so no outage or recovery alert was sent for it, see *Grouped alerts and flapping*; `has_snapshot`: see
-*Failure snapshots*).
+*Failure snapshots*; `has_analysis`: see *AI incident analysis*).
 
 ### Failure snapshots
 
@@ -440,6 +440,28 @@ content. The prompt treats all of it as data (names and earlier updates are type
 409 `AI_DRAFTS_OFF` (not turned on), 403 `PLAN_LIMIT_REACHED` (`ai_drafts`, checked on every draft, so a downgrade stops it at once), 422
 `DRAFT_DECLINED` (the model declined; there is no fallback model for Haiku), 503 `AI_DRAFTS_UNAVAILABLE` (no `ANTHROPIC_API_KEY`, or the model
 could not be reached). Limits: per IP, and 60 drafts an hour per organization. Session only: API keys and MCP get `SESSION_REQUIRED`.
+
+### AI incident analysis
+
+`internal/incidentanalysis`, migration `000059`, `docs/plan-ai-incident-analysis.md`. Once the owner turns it on (`organizations.ai_analysis_enabled`, off
+by default), the worker asks **Claude Haiku 5.5** (`claude-haiku-5-5`, effort `low`, structured output) for the likely cause of each confirmed outage
+that has a failure snapshot, and stores it with the incident. Not for outages a flapping monitor's "flapping" alert covered.
+
+| Endpoint | Who | Notes |
+|---|---|---|
+| `GET /ai-analysis` | any member, session | `{available, included, enabled, limit, used, model}`: the server can run analyses, the plan includes some, the owner turned it on, and this calendar month's (UTC) allowance and usage |
+| `PUT /ai-analysis` | owner, session | `{enabled}` → as `GET`. Turning on needs a configured model (503 `AI_ANALYSIS_UNAVAILABLE`) and a plan with analyses (403 `PLAN_LIMIT_REACHED`, `limit_type: ai_analyses`). Recorded in the security log |
+| `GET /incidents/:id/analysis` | open to API keys | `{analysis: {status, category, likely_cause, evidence, next_step, confidence, model, requested_at, finished_at}}`; 404 when it has none |
+| `POST /incidents/:id/analysis` | any member, session | 202 `{analysis}` with `status: pending`: asks for one (the first, or a new one replacing the last), run in the background. 409 `AI_ANALYSIS_OFF`, `NO_SNAPSHOT`, `ANALYSIS_IN_PROGRESS`; 403 `PLAN_LIMIT_REACHED` when the month's analyses are used up; 503 `AI_ANALYSIS_UNAVAILABLE` |
+
+`status` is `pending` or `running` (poll until it isn't), `done` (the fields are set), `declined` (the model declined), `failed` (the model couldn't be
+reached after 3 attempts), `over_limit` (the month's allowance was used up when the run started) or `off` (turned off, or no longer in the plan, before
+it ran). `category` is one of `origin_server`, `cdn_or_proxy`, `dns`, `tls_certificate`, `network`, `slow_response`, `application_error`,
+`content_changed`, `authentication`, `rate_limited`, `unknown`; `likely_cause` and `next_step` are at most 200 characters, `evidence` at most 3 items of
+160; `confidence` is `low`, `medium` or `high`. Every run, automatic or asked for, counts against `plans.max_ai_analyses` (Free 25, Pro 250, Agency
+1,000 a calendar month, UTC) when it starts; declined and failed runs are given back. At most 30 runs an hour per organization (more wait). Sent to the
+model: the snapshot's facts without addresses (see `docs/security.md#ai-incident-analysis-outbound-to-anthropic`). Recovery alerts carry the
+analysis when one is done (email facts, a chat line, webhook `incident.ai_analysis: {category, likely_cause, next_step, confidence}`).
 
 ## Reports, history and the dashboard
 
@@ -784,7 +806,8 @@ Webhook requests are `POST` with `Content-Type: application/json` and these head
 and `flapping_ended` carry `flapping: {started_at, ended_at, outages, status}` (`status` `open`, `settled`, `stayed_down` or `ended`) instead of
 `incident`, and an `outage` or `recovery` of an episode that stayed down carries it next to `incident`; `test` carries none of them. An `outage`
 of a website, API or multi-step monitor also carries `incident.snapshot: {response, failed_step, changes, locations}` (as in *Failure snapshots*,
-never the body). Chat apps and PagerDuty get at most three short lines of it: the timings, the top two changes and the locations. Webhooks are never
+never the body). A `recovery` also carries `incident.ai_analysis: {category, likely_cause, next_step, confidence}` when an AI analysis was written
+(see *AI incident analysis*; it may be wrong). Chat apps and PagerDuty get at most three short lines of the snapshot: the timings, the top two changes and the locations. Webhooks are never
 grouped: each alert is its own request. Chat destinations receive an equivalent, unsigned message in the app's own format: Slack incoming-webhook blocks; a Discord embed colored by severity, with mentions switched off (`allowed_mentions: {parse: []}`) so names such as `@everyone` never ping; a Teams Adaptive Card with an "Open in HawkEye" button; and a Telegram `sendMessage` in HTML mode with link previews off. Text from monitors (names, addresses, causes) is escaped for each app's markup so it cannot add links or formatting.
 
 ## Slow-response alerts

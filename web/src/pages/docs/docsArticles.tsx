@@ -492,6 +492,21 @@ export function Alerts() {
         assistants. It is deleted 30 days after the incident ends.
       </p>
 
+      <h2 id="ai-analysis">AI incident analysis</h2>
+      <p>
+        HawkEye can read what its check saw and write the <strong>likely cause</strong> of an outage for you, such as “the origin server behind your
+        CDN is failing” or “the certificate expired,” with the facts that point to it and the first thing to check. The owner turns it on with{' '}
+        <strong>Find the likely cause of outages with AI</strong> on the Incidents page. From then on each confirmed outage of a website, API or
+        multi-step check is analyzed within seconds, and anyone on the team can ask for a new analysis from the incident.
+      </p>
+      <p>
+        It is written by Claude Haiku 5.5 from Anthropic, and HawkEye sends it only what is described above: the status code, timings, the kept
+        headers, what changed and what each location saw. Never the monitor’s name or address, its credentials, or the response itself. The analysis
+        is labeled <strong>AI analysis · may be wrong</strong> wherever it appears: on the incident, in the API, through Claude and other assistants,
+        and in the recovery alert. Each plan includes a number of analyses a month (25 on Free, 250 on Pro, 1,000 on Agency); analyses that could not
+        be written don’t count.
+      </p>
+
       <h2 id="routing">Send each client’s alerts to the right people</h2>
       <p>
         By default every destination receives alerts for every monitor. To route them, tag your monitors (for example by client) and, on the Alerts

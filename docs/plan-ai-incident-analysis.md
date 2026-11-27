@@ -1,7 +1,8 @@
 # Plan: AI incident analysis
 
-Status: **planned** (2026-11-27), not started. Builds on failure snapshots (`docs/plan-failure-snapshots.md`, branch `feat/failure-snapshots`)
-and reuses the setup of AI-drafted incident updates (`internal/incidentdraft`, migration `000042`).
+Status: **phase 1 built** on branch `feat/ai-incident-analysis` (2026-11-27), not yet released. Where the build differs from the first draft of
+this plan, the text below says what was built (see *Changes while building*). Builds on failure snapshots (`docs/plan-failure-snapshots.md`) and
+reuses the setup of AI-drafted incident updates (`internal/incidentdraft`, migration `000042`).
 
 When an outage of a website, API or multi-step monitor is confirmed, HawkEye asks Claude to read the incident's failure snapshot and write a
 **short, labeled "likely cause"**: what probably broke, which facts point to it, and what to check first. For example:
@@ -43,9 +44,9 @@ plans a difference, not to save money. Free is included on purpose: it costs alm
   allowance, like Checkly's. It replaces the stored analysis.
 - **Never** when the month's allowance is used up. The incident page then says so and names the next plan, like the other plan limits.
 
-`incidents.Engine.Opened` already writes the snapshot in the incident's transaction. In that same transaction it enqueues an
-`incident_analysis` job on the durable queue (`internal/queue`), so the analysis never delays the outage alert and survives a restart. The
-worker runs the job, which calls the model and stores the result.
+`incidents.Engine.Opened` already writes the snapshot in the incident's transaction. In that same transaction it inserts a `pending`
+`incident_analyses` row, which is the job: the analysis never delays the outage alert and survives a restart. The worker claims the row, calls
+the model and stores the result in it. Outages that a flapping monitor's "flapping" alert covers are not analyzed.
 
 ### What is sent to the model
 
@@ -161,6 +162,19 @@ ALTER TABLE organizations ADD COLUMN ai_analysis_enabled boolean NOT NULL DEFAUL
    few seconds for the analysis before sending the outage alert, then sends without it. Measure first. If p95 is under about 3 s, this is worth
    it, since alerts are where Checkly shows theirs.
 3. **Later, if asked for:** bring your own Anthropic key (no allowance), and sending the body excerpt for organizations that keep it.
+
+## Changes while building
+
+- **The job lives in its own table.** `internal/queue` holds only monitor checks (`check_jobs`, one per monitor and region), so the
+  `incident_analyses` row is the job itself: claimed with `FOR UPDATE SKIP LOCKED` and a 2-minute lease, retried up to 3 times with a growing
+  pause. `ai_analysis_usage` is keyed by `(incident_id, requested_at)`, so a run taken over after a crash is not counted twice.
+- **Statuses** are `pending`, `running`, `done`, `declined`, `failed`, `over_limit` and `off` (turned off, or no longer in the plan, before the
+  run started). Runs over the hourly limit wait 5 minutes and are not counted.
+- **Flapping monitors' suppressed outages are not analyzed**, so one unsteady site can't use up the month.
+- **Any member can ask for an analysis** in the app (session only); API keys and MCP can read analyses but never spend them.
+- **Recovery alerts** carry the analysis in email (two facts), chat (one line) and webhooks (`incident.ai_analysis`). PagerDuty does not.
+- **The settings switch** is on the Incidents page next to the AI drafts switch.
+- **Facts left out besides addresses:** the `Location` header's value, and assertion values (only their kinds are sent).
 
 ## Open questions
 

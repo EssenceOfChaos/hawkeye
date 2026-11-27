@@ -43,6 +43,7 @@ internal/weeklysummary the Monday summary email (uptime, incidents, slowest site
 internal/lifecycle     onboarding emails that nudge new accounts toward their first monitor (worker)
 internal/badges        public uptime badges (SVG, opt-in per monitor, addressed by a random token)
 internal/incidentdraft AI-drafted incident updates with Claude, opt-in per organization on paid plans; never posts anything itself
+internal/incidentanalysis AI incident analysis: the likely cause of an outage from its failure snapshot, written by Claude in the worker; opt-in, monthly allowance per plan
 internal/waitlist      "Get notified" sign-ups for coming-soon features
 internal/retention     batched per-plan data retention + credential housekeeping (runs inside cmd/worker)
 internal/rollups       hourly totals of check results (check_rollups) built by a job beside the scheduler, and rollups.Source, which readers use to combine them with raw results
@@ -134,6 +135,13 @@ monitors.next_check_at ──► scheduler.Tick ──► check_jobs ──► w
   against the last good response and the week's average timings, and, when `capture_failure_body` is on, the excerpt sealed with the incident ID
   as context (the worker's engine has the secrets box; the API's heartbeat store doesn't need it). The dispatcher joins the snapshot for outage
   deliveries only and never selects the excerpt. Editing a monitor's request or its locations deletes its `monitor_last_good` rows; retention clears excerpts 30 days after resolution.
+- **AI incident analysis (migration `000059`, `docs/plan-ai-incident-analysis.md`):** `incidents.Engine.Opened` inserts a `pending`
+  `incident_analyses` row in the incident's transaction when the organization turned analysis on and a snapshot was saved (after the flapping
+  check, so suppressed outages aren't analyzed). The row is the job: `incidentanalysis.Job` (in `cmd/worker`, primary only) claims it with
+  `FOR UPDATE SKIP LOCKED` and a 2-minute lease, then admits it under a per-organization advisory lock (setting, plan, monthly allowance and hourly
+  limit) by inserting its `ai_analysis_usage` row keyed by `(incident_id, requested_at)`, so a run taken over after a crash isn't counted twice. It
+  calls the model with a 1-minute deadline and stores the result; a declined or failed run deletes its usage row. `Request` (the app's "Analyze
+  again") resets the row to `pending` with a new `requested_at`. The dispatcher joins a `done` analysis into recovery deliveries.
 - **Incidents and alerts (Phase 5):** `Store.Record` calls `incidents.Engine` inside its transaction. `WentDown` opens an incident (partial unique
   index: one open per monitor) and enqueues one `notification_deliveries` row per enabled, verified recipient; any move into `up` closes an
   open incident and enqueues recovery deliveries. Status, incident and deliveries therefore commit atomically

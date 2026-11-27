@@ -329,6 +329,22 @@ Every plan; 365 days (`audit.Retention`, purged by the retention job).
 
 `POST /api/v1/monitors/suggestions` (`internal/discovery`, also MCP `suggest_monitors`) needs a signed-in session or API key, and sends up to about a dozen requests to the named site and its `api.` subdomain, so it has the website checker's protections and more: like that checker it sends every request through the monitoring engine's `checks.Checker`, so through `safehttp` (public addresses only, ports 80 and 443, every redirect revalidated); only `GET` to fixed paths (`/`, a random path that detects sites answering every path, `/readyz`, `/healthz`, `/health`, `/api/health`), whatever the input contained; no custom headers or body; response bodies are drained by the checker (at most 64 KB) and never read, returned or stored, and an endpoint is judged by its status and content type alone; one MX lookup through the system resolver. The User-Agent is `HawkEye-Setup/1.0 (+https://hawkeye.observer/docs/getting-started)`. Limits: `internal/toolguard` (4 concurrent, 5 fresh lookups per host per 10 minutes, 60 s cache, 15 s deadline), 10/minute per IP and 30/hour per organization (shared with MCP). The cached report is shared across organizations, so the per-organization `already_monitored` flags are added to a copy. Nothing is created: the person picks, and each monitor is created through `POST /monitors` with its usual validation and plan limits. The domain is not stored. Tests: `internal/discovery`, `internal/httpapi/setup_integration_test.go`.
 
+## AI incident analysis (outbound to Anthropic)
+
+`internal/incidentanalysis` (migration `000059`) sends a confirmed outage's failure snapshot to Anthropic's API (`claude-haiku-5-5`) from the worker
+and stores the answer. Gates: a server key (`ANTHROPIC_API_KEY`) and `AI_ANALYSIS_ENABLED` not `false`; the owner's opt-in
+(`organizations.ai_analysis_enabled`, off by default, changes recorded in the security log); the plan's monthly allowance
+(`plans.max_ai_analyses`, counted in `ai_analysis_usage` under a per-organization advisory lock when each run starts, so a downgrade or a used-up
+month stops it at once); and at most 30 runs an hour per organization. Runs are queued in the incident's transaction (not for a flapping monitor's
+suppressed outages) or asked for in the app (session only, any member: API keys and MCP can read analyses but never spend them). What is sent is
+assembled in one place (`FactsFrom`) and excludes the monitor's name and address, the final URL and server address (a change of either is sent
+only as "moved"), Location header values, request headers and body, credentials, workflow secrets and saved values, assertion values (only their
+kinds) and the body excerpt. Header values, summaries and step names come from the monitored site or the customer, so they are sent as JSON inside a
+`<failure>` block that the system prompt says is data; the answer is a structured output (fixed fields, a category from a fixed list), cleaned and
+length-capped, and only ever rendered as text. The worst a prompt injection can do is a wrong analysis, which is labeled "AI analysis · may be
+wrong" everywhere it appears. Prompts and answers are never logged (only the incident ID, status and token counts). Tests:
+`internal/incidentanalysis`, `internal/httpapi/ai_analysis_integration_test.go`.
+
 ## AI-drafted incident updates (outbound to Anthropic)
 
 `POST /api/v1/incidents/:id/updates/draft` (`internal/incidentdraft`) sends incident details to Anthropic's API (`claude-haiku-5-5`) and returns a draft.
