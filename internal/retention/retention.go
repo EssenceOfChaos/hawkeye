@@ -4,7 +4,8 @@
 // Policy:
 //   - check results older than the plan's history window are deleted, and so are their hourly totals (internal/rollups); monitors checked more
 //     often than once a minute keep their individual results for 30 days (rollups.RawRetention) and their totals for the whole window;
-//   - resolved incidents and slowdowns older than the window are deleted (with their delivery records);
+//   - resolved incidents and slowdowns older than the window are deleted (with their delivery records and failure snapshots);
+//   - a failure snapshot's body excerpt is cleared 30 days after its incident resolved, whatever the plan (the rest of the snapshot stays);
 //   - open incidents, open slowdowns and live monitors are NEVER deleted, whatever the plan (a downgrade does not delete monitors);
 //   - monitors the user deleted are purged after a grace period, cascading to their remaining data;
 //   - expired sessions and spent or expired one-time tokens are removed.
@@ -28,6 +29,10 @@ import (
 	"hawkeye/internal/reports"
 	"hawkeye/internal/rollups"
 )
+
+// excerptRetention is how long a failure snapshot keeps its body excerpt after the incident resolved (incidents.ExcerptRetention; repeated here
+// so this package needn't import the incident engine).
+const excerptRetention = 30 * 24 * time.Hour
 
 // advisoryLockKey makes sure only one process runs a retention pass at a time (arbitrary constant).
 const advisoryLockKey int64 = 1213680466 // 0x48574b52, "HWKR" (decimal because PostgreSQL < 16 has no hex literals)
@@ -57,8 +62,8 @@ func (c Config) withDefaults() Config {
 
 // Stats counts what one pass removed.
 type Stats struct {
-	CheckResults, Rollups, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits, SentEmails, AuditEvents, Deploys int
-	Skipped                                                                                                                              bool // another instance holds the lock
+	CheckResults, Rollups, Incidents, Slowdowns, Monitors, Sessions, Tokens, BillingEvents, RateLimits, SentEmails, AuditEvents, Deploys, Excerpts int
+	Skipped                                                                                                                                        bool // another instance holds the lock
 }
 
 type Job struct {
@@ -208,6 +213,12 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 		note(err)
 	}
 
+	// Response text kept from failed checks (opt-in) goes well before the rest of the incident, on every plan.
+	st.Excerpts, err = j.batchesNoOrg(ctx, `UPDATE incident_snapshots SET body_excerpt = NULL, body_cleared_at = now() WHERE incident_id IN (
+			SELECT s.incident_id FROM incident_snapshots s JOIN incidents i ON i.id = s.incident_id
+			WHERE s.body_excerpt IS NOT NULL AND i.status = 'resolved' AND i.resolved_at < $1 LIMIT $2)`, j.now().Add(-excerptRetention))
+	note(err)
+
 	var err2 error
 	st.Monitors, err2 = j.batchesNoOrg(ctx, `DELETE FROM monitors WHERE id IN (
 			SELECT id FROM monitors WHERE deleted_at IS NOT NULL AND deleted_at < $1 LIMIT $2)`, j.now().Add(-j.cfg.DeletedGrace))
@@ -266,6 +277,7 @@ func (j *Job) RunOnce(ctx context.Context) (Stats, error) {
 	j.m.RetentionDeleted.WithLabelValues("rate_limits").Add(float64(st.RateLimits))
 	j.m.RetentionDeleted.WithLabelValues("audit_events").Add(float64(st.AuditEvents))
 	j.m.RetentionDeleted.WithLabelValues("deploys").Add(float64(st.Deploys))
+	j.m.RetentionDeleted.WithLabelValues("snapshot_excerpts").Add(float64(st.Excerpts))
 	return st, firstErr
 }
 

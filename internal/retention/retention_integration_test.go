@@ -313,3 +313,36 @@ func TestSecurityLogIsKeptForAYear(t *testing.T) {
 		t.Fatalf("the event from 364 days ago went too: %d left", n)
 	}
 }
+
+// A failure snapshot's body excerpt is cleared 30 days after its incident resolved, on every plan; the snapshot itself stays with the incident.
+func TestSnapshotExcerptsAreClearedAfterThirtyDays(t *testing.T) {
+	e := newEnv(t)
+	org := e.org(t, "agency", "active") // a year of history: the incidents themselves stay
+	snap := func(startedAgo, resolvedAgo string) uuid.UUID {
+		m := e.monitor(t, org)
+		var id uuid.UUID
+		if err := e.pool.QueryRow(t.Context(), `INSERT INTO incidents (monitor_id, started_at, resolved_at, status)
+			VALUES ($1, now() - $2::interval, CASE WHEN $3::text = '' THEN NULL ELSE now() - $3::interval END,
+				CASE WHEN $3::text = '' THEN 'open' ELSE 'resolved' END) RETURNING id`, m, startedAgo, resolvedAgo).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := e.pool.Exec(t.Context(), `INSERT INTO incident_snapshots (incident_id, checked_at, region, facts, body_excerpt)
+			VALUES ($1, now(), 'primary', '{}', 'sealed')`, id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	old, recent, open := snap("32 days", "31 days"), snap("3 days", "2 days"), snap("60 days", "")
+	st, err := e.job(100).RunOnce(t.Context())
+	if err != nil || st.Excerpts != 1 || st.Incidents != 0 {
+		t.Fatalf("%v %+v", err, st)
+	}
+	for id, kept := range map[uuid.UUID]bool{old: false, recent: true, open: true} {
+		if got := e.count(t, `SELECT count(*) FROM incident_snapshots WHERE incident_id = $1 AND body_excerpt IS NOT NULL`, id); got != map[bool]int{true: 1}[kept] {
+			t.Errorf("incident %s: excerpt kept %d, want kept=%v", id, got, kept)
+		}
+	}
+	if e.count(t, `SELECT count(*) FROM incident_snapshots WHERE incident_id = $1 AND body_cleared_at IS NOT NULL`, old) != 1 {
+		t.Fatal("the cleared snapshot should say when")
+	}
+}

@@ -2,9 +2,11 @@ package checks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,11 +30,30 @@ type Outcome struct {
 	Recheck bool
 }
 
+// Outage is a confirmed outage, as Incidents.Opened receives it.
+type Outage struct {
+	Failures int    // the current failure streak
+	Summary  string // the result's summary, with where it was seen from and how it was confirmed
+	Result   Result // the confirming check, for the failure snapshot (Facts, FailedStep, Excerpt)
+	Region   string // where the confirming check ran
+	// Locations is what each of a multi-location monitor's locations last saw; nil with one location.
+	Locations []LocationState
+}
+
+// LocationState is one location's latest verdict, for a failure snapshot.
+type LocationState struct {
+	Region    string    `json:"region"`
+	Name      string    `json:"name"` // the city, such as "Amsterdam"
+	Status    string    `json:"status"`
+	Error     string    `json:"error,omitempty"` // the latest failure's summary while the location is failing
+	CheckedAt time.Time `json:"checked_at"`
+}
+
 // Incidents reacts to confirmed state changes inside the transaction that records the result, so a
 // status change, its incident and its queued notifications commit together or not at all.
 type Incidents interface {
-	// Opened is called when an outage is confirmed; failures is the current failure streak.
-	Opened(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, failures int, category, summary string) error
+	// Opened is called when an outage is confirmed.
+	Opened(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, o Outage) error
 	// Resolved is called when a monitor becomes healthy again; successes is the current success streak.
 	Resolved(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, successes int) error
 	// CertificateExpiring is called once per certificate and warning bucket (30, 14, 7, 1 days, or 0 when expired) as the monitor's certificate
@@ -113,17 +134,18 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 		var rf recheckFacts
 		var untilNext float64
 		var dns dnsSettings
+		var lastGoodFP string
 		// Heartbeats are pinged, not checked, so there is nothing to re-check. readOnly: the monitor's own method, and for a multi-step check every
 		// step's. A DNS monitor's method column is the GET default.
 		err := tx.QueryRow(ctx, `SELECT current_status, consecutive_failures, consecutive_successes, enabled, in_maintenance(organization_id, id, $2), organization_id, regions,
 				slow_threshold_ms, slow_checks, slow_streak, normal_streak, EXISTS (SELECT 1 FROM slowdowns WHERE monitor_id = monitors.id AND status = 'open'),
 				CASE WHEN kind = 'heartbeat' THEN 'off' ELSE recheck END, upper(method) NOT IN `+writeMethodsSQL+` AND NOT EXISTS (SELECT 1 FROM monitor_steps WHERE monitor_id = monitors.id AND upper(method) IN `+writeMethodsSQL+`),
 				COALESCE(EXTRACT(EPOCH FROM next_check_at - $2), 0)::float8,
-				CASE WHEN kind = 'dns' THEN COALESCE(dns_record_type, '') ELSE '' END, dns_change_alerts, dns_change_strict
+				CASE WHEN kind = 'dns' THEN COALESCE(dns_record_type, '') ELSE '' END, dns_change_alerts, dns_change_strict, COALESCE(last_good_fp, '')
 			FROM monitors WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, monitorID, r.FinishedAt).
 			Scan(&out.Before.Status, &out.Before.Failures, &out.Before.Successes, &enabled, &maintenance, &orgID, &chosen,
 				&speed.thresholdMs, &speed.checks, &speed.state.SlowStreak, &speed.state.NormalStreak, &speed.state.Slow,
-				&rf.setting, &rf.readOnly, &untilNext, &dns.recordType, &dns.on, &dns.strict)
+				&rf.setting, &rf.readOnly, &untilNext, &dns.recordType, &dns.on, &dns.strict, &lastGoodFP)
 		if errors.Is(err, pgx.ErrNoRows) || err == nil && !enabled {
 			return ErrDiscarded
 		}
@@ -185,9 +207,18 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 		rf.locationFailures, rf.monitorDown = out.After.Failures, out.Before.Status == StatusDown
 		rf.untilNextCheck = time.Duration(untilNext * float64(time.Second))
 		out.Recheck = wantRecheck(rf, s.thresholds.Failure, s.recheck)
+		// The last good response, for "what changed" in a later failure snapshot: written only when it differs (NULL leaves it).
+		var goodFacts any
+		var goodFP *string
+		if counts && r.Success {
+			if facts, fp := lastGood(r); fp != "" && fp != lastGoodFP {
+				goodFacts, goodFP = facts, &fp
+			}
+		}
 		_, err = tx.Exec(ctx, `UPDATE monitors SET current_status = $2, consecutive_failures = $3, consecutive_successes = $4,
-			last_checked_at = $5, last_success_at = CASE WHEN $6 THEN $5 ELSE last_success_at END
-			WHERE id = $1`, monitorID, out.After.Status, out.After.Failures, out.After.Successes, r.FinishedAt, r.Success)
+			last_checked_at = $5, last_success_at = CASE WHEN $6 THEN $5 ELSE last_success_at END,
+			last_good = CASE WHEN $7::text IS NULL THEN last_good ELSE $8::jsonb END, last_good_fp = COALESCE($7, last_good_fp)
+			WHERE id = $1`, monitorID, out.After.Status, out.After.Failures, out.After.Successes, r.FinishedAt, r.Success, goodFP, goodFacts)
 		if err != nil {
 			return err
 		}
@@ -223,7 +254,13 @@ func (s *Store) RecordTx(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, r 
 			return nil
 		}
 		if out.Transition == WentDown {
-			return s.incidents.Opened(ctx, tx, monitorID, out.After.Failures, r.ErrorCategory, summary)
+			o := Outage{Failures: out.After.Failures, Summary: summary, Result: r, Region: region}
+			if len(effective) > 1 {
+				if o.Locations, err = s.locations(ctx, tx, monitorID, effective); err != nil {
+					return err
+				}
+			}
+			return s.incidents.Opened(ctx, tx, monitorID, o)
 		}
 		// Any move into "up" closes an open incident. This covers confirmed recovery and also the case where
 		// editing a monitor reset its state to "unknown" while an incident was open.
@@ -346,6 +383,69 @@ func (s *Store) applyRegional(ctx context.Context, tx pgx.Tx, monitorID uuid.UUI
 		after.Status = StatusUp
 	}
 	return after, t, down, nil
+}
+
+// lastGood is what a successful result keeps as the monitor's last good response, and its fingerprint: the facts for a single request, or every
+// step's for a multi-step check. "" when there is nothing to keep (heartbeats, DNS monitors, a step without facts).
+func lastGood(r Result) (any, string) {
+	if len(r.Steps) == 0 {
+		if r.Facts == nil {
+			return nil, ""
+		}
+		return r.Facts, r.Facts.Fingerprint()
+	}
+	facts := make([]*ResponseFacts, len(r.Steps))
+	var fps strings.Builder
+	for i, st := range r.Steps {
+		if st.Facts == nil {
+			return nil, ""
+		}
+		facts[i] = st.Facts
+		fps.WriteString(st.Facts.Fingerprint())
+	}
+	return facts, fps.String()
+}
+
+// LastGoodFor picks, from a stored last_good value, the facts to compare a failure with: the monitor's own, or the failing step's.
+func LastGoodFor(raw []byte, step int) *ResponseFacts {
+	if len(raw) == 0 {
+		return nil
+	}
+	if step < 0 {
+		var f ResponseFacts
+		if json.Unmarshal(raw, &f) != nil {
+			return nil
+		}
+		return &f
+	}
+	var steps []*ResponseFacts
+	if json.Unmarshal(raw, &steps) != nil || step >= len(steps) {
+		return nil // the workflow changed since, or a single request became one
+	}
+	return steps[step]
+}
+
+// locations is what each effective location of a multi-location monitor last saw.
+func (s *Store) locations(ctx context.Context, tx pgx.Tx, monitorID uuid.UUID, effective []string) ([]LocationState, error) {
+	rows, err := tx.Query(ctx, `SELECT region, status, COALESCE(last_error, ''), last_checked_at FROM monitor_region_state
+		WHERE monitor_id = $1 AND region = ANY($2) ORDER BY region`, monitorID, effective)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []LocationState
+	for rows.Next() {
+		var l LocationState
+		if err := rows.Scan(&l.Region, &l.Status, &l.Error, &l.CheckedAt); err != nil {
+			return nil, err
+		}
+		if l.Status != StatusDown {
+			l.Error = ""
+		}
+		l.Name = s.regions.Name(l.Region)
+		out = append(out, l)
+	}
+	return out, rows.Err()
 }
 
 // recordCertificate stores the certificate expiry the check saw and queues a warning when the certificate has entered a new bucket.

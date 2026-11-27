@@ -1320,6 +1320,7 @@ func (s *Service) Update(ctx context.Context, orgID, id uuid.UUID, in UpdateInpu
 			current_status = CASE WHEN $9 THEN 'unknown' ELSE current_status END,
 			consecutive_failures = CASE WHEN $9 THEN 0 ELSE consecutive_failures END,
 			consecutive_successes = CASE WHEN $9 THEN 0 ELSE consecutive_successes END,
+			last_good = CASE WHEN $9 THEN NULL ELSE last_good END, last_good_fp = CASE WHEN $9 THEN NULL ELSE last_good_fp END,
 			request_headers=$10, request_body=$11, auth_type=$12, auth_username=NULLIF($13,''),
 			auth_header_name=NULLIF($14,''),
 			auth_secret = CASE WHEN $12 = 'none' THEN NULL WHEN $15 THEN auth_secret ELSE NULLIF($16,'') END,
