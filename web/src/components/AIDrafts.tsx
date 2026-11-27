@@ -38,8 +38,8 @@ export function AIDraftsSetting({ state, onChange }: { state: AIDraftsState; onC
       <Toggle checked={state.enabled} busy={busy} onToggle={toggle}>Draft incident updates with AI</Toggle>
       <p className="hint">
         Adds a <strong>Draft with AI</strong> button to each update. HawkEye sends {state.model} the incident’s details: the monitor’s name, when the
-        problem started and ended, the kind of failure, status codes, check locations and the updates already posted. Never the monitor’s address or
-        anything from its responses. Drafts aren’t stored, and nothing is posted until you post it.
+        problem started and ended, the kind of failure, status codes, check locations, the updates already posted and, when AI incident analysis
+        found one, the kind of cause in general words. Never the monitor’s address or anything from its responses. Drafts aren’t stored, and nothing is posted until you post it.
       </p>
       {error && <small className="error">{error}</small>}
     </section>

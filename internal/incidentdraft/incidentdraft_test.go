@@ -88,3 +88,20 @@ func TestLongDraftsEndOnAWholeSentence(t *testing.T) {
 		t.Fatalf("%d runes: %q", n, got[len(got)-30:])
 	}
 }
+
+func TestCauseKindIsInCustomersWordsAndOnlyWhenTheAnalysisIsFairlySure(t *testing.T) {
+	if got := CauseKind("cdn_or_proxy", "medium"); got != "a problem with the network provider that delivers the service" {
+		t.Errorf("medium: %q", got)
+	}
+	if got := CauseKind("dns", "high"); got != "a domain name (DNS) problem" {
+		t.Errorf("high: %q", got)
+	}
+	for _, c := range [][2]string{{"dns", "low"}, {"unknown", "high"}, {"aliens", "high"}, {"dns", ""}} {
+		if got := CauseKind(c[0], c[1]); got != "" {
+			t.Errorf("CauseKind(%q, %q) = %q, want none", c[0], c[1], got)
+		}
+	}
+	if !strings.Contains(system, "likely_cause_kind") || !strings.Contains(system, `For "investigating", don't mention a cause`) {
+		t.Error("the prompt doesn't say how to treat likely_cause_kind")
+	}
+}

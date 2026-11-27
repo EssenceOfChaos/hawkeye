@@ -131,7 +131,9 @@ ALTER TABLE organizations ADD COLUMN ai_analysis_enabled boolean NOT NULL DEFAUL
   `get_incident` in MCP includes it. Re-running is `POST /incidents/:id/analysis`, session only, like drafts.
 - **Recovery alert:** the analysis is included when it exists (by then it always has had time to finish).
 - **Outage alert:** not in the first version (see *Phases*), because waiting for the model would delay the alert.
-- **AI drafts:** when an analysis exists, the draft may use its category (never its text) to say what was affected.
+- **AI drafts:** when an analysis is `done` with medium or high confidence, the draft is sent its category as a fixed phrase in a customer's words
+  (`incidentdraft.CauseKind`, such as "a domain name (DNS) problem"), never its text. The prompt treats it as a guess: not mentioned in an
+  "investigating" update, and never stated more firmly than the team's own updates.
 
 ### Limits, metrics and safety
 

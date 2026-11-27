@@ -435,8 +435,9 @@ change; a browser that already loaded a page may keep its copy for up to 30 seco
 (`organizations.ai_drafts_enabled`, off by default), `POST …/updates/draft` asks **Claude Haiku 5.5** (`claude-haiku-5-5`, effort `low`) for a draft of
 the chosen status and returns it; the owner edits it and posts it with `POST …/updates` as usual. Drafts are never stored or posted by HawkEye. Sent to the
 model: the monitor's name and kind, the incident's start, end and duration, HawkEye's failure category and summary, the distinct HTTP status codes and
-check locations of its failed checks, and the updates already posted. Never the monitor's address, request settings, credentials or response
-content. The prompt treats all of it as data (names and earlier updates are typed by people; summaries may come from the monitored site). Errors:
+check locations of its failed checks, the updates already posted, and, when an AI analysis of the incident is `done` with `medium` or `high`
+confidence, its category in a customer's words (`incidentdraft.CauseKind`, as `likely_cause_kind`; never the analysis's text). Never the monitor's
+address, request settings, credentials or response content. The prompt treats all of it as data (names and earlier updates are typed by people; summaries may come from the monitored site). Errors:
 409 `AI_DRAFTS_OFF` (not turned on), 403 `PLAN_LIMIT_REACHED` (`ai_drafts`, checked on every draft, so a downgrade stops it at once), 422
 `DRAFT_DECLINED` (the model declined; there is no fallback model for Haiku), 503 `AI_DRAFTS_UNAVAILABLE` (no `ANTHROPIC_API_KEY`, or the model
 could not be reached). Limits: per IP, and 60 drafts an hour per organization. Session only: API keys and MCP get `SESSION_REQUIRED`.

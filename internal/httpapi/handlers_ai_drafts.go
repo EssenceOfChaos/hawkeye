@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"hawkeye/internal/audit"
+	"hawkeye/internal/incidentanalysis"
 	"hawkeye/internal/incidentdraft"
 	"hawkeye/internal/incidents"
 	"hawkeye/internal/monitors"
@@ -113,7 +114,8 @@ func (h *handlers) draftIncidentUpdate(c *echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"message": text})
 }
 
-// draftFacts gathers what the draft may be based on: never the monitor's address, its request settings or any response content.
+// draftFacts gathers what the draft may be based on: never the monitor's address, its request settings or any response content, and of an AI
+// analysis only the kind of cause it found.
 func (h *handlers) draftFacts(ctx context.Context, c *echo.Context, id uuid.UUID, status string) (incidentdraft.Facts, error) {
 	org := currentOrg(c)
 	inc, err := incidents.Get(ctx, h.db, org, id)
@@ -139,6 +141,14 @@ func (h *handlers) draftFacts(ctx context.Context, c *echo.Context, id uuid.UUID
 	}
 	for _, r := range regionCodes {
 		f.Locations = append(f.Locations, h.regions.Name(r))
+	}
+	// The kind of cause an AI analysis found, in a customer's words: never the analysis's own text, which is written for the team.
+	a, err := incidentanalysis.Load(ctx, h.db, id)
+	if err != nil {
+		return incidentdraft.Facts{}, err
+	}
+	if a != nil && a.Status == "done" && a.Category != nil && a.Confidence != nil {
+		f.LikelyCauseKind = incidentdraft.CauseKind(*a.Category, *a.Confidence)
 	}
 	slices.SortFunc(updates, func(a, b incidents.Update) int { return a.CreatedAt.Compare(b.CreatedAt) })
 	for _, u := range updates {

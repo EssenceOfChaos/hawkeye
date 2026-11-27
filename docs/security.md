@@ -352,7 +352,8 @@ Gates, each checked on every draft: a server key (`ANTHROPIC_API_KEY`; without i
 Agency), the owner's opt-in (`organizations.ai_drafts_enabled`, off by default, changes recorded in the security log), the owner role, and a session
 (API keys and MCP are refused, so a leaked key can't spend model calls). Budgets: per IP, and 60 drafts an hour per organization. What is sent is
 assembled in one place (`draftFacts` in `internal/httpapi/handlers_ai_drafts.go`) and excludes the monitored address, request headers, bodies,
-credentials and response content. Monitor names, earlier updates and failure summaries are untrusted text, so they are sent as JSON inside an
+credentials and response content; of an AI incident analysis it takes only the category, as a fixed phrase (`incidentdraft.CauseKind`), never the
+analysis's own text, which a model wrote from data the monitored site controls. Monitor names, earlier updates and failure summaries are untrusted text, so they are sent as JSON inside an
 `<incident>` block that the system prompt says is data, not instructions; the worst a prompt injection can do is a bad draft, which the owner
 reads before posting (nothing is posted automatically). Drafts are cleaned and capped at 700 characters. The key is a secret like
 `SECRETS_ENCRYPTION_KEY` (`deploy/env.manifest`, optional). Tests: `internal/incidentdraft`, `internal/httpapi/ai_drafts_integration_test.go`.
