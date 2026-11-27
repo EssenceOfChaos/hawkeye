@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { AvgTimings } from '../api'
 
 /** The phases of a check, in the order they happen. Colors are the --phase-* tokens in index.css (validated as a set on the chart surface). */
@@ -28,7 +28,13 @@ const ms = (v: number) => `${v.toLocaleString()} ms`
  * legend in block order and a table view. Each block prints its share when it is wide enough, and hover or keyboard focus gives its name, time
  * and share.
  */
-export function TimingBar({ timings, loading }: { timings: AvgTimings; loading?: boolean }) {
+export function TimingBar({ timings, loading, title = 'Where the time goes', note }: {
+  timings: AvgTimings
+  loading?: boolean
+  title?: string
+  /** Replaces "average of N successful checks" after the title, for a single check. */
+  note?: ReactNode
+}) {
   const [active, setActive] = useState<Part | null>(null)
   const ps = parts(timings)
   if (ps.length === 0) return null
@@ -37,12 +43,12 @@ export function TimingBar({ timings, loading }: { timings: AvgTimings; loading?:
   return (
     <figure className="chart timing" style={{ opacity: loading ? 0.55 : 1 }} aria-busy={loading || undefined}>
       <figcaption>
-        <strong>Where the time goes</strong>
+        <strong>{title}</strong>
         <span className="hint">
-          {' '}· average of {timings.checks.toLocaleString()} successful check{timings.checks === 1 ? '' : 's'}, {ms(total)} in all
+          {' '}· {note ?? <>average of {timings.checks.toLocaleString()} successful check{timings.checks === 1 ? '' : 's'}</>}, {ms(total)} in all
         </span>
       </figcaption>
-      <div className="timing-bar" role="img" aria-label={`Where the time goes, on average: ${summary}. A table view follows.`}>
+      <div className="timing-bar" role="img" aria-label={`${title}${note ? '' : ', on average'}: ${summary}. A table view follows.`}>
         {ps.map((p) => (
           <div key={p.key} className={`timing-part phase-${p.key}`} style={{ flexGrow: p.ms }} tabIndex={0} aria-label={`${p.name}: ${ms(p.ms)}, ${pct(p.share)}`}
             onMouseEnter={() => setActive(p)} onMouseLeave={() => setActive(null)} onFocus={() => setActive(p)} onBlur={() => setActive(null)}>
@@ -62,8 +68,8 @@ export function TimingBar({ timings, loading }: { timings: AvgTimings; loading?:
         <summary>View as table</summary>
         <div className="table-wrap">
           <table>
-            <caption className="sr-only">Where the time goes, on average</caption>
-            <thead><tr><th>Phase</th><th className="num">Average</th><th className="num">Share</th><th>What it is</th></tr></thead>
+            <caption className="sr-only">{title}{note ? '' : ', on average'}</caption>
+            <thead><tr><th>Phase</th><th className="num">{note ? 'Time' : 'Average'}</th><th className="num">Share</th><th>What it is</th></tr></thead>
             <tbody>
               {ps.map((p) => (
                 <tr key={p.key}><td>{p.name}</td><td className="num">{ms(p.ms)}</td><td className="num">{pct(p.share)}</td><td>{p.hint}</td></tr>

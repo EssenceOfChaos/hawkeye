@@ -177,4 +177,6 @@ type Incident struct {
 	// "flapping" alert covered it); false again if the monitor then stayed down and the outage was alerted.
 	Flapping     bool `json:"flapping"`
 	AlertsPaused bool `json:"alerts_paused"`
+	// HasSnapshot: what HawkEye saw when the outage was confirmed is kept (GET /incidents/:id/snapshot).
+	HasSnapshot bool `json:"has_snapshot"`
 }

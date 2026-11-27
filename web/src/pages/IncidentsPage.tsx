@@ -9,6 +9,7 @@ import { PageIcon } from '../components/Brand'
 import { AIDraftsSetting } from '../components/AIDrafts'
 import { useAIDrafts } from '../useAIDrafts'
 import { IncidentUpdates } from '../components/IncidentUpdates'
+import { FailureSnapshot } from '../components/FailureSnapshot'
 import { useAuth } from '../auth'
 
 /** When an incident started. The date and the time each stay on one line: a narrow column puts the time below the date, never "PM" on its own. */
@@ -128,7 +129,18 @@ export function IncidentsPage() {
                       </td>
                       <td><StartedAt iso={i.started_at} /></td>
                       <td>{formatDuration(i.duration_seconds)}{i.status === 'open' && ' so far'}</td>
-                      <td>{i.summary ?? (i.cause_category ? CAUSES[i.cause_category] ?? i.cause_category : '—')}</td>
+                      <td>
+                        {i.summary ?? (i.cause_category ? CAUSES[i.cause_category] ?? i.cause_category : '—')}
+                        {i.has_snapshot && (
+                          <>
+                            {' '}
+                            <button type="button" className="linklike nowrap" aria-expanded={shown} aria-controls={`updates-${i.id}`}
+                              onClick={() => setOpen(shown ? null : i.id)}>
+                              What HawkEye saw
+                            </button>
+                          </>
+                        )}
+                      </td>
                       <td>
                         <button type="button" className="linklike" aria-expanded={shown} aria-controls={`updates-${i.id}`}
                           onClick={() => setOpen(shown ? null : i.id)}>
@@ -139,6 +151,7 @@ export function IncidentsPage() {
                     {shown && (
                       <tr className="incident-updates-row" id={`updates-${i.id}`}>
                         <td colSpan={6}>
+                          {i.has_snapshot && <FailureSnapshot incidentID={i.id} monitorID={i.monitor_id} />}
                           <IncidentUpdates incident={i} isOwner={isOwner} canDraft={Boolean(drafts?.available && drafts.included && drafts.enabled)}
                             onCountChange={(count) => setItems((all) => all?.map((x) => (x.id === i.id ? { ...x, update_count: count } : x)) ?? all)} />
                         </td>
