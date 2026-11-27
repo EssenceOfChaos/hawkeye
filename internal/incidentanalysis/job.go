@@ -107,27 +107,40 @@ func (j *Job) RunOne(ctx context.Context) (bool, error) {
 	defer cancel()
 	start := time.Now()
 	res, usage, err := j.ai.Analyze(callCtx, facts)
+	took := time.Since(start)
 	j.countTokens(usage)
 	switch {
 	case err == nil:
 		j.count("done")
+		j.observeModel("done", took)
 		j.log.InfoContext(ctx, "incident analysis", "incident_id", r.incidentID, "status", "done", "category", res.Category,
-			"input_tokens", usage.InputTokens, "output_tokens", usage.OutputTokens, "duration_ms", time.Since(start).Milliseconds())
-		_, err := j.pool.Exec(ctx, `UPDATE incident_analyses SET status = 'done', locked_until = NULL, finished_at = now(), category = $3,
+			"input_tokens", usage.InputTokens, "output_tokens", usage.OutputTokens, "duration_ms", took.Milliseconds())
+		// The latency is measured by the database's clock at both ends, so a worker's clock skew can't distort it.
+		var latency float64
+		err := j.pool.QueryRow(ctx, `UPDATE incident_analyses SET status = 'done', locked_until = NULL, finished_at = now(), category = $3,
 				likely_cause = $4, evidence = $5, next_step = $6, confidence = $7, model = $8, input_tokens = $9, output_tokens = $10
-			WHERE incident_id = $1 AND requested_at = $2`,
-			r.incidentID, r.requestedAt, res.Category, res.LikelyCause, res.Evidence, res.NextStep, res.Confidence, Model, usage.InputTokens, usage.OutputTokens)
+			WHERE incident_id = $1 AND requested_at = $2
+			RETURNING extract(epoch FROM finished_at - requested_at)::float8`,
+			r.incidentID, r.requestedAt, res.Category, res.LikelyCause, res.Evidence, res.NextStep, res.Confidence, Model, usage.InputTokens, usage.OutputTokens).Scan(&latency)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return true, nil // asked for again meanwhile: the new run replaces this one
+		}
+		if err == nil && r.attempts == 1 && j.m != nil {
+			j.m.AIAnalysisLatency.Observe(latency)
+		}
 		return true, err
 	case errors.Is(err, ErrRefused):
 		j.count("declined")
+		j.observeModel("declined", took)
 		j.log.InfoContext(ctx, "incident analysis", "incident_id", r.incidentID, "status", "declined")
 		return true, errors.Join(j.refund(ctx, r), j.finish(ctx, r, "declined"))
 	case ctx.Err() != nil: // shutting down: give the run back as it was
 		bg := context.WithoutCancel(ctx)
 		return true, errors.Join(j.refund(bg, r), j.retry(bg, r, -1))
 	default:
+		j.observeModel("unavailable", took)
 		j.log.WarnContext(ctx, "incident analysis unavailable", "incident_id", r.incidentID, "attempt", r.attempts, "error", err,
-			"duration_ms", time.Since(start).Milliseconds())
+			"duration_ms", took.Milliseconds())
 		if err := j.refund(ctx, r); err != nil {
 			return true, err
 		}
@@ -253,6 +266,12 @@ func (j *Job) finishTx(ctx context.Context, tx pgx.Tx, r run, status string) err
 func (j *Job) count(status string) {
 	if j.m != nil {
 		j.m.AIAnalyses.WithLabelValues(status).Inc()
+	}
+}
+
+func (j *Job) observeModel(result string, took time.Duration) {
+	if j.m != nil {
+		j.m.AIAnalysisModel.WithLabelValues(result).Observe(took.Seconds())
 	}
 }
 

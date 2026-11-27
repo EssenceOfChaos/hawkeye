@@ -10,10 +10,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	promtest "github.com/prometheus/client_golang/prometheus/testutil"
+	dto "github.com/prometheus/client_model/go"
 
 	"hawkeye/internal/checks"
 	"hawkeye/internal/incidentanalysis"
 	"hawkeye/internal/incidents"
+	"hawkeye/internal/metrics"
 	"hawkeye/internal/testutil"
 )
 
@@ -226,4 +230,38 @@ func TestTheHourlyLimitDelaysRunsInsteadOfDroppingThem(t *testing.T) {
 	if s := e.status(t, inc); s != "pending" || !later || len(e.ai.calls) != 0 {
 		t.Fatalf("status %s, later %v, calls %d", s, later, len(e.ai.calls))
 	}
+}
+
+func TestRunsRecordHowLongTheModelAndTheWholeAnalysisTook(t *testing.T) {
+	e := newEnv(t, "pro", true)
+	m := metrics.New()
+	e.job = incidentanalysis.NewJob(e.pool, e.ai, m, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	e.outage(t)
+	e.runAll(t)
+	if n := promtest.CollectAndCount(m.AIAnalysisModel, "hawkeye_ai_analysis_model_seconds"); n != 1 {
+		t.Fatalf("model series: %d", n)
+	}
+	if got := histogramCount(t, m.AIAnalysisLatency); got != 1 {
+		t.Fatalf("latency observations: %d", got)
+	}
+
+	// A run the model declined is timed too, but has no analysis to measure the latency of.
+	e.ai.err = incidentanalysis.ErrRefused
+	e.outage(t)
+	e.runAll(t)
+	if n := promtest.CollectAndCount(m.AIAnalysisModel, "hawkeye_ai_analysis_model_seconds"); n != 2 {
+		t.Fatalf("model series after a decline: %d", n)
+	}
+	if got := histogramCount(t, m.AIAnalysisLatency); got != 1 {
+		t.Fatalf("latency observations after a decline: %d", got)
+	}
+}
+
+func histogramCount(t *testing.T, h prometheus.Histogram) uint64 {
+	t.Helper()
+	var out dto.Metric
+	if err := h.Write(&out); err != nil {
+		t.Fatal(err)
+	}
+	return out.GetHistogram().GetSampleCount()
 }

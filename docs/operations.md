@@ -552,7 +552,13 @@ own team, and the app shows it to them. Retention clears excerpts 30 days after 
 
 Runs in the worker (primary only) when `ANTHROPIC_API_KEY` is set and `AI_ANALYSIS_ENABLED` isn't `false`; the API offers the switch on the same
 conditions. `hawkeye_ai_analyses_total{status}` counts runs (`done`, `declined`, `failed`, `retry`, `over_limit`, `off`) and
-`hawkeye_ai_analysis_tokens_total{direction}` the tokens they used (about 1,500 in and a few hundred out each). **HawkEyeAIAnalysisFailing**
+`hawkeye_ai_analysis_tokens_total{direction}` the tokens they used (about 1,500 in and a few hundred out each).
+`hawkeye_ai_analysis_model_seconds{result}` is how long the model took to answer, and `hawkeye_ai_analysis_latency_seconds` the time from the
+outage being confirmed (or "Analyze again") to the analysis being stored, for runs done on the first attempt: queue wait plus the model. They decide
+phase 2 of `docs/plan-ai-incident-analysis.md` (holding the outage alert for its analysis). p95 over a week:
+`histogram_quantile(0.95, sum by (le) (rate(hawkeye_ai_analysis_model_seconds_bucket{result="done"}[7d])))`, and the same for
+`hawkeye_ai_analysis_latency_seconds_bucket`. The database has the end-to-end figure too: `SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY
+extract(epoch FROM finished_at - requested_at)) FROM incident_analyses WHERE status = 'done' AND attempts = 1 AND finished_at > now() - interval '7 days';`. **HawkEyeAIAnalysisFailing**
 fires when more runs fail or are retried than succeed over 15 minutes: check Anthropic's status page and that the key is valid (the worker logs
 `incident analysis unavailable` with the error). To stop spending during a provider incident, set `AI_ANALYSIS_ENABLED=false` and redeploy:
 queued runs wait, and run when it's back on. A stuck run: `SELECT status, attempts, run_at, locked_until FROM incident_analyses WHERE incident_id = '…';`

@@ -160,9 +160,11 @@ ALTER TABLE organizations ADD COLUMN ai_analysis_enabled boolean NOT NULL DEFAUL
 
 1. **Analysis on the incident page, API and MCP** (about 1.5 build weeks): migration, `internal/incidentanalysis`, the job, the settings switch,
    the panel, the allowance, metrics, docs and pricing row.
-2. **In the outage alert** (about 1 week, after measuring phase 1's latency): for organizations with analysis on, the dispatcher waits up to a
+2. **In the outage alert** (about 1 week, after measuring phase 1's latency with `hawkeye_ai_analysis_model_seconds` and
+   `hawkeye_ai_analysis_latency_seconds`, `docs/operations.md#ai-incident-analysis`): for organizations with analysis on, the dispatcher waits up to a
    few seconds for the analysis before sending the outage alert, then sends without it. Measure first. If p95 is under about 3 s, this is worth
-   it, since alerts are where Checkly shows theirs.
+   it, since alerts are where Checkly shows theirs. The job polls for work every 2 to 3 seconds, so phase 2 should wake it with a `NOTIFY` from
+   the incident's transaction instead; the latency histogram shows how much that wait costs.
 3. **Later, if asked for:** bring your own Anthropic key (no allowance), and sending the body excerpt for organizations that keep it.
 
 ## Changes while building
