@@ -49,12 +49,6 @@ const FEATURES = [
     text: 'Track response times over time, and see where the time goes: DNS, connecting, TLS or your server.',
   },
   {
-    icon: brand.icons.incident,
-    title: 'Incident tracking',
-    lead: 'Every incident, clearly accounted for.',
-    text: 'See when a problem began, what changed since it last worked, and when service recovered.',
-  },
-  {
     icon: brand.icons.notifications,
     title: 'Alerts where you work',
     lead: 'The right signal. When it matters.',
