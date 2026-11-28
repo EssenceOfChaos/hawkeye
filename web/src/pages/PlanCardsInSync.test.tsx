@@ -14,15 +14,15 @@ afterEach(() => vi.unstubAllGlobals())
 const json = (status: number, body: unknown) =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
 
-const free = { code: 'free', name: 'Free', monthly_price_cents: 0, max_monitors: 5, minimum_check_interval_seconds: 300, history_retention_days: 7, max_domains: 3, max_team_members: 1, max_regions: 1, max_workflows: 1, max_workflow_steps: 3 }
+const free = { code: 'free', name: 'Free', monthly_price_cents: 0, max_monitors: 5, minimum_check_interval_seconds: 300, history_retention_days: 7, max_domains: 3, max_team_members: 1, max_regions: 1, max_workflows: 1, max_workflow_steps: 3, max_ai_analyses: 25 }
 const pro = {
   code: 'pro', name: 'Pro', monthly_price_cents: 1900, annual_price_cents: 19000, max_monitors: 50, minimum_check_interval_seconds: 60, history_retention_days: 90,
-  max_domains: 25, max_team_members: 1, max_regions: 3, maintenance_enabled: true, reports_enabled: true, api_write_enabled: true, ai_drafts_enabled: true,
+  max_domains: 25, max_team_members: 1, max_regions: 3, maintenance_enabled: true, reports_enabled: true, api_write_enabled: true, ai_drafts_enabled: true, max_ai_analyses: 250,
 }
 const agency = {
   code: 'agency', name: 'Agency', monthly_price_cents: 5900, annual_price_cents: 59000, max_monitors: 200, minimum_check_interval_seconds: 60, history_retention_days: 365,
   max_domains: 100, max_team_members: 5, max_regions: 3, maintenance_enabled: true, reports_enabled: true, branded_reports_enabled: true, api_write_enabled: true, ai_drafts_enabled: true,
-  max_workflows: 50, max_workflow_steps: 10, max_status_page_domains: 50,
+  max_workflows: 50, max_workflow_steps: 10, max_status_page_domains: 50, max_ai_analyses: 1000,
 }
 const plans = [free, pro, agency]
 
@@ -81,13 +81,13 @@ describe('pricing cards stay in sync', () => {
   it('show the limits on every card and only what each plan adds over the one before it, on all three pages', async () => {
     for (const [ui, signedIn] of [[<LandingPage key="landing" />, false], [<MonitoringLandingPage key="monitoring" />, false], [<BillingPage key="billing" />, true]] as const) {
       const cards = await cardsOn(ui, signedIn)
-      expect(cards.Free.slice(2)).toEqual(['5 monitors', 'Checks every 5 minutes', '7 days of history', 'Checks from 1 location'])
+      expect(cards.Free.slice(2)).toEqual(['5 monitors', 'Checks every 5 minutes', '7 days of history', 'Checks from 1 location', '25 AI root cause analyses a month'])
       expect(cards.Pro.slice(2)).toEqual([
-        '50 monitors', 'Checks every 1 minute', '90 days of history', 'Checks from up to 3 locations',
+        '50 monitors', 'Checks every 1 minute', '90 days of history', 'Checks from up to 3 locations', '250 AI root cause analyses a month',
         'Maintenance windows and quiet deploys from CI', 'API and Claude can make changes, not just read', 'Monthly PDF uptime reports', 'AI-drafted incident updates',
       ])
       expect(cards.Agency.slice(2)).toEqual([
-        '200 monitors', 'Checks every 1 minute', '365 days of history', 'Checks from up to 3 locations',
+        '200 monitors', 'Checks every 1 minute', '365 days of history', 'Checks from up to 3 locations', '1,000 AI root cause analyses a month',
         '5 team members, with two-factor sign-in you can require', 'Status pages on your clients’ own domains', 'Reports with your name and logo',
       ])
       // Features every plan has are said once, under the cards, not repeated on each.

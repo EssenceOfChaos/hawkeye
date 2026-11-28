@@ -42,7 +42,7 @@ const ADDITIONS: { has: (p: Plan) => boolean; label: (p: Plan) => string }[] = [
 ]
 
 /**
- * Everything on a pricing card below the plan's name: the tagline, the price, the four limits that differ on every plan, and what the plan adds
+ * Everything on a pricing card below the plan's name: the tagline, the price, the limits that differ on every plan (with the AI root cause analyses a month), and what the plan adds
  * over the one before it. The landing page, the monitoring landing page and the billing page all render this, so a plan change is made in one place
  * and the three can never disagree (PlanCardsInSync.test.tsx guards it). `previous` is the next cheaper plan, or none for the cheapest.
  */
@@ -75,6 +75,7 @@ export function PlanDetails({ plan, previous, interval = 'month' }: { plan: Plan
         <li>Checks every {formatPeriod(plan.minimum_check_interval_seconds)}</li>
         <li>{plan.history_retention_days} days of history</li>
         <li>{regions(plan) > 1 ? `Checks from up to ${regions(plan)} locations` : 'Checks from 1 location'}</li>
+        {(plan.max_ai_analyses ?? 0) > 0 && <li>{plan.max_ai_analyses!.toLocaleString('en-US')} AI root cause analyses a month</li>}
       </ul>
       {added.length > 0 && (
         <>

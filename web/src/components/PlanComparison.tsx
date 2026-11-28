@@ -43,7 +43,7 @@ const GROUPS: { title: string; rows: Row[] }[] = [
       { label: 'Monthly PDF uptime reports', value: (p) => !!p.reports_enabled },
       { label: 'Reports with your name and logo', value: (p) => !!p.branded_reports_enabled },
       { label: 'AI-drafted incident updates', value: (p) => !!p.ai_drafts_enabled },
-      { label: 'AI incident analyses per month', value: (p) => ((p.max_ai_analyses ?? 0) > 0 ? p.max_ai_analyses!.toLocaleString('en-US') : false) },
+      { label: 'AI root cause analyses per month', value: (p) => ((p.max_ai_analyses ?? 0) > 0 ? p.max_ai_analyses!.toLocaleString('en-US') : false) },
       { label: 'API and Claude (MCP) access', value: (p) => (p.api_write_enabled ? 'Read and make changes' : 'Read and add monitors') },
     ],
   },

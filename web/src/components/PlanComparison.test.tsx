@@ -27,7 +27,7 @@ describe('plan comparison table', () => {
     expect(cells('Check locations per monitor')).toEqual(['1', '3', '5'])
     expect(cells('Team members')).toEqual(['1', '1', '5'])
     expect(cells('Multi-step API checks')).toEqual(['1, up to 3 steps', '5, up to 10 steps', '50, up to 10 steps'])
-    expect(cells('AI incident analyses per month')).toEqual(['25', '250', '1,000'])
+    expect(cells('AI root cause analyses per month')).toEqual(['25', '250', '1,000'])
     expect(cells('API and Claude (MCP) access')).toEqual(['Read and add monitors', 'Read and make changes', 'Read and make changes'])
   })
 
