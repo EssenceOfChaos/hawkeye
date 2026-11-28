@@ -190,6 +190,14 @@ describe('LandingPage', () => {
     expect(screen.getByText('SSL certificate and domain expiry warnings')).toBeInTheDocument()
   })
 
+  it('advertises AI root cause analysis among the features, and no longer the dashboard', () => {
+    renderLanding(() => json(200, { plans: [] }))
+    const card = screen.getByRole('heading', { name: /^Root cause analysis, powered\sby\sAI$/ }).closest('li')!
+    expect(within(card).getByText('Know what broke before you open a browser.')).toBeInTheDocument()
+    expect(within(card).getByText(/suggests the likely cause and the first thing to check/)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'One dashboard, clear reports' })).not.toBeInTheDocument()
+  })
+
   it('puts the no-false-alarms message above the feature list, and says the true thing about it', () => {
     renderLanding(() => json(200, { plans: [] }))
     const truth = screen.getByRole('heading', { name: 'A failed check is not an incident.' })

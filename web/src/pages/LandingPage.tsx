@@ -37,6 +37,12 @@ const FEATURES = [
     text: 'Watch address, mail, name server and TXT records, and hear about it when one changes, without typing in what it should be.',
   },
   {
+    icon: brand.icons.monitors,
+    title: 'Root cause analysis, powered\u00a0by\u00a0AI', // "powered by AI" stays together, so the title breaks after the comma
+    lead: 'Know what broke before you open a browser.',
+    text: 'HawkEye reads what its check saw and suggests the likely cause and the first thing to check.',
+  },
+  {
     icon: brand.icons.responseTime,
     title: 'Response-time tracking',
     lead: 'Spot slowdowns early.',
@@ -83,12 +89,6 @@ const FEATURES = [
     title: 'Domain expiry alerts',
     lead: 'Don’t lose your domain to a missed renewal.',
     text: 'Warnings 30, 14, 7 and 1 days before a domain registration expires.',
-  },
-  {
-    icon: brand.icons.dashboard,
-    title: 'One dashboard, clear reports',
-    lead: 'Every website. One clear picture.',
-    text: 'Availability, response times, incidents, certificates and domains in one place.',
   },
   {
     icon: brand.icons.developers,
