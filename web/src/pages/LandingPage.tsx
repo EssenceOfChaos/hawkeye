@@ -37,7 +37,7 @@ const FEATURES = [
     text: 'Watch address, mail, name server and TXT records, and hear about it when one changes, without typing in what it should be.',
   },
   {
-    icon: brand.icons.monitors,
+    icon: brand.icons.rootCause,
     title: 'Root cause analysis, powered\u00a0by\u00a0AI', // "powered by AI" stays together, so the title breaks after the comma
     lead: 'Know what broke before you open a browser.',
     text: 'HawkEye reads what its check saw and suggests the likely cause and the first thing to check.',
