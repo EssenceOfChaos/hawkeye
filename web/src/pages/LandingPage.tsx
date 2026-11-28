@@ -37,16 +37,16 @@ const FEATURES = [
     text: 'Watch address, mail, name server and TXT records, and hear about it when one changes, without typing in what it should be.',
   },
   {
+    icon: brand.icons.rootCause,
+    title: 'Root cause analysis, powered\u00a0by\u00a0AI', // "powered by AI" stays together, so the title breaks after the comma
+    lead: 'Know what broke before you open a browser.',
+    text: 'HawkEye reads what its check saw and suggests the likely cause and the first thing to check.',
+  },
+  {
     icon: brand.icons.responseTime,
     title: 'Response-time tracking',
     lead: 'Spot slowdowns early.',
     text: 'Track response times over time, and see where the time goes: DNS, connecting, TLS or your server.',
-  },
-  {
-    icon: brand.icons.incident,
-    title: 'Incident tracking',
-    lead: 'Every incident, clearly accounted for.',
-    text: 'See when a problem began, what changed since it last worked, and when service recovered.',
   },
   {
     icon: brand.icons.notifications,
@@ -83,12 +83,6 @@ const FEATURES = [
     title: 'Domain expiry alerts',
     lead: 'Don’t lose your domain to a missed renewal.',
     text: 'Warnings 30, 14, 7 and 1 days before a domain registration expires.',
-  },
-  {
-    icon: brand.icons.dashboard,
-    title: 'One dashboard, clear reports',
-    lead: 'Every website. One clear picture.',
-    text: 'Availability, response times, incidents, certificates and domains in one place.',
   },
   {
     icon: brand.icons.developers,

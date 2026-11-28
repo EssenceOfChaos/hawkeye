@@ -14,6 +14,7 @@ import iconTeam from './assets/brand/icon-team.png'
 import iconStatusPage from './assets/brand/icon-status-page.png'
 import iconReports from './assets/brand/icon-reports.png'
 import iconMonitors from './assets/brand/icon-monitors.png'
+import iconRootCause from './assets/brand/icon-root-cause.png'
 import iconShield from './assets/brand/icon-shield.png'
 import iconSsl from './assets/brand/icon-ssl.png'
 import iconWebsites from './assets/brand/icon-websites.png'
@@ -89,6 +90,7 @@ export const brand = {
     statusPage: iconStatusPage,
     reports: iconReports,
     monitors: iconMonitors,
+    rootCause: iconRootCause,
     cron: iconCron,
     incident: iconIncident,
     locations: iconLocations,
