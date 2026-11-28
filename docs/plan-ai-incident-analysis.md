@@ -145,8 +145,9 @@ ALTER TABLE organizations ADD COLUMN ai_analysis_enabled boolean NOT NULL DEFAUL
 
 ## Sync checklist
 
-- **Pricing:** an "AI incident analyses per month" row in the comparison table (`PlanComparison.tsx`), with the count from
-  `plans.max_ai_analyses`. It shows on every plan, so it goes in the table rather than in a card's "plus" list. Not in the taglines.
+- **Pricing:** "N AI root cause analyses a month" with the other limits on each pricing card (`PlanDetails.tsx`), and an "AI root cause
+  analyses per month" row in the comparison table (`PlanComparison.tsx`), both from `plans.max_ai_analyses`. It differs on every plan, so it is a
+  limit, not a line in a card's "plus" list. Not in the taglines.
 - **Landing page:** an FAQ answer ("Can HawkEye tell me why a site went down?") and a line in the features section. Optionally a value-strip
   badge.
 - **Public docs:** an "AI incident analysis" section on the incidents doc page, and the Claude page (MCP `get_incident` returns it).
